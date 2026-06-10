@@ -1,0 +1,93 @@
+[
+  {
+    "id": "no-comment-share-uses-shared-content",
+    "description": "A no-comment share should expose shared content, not byline or timestamp chrome.",
+    "input": {
+      "authorName": "Example Sharer",
+      "contentKind": "share_without_comment",
+      "reshareOriginalAuthor": "Example Original Page",
+      "reshareOriginalText": "2 小時",
+      "text": "範例公告：本文說明公共服務申請方式。\n申請人可在官方網站查詢資格與期限。"
+    },
+    "expectedContext": {
+      "isShare": true,
+      "originalAuthor": "Example Original Page",
+      "ownText": "",
+      "sharerComment": "",
+      "sharedContent": "範例公告：本文說明公共服務申請方式。 申請人可在官方網站查詢資格與期限。",
+      "linkPreview": ""
+    },
+    "tierBIncludes": [
+      "### 分享者評論\n（分享者沒有加上文字）",
+      "### 原始作者：Example Original Page",
+      "### 被分享內容\n範例公告：本文說明公共服務申請方式。"
+    ],
+    "tierBExcludes": ["2 小時"],
+    "expectedZhtwSegments": [
+      {
+        "kind": "shared_content",
+        "label": "被分享內容",
+        "text": "範例公告：本文說明公共服務申請方式。 申請人可在官方網站查詢資格與期限。"
+      }
+    ]
+  },
+  {
+    "id": "visible-comment-thread-is-not-post-body",
+    "description": "Expanded visible comments after 查看更多留言 are discussion UI, not authored post text.",
+    "input": {
+      "authorName": "Example Author",
+      "contentKind": "standard",
+      "text": "正文第一段提供重要內容。\n查看更多留言\nExample Commenter 這是留言內容",
+      "fullText": "正文第一段提供重要內容。\n查看更多留言\nExample Commenter 這是留言內容"
+    },
+    "expectedContext": {
+      "isShare": false,
+      "ownText": "正文第一段提供重要內容。",
+      "sharedContent": "",
+      "linkPreview": "",
+      "imageTexts": [],
+      "imageAltTexts": []
+    },
+    "tierBIncludes": ["正文第一段提供重要內容。"],
+    "tierBExcludes": ["查看更多留言", "Example Commenter", "這是留言內容", "## 分享文結構"],
+    "expectedZhtwSegments": [
+      {
+        "kind": "post_text",
+        "label": "貼文文字",
+        "text": "正文第一段提供重要內容。"
+      }
+    ]
+  },
+  {
+    "id": "image-ocr-is-image-text-not-body",
+    "description": "Facebook OCR text belongs to image_text so Tier B-2 can reason over it without polluting authored body text.",
+    "input": {
+      "authorName": "Example Poster",
+      "contentKind": "standard",
+      "text": "這張圖值得仔細看。\n可能是顯示的文字是「投票結果出爐 渠道更新」的圖像",
+      "fullText": "這張圖值得仔細看。\n可能是顯示的文字是「投票結果出爐 渠道更新」的圖像"
+    },
+    "expectedContext": {
+      "isShare": false,
+      "ownText": "這張圖值得仔細看。",
+      "sharedContent": "",
+      "linkPreview": "",
+      "imageTexts": ["投票結果出爐 渠道更新"],
+      "imageAltTexts": []
+    },
+    "tierBIncludes": ["這張圖值得仔細看。"],
+    "tierBExcludes": ["投票結果出爐 渠道更新"],
+    "expectedZhtwSegments": [
+      {
+        "kind": "post_text",
+        "label": "貼文文字",
+        "text": "這張圖值得仔細看。"
+      },
+      {
+        "kind": "image_text",
+        "label": "圖片文字",
+        "text": "投票結果出爐 渠道更新"
+      }
+    ]
+  }
+]

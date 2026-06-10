@@ -1,0 +1,49 @@
+import { describe, expect, it } from "vitest";
+
+import {
+  defaultEndpointForProvider,
+  defaultModelForProvider,
+  normalizeEndpointInput,
+  resolveModelName,
+  validateEndpointUrl,
+} from "@src/lib/model-source-config";
+
+describe("model source config", () => {
+  it("uses deterministic defaults for local and OpenAI-compatible providers", () => {
+    expect(defaultEndpointForProvider("ollama")).toBe("http://localhost:11434");
+    expect(defaultEndpointForProvider("openai-compatible")).toBe("http://localhost:8000/v1");
+    expect(defaultEndpointForProvider("chrome-gemini-nano")).toBe("");
+
+    expect(defaultModelForProvider("ollama", "reading-prompt")).toBe("gemma4:e4b-it-qat");
+    expect(defaultModelForProvider("openai-compatible", "reading-prompt")).toBe(
+      "mlx-community/gemma-4-e4b-it-4bit",
+    );
+  });
+
+  it("normalizes endpoint input without inventing a host", () => {
+    expect(normalizeEndpointInput(" http://localhost:11434/// ")).toBe(
+      "http://localhost:11434",
+    );
+    expect(normalizeEndpointInput("   ", "http://localhost:8000/v1/")).toBe(
+      "http://localhost:8000/v1",
+    );
+  });
+
+  it("rejects unsupported endpoint URL schemes", () => {
+    expect(validateEndpointUrl("https://models.example.test/v1")).toBeNull();
+    expect(validateEndpointUrl("ftp://models.example.test")).toBe(
+      "端點網址請使用 http:// 或 https://",
+    );
+    expect(validateEndpointUrl("not a url")).toBe("端點網址格式無法辨識");
+  });
+
+  it("resolves model names against server-provided tags", () => {
+    expect(resolveModelName("gemma4:e4b", ["gemma4:e4b:latest"])).toBe(
+      "gemma4:e4b:latest",
+    );
+    expect(resolveModelName("qwen3.6-35b", ["qwen3.6-35b", "qwen3.6-35b:latest"])).toBe(
+      "qwen3.6-35b",
+    );
+    expect(resolveModelName("custom-model", [])).toBe("custom-model");
+  });
+});

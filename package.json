@@ -1,0 +1,27 @@
+{
+  "name": "truly",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A local-first Chrome extension for improving reading clarity in social feeds and web pages.",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "build:dev": "vite build && node scripts/patch-dev-manifest.mjs",
+    "release:alpha": "node scripts/release-alpha.mjs",
+    "check:type": "tsc --noEmit",
+    "check:public-boundary": "node scripts/check-public-boundary.mjs",
+    "test:contract:public": "vitest run tests/contract/model-response-contract.test.ts tests/contract/post-context-boundary-contract.test.ts tests/contract/zhtw-segmentation-contract.test.ts",
+    "test:unit:public": "vitest run tests/unit/model-display.test.ts tests/unit/model-source-config.test.ts tests/unit/provider-capabilities.test.ts tests/unit/reading-question-policy.test.ts tests/unit/theme-mode.test.ts",
+    "check:public": "npm run check:public-boundary && npm run check:type && npm run test:contract:public && npm run test:unit:public && npm run build",
+    "check:build": "npm run check:public-boundary && npm run build"
+  },
+  "dependencies": {
+    "webextension-polyfill": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.39",
+    "typescript": "^5.7.0",
+    "vite": "^6.0.0",
+    "vitest": "^4.1.3"
+  }
+}

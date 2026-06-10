@@ -1,0 +1,1257 @@
+.truly-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 200ms ease-in-out;
+  pointer-events: none;
+}
+
+.truly-overlay.truly-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.truly-overlay-reason {
+  font-size: 13px;
+  color: #65676b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.truly-overlay-scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.truly-overlay-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.truly-btn {
+  padding: 6px 14px;
+  border: 1px solid #dadde1;
+  border-radius: 6px;
+  background: #fff;
+  color: #1c1e21;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 150ms;
+}
+
+.truly-btn:hover {
+  background: #f0f2f5;
+}
+
+.truly-btn-primary {
+  background: #e7f3ff;
+  border-color: #1877f2;
+  color: #1877f2;
+}
+
+.truly-btn-primary:hover {
+  background: #d2e7fc;
+}
+
+.truly-filtered [role="article"] {
+  position: relative;
+}
+
+.truly-tier-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #1877f2;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: middle;
+  margin-left: 6px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* <truly-headsup-styles:start>
+   Generated from src/content_scripts/heads-up-styles.css.
+   Run npm run sync:headsup-css after editing that source file.
+*/
+/* --- Pipeline status badges (deep analysis, 📊分類 only on failure) --- */
+
+.truly-badge-tier-a,
+.truly-badge-tier-b {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  line-height: 1.35;
+  border-radius: 999px;
+  padding: 1px 7px;
+  vertical-align: middle;
+  flex-shrink: 0;
+  margin-left: 3px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  cursor: default;
+  position: relative;
+  min-width: 4.75em;
+  justify-content: center;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    border-color 160ms ease;
+}
+
+.truly-badge-pending {
+  color: #8a8d91;
+  background: transparent;
+  border-color: transparent;
+  font-weight: 500;
+}
+
+.truly-badge-tier-b::before {
+  content: "";
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  margin-right: 5px;
+  background: currentColor;
+  opacity: 0;
+  flex-shrink: 0;
+}
+
+.truly-badge-pending::before {
+  background: #8a8d91;
+  opacity: 1;
+}
+
+.truly-badge-complete {
+  color: #8a8d91;
+  background: transparent;
+  border-color: transparent;
+  font-weight: 400;
+}
+
+.truly-badge-failed {
+  color: #9a3b00;
+  background: #fff3e0;
+  border-color: #ffd6a6;
+  font-weight: 500;
+}
+
+/* --- Heads-up panel Shadow DOM preflight contract ---------------------------
+   `.truly-headsup-host` is the public outer marker for locating, excluding, and
+   eventually shadow-wrapping the injected heads-up UI. Keep layout styling on
+   the internals until the panel CSS is fully extracted for Shadow DOM. */
+
+.truly-headsup-host {
+  display: block;
+}
+
+/* --- Heads-up panel internals (above each classified post) ------------------
+   Style targets FB's gray sub-chrome (the bar style FB uses for
+   "Suggested for you" / "See more from this Page") so the panel
+   reads as part of the page rather than as an extension overlay. */
+
+.truly-headsup {
+  background: #eef2f6;
+  border-bottom: 1px solid #d8dee7;
+  padding: 6px 16px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  color: #1c1e21;
+}
+
+.truly-headsup-placeholder {
+  min-height: 33px;
+  contain: layout paint style;
+  contain-intrinsic-size: auto 33px;
+  background: #eef2f6;
+  border-bottom: 1px solid #d8dee7;
+  padding: 6px 16px;
+  color: #8a8d91;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+}
+
+.truly-headsup-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  padding: 0;
+  cursor: pointer;
+  user-select: none;
+  min-height: 20px;
+  border-radius: 6px;
+  outline: none;
+}
+
+.truly-headsup-summary:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.truly-headsup-working .truly-headsup-summary {
+  cursor: default;
+}
+
+.truly-headsup-working .truly-headsup-summary:hover {
+  background: transparent;
+}
+
+.truly-headsup-summary:focus-visible {
+  box-shadow: 0 0 0 2px #1877f2;
+}
+
+.truly-headsup-summary:hover .truly-headsup-toggle {
+  color: #1c1e21;
+}
+
+.truly-headsup-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #9ca3af;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* Truly status dot palette: low=Verified, mid=Caution, high=High Risk,
+   pending=Neutral. See docs/specs/settings-ui.md → Status Color System. */
+.truly-headsup-low .truly-headsup-dot { background: #10b981; --truly-dot-ripple: rgba(16, 185, 129, 0.24); }
+.truly-headsup-mid .truly-headsup-dot { background: #f59e0b; --truly-dot-ripple: rgba(245, 158, 11, 0.28); }
+.truly-headsup-high .truly-headsup-dot { background: #ef4444; --truly-dot-ripple: rgba(239, 68, 68, 0.28); }
+.truly-headsup-pending .truly-headsup-dot { background: #9ca3af; }
+.truly-headsup-working .truly-headsup-dot,
+.truly-headsup-working .truly-headsup-label,
+.truly-headsup-progress-label {
+  animation: truly-headsup-pulse 1.2s ease-in-out infinite;
+}
+
+.truly-headsup-dot-arrive {
+  animation: truly-headsup-dot-ripple 760ms ease-out both;
+}
+
+.truly-badge-pending::before {
+  animation: truly-headsup-pending-dot 1.2s ease-in-out infinite;
+}
+
+.truly-headsup-reveal-enter {
+  animation: truly-headsup-reveal-enter 180ms ease-out both;
+}
+
+.truly-headsup-label {
+  font-size: 13px;
+  color: #65676b;
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+}
+
+.truly-headsup-high .truly-headsup-label { color: #1c1e21; }
+.truly-headsup-label-pending {
+  color: #8a8d91;
+}
+
+.truly-headsup-progress-label {
+  font-size: 12px;
+  color: #8a8d91;
+  font-weight: 500;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+.truly-headsup-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 120px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid #dadde1;
+  background: rgba(255, 255, 255, 0.72);
+  color: #65676b;
+  font-size: 12px;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+}
+
+.truly-iq-ai-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 96px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid #dadde1;
+  background: rgba(255, 255, 255, 0.72);
+  color: #65676b;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+  flex: 0 1 auto;
+}
+
+.truly-iq-ai-score {
+  color: inherit;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
+}
+
+.truly-personal-context-chip {
+  border-color: #cbded2;
+  background: rgba(53, 111, 76, 0.08);
+  color: #356f4c;
+}
+
+.truly-share-context-chip {
+  border-color: #d6d9dd;
+  background: rgba(101, 103, 107, 0.06);
+  color: #65676b;
+}
+
+.truly-zhtw-chip {
+  max-width: 96px;
+  border-style: dotted;
+  border-color: #b8bcc2;
+  background: rgba(255, 255, 255, 0.36);
+  color: #65676b;
+  font-size: 11px;
+  font-weight: 400;
+  cursor: help;
+}
+
+@keyframes truly-headsup-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+
+@keyframes truly-headsup-pending-dot {
+  0%, 100% {
+    opacity: 0.45;
+    transform: scale(0.75);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes truly-headsup-dot-ripple {
+  0% {
+    box-shadow: 0 0 0 0 var(--truly-dot-ripple, rgba(16, 185, 129, 0.22));
+  }
+  70% {
+    box-shadow: 0 0 0 7px var(--truly-dot-ripple, rgba(16, 185, 129, 0.22));
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+
+@keyframes truly-headsup-reveal-enter {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .truly-headsup-working .truly-headsup-dot,
+  .truly-headsup-working .truly-headsup-label,
+  .truly-headsup-dot-arrive {
+    animation: none;
+  }
+
+  .truly-badge-pending::before,
+  .truly-headsup-reveal-enter {
+    animation: none;
+  }
+}
+
+.truly-headsup-spacer {
+  flex: 1;
+}
+
+.truly-headsup-statuses {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.truly-headsup-toggle {
+  margin-left: 4px;
+  font-size: 12px;
+  color: #65676b;
+  flex-shrink: 0;
+  user-select: none;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.truly-headsup-toggle-placeholder {
+  margin-left: 4px;
+  font-size: 12px;
+  flex-shrink: 0;
+  user-select: none;
+  padding: 1px 6px;
+  visibility: hidden;
+}
+
+.truly-headsup-summary:hover .truly-headsup-toggle,
+.truly-headsup-summary:focus-visible .truly-headsup-toggle {
+  background: #e4e6eb;
+}
+
+.truly-headsup-detail {
+  display: none;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed #e4e6eb;
+}
+
+.truly-headsup-error {
+  font-size: 12px;
+  color: #a3362c;
+  background: #fdeeec;
+  border: 1px solid #f4d3cd;
+  border-radius: 6px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.truly-headsup-error-action {
+  border: 1px solid #d98a80;
+  color: #a3362c;
+  background: #fff;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.truly-headsup-error-action:hover,
+.truly-headsup-error-action:focus-visible {
+  background: #fdf2f0;
+}
+
+.truly-headsup-error-raw {
+  flex-basis: 100%;
+  color: #8a4339;
+}
+
+.truly-headsup-error-raw summary {
+  cursor: pointer;
+}
+
+.truly-headsup-error-raw code {
+  display: block;
+  margin-top: 4px;
+  white-space: pre-wrap;
+}
+
+.truly-headsup-expanded .truly-headsup-detail {
+  display: block;
+}
+
+.truly-headsup-detail-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  row-gap: 6px;
+  margin-bottom: 8px;
+  align-items: start;
+}
+
+.truly-headsup-detail-summary {
+  display: block;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  margin: 0;
+  padding-left: 9px;
+  border-left: 3px solid #d8dde6;
+  color: #1c1e21;
+  font-size: 12px;
+  line-height: 1.4;
+  font-style: italic;
+}
+
+.truly-headsup-detail-summary-pending {
+  color: #606770;
+}
+
+.truly-headsup-detail-actions {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  justify-content: flex-end;
+  align-items: flex-start;
+}
+
+.truly-analysis-panel-btn {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #cfd6df;
+  background: #eef2f6;
+  color: #4b5563;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.35;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.truly-analysis-panel-btn:hover,
+.truly-analysis-panel-btn:focus-visible {
+  border-color: #9ca3af;
+  color: #1f2937;
+  background: #e7edf5;
+  outline: none;
+}
+
+.truly-headsup-bullets {
+  margin: 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+}
+
+.truly-headsup-bullet {
+  font-size: 12px;
+  line-height: 1.45;
+  color: #1c1e21;
+  margin: 0;
+}
+
+.truly-headsup-model-note {
+  margin: 7px 0 0;
+  color: #8a8d91;
+  font-size: 10px;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.truly-headsup-bullet-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+.truly-headsup-bullet-text {
+  vertical-align: middle;
+}
+
+.truly-headsup-section {
+  margin-bottom: 8px;
+}
+
+.truly-headsup-section h4 {
+  font-size: 12px;
+  margin: 0 0 4px 0;
+  color: #65676b;
+  font-weight: 600;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.truly-headsup-line {
+  font-size: 12px;
+  color: #1c1e21;
+  margin: 0;
+}
+
+.truly-headsup-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 4px;
+}
+
+.truly-headsup-action-chip,
+.truly-headsup-signal-chip,
+.truly-headsup-section-chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 1.35;
+  padding: 1px 7px;
+  white-space: nowrap;
+}
+
+.truly-headsup-action-chip {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #f59e0b;
+  font-weight: 700;
+}
+
+.truly-headsup-action-chip-trailing {
+  margin-left: 5px;
+  vertical-align: middle;
+}
+
+.truly-headsup-signal-chip {
+  color: #374151;
+  background: #eef2f7;
+  border: 1px solid #d8dde6;
+  font-weight: 500;
+}
+
+.truly-headsup-section-chip {
+  color: #374151;
+  background: #eef2f7;
+  border: 1px solid #d8dde6;
+  font-weight: 500;
+}
+
+.truly-headsup-muted-signal-chip {
+  color: #365314;
+  background: #ecfccb;
+  border-color: #bef264;
+}
+
+.truly-manip-evidence {
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+
+.truly-manip-evidence strong {
+  display: inline-block;
+  margin-right: 4px;
+  color: #444;
+}
+
+.truly-headsup-quote {
+  margin: 4px 0 0 8px;
+  padding-left: 8px;
+  border-left: 3px solid #d6d8db;
+  color: #65676b;
+  font-style: italic;
+}
+
+.truly-headsup-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.truly-score-chip {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #1c1e21;
+  white-space: nowrap;
+}
+
+.truly-score-chip-low {
+  background: #e4e6eb;
+  color: #65676b;
+}
+
+.truly-score-chip-mid {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.truly-score-chip-high {
+  background: #fbd5d5;
+  color: #c41e3a;
+  font-weight: 600;
+}
+
+.truly-chip-recommended {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid #dadde1;
+  border-radius: 10px;
+  background: #f0f2f5;
+  color: #65676b;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.truly-score-report-btn {
+  margin-left: auto;
+  padding: 2px 8px;
+  border: 1px solid #dadde1;
+  border-radius: 4px;
+  background: #fff;
+  color: #65676b;
+  font-size: 11px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.truly-score-report-btn:hover:not(:disabled) {
+  color: #e41e3f;
+  border-color: #e41e3f;
+}
+
+.truly-score-report-btn:disabled {
+  background: #e7f3ff;
+  color: #1877f2;
+  border-color: #1877f2;
+  cursor: default;
+}
+
+/* Facebook dark mode does not necessarily follow the OS/browser or `_9dls`.
+ * The content script computes the live feed background and marks the root with
+ * `truly-fb-dark`; use that class so injected UI follows the actual FB theme. */
+html.truly-fb-dark .truly-headsup {
+  background: #242526;
+  border-bottom-color: #3a3b3c;
+  color: #e4e6eb;
+}
+
+html.truly-fb-dark .truly-headsup-placeholder {
+  background: #242526;
+  border-bottom-color: #3a3b3c;
+  color: #b0b3b8;
+}
+
+html.truly-fb-dark .truly-headsup-summary:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+html.truly-fb-dark .truly-headsup-summary:focus-visible {
+  box-shadow: 0 0 0 2px #4599ff;
+}
+
+html.truly-fb-dark .truly-headsup-label {
+  color: #b0b3b8;
+}
+
+html.truly-fb-dark .truly-headsup-high .truly-headsup-label {
+  color: #e4e6eb;
+}
+
+html.truly-fb-dark .truly-headsup-tag {
+  color: #b0b3b8;
+  border-color: #3e4042;
+  background: rgba(58, 59, 60, 0.7);
+}
+
+html.truly-fb-dark .truly-headsup-toggle {
+  color: #b0b3b8;
+}
+
+html.truly-fb-dark .truly-headsup-summary:hover .truly-headsup-toggle,
+html.truly-fb-dark .truly-headsup-summary:focus-visible .truly-headsup-toggle {
+  color: #e4e6eb;
+  background: #3a3b3c;
+}
+
+html.truly-fb-dark .truly-headsup-detail {
+  border-top-color: #3a3b3c;
+}
+
+html.truly-fb-dark .truly-headsup-section h4 {
+  color: #b0b3b8;
+}
+
+html.truly-fb-dark .truly-headsup-line {
+  color: #e4e6eb;
+}
+
+html.truly-fb-dark .truly-headsup-detail-summary {
+  color: #d2d4d7;
+  border-left-color: #4e4f50;
+}
+
+html.truly-fb-dark .truly-headsup-detail-summary-pending {
+  color: #b0b3b8;
+}
+
+html.truly-fb-dark .truly-headsup-bullet {
+  color: #e4e6eb;
+}
+
+html.truly-fb-dark .truly-headsup-action-chip {
+  color: #fde68a;
+  background: #3b2f10;
+  border-color: #b45309;
+}
+
+html.truly-fb-dark .truly-headsup-signal-chip,
+html.truly-fb-dark .truly-headsup-section-chip {
+  color: #e4e6eb;
+  background: #242526;
+  border-color: #3e4042;
+}
+
+html.truly-fb-dark .truly-headsup-muted-signal-chip {
+  color: #d9f99d;
+  background: #26330f;
+  border-color: #4d7c0f;
+}
+
+html.truly-fb-dark .truly-headsup-quote {
+  border-left-color: #4e4f50;
+  color: #b0b3b8;
+}
+
+html.truly-fb-dark .truly-manip-evidence strong {
+  color: #d2d4d7;
+}
+
+html.truly-fb-dark .truly-badge-pending {
+  color: #b0b3b8;
+  background: transparent;
+  border-color: transparent;
+}
+
+html.truly-fb-dark .truly-badge-pending::before {
+  background: #b0b3b8;
+}
+
+html.truly-fb-dark .truly-badge-complete {
+  color: #8a8d91;
+  background: transparent;
+  border-color: transparent;
+}
+
+html.truly-fb-dark .truly-badge-failed {
+  color: #ffb86b;
+  background: #3f2b16;
+  border-color: #7a4a1e;
+}
+
+html.truly-fb-dark .truly-headsup-error {
+  color: #ff9a8f;
+  background: #3a1f1c;
+  border-color: #6e3a32;
+}
+
+html.truly-fb-dark .truly-headsup-error-action {
+  color: #ffb3a8;
+  background: #2a2526;
+  border-color: #7a4039;
+}
+
+html.truly-fb-dark .truly-headsup-error-action:hover,
+html.truly-fb-dark .truly-headsup-error-action:focus-visible {
+  background: #3a2a27;
+}
+
+html.truly-fb-dark .truly-headsup-error-raw {
+  color: #e0a59b;
+}
+
+html.truly-fb-dark .truly-score-chip {
+  color: #e4e6eb;
+}
+
+html.truly-fb-dark .truly-score-chip-low {
+  background: #3a3b3c;
+  color: #b0b3b8;
+}
+
+html.truly-fb-dark .truly-score-chip-mid,
+html.truly-fb-dark .truly-manip-chip {
+  background: #5a4a1f;
+  color: #ffd966;
+}
+
+html.truly-fb-dark .truly-chip-recommended {
+  background: #303132;
+  color: #b0b3b8;
+  border-color: #4e4f50;
+}
+
+html.truly-fb-dark .truly-score-chip-high {
+  background: #5a1f2a;
+  color: #ff6b7a;
+}
+
+html.truly-fb-dark .truly-analysis-panel-btn {
+  background: #1e3a5f;
+  border-color: #2d5a8f;
+  color: #8ec5ff;
+}
+
+html.truly-fb-dark .truly-analysis-panel-btn:hover,
+html.truly-fb-dark .truly-analysis-panel-btn:focus-visible {
+  background: #254f83;
+  border-color: #4599ff;
+  color: #dbeafe;
+}
+
+html.truly-fb-dark .truly-headsup-model-note {
+  color: #8f949b;
+}
+
+html.truly-fb-dark .truly-iq-ai-chip {
+  color: #b0b3b8;
+  border-color: #3e4042;
+  background: rgba(58, 59, 60, 0.7);
+}
+
+html.truly-fb-dark .truly-iq-ai-score {
+  color: inherit;
+  opacity: 0.92;
+}
+
+html.truly-fb-dark .truly-personal-context-chip {
+  color: #a7d8b8;
+  border-color: #335a42;
+  background: rgba(72, 137, 96, 0.16);
+}
+
+html.truly-fb-dark .truly-share-context-chip {
+  color: #b0b3b8;
+  border-color: #4b4d50;
+  background: rgba(176, 179, 184, 0.08);
+}
+
+html.truly-fb-dark .truly-zhtw-chip {
+  color: #b0b3b8;
+  border-color: #5d6269;
+  background: rgba(176, 179, 184, 0.08);
+}
+
+html.truly-fb-dark .truly-tier-b-marker {
+  background: #4a3a1f;
+  color: #fde68a;
+}
+
+html.truly-fb-dark .truly-tier-b-image-warning {
+  background: #2a2618;
+  color: #fbbf24;
+  border-color: #78350f;
+}
+/* <truly-headsup-styles:end> */
+
+.truly-report-pill {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 11;
+  padding: 4px 10px;
+  border: 1px solid #dadde1;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #65676b;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  transition: background 150ms, color 150ms;
+}
+
+.truly-report-pill:hover {
+  background: #fff;
+  color: #e41e3f;
+  border-color: #e41e3f;
+}
+
+.truly-report-pill:disabled {
+  background: #e7f3ff;
+  color: #1877f2;
+  border-color: #1877f2;
+  cursor: default;
+}
+
+.truly-report-pill-group {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 11;
+  display: flex;
+  gap: 6px;
+}
+
+.truly-report-pill.truly-report-pill-in-group {
+  position: static;
+}
+
+/* --- Collapse bar (minimized sponsored post) --- */
+
+.truly-collapse-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: #f0f2f5;
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.truly-collapse-label {
+  font-size: 13px;
+  color: #65676b;
+  font-weight: 500;
+}
+
+/* Fold reason chip rendered inline on the collapse bar — sponsored,
+   built-in axis, or custom-rule reason. Visually subordinate to the
+   author label per filter-ui spec. */
+.truly-collapse-bar-reason {
+  font-size: 12px;
+  color: #8a8d91;
+  font-weight: 400;
+  margin: 0 8px;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.truly-surface-collapse-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 42px;
+  padding: 8px 12px;
+  border: 1px solid #dadde1;
+  border-radius: 8px;
+  background: #f7f8fa;
+  color: #65676b;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.truly-surface-collapse-label {
+  overflow: hidden;
+  color: #65676b;
+  font-size: 13px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-color-scheme: dark) {
+  .truly-overlay {
+    background: rgba(36, 37, 38, 0.85);
+  }
+
+  .truly-overlay-reason {
+    color: #b0b3b8;
+  }
+
+  .truly-btn {
+    background: #3a3b3c;
+    border-color: #4e4f50;
+    color: #e4e6eb;
+  }
+
+  .truly-btn:hover {
+    background: #4e4f50;
+  }
+
+  .truly-btn-primary {
+    background: #263d5c;
+    border-color: #1877f2;
+    color: #2d88ff;
+  }
+
+  .truly-report-pill {
+    background: rgba(36, 37, 38, 0.92);
+    border-color: #4e4f50;
+    color: #b0b3b8;
+  }
+
+  .truly-report-pill:hover {
+    background: #3a3b3c;
+    color: #ff6b6b;
+    border-color: #ff6b6b;
+  }
+
+  html.truly-fb-dark .truly-score-report-btn {
+    background: #3a3b3c;
+    border-color: #4e4f50;
+    color: #b0b3b8;
+  }
+
+  html.truly-fb-dark .truly-score-report-btn:hover:not(:disabled) {
+    color: #ff6b6b;
+    border-color: #ff6b6b;
+  }
+
+  .truly-collapse-bar {
+    background: #3a3b3c;
+  }
+
+  .truly-collapse-label {
+    color: #b0b3b8;
+  }
+
+  .truly-collapse-bar-reason {
+    color: #8a8d91;
+  }
+
+  .truly-surface-collapse-bar {
+    background: #242526;
+    border-color: #3a3b3c;
+    color: #b0b3b8;
+  }
+
+  .truly-surface-collapse-label {
+    color: #b0b3b8;
+  }
+
+}
+
+/* ---- Dashboard correlation flash highlight ---- */
+/* Triggered when the user clicks a card in the side panel.
+ * The content script's scrollToDashPost adds .truly-dash-flash for ~1800ms
+ * so the matching post is visually obvious in the feed. */
+@keyframes truly-dash-flash-anim {
+  0%   { box-shadow: 0 0 0 4px rgba(255, 224, 102, 0.0); }
+  10%  { box-shadow: 0 0 0 4px rgba(255, 224, 102, 0.95); }
+  100% { box-shadow: 0 0 0 4px rgba(255, 224, 102, 0.0); }
+}
+[data-truly-id].truly-dash-flash {
+  animation: truly-dash-flash-anim 1800ms ease-out;
+  border-radius: 8px;
+}
+
+/* ---- Tier A on-post enrichment (score panel summary row) ---- */
+/* Inline widgets that surface information-quality signals directly on
+ * the post for users who never open the side panel. They sit
+ * on the same existing summary row — no new line is inserted. */
+.truly-manip-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  margin-left: 4px;
+  border-radius: 10px;
+  background: #fff3cd;
+  color: #8a6d1f;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: help;
+}
+.truly-iq-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  margin-left: 4px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: help;
+  color: #fff;
+  white-space: nowrap;
+}
+.truly-iq-source-original        { background: #42b72a; }
+.truly-iq-source-news_repost     { background: #1877f2; }
+.truly-iq-source-secondhand_rumor{ background: #e41e3f; }
+.truly-iq-source-unclear         { background: #8a8d91; }
+.truly-chip-recommended {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  border: 1px solid #dadde1;
+  border-radius: 10px;
+  background: #f0f2f5;
+  color: #65676b;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: help;
+  white-space: nowrap;
+}
+
+.truly-iq-ai-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 96px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid #dadde1;
+  background: rgba(255, 255, 255, 0.72);
+  color: #65676b;
+  font-size: 12px;
+  line-height: 1.35;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: help;
+  flex: 0 1 auto;
+}
+
+.truly-iq-ai-score {
+  color: #5b21b6;
+  font-weight: 750;
+}
+
+.truly-tier-b-marker {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  margin-left: 4px;
+  border-radius: 10px;
+  background: linear-gradient(120deg, #fef3c7, #fde68a);
+  color: #92400e;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: help;
+  white-space: nowrap;
+  letter-spacing: 0;
+}
+
+.truly-tier-b-image-warning {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 5px;
+  margin-left: 3px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  color: #78350f;
+  font-size: 11px;
+  cursor: help;
+  white-space: nowrap;
+  border: 1px solid #fcd34d;
+}

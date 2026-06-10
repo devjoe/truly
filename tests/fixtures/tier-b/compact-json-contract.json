@@ -1,0 +1,56 @@
+[
+  {
+    "id": "compact-deep-analysis",
+    "description": "Tier B compact JSON maps short response fields into the stable DeepClassification shape.",
+    "model": "contract-model",
+    "raw": "{\"sum\":\"官方公告摘要。\",\"txt_ai\":0.2,\"img_ai\":0.1,\"com\":0.3,\"lq\":0.1,\"fr\":0.8,\"mr\":0.4,\"fc\":true,\"why\":\"需核對日期與官方來源。\",\"imgs\":[{\"i\":1,\"note\":\"截圖含公告資訊。\"}]}",
+    "expected": {
+      "model": "contract-model",
+      "summary": "官方公告摘要。",
+      "textAiLikelihood": 0.2,
+      "imageAiLikelihood": 0.1,
+      "aiLikelihood": 0.2,
+      "commercialIntent": 0.3,
+      "lowQualitySignal": 0.1,
+      "informationQuality": {
+        "factualRisk": 0.8,
+        "manipulationRisk": 0.4,
+        "needsFactCheck": true,
+        "explanation": "需核對日期與官方來源。"
+      },
+      "imageInsights": [
+        {
+          "index": 1,
+          "observation": "截圖含公告資訊。"
+        }
+      ]
+    }
+  },
+  {
+    "id": "fenced-json",
+    "description": "Fenced JSON is accepted only when the fence contains one strict object.",
+    "model": "fenced-contract",
+    "raw": "```json\n{\"sum\":\"生活心得分享。\",\"txt_ai\":0.1,\"img_ai\":0,\"com\":0,\"lq\":0,\"fr\":0.1,\"mr\":0.1,\"fc\":false,\"why\":\"低風險個人經驗。\"}\n```",
+    "expected": {
+      "model": "fenced-contract",
+      "summary": "生活心得分享。",
+      "textAiLikelihood": 0.1,
+      "imageAiLikelihood": 0,
+      "commercialIntent": 0,
+      "lowQualitySignal": 0,
+      "informationQuality": {
+        "factualRisk": 0.1,
+        "manipulationRisk": 0.1,
+        "needsFactCheck": false,
+        "explanation": "低風險個人經驗。"
+      }
+    }
+  },
+  {
+    "id": "rejects-prose-around-json",
+    "description": "Tier B parser must not swallow prose wrapped around JSON because that hides response-format drift.",
+    "model": "contract-model",
+    "raw": "Here is the JSON:\n{\"sum\":\"ok\"}",
+    "expectedError": "no_strict_json_object"
+  }
+]

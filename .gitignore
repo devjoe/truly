@@ -1,0 +1,10 @@
+.env
+.env.*
+data/
+tmp/
+dist/
+dist-*/
+artifacts/
+test-results/
+node_modules/
+.idea/

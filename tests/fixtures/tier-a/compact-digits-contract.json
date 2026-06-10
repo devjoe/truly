@@ -1,0 +1,41 @@
+[
+  {
+    "id": "four-axis-score-only",
+    "description": "Compact mode maps the four built-in axes in commercial, political, emotional, personal order.",
+    "raw": "0789",
+    "customRules": [],
+    "expected": {
+      "scores": {
+        "commercial": 0,
+        "political": 0.7,
+        "emotional": 0.8,
+        "personal": 0.9
+      }
+    }
+  },
+  {
+    "id": "custom-rule-suffix",
+    "description": "Custom-rule scores append after the four built-in axes and keep rule order.",
+    "raw": "078956",
+    "customRules": [{ "id": "rule-a" }, { "id": "rule-b" }],
+    "expected": {
+      "scores": {
+        "commercial": 0,
+        "political": 0.7,
+        "emotional": 0.8,
+        "personal": 0.9
+      },
+      "customRuleScores": {
+        "rule-a": 0.5,
+        "rule-b": 0.6
+      }
+    }
+  },
+  {
+    "id": "rejects-non-digit-output",
+    "description": "Compact mode is intentionally strict; punctuation or prose must trigger fallback instead of being parsed loosely.",
+    "raw": "0.789",
+    "customRules": [],
+    "expected": null
+  }
+]

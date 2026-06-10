@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
+  <!-- Truly favicon (Dot only, 16px+) — the brand reduced to its status dot.
+       Halo Blue #DCE6FF ring + Primary Blue #2563FF core. -->
+  <defs>
+    <radialGradient id="faviconHalo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2563FF" stop-opacity="0.24"/>
+      <stop offset="62%" stop-color="#DCE6FF"/>
+      <stop offset="100%" stop-color="#BFD1FF"/>
+    </radialGradient>
+    <radialGradient id="faviconCore" cx="36%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#78B1FF"/>
+      <stop offset="42%" stop-color="#2563FF"/>
+      <stop offset="100%" stop-color="#1D4FE8"/>
+    </radialGradient>
+  </defs>
+  <circle cx="8" cy="8" r="7.5" fill="url(#faviconHalo)"/>
+  <circle cx="8" cy="8" r="5" fill="url(#faviconCore)"/>
+</svg>

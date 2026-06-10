@@ -1,0 +1,69 @@
+[
+  {
+    "id": "strict-json-reading-brief",
+    "description": "A normal Tier B-2 response keeps action-oriented fields and records the model signature.",
+    "model": "brief-contract-model",
+    "raw": "{\"bg\":[{\"t\":\"範例實驗\",\"why\":\"數字主張需要來源\",\"q\":\"範例實驗 86.1% 原始資料？\"}],\"claims\":[{\"c\":\"範例 Top-1 達 86.1%\",\"why\":\"核心數字可查核\",\"need\":\"原始 repo 或論文\",\"q\":\"範例 Top-1 86.1% benchmark\"}],\"qs\":[{\"q\":\"範例方法如何分類圖片？\",\"kind\":\"understand\"}],\"checks\":[{\"label\":\"數字來源\",\"q\":\"範例 86.1% Top-1 來源\",\"why\":\"需對照原始資料\"}],\"note\":\"先確認原始實驗設定。\"}",
+    "expected": {
+      "model": "brief-contract-model",
+      "bg": [
+        {
+          "t": "範例實驗",
+          "why": "數字主張需要來源",
+          "q": "範例實驗 86.1% 原始資料？"
+        }
+      ],
+      "claims": [
+        {
+          "c": "範例 Top-1 達 86.1%",
+          "why": "核心數字可查核",
+          "need": "原始 repo 或論文",
+          "q": "範例 Top-1 86.1% benchmark"
+        }
+      ],
+      "qs": [
+        {
+          "q": "範例方法如何分類圖片？",
+          "kind": "understand"
+        }
+      ],
+      "checks": [
+        {
+          "label": "數字來源",
+          "q": "範例 86.1% Top-1 來源",
+          "why": "需對照原始資料"
+        }
+      ],
+      "note": "先確認原始實驗設定。"
+    }
+  },
+  {
+    "id": "fenced-json-reading-brief",
+    "description": "Fenced JSON is accepted only when the fence wraps a single object.",
+    "model": "fenced-brief-contract",
+    "raw": "```json\n{\"bg\":[{\"t\":\"官方公告\",\"why\":\"可由原站確認\"}],\"qs\":[{\"q\":\"範例套件 moderation approved 官方公告\",\"kind\":\"source\"}],\"note\":\"優先對照官方連結。\"}\n```",
+    "expected": {
+      "model": "fenced-brief-contract",
+      "bg": [
+        {
+          "t": "官方公告",
+          "why": "可由原站確認"
+        }
+      ],
+      "qs": [
+        {
+          "q": "範例套件 moderation approved 官方公告",
+          "kind": "source"
+        }
+      ],
+      "note": "優先對照官方連結。"
+    }
+  },
+  {
+    "id": "prose-around-json-is-rejected",
+    "description": "Prose around JSON remains a contract violation so model drift is visible.",
+    "model": "brief-contract-model",
+    "raw": "Here is the JSON: {\"bg\":[]}",
+    "expectedError": "no_strict_json_object"
+  }
+]

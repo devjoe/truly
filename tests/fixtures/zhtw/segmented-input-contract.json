@@ -1,0 +1,53 @@
+[
+  {
+    "id": "image-alt-is-not-scanned",
+    "description": "Generic image alt text is stored separately and does not become zhtw input.",
+    "input": {
+      "contentKind": "standard",
+      "fullText": "今天終於學會換氣了 可能是游泳、水池和文字的圖像 回覆"
+    },
+    "expectedSegments": [
+      {
+        "kind": "post_text",
+        "label": "貼文文字",
+        "text": "今天終於學會換氣了"
+      }
+    ]
+  },
+  {
+    "id": "image-ocr-is-scanned-as-image-text",
+    "description": "OCR text is scanned as image_text rather than authored post_text.",
+    "input": {
+      "contentKind": "standard",
+      "fullText": "這張圖值得仔細閱讀。可能是顯示的文字是「投票結果出爐 渠道更新」的圖像"
+    },
+    "expectedSegments": [
+      {
+        "kind": "post_text",
+        "label": "貼文文字",
+        "text": "這張圖值得仔細閱讀。"
+      },
+      {
+        "kind": "image_text",
+        "label": "圖片文字",
+        "text": "投票結果出爐 渠道更新"
+      }
+    ]
+  },
+  {
+    "id": "visible-comments-are-not-scanned",
+    "description": "Expanded comments after 查看更多留言 stay outside zhtw input.",
+    "input": {
+      "authorName": "Example Author",
+      "contentKind": "standard",
+      "fullText": "正文第一段提供重要內容。\n查看更多留言\nExample Commenter 這是留言內容"
+    },
+    "expectedSegments": [
+      {
+        "kind": "post_text",
+        "label": "貼文文字",
+        "text": "正文第一段提供重要內容。"
+      }
+    ]
+  }
+]

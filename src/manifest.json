@@ -1,0 +1,59 @@
+{
+  "manifest_version": 3,
+  "default_locale": "en",
+  "name": "Truly",
+  "version": "0.1.0",
+  "description": "Local-first reading clarity for social feeds and web pages.",
+  "permissions": ["storage", "activeTab", "sidePanel"],
+  "host_permissions": [
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "*://*.fbcdn.net/*",
+    "*://*.facebook.com/*"
+  ],
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["*://*.facebook.com/*"],
+      "js": ["content_scripts/graphql-interceptor.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["*://*.facebook.com/*"],
+      "js": ["content_scripts/feed-filter.js"],
+      "css": ["content_scripts/feed-filter.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "side_panel": {
+    "default_path": "sidepanel/sidepanel.html"
+  }
+}

@@ -1,0 +1,33 @@
+name: Alpha Artifact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Alpha artifact
+        run: npm run release:alpha
+
+      - name: Upload Alpha artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: truly-alpha-artifacts
+          path: artifacts/alpha/*/
+          if-no-files-found: error

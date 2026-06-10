@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <!-- Truly app icon (Light square, 24px+) — white squircle with a hairline
+       Ink border for definition on light surfaces, Ink humanist "t", baseline
+       Primary Blue status dot. Always light regardless of OS theme (a dark
+       square reads as Tumblr). Brand colors: Ink #0E1726, Primary Blue #2563FF. -->
+  <defs>
+    <radialGradient id="dotHalo" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#2563FF" stop-opacity="0.28"/>
+      <stop offset="56%" stop-color="#2563FF" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#2563FF" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="dotCore" cx="35%" cy="30%" r="70%">
+      <stop offset="0%" stop-color="#6EA8FF"/>
+      <stop offset="38%" stop-color="#2563FF"/>
+      <stop offset="100%" stop-color="#1D4FE8"/>
+    </radialGradient>
+  </defs>
+  <rect width="128" height="128" rx="29" fill="#FFFFFF"/>
+  <rect x="1" y="1" width="126" height="126" rx="28" fill="none" stroke="#0E1726" stroke-opacity="0.10" stroke-width="2"/>
+  <g fill="none" stroke="#0E1726" stroke-width="13" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M52 32 L52 83 Q52 95 64 95"/>
+    <path d="M38 50 L70 50"/>
+  </g>
+  <circle cx="86" cy="91" r="18" fill="url(#dotHalo)"/>
+  <circle cx="86" cy="91" r="10" fill="url(#dotCore)"/>
+</svg>
