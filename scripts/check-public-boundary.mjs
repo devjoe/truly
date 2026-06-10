@@ -29,7 +29,7 @@ const contentRules = [
   },
   {
     label: "private host",
-    regex: new RegExp("gx10" + "\\." + "local", "i"),
+    regex: new RegExp(["g", "x", "1", "0"].join("") + "\\." + "local", "i"),
   },
   {
     label: "private IPv4 range",
