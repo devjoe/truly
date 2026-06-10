@@ -55,6 +55,13 @@ Live Facebook checks and private regression packs are separate human release
 confidence passes. They can block a release decision, but they should not make
 the public package command unusable from a clean checkout.
 
+## GitHub Release Boundary
+
+The first Alpha keeps release publishing manual. The workflow can build and
+upload artifacts for review, but the human release step is still to create the
+GitHub Release from the Alpha tag and attach the generated extension zip,
+source zip, and build report.
+
 ## Dev Shortcut Boundary
 
 Alpha release artifacts must not include development-only commands. Local

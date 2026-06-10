@@ -11,7 +11,7 @@
     "check:type": "tsc --noEmit",
     "check:public-boundary": "node scripts/check-public-boundary.mjs",
     "test:contract:public": "vitest run tests/contract/model-response-contract.test.ts tests/contract/post-context-boundary-contract.test.ts tests/contract/zhtw-segmentation-contract.test.ts",
-    "test:unit:public": "vitest run tests/unit/model-display.test.ts tests/unit/model-source-config.test.ts tests/unit/provider-capabilities.test.ts tests/unit/reading-question-policy.test.ts tests/unit/theme-mode.test.ts",
+    "test:unit:public": "vitest run tests/unit/i18n.test.ts tests/unit/i18n-hardcoded-strings.test.ts tests/unit/model-display.test.ts tests/unit/model-source-config.test.ts tests/unit/provider-capabilities.test.ts tests/unit/reading-question-policy.test.ts tests/unit/theme-mode.test.ts",
     "check:public": "npm run check:public-boundary && npm run check:type && npm run test:contract:public && npm run test:unit:public && npm run build",
     "check:build": "npm run check:public-boundary && npm run build"
   },

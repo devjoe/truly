@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { resolve, sep } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 
@@ -19,8 +19,8 @@ const deniedPathRules = [
 
 const contentRules = [
   {
-    label: "parent-directory reference",
-    regex: new RegExp("\\.\\." + "[/\\\\]"),
+    label: "parent-directory reference outside public root",
+    test: hasEscapingParentReference,
     appliesTo: (path) => !startsWithSegment(path, "src"),
   },
   {
@@ -78,7 +78,8 @@ for (const file of files) {
 
   const content = bytes.toString("utf8");
   for (const rule of contentRules) {
-    if ((rule.appliesTo?.(normalized) ?? true) && rule.regex.test(content)) {
+    const matched = rule.test?.(content, normalized) ?? rule.regex.test(content);
+    if ((rule.appliesTo?.(normalized) ?? true) && matched) {
       failures.push(`${normalized}: forbidden content (${rule.label})`);
     }
   }
@@ -96,6 +97,20 @@ console.log(`Public-boundary check passed (${files.length} files scanned).`);
 
 function startsWithSegment(path, segment) {
   return path === segment || path.startsWith(`${segment}/`);
+}
+
+function hasEscapingParentReference(content, filePath) {
+  const pattern = /(?:^|["'`\s(:=])(\.\.(?:[/\\][^"'`\s),;]+)+)/g;
+  const baseDir = dirname(filePath);
+  let match;
+  while ((match = pattern.exec(content)) !== null) {
+    const target = resolve(root, baseDir, match[1]);
+    const rel = relative(root, target);
+    if (rel.startsWith("..") || isAbsolute(rel)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function listCandidateFiles() {
