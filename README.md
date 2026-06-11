@@ -40,6 +40,45 @@ See `docs/release/privacy-policy.md` for the release-facing privacy policy.
 - Current UI support is focused on Facebook reading surfaces.
 - Public tests use synthetic fixtures only.
 
+## Recommended Model Setup
+
+Truly works best with Chrome built-in Gemini Nano for zero-configuration Alpha
+testing.
+
+For stronger local setups, we currently recommend:
+
+- Ollama + `gemma4:e4b-it-qat` for lightweight local reading hints and summaries.
+- A larger OpenAI-compatible local endpoint for deeper reading analysis.
+
+See [Model Setup](docs/model-setup.md) for requirements and examples.
+
+## Roadmap
+
+**Now**
+
+- Public Alpha release and feedback collection.
+- Bug fixes and stability improvements.
+
+**Next**
+
+- Comment analysis support.
+- More social feed surfaces.
+- A lightweight universal mode for regular web pages.
+
+**Later**
+
+- Mobile-friendly reading workflows.
+- Social collaboration features, such as shared signals for suspicious accounts
+  or posts.
+
+## Feedback And Contributions
+
+Alpha feedback is tracked through GitHub Issues. Pull requests are welcome for
+small fixes, docs, and public test coverage. Please open an issue before large
+features or platform expansion work.
+
+Security issues should follow `SECURITY.md` rather than public issue details.
+
 ## Development
 
 ```bash

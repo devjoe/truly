@@ -24,4 +24,6 @@ remaining Chrome Web Store visual decisions.
 - Create or choose the final promotional tile if the listing requires one.
 - Confirm all images avoid private feed content, private account names, or raw
   logged-in screenshots.
+- Use synthetic or de-identified mockups in the public README and first GitHub
+  Alpha release. Do not publish raw platform screenshots from logged-in pages.
 - Confirm light/dark screenshots represent the current Alpha UI.

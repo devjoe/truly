@@ -3,8 +3,8 @@
 Status: Alpha draft for review
 Last updated: 2026-06-10
 
-This is release-facing copy for the first unlisted Chrome Web Store Alpha.
-Review wording, screenshots, and final privacy-policy URL before submission.
+This is future Chrome Web Store copy. The first Alpha ships through a public
+GitHub repo and GitHub Release artifact; CWS unlisted is deferred.
 
 ## Name
 
@@ -44,4 +44,4 @@ Productivity
 
 - Use the public README for setup instructions.
 - Use the privacy policy URL submitted to Chrome Web Store.
-- Collect Alpha feedback in GitHub Issues after the private repo is ready.
+- Collect Alpha feedback in GitHub Issues after the public repo is announced.
