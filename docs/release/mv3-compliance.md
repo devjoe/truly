@@ -35,6 +35,10 @@ language-convention checker. The WASM asset is included under
 `src/vendor/zhtw-mcp/` with its license preserved in `THIRD_PARTY_NOTICES.md`
 and `src/vendor/zhtw-mcp/LICENSE`.
 
+The vendored zhtw-mcp build may contain dormant `detect_ai` plumbing for future
+evaluation, but Alpha uses the WASM only for local language-convention checks.
+No zhtw-mcp AI-detection verdict is shown to users.
+
 Remove `wasm-unsafe-eval` before release only if the bundled zhtw-mcp loader no
 longer needs it.
 

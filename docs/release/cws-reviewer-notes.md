@@ -73,3 +73,6 @@ as data used to render reading assistance; they are not remote executable code.
 The zhtw-mcp language-convention checker is bundled as a local WASM asset. Its
 license is preserved in `THIRD_PARTY_NOTICES.md` and
 `src/vendor/zhtw-mcp/LICENSE`.
+
+For Alpha, zhtw-mcp is used only for language-convention hints such as wording
+and punctuation. Truly does not expose a zhtw-mcp AI-detection verdict.
