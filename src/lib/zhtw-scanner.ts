@@ -8,7 +8,7 @@ import {
   ZHTW_RAW_MAX_EXAMPLES,
 } from "./zhtw-review";
 
-export const ZHTW_MCP_SOURCE_VERSION = "9b977caaa4671473d4175828ed1d5970761aa192";
+export const ZHTW_MCP_SOURCE_VERSION = "9b407b7bce3c603a0ade221d248eec1a0f531335";
 export const ZHTW_SCAN_OPTIONS = { profile: "base", relaxed: true } as const;
 
 const MAX_SCAN_CHARS_PER_SEGMENT = 5000;

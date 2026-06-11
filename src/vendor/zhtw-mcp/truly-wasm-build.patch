@@ -1,0 +1,45 @@
+Cargo.toml  |  2 +-
+ src/wasm.rs | 12 ++++++++++++
+ 2 files changed, 13 insertions(+), 1 deletion(-)
+
+--- Changes ---
+
+Cargo.toml
+  @@ -39,7 +39,7 @@ serde = { version = "1", features = ["derive", "rc"] }
+  -regex = "1"
+  +regex = { version = "1", default-features = false, features = ["std", "perf", "unicode-perl"] }
+   blake3 = "1"
+   rayon = { version = "1", optional = true }
+   anyhow = "1"
+  +1 -1
+
+src/wasm.rs
+  @@ -19,6 +19,8 @@ pub fn start() {
+  +    detect_ai: bool,
+  +    ai_threshold_multiplier: Option<f32>,
+   }
+   
+   #[derive(Debug, Serialize)]
+  @@ -28,6 +30,8 @@ struct BrowserScanResult {
+  +    #[serde(skip_serializing_if = "Option::is_none")]
+  +    ai_signature: Option<crate::engine::ai_score::AiSignatureReport>,
+   }
+   
+   #[derive(Debug, Default, Serialize)]
+  @@ -68,6 +72,13 @@ pub fn scan_text(text: &str, options_json: Option<String>) -> Result<String, JsV
+  +    if options.detect_ai {
+  +        config.ai_filler_detection = true;
+  +        config.ai_semantic_safety = true;
+  +        config.ai_density_detection = true;
+  +        config.ai_structural_patterns = true;
+  +        config.ai_threshold_multiplier = options.ai_threshold_multiplier.unwrap_or(1.0);
+  +    }
+   
+       let scanner = scanner()?;
+       let output = scanner.scan_for_content_type_with_config(text, ContentType::Plain, config);
+  @@ -91,6 +102,7 @@ pub fn scan_text(text: &str, options_json: Option<String>) -> Result<String, JsV
+  +        ai_signature: output.ai_signature,
+       };
+   
+       serde_json::to_string(&result)
+  +12 -0
