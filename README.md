@@ -5,8 +5,8 @@
 Truly is a local-first Chrome extension for improving reading clarity in social
 feeds and web pages.
 
-Truly is in Alpha. The current build focuses on Facebook reading surfaces, while
-the product direction is broader than any single platform.
+Truly is an early preview. The current build focuses on Facebook reading
+surfaces, while the product direction is broader than any single platform.
 
 ## Preview
 
@@ -33,7 +33,7 @@ the product direction is broader than any single platform.
 
 See `docs/release/privacy-policy.md` for the release-facing privacy policy.
 
-## Current Alpha Scope
+## Current Preview Scope
 
 - Chrome Manifest V3 extension.
 - Browser-local, local endpoint, or private endpoint model sources.
@@ -42,7 +42,7 @@ See `docs/release/privacy-policy.md` for the release-facing privacy policy.
 
 ## Recommended Model Setup
 
-Truly works best with Chrome built-in Gemini Nano for zero-configuration Alpha
+Truly works best with Chrome built-in Gemini Nano for zero-configuration early
 testing.
 
 For stronger local setups, we currently recommend:
@@ -56,7 +56,7 @@ See [Model Setup](docs/model-setup.md) for requirements and examples.
 
 **Now**
 
-- Public Alpha release and feedback collection.
+- Public early preview release and feedback collection.
 - Bug fixes and stability improvements.
 
 **Next**
@@ -73,9 +73,12 @@ See [Model Setup](docs/model-setup.md) for requirements and examples.
 
 ## Feedback And Contributions
 
-Alpha feedback is tracked through GitHub Issues. Pull requests are welcome for
-small fixes, docs, and public test coverage. Please open an issue before large
-features or platform expansion work.
+For general early preview feedback, use the feedback page once it is available:
+<https://trulyreader.org/feedback/>
+
+Use GitHub Issues for reproducible bugs, screenshots, logs, or visible technical
+problems. Pull requests are welcome for small fixes, docs, and public test
+coverage. Please open an issue before large features or platform expansion work.
 
 Security issues should follow `SECURITY.md` rather than public issue details.
 

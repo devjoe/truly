@@ -1,6 +1,6 @@
 # Contributing
 
-Truly is in Alpha. Please keep contributions small and easy to review.
+Truly is an early preview. Please keep contributions small and easy to review.
 
 ## Good First Contributions
 
@@ -12,7 +12,7 @@ Truly is in Alpha. Please keep contributions small and easy to review.
 ## Before Large Changes
 
 Open an issue before starting large features, new platform support, permission
-changes, or model-provider changes. Alpha priorities may change quickly.
+changes, or model-provider changes. Early preview priorities may change quickly.
 
 ## Private Data
 
