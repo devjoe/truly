@@ -1,7 +1,7 @@
 # Chrome Web Store Listing Copy
 
 Status: Alpha draft for review
-Last updated: 2026-06-10
+Last updated: 2026-06-12
 
 This is future Chrome Web Store copy. The first Alpha ships through a public
 GitHub repo and GitHub Release artifact; CWS unlisted is deferred.
@@ -43,5 +43,6 @@ Productivity
 ## Support Notes
 
 - Use the public README for setup instructions.
-- Use the privacy policy URL submitted to Chrome Web Store.
+- Use https://trulyreader.org/privacy/ as the submitted privacy policy URL.
+- Use cws@trulyreader.org for Chrome Web Store contact.
 - Collect Alpha feedback in GitHub Issues after the public repo is announced.

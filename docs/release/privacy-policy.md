@@ -1,6 +1,8 @@
 # Privacy Policy
 
-Last updated: 2026-06-10
+Last updated: 2026-06-12
+
+Canonical URL: https://trulyreader.org/privacy/
 
 Truly is a local-first reading assistant for social feeds and web pages.
 Reading analysis runs in the model environment you choose. Content is sent to
@@ -72,3 +74,7 @@ https://policies.google.com/terms/generative-ai/use-policy
 Truly is not designed for high-stakes decisions, automated moderation, legal,
 medical, financial, or safety-critical advice. Do not rely on model output as
 the sole basis for such decisions.
+
+## Contact
+
+For privacy or Chrome Web Store questions, contact cws@trulyreader.org.
