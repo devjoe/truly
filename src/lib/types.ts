@@ -581,9 +581,9 @@ export const DEFAULT_SETTINGS: UserSettings = {
     personal: false,
   },
   thresholds: {
-    commercial: 0.7,
-    political: 0.8,
-    emotional: 0.7,
+    commercial: 0.85,
+    political: 0.9,
+    emotional: 0.85,
     personal: 1.0,
   },
   tierAProvider: "chrome-gemini-nano",

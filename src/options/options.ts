@@ -105,7 +105,10 @@ const THRESHOLD_PRESETS: Record<ThresholdPresetName, Record<FilterCategory, numb
     personal: 1.0,
   },
   standard: {
-    ...DEFAULT_SETTINGS.thresholds,
+    commercial: 0.7,
+    political: 0.8,
+    emotional: 0.7,
+    personal: 1.0,
   },
   active: {
     commercial: 0.55,

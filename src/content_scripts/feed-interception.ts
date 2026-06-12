@@ -347,6 +347,7 @@ export function extractPrimaryMessageText(root: HTMLElement, identity = extractP
   const candidates: string[] = [];
   for (const el of Array.from(root.querySelectorAll<HTMLElement>('[dir="auto"]'))) {
     if (isTrulyUI(el) || isNestedArticleNode(el, root)) continue;
+    if (isAfterCommentThreadBoundary(root, el)) continue;
     const label = el.getAttribute("aria-label");
     if (label && ACTION_BAR_ARIA_LABELS.has(label.trim())) continue;
     const text = stripLeadingIdentityLines(cleanText(visibleText(el)), identity);
@@ -429,9 +430,26 @@ function rawElementText(el: Element): string {
     .trim();
 }
 
+const POST_ACTION_BOUNDARY_LABELS = new Set([
+  "讚", "Like", "喜歡",
+  "留言", "Comment",
+  "分享", "Share",
+  "傳送", "Send",
+]);
+
+function isPostActionBoundaryElement(el: HTMLElement): boolean {
+  const label = (el.getAttribute("aria-label") || "").trim();
+  if (POST_ACTION_BOUNDARY_LABELS.has(label)) return true;
+  const role = (el.getAttribute("role") || "").trim();
+  const tag = el.tagName.toLowerCase();
+  return (role === "button" || tag === "button") &&
+    POST_ACTION_BOUNDARY_LABELS.has(rawElementText(el));
+}
+
 function findCommentThreadBoundary(root: HTMLElement): HTMLElement | null {
   for (const el of Array.from(root.querySelectorAll<HTMLElement>('[role="button"], button, a'))) {
     if (isFacebookCommentThreadBoundaryText(rawElementText(el))) return el;
+    if (isPostActionBoundaryElement(el)) return el;
   }
   return null;
 }
@@ -1632,6 +1650,7 @@ export function extractPostBody(root: HTMLElement): string {
   }
 
   function walk(node: Node, depth: number): string {
+    if (depth > 0 && isAfterCommentThreadBoundary(root, node)) return "";
     if (node.nodeType === Node.TEXT_NODE) return node.textContent || "";
     if (node.nodeType !== Node.ELEMENT_NODE) return "";
     const el = node as Element;
