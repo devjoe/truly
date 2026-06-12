@@ -1,7 +1,7 @@
 # Early Preview Feedback
 
 Created: 2026-06-12
-Status: planned public entrypoint, waiting for Google Form URL
+Status: live public entrypoint
 
 This document defines the lightweight early preview feedback route for Truly.
 It is a public-facing product-feedback path, not a replacement for reproducible
@@ -10,6 +10,10 @@ GitHub bug reports.
 ## Routes
 
 - Product feedback page: `https://trulyreader.org/feedback/`
+- Chinese feedback form:
+  `https://docs.google.com/forms/d/e/1FAIpQLSeZmQv-Q6lnluoC6_Uu3FMepbRlpCNkcDSQqFIb1Xf3yltAXA/viewform?usp=dialog`
+- English feedback form:
+  `https://docs.google.com/forms/d/e/1FAIpQLSfXrM9D55r1PzNFdvR6UiZFfo1cGBFcAJ5PFfq5QZsyLyuEaw/viewform?usp=dialog`
 - Human contact: `hello@trulyreader.org`
 - Technical issues: GitHub Issues in the public `truly` repository
 
@@ -24,51 +28,54 @@ The page should stay small and clear:
 
 1. Say that Truly is an early preview and feedback is used to improve the
    reading experience.
-2. Link to the Google Form once available.
+2. Link to the Chinese and English Google Forms.
 3. Provide `hello@trulyreader.org` for direct contact.
-4. Ask users not to submit other people's personal data, private posts, or
-   non-public content.
-5. Explain that reproducible technical problems belong in GitHub Issues.
+4. Explain that reproducible technical problems belong in GitHub Issues.
 
 ## Google Form Questions
 
 Use short questions. Avoid long product explanations inside the form.
 
-Required or strongly suggested:
+English form intro:
 
-- Overall, what is your impression of Truly right now?
+> Thanks for trying Truly. Your feedback helps us understand what feels useful,
+> what feels confusing, and what you would like Truly to support next.
+
+Chinese form:
+
+- 整體而言，你對 Truly 的第一印象是什麼？
+- 哪些地方你覺得有幫助？
+- 哪些地方讓你覺得困惑、不必要或不準確？
+- 你希望 Truly 接下來改善或支援什麼？
+- 你是否對假帳號發言帶風向感到困擾？
+- 如果有，你通常用哪些線索判斷？
+- 願意加入 Google Groups 測試群組，提前體驗新功能並協助測試嗎？
+  若願意，請留下 Gmail。
+
+English form:
+
+- Overall, what is your first impression of Truly?
 - What felt useful?
-- What felt confusing, unnecessary, or wrong?
-- What would you most want Truly to help with next?
-- Are you interested in joining a tester group? If yes, leave a Gmail address.
-- Do you want a reply from the maintainer? If yes, leave an email address.
+- What felt confusing, unnecessary, or inaccurate?
+- What should Truly improve or support next?
+- Are you bothered by suspected fake accounts or coordinated comments?
+- If yes, what clues do you usually look for?
+- Would you like to join a Google Groups testing group to try new features
+  early and help test them? If yes, please leave your Gmail.
 
-Optional research questions:
-
-- Are you bothered by suspected fake accounts or coordinated influence
-  comments?
-- If yes, how do you usually judge?
-
-The second research question must be free text with no predefined answer
-choices. The goal is to collect users' own mental models and examples, not to
-lead them toward our assumptions.
-
-Privacy reminder:
-
-- Please do not submit other people's personal data, private posts, or
-  non-public content.
+The fake-account clue question must be free text with no predefined answer
+choices. The goal is to collect users' own mental models and examples.
 
 ## Extension Link Placement
 
-Once the feedback URL is final, add a low-key `提供回饋` link in the Side Panel
-External Tools area:
+The public feedback URL is final. Add a low-key `提供回饋` / `Feedback` link in
+the Side Panel External Tools area when that UI surface is ready:
 
 - place it at the lower-right of the section;
 - use the same quiet visual style as model/source notes such as `Analyzed by`;
 - keep it separate from primary external-tool buttons;
-- do not show it before the reading context is available.
-
-Do not add the link until the public page or form can receive feedback.
+- do not show it before the reading context is available;
+- link to `https://trulyreader.org/feedback/`, not directly to a Google Form.
 
 ## Deferred Contributor Form
 
