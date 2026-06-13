@@ -7,6 +7,29 @@ side panel.
 For public Alpha release, keep this notice in the root of the release source
 and preserve the vendored license file.
 
+## audreyt/pi-ds4
+
+Truly adapts the stakeholder-framing prompt wording documented in
+`audreyt/pi-ds4` for contested-context analysis. The conditional prompting
+pattern around that wording is Truly-specific.
+
+- Public project: https://github.com/audreyt/pi-ds4
+- Source: `README.md`, Directional steering section
+- License: MIT
+- Copyright: Copyright (c) 2026 Armin Ronacher
+
+MIT permission notice for the adapted source material:
+
+> Permission is hereby granted, free of charge, to any person obtaining a copy
+> of this software and associated documentation files (the "Software"), to deal
+> in the Software without restriction, including without limitation the rights
+> to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+> copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all
+> copies or substantial portions of the Software.
+
 ## zhtw-mcp
 
 - Public project: https://github.com/sysprog21/zhtw-mcp
