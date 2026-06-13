@@ -68,14 +68,23 @@ choices. The goal is to collect users' own mental models and examples.
 
 ## Extension Link Placement
 
-The public feedback URL is final. Add a low-key `提供回饋` / `Feedback` link in
-the Side Panel External Tools area when that UI surface is ready:
+The public feedback URL is final. The Side Panel External Tools area includes a
+low-key `提供回饋` / `Feedback` link:
 
 - place it at the lower-right of the section;
 - use the same quiet visual style as model/source notes such as `Analyzed by`;
 - keep it separate from primary external-tool buttons;
 - do not show it before the reading context is available;
 - link to `https://trulyreader.org/feedback/`, not directly to a Google Form.
+
+## Response Management
+
+Verified on 2026-06-13 by CDP against the live Google Forms editors:
+
+- both Chinese and English forms are linked to response spreadsheets;
+- both forms have email notifications enabled for new responses;
+- live feedback page screenshot:
+  `tmp/feedback-live-verify/feedback-live.png` (private, not committed).
 
 ## Deferred Contributor Form
 
