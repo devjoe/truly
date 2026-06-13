@@ -12,9 +12,7 @@ feeds and web pages.
 ## Preview
 
 <p>
-  <img src="docs/assets/mockups/heads-up-feed.png" alt="Reading hint inside a synthetic feed" width="31%">
-  <img src="docs/assets/mockups/heads-up-expanded.png" alt="Expanded reading summary" width="31%">
-  <img src="docs/assets/mockups/side-panel-reading.png" alt="Deep reading side panel" width="31%">
+  <img src="docs/assets/demo/truly-demo-balanced.gif" alt="Animated preview of Truly reading hints, expanded details, and deeper reading side panel" width="100%">
 </p>
 
 ## What It Does
