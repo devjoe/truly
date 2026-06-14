@@ -16,6 +16,13 @@ The public gate runs:
 - public pure unit tests;
 - production build.
 
+## Review Hardening Gate
+
+Before publishing a public preview, code-review hardening changes should pass
+`npm run check:public`. This gate covers deterministic regressions for the
+public package without requiring private feed captures, live browser sessions,
+or local model endpoints.
+
 ## Fixture Policy
 
 Public tests must not include:

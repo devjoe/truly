@@ -8,6 +8,12 @@ import {
   type ExtractedPost,
 } from "../lib/sponsorship-signals";
 
+const PAGE_ORIGIN = window.location.origin;
+
+function isSamePageMessage(event: MessageEvent): boolean {
+  return event.source === window && event.origin === PAGE_ORIGIN;
+}
+
 // --- SSR HTML sponsored detection (lightweight fetch path + cache) ---
 //
 // Page-context fetch path verified 2026-04-09 during SSR fetch diagnostics.
@@ -36,6 +42,7 @@ function requestCacheLookup(url: string): Promise<ExtractedPost[] | null> {
       resolve(null);
     }, 500);
     function onMsg(event: MessageEvent) {
+      if (!isSamePageMessage(event)) return;
       const d = event.data;
       if (!d || d.type !== "TRULY_SSR_CACHE_REPLY" || d.reqId !== reqId) return;
       clearTimeout(timer);
@@ -43,12 +50,12 @@ function requestCacheLookup(url: string): Promise<ExtractedPost[] | null> {
       resolve(d.posts ?? null);
     }
     window.addEventListener("message", onMsg);
-    window.postMessage({ type: "TRULY_SSR_CACHE_QUERY", url, reqId }, "*");
+    window.postMessage({ type: "TRULY_SSR_CACHE_QUERY", url, reqId }, PAGE_ORIGIN);
   });
 }
 
 function storeCacheEntry(url: string, posts: ExtractedPost[]): void {
-  window.postMessage({ type: "TRULY_SSR_CACHE_STORE", url, posts }, "*");
+  window.postMessage({ type: "TRULY_SSR_CACHE_STORE", url, posts }, PAGE_ORIGIN);
 }
 
 async function fetchAndScanSSR(): Promise<void> {
@@ -144,13 +151,14 @@ function _dispatchPosts(posts: ExtractedPost[]) {
     );
   }
   // Dispatch live (caught if listener is already attached)
-  window.postMessage({ type: "TRULY_GRAPHQL_POSTS", posts }, "*");
+  window.postMessage({ type: "TRULY_GRAPHQL_POSTS", posts }, PAGE_ORIGIN);
 }
 
 // Isolated-world handshake: when content script finishes init, it posts
 // TRULY_CONTENT_READY. We replay the entire buffer so it gets all posts that
 // were dispatched before its listener was attached.
 window.addEventListener("message", (event) => {
+  if (!isSamePageMessage(event)) return;
   if (event.data?.type !== "TRULY_CONTENT_READY") return;
   console.log(
     `[Truly] handshake: buffer=${_postsBuffer.length} gqlXhrSeen=${_gqlXhrCount} extracted=${_gqlPostsExtracted}`
@@ -159,7 +167,7 @@ window.addEventListener("message", (event) => {
   if (_postsBuffer.length === 0) return;
   window.postMessage(
     { type: "TRULY_GRAPHQL_POSTS", posts: _postsBuffer.slice() },
-    "*"
+    PAGE_ORIGIN
   );
 });
 

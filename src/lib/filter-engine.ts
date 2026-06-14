@@ -191,7 +191,7 @@ function isAllowlisted(post: PostData): boolean {
 const MAX_CACHE_SIZE = 500;
 // V14 tags Tier B natural-language output with `outputLang`; a Deep cache hit
 // is valid only when it matches the current extension language.
-const CACHE_STORAGE_KEY = "classificationCacheV14";
+const CACHE_STORAGE_KEY = "classificationCacheV15";
 const CACHE_BUILD_ID_KEY = "classificationCacheBuildId";
 const PERSIST_DEBOUNCE_MS = 2000;
 
@@ -217,11 +217,14 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 let cacheDirty = false;
 
 function hashText(text: string): string {
-  let h = 0;
+  let h1 = 0x811c9dc5;
+  let h2 = 0x9e3779b9;
   for (let i = 0; i < text.length; i++) {
-    h = ((h << 5) - h + text.charCodeAt(i)) | 0;
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 0x01000193);
+    h2 = Math.imul(h2 ^ code, 0x85ebca6b);
   }
-  return h.toString(36);
+  return `${text.length.toString(36)}:${(h1 >>> 0).toString(36)}:${(h2 >>> 0).toString(36)}`;
 }
 
 /** Active enabled rules, capped at MAX_ACTIVE_FOLD_RULES. Stable order
@@ -536,6 +539,11 @@ function resolveQueuedRequest(req: QueuedRequest, result: ClassifierResult): voi
   req.resolve(result);
 }
 
+function expireQueuedRequest(postId: string, text: string): void {
+  pendingOllamaRequests.delete(postId);
+  inFlight.delete(hashText(text));
+}
+
 // Listen for OLLAMA_RESULT from the service worker
 if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
   chrome.runtime.onMessage.addListener((message: any) => {
@@ -781,7 +789,10 @@ export async function classifyPost(
       const ollamaResult = await Promise.race([
         classifyWithOllama(post.id, post.text, llmContext),
         new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Tier A timeout")), TIER_A_TIMEOUT_MS)
+          setTimeout(() => {
+            expireQueuedRequest(post.id, post.text);
+            reject(new Error("Tier A timeout"));
+          }, TIER_A_TIMEOUT_MS)
         ),
       ]);
       const aDuration = performance.now() - aStartTime;

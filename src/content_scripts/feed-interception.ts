@@ -2148,6 +2148,11 @@ export function markSponsoredInFeed() {
 // See proposal `cache-ssr-fetch-in-session-storage` for the original rationale.
 const SSR_CACHE_TTL_MS = 5 * 60 * 1000;
 const SSR_CACHE_KEY_PREFIX = "truly-ssr:";
+const PAGE_ORIGIN = window.location.origin;
+
+function isSamePageMessage(event: MessageEvent): boolean {
+  return event.source === window && event.origin === PAGE_ORIGIN;
+}
 
 interface SsrCacheEntry {
   ts: number;
@@ -2168,7 +2173,7 @@ async function handleSsrCacheQuery(url: string, reqId: string): Promise<void> {
       posts = null;
     }
   }
-  window.postMessage({ type: "TRULY_SSR_CACHE_REPLY", reqId, posts }, "*");
+  window.postMessage({ type: "TRULY_SSR_CACHE_REPLY", reqId, posts }, PAGE_ORIGIN);
 }
 
 function handleSsrCacheStore(url: string, posts: GraphQLPost[]): void {
@@ -2180,6 +2185,7 @@ function handleSsrCacheStore(url: string, posts: GraphQLPost[]): void {
 
 export function injectGraphQLInterceptor(): void {
   window.addEventListener("message", (event) => {
+    if (!isSamePageMessage(event)) return;
     const data = event.data;
     if (!data || typeof data !== "object") return;
     if (data.type === "TRULY_GRAPHQL_POSTS") {
@@ -2200,7 +2206,7 @@ export function injectGraphQLInterceptor(): void {
   // The interceptor runs at document_start (much earlier than this content
   // script's document_idle), so the first feed XHR can fire before we're
   // listening. The handshake closes this race window.
-  window.postMessage({ type: "TRULY_CONTENT_READY" }, "*");
+  window.postMessage({ type: "TRULY_CONTENT_READY" }, PAGE_ORIGIN);
 }
 
 // Test-only exports for ssr-cache.test.ts

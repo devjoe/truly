@@ -75,7 +75,10 @@ function currentContentLang() {
 }
 
 async function loadAndApplySettings() {
-  const result = await browser.storage.sync.get(["settings"]);
+  const [result, stored] = await Promise.all([
+    browser.storage.sync.get(["settings"]),
+    browser.storage.local.get(["ollamaEndpoint", "ollamaModel"]),
+  ]);
   const settings = normalizeUserSettings(result.settings as Partial<UserSettings> | undefined);
   liveSettings = settings;
   updateSettings(settings);
@@ -83,7 +86,6 @@ async function loadAndApplySettings() {
   setSponsoredDisplayMode(settings.sponsoredDisplayMode);
   updateSurfaceCollapseSettings(settings, currentContentLang());
 
-  const stored = await browser.storage.local.get(["ollamaEndpoint", "ollamaModel"]);
   liveTierAEndpoint = (stored.ollamaEndpoint as string) || defaultEndpointForProvider("ollama");
   liveTierAModel = (stored.ollamaModel as string) || defaultModelForProvider("ollama", "reading-prompt");
   setOllamaConfig(liveTierAEndpoint, liveTierAModel);
@@ -106,6 +108,7 @@ async function loadAndApplySettings() {
 // When the queue is drained, idle pre-fetch picks the closest below-fold
 // post so the Tier B endpoint stays warm and results arrive before the user scrolls down.
 const postIdToData = new Map<string, PostData>();
+const POST_DATA_MAX_SIZE = 500;
 const postIdToTierA = new Map<string, FilterDecision>();
 const zhtwReviewCache = new Map<string, ZhtwReview>();
 const zhtwInflight = new Map<string, string>();
@@ -118,6 +121,17 @@ const zhtwAppliedKey = new Map<string, string>();
 const lastDispatchedLength = new Map<string, number>();
 const lastDispatchedTextHash = new Map<string, string>();
 const inFlightDispatchedTextHash = new Map<string, string>();
+
+function rememberPostData(stableId: string, post: PostData): void {
+  if (postIdToData.has(stableId)) postIdToData.delete(stableId);
+  postIdToData.set(stableId, post);
+
+  while (postIdToData.size > POST_DATA_MAX_SIZE) {
+    const oldest = postIdToData.keys().next().value;
+    if (!oldest) break;
+    postIdToData.delete(oldest);
+  }
+}
 
 // ---- sequential queue state ----
 const TIER_B_CANDIDATE_MS = 300;
@@ -208,45 +222,53 @@ async function tierBDrain() {
   if (tierBInflight || tierBQueue.length === 0) return;
   tierBInflight = true;
 
-  while (tierBQueue.length > 0) {
-    let pickIdx = 0;
-    const vh = window.innerHeight;
-    const center = vh / 2;
-    let bestDist = Infinity;
+  try {
+    while (tierBQueue.length > 0) {
+      let pickIdx = 0;
+      const vh = window.innerHeight;
+      const center = vh / 2;
+      let bestDist = Infinity;
 
-    for (let i = 0; i < tierBQueue.length; i++) {
-      const { el } = tierBQueue[i];
-      if (!document.contains(el)) {
-        tierBQueue.splice(i, 1);
-        i--;
-        continue;
+      for (let i = 0; i < tierBQueue.length; i++) {
+        const { el } = tierBQueue[i];
+        if (!document.contains(el)) {
+          tierBQueue.splice(i, 1);
+          i--;
+          continue;
+        }
+        if (skipMixedFeedContainer(el)) {
+          tierBQueue.splice(i, 1);
+          i--;
+          continue;
+        }
+        const rect = el.getBoundingClientRect();
+        if (rect.bottom <= 0 || rect.top >= vh) continue;
+        const elCenter = (rect.top + rect.bottom) / 2;
+        const dist = Math.abs(elCenter - center);
+        if (dist < bestDist) {
+          bestDist = dist;
+          pickIdx = i;
+        }
       }
-      if (skipMixedFeedContainer(el)) {
-        tierBQueue.splice(i, 1);
-        i--;
-        continue;
+
+      if (pickIdx >= tierBQueue.length) break;
+      const entry = tierBQueue.splice(pickIdx, 1)[0];
+      if (!entry || !document.contains(entry.el)) continue;
+
+      tierBInflightStableId = entry.stableId;
+      __trulyAudit({ ts: performance.now(), event: "dequeue", stableId: entry.stableId, remaining: tierBQueue.length });
+      try {
+        await dispatchDeepClassify(entry.el, "auto");
+      } catch (err) {
+        console.warn("[Truly] Tier B dispatch failed:", err);
+        __trulyAudit({ ts: performance.now(), event: "deep-dispatch-error", stableId: entry.stableId });
       }
-      const rect = el.getBoundingClientRect();
-      if (rect.bottom <= 0 || rect.top >= vh) continue;
-      const elCenter = (rect.top + rect.bottom) / 2;
-      const dist = Math.abs(elCenter - center);
-      if (dist < bestDist) {
-        bestDist = dist;
-        pickIdx = i;
-      }
+      tierBInflightStableId = null;
     }
-
-    if (pickIdx >= tierBQueue.length) break;
-    const entry = tierBQueue.splice(pickIdx, 1)[0];
-    if (!entry || !document.contains(entry.el)) continue;
-
-    tierBInflightStableId = entry.stableId;
-    __trulyAudit({ ts: performance.now(), event: "dequeue", stableId: entry.stableId, remaining: tierBQueue.length });
-    await dispatchDeepClassify(entry.el, "auto");
+  } finally {
     tierBInflightStableId = null;
+    tierBInflight = false;
   }
-
-  tierBInflight = false;
 
   // Idle pre-fetch: when no visible posts are waiting, warm Tier B with the
   // closest below-fold post (within 2× viewport height). The result paints
@@ -289,10 +311,16 @@ async function tierBIdlePrefetch() {
     __trulyAudit({ ts: performance.now(), event: "idle-prefetch", stableId: bestStableId, distPx: bestDist });
     tierBInflight = true;
     tierBInflightStableId = bestStableId;
-    await dispatchDeepClassify(bestEl, "auto");
-    tierBInflightStableId = null;
-    tierBInflight = false;
-    __trulyAudit({ ts: performance.now(), event: "idle-prefetch-done", stableId: bestStableId });
+    try {
+      await dispatchDeepClassify(bestEl, "auto");
+      __trulyAudit({ ts: performance.now(), event: "idle-prefetch-done", stableId: bestStableId });
+    } catch (err) {
+      console.warn("[Truly] Tier B idle prefetch failed:", err);
+      __trulyAudit({ ts: performance.now(), event: "idle-prefetch-error", stableId: bestStableId });
+    } finally {
+      tierBInflightStableId = null;
+      tierBInflight = false;
+    }
 
     // After idle pre-fetch completes, drain again in case new posts
     // entered the viewport while we were working.
@@ -562,7 +590,7 @@ async function dispatchDeepClassify(el: HTMLElement, source: "auto" | "expand" |
   const post = source === "expand" || source === "manual"
     ? mergeLiveExpandedPost(storedPost, postFromArticle(el), el)
     : storedPost;
-  if (post !== storedPost) postIdToData.set(id, post);
+  if (post !== storedPost) rememberPostData(id, post);
 
   // Re-extract text from the live element so post-expand content reaches
   // Tier B and Tier A-2 zhtw. Fall back to the snapshot if extractor
@@ -603,7 +631,7 @@ async function dispatchDeepClassify(el: HTMLElement, source: "auto" | "expand" |
   const dispatchPost: PostData = post.text === text && post.textCompleteness === textCompleteness
     ? post
     : { ...post, text, textCompleteness };
-  postIdToData.set(id, dispatchPost);
+  rememberPostData(id, dispatchPost);
   triggerZhtwReview(id, dispatchPost);
   const outputLang = currentContentLang();
 
@@ -1174,7 +1202,7 @@ function repairMissingHeadsUpPanels(): void {
     if (!decision || !post) continue;
 
     const repairedPost = post.element === el ? post : { ...post, element: el };
-    postIdToData.set(stableId, repairedPost);
+    rememberPostData(stableId, repairedPost);
     rememberPostElement(stableId, el);
     applyOverlay(repairedPost, decision, { lang: currentContentLang() });
     mostCenteredObserver.observe(el);
@@ -1290,7 +1318,7 @@ function handleNewPost(post: PostData) {
     // Tier B prep: retain the latest post + decision under the stable id
     // so the queue / expand paths can build the DEEP_CLASSIFY payload
     // without re-extracting text / re-running classification.
-    postIdToData.set(stableId, mergedPost);
+    rememberPostData(stableId, mergedPost);
     postIdToTierA.set(stableId, mergedDecision);
     triggerZhtwReview(stableId, mergedPost);
     mostCenteredObserver.observe(mergedPost.element);
