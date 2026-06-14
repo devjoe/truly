@@ -121,6 +121,8 @@ function shouldExcludeSourcePath(path) {
     normalized.startsWith("data/") ||
     normalized === "test-results" ||
     normalized.startsWith("test-results/") ||
+    (normalized.startsWith("docs/assets/demo/truly-demo-") &&
+      normalized !== "docs/assets/demo/truly-demo-balanced.gif") ||
     normalized === ".env" ||
     normalized.startsWith(".env.")
   );

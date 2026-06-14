@@ -49,6 +49,10 @@ The extension zip must contain only the built extension. It must not include:
 The source zip must contain the public source package used to build the Alpha.
 It must not include private lab material or generated output.
 
+Generated demo experiments are excluded from the source zip. The README preview
+asset `docs/assets/demo/truly-demo-balanced.gif` is the only tracked demo GIF
+included in the public source package.
+
 ## Confidence Passes
 
 Live Facebook checks and private regression packs are separate human release

@@ -1,9 +1,12 @@
 # Model Setup
 
 Truly can run with Chrome's built-in Gemini Nano, a local Ollama model, or an
-OpenAI-compatible endpoint that you control. Start with Gemini Nano if it is
-available. Use Ollama or a private endpoint when you want stronger summaries or
-more predictable model availability.
+OpenAI-compatible endpoint that you control.
+
+Start with Gemini Nano when Chrome says it is available. It is the easiest path
+because it does not require an endpoint URL or API key. Use Ollama or a private
+endpoint when you want stronger summaries, more predictable availability, or a
+model you can manage yourself.
 
 ## Ask An AI Agent To Check Your Machine
 
@@ -27,10 +30,10 @@ Ask me for or help me check:
 - whether I prefer zero setup, local-only models, or a private endpoint
 
 Then recommend one setup:
-1. Chrome built-in Gemini Nano
+1. Chrome built-in Gemini Nano for the lowest setup effort
 2. Ollama with Gemma 4 E4B for lightweight local use
 3. Ollama or an OpenAI-compatible endpoint with Gemma 4 12B for higher quality
-4. Heuristic-only mode if this machine is too small
+4. Reading hints only if this machine is too small for model-backed summaries
 
 Please explain the tradeoff in setup effort, memory use, speed, and expected
 quality. Do not recommend paid cloud APIs unless I explicitly ask for them.
@@ -41,15 +44,17 @@ quality. Do not recommend paid cloud APIs unless I explicitly ask for them.
 | Your situation | Recommended setup | Reading hints | Summary / deep reading |
 | --- | --- | --- | --- |
 | Chrome already supports Gemini Nano on your machine | **Chrome built-in Gemini Nano** | Yes, zero config | Experimental; enable in settings |
-| 8 GB RAM or below the Gemini Nano floor | Heuristic-only mode | Basic rules only | Off |
+| Chrome does not have Gemini Nano and the machine is small | Reading hints only | Basic rules only | Off |
 | 16 GB RAM Apple Silicon Mac, or a 6-8 GB VRAM GPU | Ollama with **Gemma 4 E4B** | Yes | Yes, text-focused |
 | 24-36 GB unified memory, or 12 GB+ VRAM | Ollama or private endpoint with **Gemma 4 12B** | Yes | Better quality, slower |
 | You already operate a private model server | OpenAI-compatible endpoint with **Gemma 4 12B** or an equivalent model | Yes | Best if the endpoint supports structured output and images |
 
-## Gemini Nano
+## Chrome Built-In Gemini Nano
 
-Chrome downloads and manages Gemini Nano itself. Requirements are set by
-Chrome, not Truly:
+Chrome downloads and manages Gemini Nano itself. Availability is decided by
+Chrome, not Truly, and may change when Chrome updates or frees disk space.
+
+Chrome's on-device model usually needs:
 
 - a GPU with more than 4 GB of VRAM, **or** 16 GB+ RAM and a 4-core CPU;
 - about 22 GB of free disk space, because Chrome may remove the model when disk
@@ -57,18 +62,20 @@ Chrome, not Truly:
 - an unmetered network connection for the initial download;
 - desktop Chrome on Windows 10/11, macOS 13+, Linux, or ChromeOS.
 
-If Chrome reports the model as downloading or unavailable, Truly shows the
-status in its options page and falls back to heuristic hints until the model is
-ready.
+Use Truly's Options page to check whether Chrome currently exposes the model to
+extensions. If Chrome reports the model as downloading or unavailable, Truly
+shows that status and falls back to reading hints that do not require deep model
+analysis.
 
 ## Ollama
 
 Ollama is the simplest local-model path when Gemini Nano is unavailable or too
-limited for your use.
+limited for your use. It is also the easiest way to keep model traffic on your
+own machine.
 
-1. Install Ollama 0.30 or newer.
+1. Install Ollama.
 
-2. Pull a model:
+2. Pull a model. For a lightweight first pass:
 
    ```bash
    ollama pull gemma4:e4b-it-qat
@@ -86,7 +93,8 @@ limited for your use.
    ```
 
 4. In Truly's options, choose Ollama. The default endpoint is
-   `http://localhost:11434`.
+   `http://localhost:11434`. Use **Test and Save** to confirm the extension can
+   reach the endpoint and the selected model follows Truly's output format.
 
 Truly requests structured output and disables hidden reasoning when the provider
 supports those controls. If a model cannot follow the required output format,
@@ -104,8 +112,9 @@ summary quality, deeper reading, and more stable structured output.
 ## OpenAI-Compatible Endpoints
 
 Any server that speaks the OpenAI chat-completions API can work, including vLLM,
-llama.cpp server, LM Studio, and similar tools. Choose "OpenAI-compatible" in
-Truly's options, then set the endpoint URL and model name.
+llama.cpp server, LM Studio, and similar tools. Choose
+**OpenAI-compatible endpoint** in Truly's options, then set the endpoint URL and
+model name.
 
 For summary and deep reading, the model should:
 
@@ -115,6 +124,8 @@ For summary and deep reading, the model should:
 
 Use this path when you already run a private model service or need a stronger
 model than your laptop can host directly. Do not put secrets in endpoint URLs.
+If the endpoint provides a model list, Truly can help you choose from the models
+it reports; otherwise, enter the model name exactly as the server expects it.
 
 ## Performance Expectations
 
