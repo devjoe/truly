@@ -1,5 +1,5 @@
 <p>
-  <img src="docs/assets/brand/truly-readme-lockup.svg" alt="Truly 梳 理" width="262">
+  <img src="docs/assets/brand/truly-readme-lockup.svg?v=20260614" alt="Truly 梳 理" width="262">
 </p>
 
 Truly is a local-first Chrome extension for improving reading clarity in social
