@@ -5,6 +5,8 @@
 Truly is a local-first Chrome extension for improving reading clarity in social
 feeds and web pages.
 
+Truly · 梳 理: to comb through and clarify.
+
 > **Early Preview:** useful for testing, still changing quickly. The current
 > build focuses on selected social feed surfaces on desktop Chrome, while the
 > product direction is broader than any single platform.
@@ -15,18 +17,33 @@ feeds and web pages.
   <img src="docs/assets/demo/truly-demo-balanced.gif" alt="Animated preview of Truly reading hints, expanded details, and deeper reading side panel" width="100%">
 </p>
 
+Synthetic examples: reading hints, expanded view, and side panel. No private
+feed content.
+
 ## What It Does
 
-- Shows compact reading hints before supported posts.
-- Expands into a short summary and reading signals when you ask for more.
+- Adds a compact signal before supported posts so you can decide whether to
+  read normally, slow down, or verify context first.
+- Expands the signal into a short summary and reading cues when you ask for
+  more.
 - Opens a side panel for deeper context, follow-up questions, and manual
-  external-tool handoff.
+  handoff to external tools.
 - Checks Traditional Chinese language conventions with bundled zhtw-mcp when
   enabled and applicable.
 
 ## Early Preview Quick Start
 
-When you have an early preview build installed:
+Build the extension:
+
+```bash
+npm ci
+npm run build
+```
+
+Then open `chrome://extensions`, enable Developer mode, choose **Load
+unpacked**, and select `dist/`.
+
+After installation:
 
 1. Open Options.
 2. Start with Chrome built-in Gemini Nano, or configure Ollama /

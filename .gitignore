@@ -1,5 +1,6 @@
 .env
 .env.*
+.DS_Store
 data/
 tmp/
 dist/
@@ -8,3 +9,5 @@ artifacts/
 test-results/
 node_modules/
 .idea/
+docs/assets/demo/truly-demo-*.gif
+!docs/assets/demo/truly-demo-balanced.gif
