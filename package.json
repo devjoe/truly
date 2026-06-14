@@ -8,6 +8,7 @@
     "build": "vite build",
     "build:dev": "vite build && node scripts/patch-dev-manifest.mjs",
     "release:alpha": "node scripts/release-alpha.mjs",
+    "render:social-preview": "node scripts/render-social-preview.mjs",
     "check:type": "tsc --noEmit",
     "check:public-boundary": "node scripts/check-public-boundary.mjs",
     "test:contract:public": "vitest run tests/contract/model-response-contract.test.ts tests/contract/post-context-boundary-contract.test.ts tests/contract/zhtw-segmentation-contract.test.ts",
