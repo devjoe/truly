@@ -2,41 +2,32 @@
   <img src="docs/assets/brand/truly-readme-lockup.svg?v=20260614" alt="Truly 梳 理" width="262">
 </p>
 
-Truly is a local-first Chrome extension for improving reading clarity in social
-feeds and web pages.
+Truly is a local-first Chrome extension for reading social feeds and web pages
+with more context.
 
-Local-first means Truly prefers browser-local or user-chosen local AI models
-before cloud services.
+It prefers browser-local or user-chosen local AI before cloud services.
 
 Truly · 梳 理: to comb through and clarify.
 
-> **Early Preview:** useful for testing, still changing quickly. The current
-> build focuses on selected social feed surfaces on desktop Chrome, while the
-> product direction is broader than any single platform.
+> **Early Preview:** desktop Chrome first, still changing quickly.
 
 ## Preview
 
 <p>
-  <img src="docs/assets/demo/truly-demo-balanced.gif" alt="Animated preview of Truly reading hints, expanded details, and deeper reading side panel" width="100%">
+  <img src="docs/assets/demo/truly-demo-balanced.gif" alt="Truly reading hints, expanded view, and side panel" width="100%">
 </p>
 
-Synthetic examples: reading hints, expanded view, and side panel. No private
-feed content.
+Reading hints, expanded view, and side panel.
 
 ## What It Does
 
-- Adds a compact signal before supported posts so you can decide whether to
-  read normally, slow down, or verify context first.
-- Expands the signal into a short summary and reading cues when you ask for
-  more.
-- Opens a side panel for deeper context, follow-up questions, and manual
-  handoff to external tools.
-- Checks Traditional Chinese language conventions with bundled zhtw-mcp when
-  enabled and applicable.
+- Shows compact reading signals.
+- Expands signals into summaries and reading cues.
+- Opens a side panel with context, follow-up questions, and handoff tools.
+- Checks Traditional Chinese wording with bundled zhtw-mcp when
+  enabled.
 
 ## Early Preview Quick Start
-
-Build the extension:
 
 ```bash
 npm ci
@@ -49,20 +40,20 @@ unpacked**, and select `dist/`.
 After installation:
 
 1. Open Options.
-2. Start with Chrome built-in Gemini Nano, or configure Ollama /
-   OpenAI-compatible endpoints.
+2. Start with Chrome built-in Gemini Nano, or configure Ollama / an
+   OpenAI-compatible endpoint.
 3. Open a supported page in desktop Chrome.
-4. Use the reading hint, expanded summary, or side panel.
+4. Use the reading hint, expanded view, or side panel.
 5. Send feedback through <https://trulyreader.org/feedback/>.
 
-Public install links will be added when the first preview release is ready.
+Public install links will be added after the first preview release.
 
 ## Roadmap
 
 **Now**
 
-- Public early preview release and feedback collection.
-- Bug fixes and stability improvements.
+- Public early preview and feedback.
+- Bug fixes and stability.
 
 **Next**
 
@@ -78,16 +69,15 @@ Public install links will be added when the first preview release is ready.
 
 ## Current Scope
 
-- Chrome Manifest V3 extension.
-- Browser-local, local endpoint, or private endpoint model sources.
-- Current UI support is focused on Facebook reading surfaces.
-- Public tests use synthetic fixtures only.
+- Chrome Manifest V3.
+- Browser-local, local, or private model sources.
+- UI support currently focuses on Facebook reading surfaces.
+- Public tests use synthetic fixtures.
 
 ## Model Sources
 
-Truly works best with Chrome built-in Gemini Nano for zero-configuration early
-testing. Other model sources are useful when you want stronger local or private
-endpoints.
+Start with Chrome built-in Gemini Nano. Use another model source when you want a
+stronger local or private endpoint.
 
 | Source | Best first use | Main caveat |
 | --- | --- | --- |
@@ -95,15 +85,14 @@ endpoints.
 | Ollama | Local model experiments | Requires local service setup and extension access to the endpoint. |
 | OpenAI-compatible endpoint | Stronger private endpoints | Deep reading requires compatible model and response-format support. |
 
-See [Model Setup](docs/model-setup.md) for hardware requirements, endpoint
-examples, and recommended models.
+See [Model Setup](docs/model-setup.md).
 
 ## Current Limitations
 
-- Truly is not a fact-checking authority or truth engine.
+- Truly is not a fact-checking authority.
 - Model output can be wrong, incomplete, or biased.
-- Site support is still limited.
-- Some features depend on Chrome or local model availability.
+- Site support is limited.
+- Some features depend on model availability.
 
 ## Privacy At A Glance
 
@@ -118,13 +107,13 @@ See `docs/release/privacy-policy.md` for the release-facing privacy policy.
 
 ## Feedback And Contributions
 
-For general early preview feedback, use <https://trulyreader.org/feedback/>.
+For early preview feedback, use <https://trulyreader.org/feedback/>.
 
 Use GitHub Issues for reproducible bugs, screenshots, logs, or visible technical
-problems. Pull requests are welcome for small fixes, docs, and public test
-coverage. Please open an issue before large features or platform expansion work.
+problems. Pull requests are welcome for small fixes, docs, and public tests.
+Open an issue before large features or platform expansion work.
 
-Security issues should follow `SECURITY.md` rather than public issue details.
+For security issues, follow `SECURITY.md`.
 
 ## Development
 
