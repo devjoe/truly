@@ -1,6 +1,6 @@
-# Alpha Command Contract
+# Preview Command Contract
 
-Status: implemented for Alpha staging
+Status: implemented for Preview staging
 
 This is the short release-facing contract for the Preview package command.
 It is intentionally smaller than the private migration plan.
@@ -11,7 +11,7 @@ It is intentionally smaller than the private migration plan.
 npm run release:alpha
 ```
 
-The command should create a reviewable Chrome MV3 Alpha artifact from a clean
+The command should create a reviewable Chrome MV3 Preview artifact from a clean
 checkout. It should not publish to Chrome Web Store automatically.
 
 ## Public Preview Naming
@@ -63,7 +63,7 @@ The extension zip must contain only the built extension. It must not include:
 - local profiles;
 - environment files.
 
-The source zip must contain the public source package used to build the Alpha.
+The source zip must contain the public source package used to build the Preview.
 It must not include private lab material or generated output.
 
 Generated demo experiments are excluded from the source zip. The README preview
@@ -78,14 +78,14 @@ the public package command unusable from a clean checkout.
 
 ## GitHub Release Boundary
 
-The first Alpha keeps release publishing manual. The workflow can build and
+The first Preview keeps release publishing manual. The workflow can build and
 upload artifacts for review, but the human release step is still to create the
 GitHub Release from the Preview tag and attach the generated extension zip,
 source zip, and build report.
 
 ## Dev Shortcut Boundary
 
-Alpha release artifacts must not include development-only commands. Local
+Preview release artifacts must not include development-only commands. Local
 development can use `npm run build:dev` to patch the built manifest with the
 reload shortcut, but `release:alpha` verifies that the packaged manifest does
 not contain that command.

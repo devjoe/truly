@@ -31,7 +31,7 @@ const crcTable = Array.from({ length: 256 }, (_, index) => {
 });
 
 if (dirty && !allowDirty) {
-  console.error("Refusing to create an Alpha artifact from a dirty tree.");
+  console.error("Refusing to create a Preview artifact from a dirty tree.");
   console.error("Commit or stash changes first, or run with TRULY_ALLOW_DIRTY_RELEASE=1 for a local smoke artifact.");
   for (const file of dirtyFiles) console.error(`- ${file}`);
   process.exit(1);
@@ -88,7 +88,7 @@ const report = {
 writeFileSync(join(outDir, "build-report.json"), `${JSON.stringify(report, null, 2)}\n`);
 writeFileSync(join(outDir, "build-report.md"), renderReport(report));
 
-console.log(`Alpha artifacts written to ${relative(root, outDir)}`);
+console.log(`Preview artifacts written to ${relative(root, outDir)}`);
 
 function git(args, fallback) {
   try {
@@ -141,7 +141,7 @@ function shouldExcludeExtensionPath(path) {
 function renderReport(report) {
   const dirtyLine = report.dirty ? "yes" : "no";
   return [
-    "# Truly Alpha Build Report",
+    "# Truly Preview Build Report",
     "",
     `- Version: ${report.version}`,
     `- Version name: ${report.versionName}`,
