@@ -5,6 +5,9 @@
 Truly is a local-first Chrome extension for improving reading clarity in social
 feeds and web pages.
 
+Local-first means Truly prefers browser-local or user-chosen local AI models
+before cloud services.
+
 Truly · 梳 理: to comb through and clarify.
 
 > **Early Preview:** useful for testing, still changing quickly. The current

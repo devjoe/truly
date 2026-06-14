@@ -9,6 +9,8 @@ platform-captured user data.
 - `truly-demo-balanced.gif` is the README default and the only tracked demo GIF.
   It shows a 1:1 split between feed-side behavior and the deeper reading side
   panel.
+- The tracked README GIF should render at `1200 × 760` to preserve UI text
+  clarity while staying lightweight enough for GitHub README use.
 - `truly-demo.html` is a local review page for the tracked default asset.
 - Earlier exploration candidates should stay untracked unless a future decision
   explicitly promotes them.

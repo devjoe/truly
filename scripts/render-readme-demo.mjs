@@ -11,6 +11,7 @@ const height = 760;
 const fps = 12;
 const duration = 5;
 const holdDuration = 0.5;
+const gifOutputWidth = 1200;
 const animationFrameCount = fps * duration;
 const holdFrameCount = Math.round(fps * holdDuration);
 const frameCount = animationFrameCount + holdFrameCount;
@@ -188,7 +189,7 @@ for (const variant of renderVariants) {
     '-y',
     '-framerate', String(fps),
     '-i', join(frameDir, 'frame-%03d.png'),
-    '-vf', 'fps=12,scale=1120:-1:flags=lanczos,palettegen=stats_mode=diff',
+    '-vf', `fps=${fps},scale=${gifOutputWidth}:-1:flags=lanczos,palettegen=stats_mode=diff`,
     palette,
   ]);
   runFfmpeg([
@@ -196,7 +197,7 @@ for (const variant of renderVariants) {
     '-framerate', String(fps),
     '-i', join(frameDir, 'frame-%03d.png'),
     '-i', palette,
-    '-lavfi', 'fps=12,scale=1120:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3',
+    '-lavfi', `fps=${fps},scale=${gifOutputWidth}:-1:flags=lanczos[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=3`,
     '-loop', '0',
     gif,
   ]);
