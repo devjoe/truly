@@ -14,7 +14,10 @@ import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
+const sourceManifest = JSON.parse(readFileSync(resolve(root, "src/manifest.json"), "utf8"));
 const version = packageJson.version ?? "0.0.0";
+const previewNumber = parsePreviewNumber(sourceManifest.version_name, version);
+const recommendedTag = previewNumber ? `v${version}-preview.${previewNumber}` : `v${version}`;
 const commit = git(["rev-parse", "--short=12", "HEAD"], "unknown").trim();
 const dirtyFiles = git(["status", "--porcelain", "--", "."], "").split("\n").filter(Boolean);
 const dirty = dirtyFiles.length > 0;
@@ -58,6 +61,8 @@ writeZipFromDirectory(root, sourceZip, {
 const report = {
   name: packageJson.name,
   version,
+  versionName: sourceManifest.version_name,
+  recommendedTag,
   commit,
   dirty,
   dirtyFiles,
@@ -65,6 +70,7 @@ const report = {
   checks: [
     "npm run check:public",
     "npm run build",
+    "verify release metadata and Preview tag naming",
     "verify dist/manifest.json excludes commands.reload-extension",
   ],
   artifacts: {
@@ -138,6 +144,8 @@ function renderReport(report) {
     "# Truly Alpha Build Report",
     "",
     `- Version: ${report.version}`,
+    `- Version name: ${report.versionName}`,
+    `- Recommended tag: ${report.recommendedTag}`,
     `- Commit: ${report.commit}`,
     `- Built at: ${report.builtAt}`,
     `- Dirty tree: ${dirtyLine}`,
@@ -156,6 +164,15 @@ function renderReport(report) {
     ...report.reviewerDocs.map((doc) => `- \`${doc}\``),
     "",
   ].join("\n");
+}
+
+function parsePreviewNumber(versionName, version) {
+  const match = new RegExp(`^${escapeRegExp(version)} Preview ([1-9]\\d*)$`).exec(versionName ?? "");
+  return match?.[1] ?? null;
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function writeZipFromDirectory(directory, outputPath, options) {

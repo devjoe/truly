@@ -2,7 +2,7 @@
 
 Status: implemented for Alpha staging
 
-This is the short public-facing contract for the future Alpha package command.
+This is the short release-facing contract for the Preview package command.
 It is intentionally smaller than the private migration plan.
 
 ## Command
@@ -14,13 +14,30 @@ npm run release:alpha
 The command should create a reviewable Chrome MV3 Alpha artifact from a clean
 checkout. It should not publish to Chrome Web Store automatically.
 
+## Public Preview Naming
+
+Chrome extension metadata and GitHub release names use different constraints:
+
+- `manifest.version` and `package.json` use Chrome-compatible numeric versions,
+  for example `0.1.0`.
+- `manifest.version_name` uses the human preview label, for example
+  `0.1.0 Preview 1`.
+- Git tags use the public preview label, for example `v0.1.0-preview.1`.
+- GitHub Release titles use `Truly 0.1.0 Preview 1` and should be marked as
+  pre-release.
+
+The command must run `npm run check:release-metadata` through `check:public`.
+That check blocks releases when `manifest.version`, `package.json`, and
+`manifest.version_name` drift.
+
 ## Expected Outputs
 
 - extension zip;
 - source zip;
 - build report;
 - reviewer notes pointer;
-- terminal summary with version, commit, artifact paths, checks, and warnings.
+- terminal summary with version, version name, recommended tag, commit,
+  artifact paths, checks, and warnings.
 
 ## Required Gates
 
@@ -63,7 +80,7 @@ the public package command unusable from a clean checkout.
 
 The first Alpha keeps release publishing manual. The workflow can build and
 upload artifacts for review, but the human release step is still to create the
-GitHub Release from the Alpha tag and attach the generated extension zip,
+GitHub Release from the Preview tag and attach the generated extension zip,
 source zip, and build report.
 
 ## Dev Shortcut Boundary
