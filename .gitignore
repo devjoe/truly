@@ -8,6 +8,7 @@ dist-*/
 artifacts/
 test-results/
 node_modules/
+tools/
 .idea/
 docs/assets/demo/truly-demo-*.gif
 !docs/assets/demo/truly-demo-balanced.gif
