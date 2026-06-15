@@ -37,6 +37,9 @@ export interface ReadinessRecord {
   latencyMs?: number;
   message?: string;
   technicalDetail?: string;
+  capabilities?: {
+    vision?: "supported" | "unsupported" | "unknown";
+  };
   buildId?: string;
   settingsFingerprint?: string;
 }
@@ -191,15 +194,13 @@ export function readinessFingerprint(
   // probe logic changes in a way that should invalidate past readiness results.
   // buildId is deliberately excluded — a routine rebuild must not nag a user who
   // already passed a check whose configuration is unchanged.
-  const base = {
-    v: 1,
-    feature,
-  };
+  const base = { feature };
 
   switch (feature) {
     case "realtime":
       return stableJson({
         ...base,
+        v: 1,
         provider: tierAProvider,
         endpoint: tierAEndpoint,
         model: tierAModel,
@@ -214,6 +215,7 @@ export function readinessFingerprint(
     case "ai_analysis":
       return stableJson({
         ...base,
+        v: 2,
         enabled: settings.deepClassifyEnabled,
         provider: tierBProvider,
         effectiveProvider: effectiveTierBProvider,
@@ -223,6 +225,7 @@ export function readinessFingerprint(
     case "reading_brief":
       return stableJson({
         ...base,
+        v: 1,
         enabled: settings.deepClassifyEnabled,
         provider: tierBProvider,
         effectiveProvider: effectiveTierBProvider,
@@ -232,11 +235,13 @@ export function readinessFingerprint(
     case "language_check":
       return stableJson({
         ...base,
+        v: 1,
         checker: "zhtw-local",
       });
     case "external_tools":
       return stableJson({
         ...base,
+        v: 1,
         actions: ["copy-markdown", "download-markdown", "google-search"],
       });
   }

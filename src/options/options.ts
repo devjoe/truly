@@ -31,6 +31,11 @@ import {
 } from "../lib/provider-capabilities";
 import { resolveTierBFeatureGate } from "../lib/feature-readiness";
 import { modelDisplayIdentity } from "../lib/model-display";
+import {
+  endpointLooksLikeOllamaCloud,
+  modelLooksLikeOllamaCloud,
+  ollamaCloudVisionSupport,
+} from "../lib/ollama-cloud-capabilities";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "../lib/readiness";
 import {
   createReadinessRecord,
@@ -448,6 +453,19 @@ async function init() {
       return {
         text: readinessRecoveryText(failed),
         className: "status-text status-error",
+      };
+    }
+    const textOnlyVision = records.find((record) =>
+      record.feature === "ai_analysis" &&
+      record.capabilities?.vision === "unsupported"
+    );
+    if (textOnlyVision) {
+      const meta = readinessItemMeta(textOnlyVision);
+      return {
+        text: meta
+          ? optT("options.modelTest.visionTextOnlyWithMeta", { meta })
+          : optT("options.modelTest.visionTextOnly"),
+        className: "status-text status-warn",
       };
     }
     const slow = records.find((record) => record.status === "slow_but_usable");
@@ -1788,6 +1806,7 @@ async function init() {
     const aiRecord = freshReadinessRecord("ai_analysis");
     const briefRecord = freshReadinessRecord("reading_brief");
     tierBCapabilityStatus.textContent = "";
+    tierBCapabilityStatus.className = "status-text";
     tierBCapabilityStatus.style.display = "none";
     tierBManualConfig.style.display = needsEndpoint ? "block" : "none";
     tierBEndpointGroup.style.display = needsEndpoint ? "" : "none";
@@ -1812,11 +1831,30 @@ async function init() {
       tierBProviderHelp.textContent = provider === "openai-compatible"
         ? optT("options.provider.openAIHelp")
         : optT("options.provider.ollamaHelp");
+      const aiVision = aiRecord?.capabilities?.vision;
+      const tierBModelName = currentTierBModelInput() || tierBModel.placeholder;
+      const useOllamaCloudRegistry = provider === "ollama" && (
+        modelLooksLikeOllamaCloud(tierBModelName) ||
+        endpointLooksLikeOllamaCloud(tierBEndpoint.value.trim() || tierBEndpoint.placeholder)
+      );
+      const registryVision = useOllamaCloudRegistry
+        ? ollamaCloudVisionSupport(tierBModelName)
+        : "unknown";
+      if (aiVision === "unsupported") {
+        tierBCapabilityStatus.textContent = optT("options.tierB.visionProbeTextOnly");
+        tierBCapabilityStatus.className = "status-text status-warn";
+        tierBCapabilityStatus.style.display = "";
+      } else if (registryVision === "unsupported") {
+        tierBCapabilityStatus.textContent = optT("options.tierB.registryTextOnlyWarning");
+        tierBCapabilityStatus.className = "status-text status-warn";
+        tierBCapabilityStatus.style.display = "";
+      }
     } else if (!aiGate.canTest) {
       tierBLaneSource.textContent = providerDisplayLabel(provider);
       tierBLaneMeta.textContent = optT("options.tierB.unsupportedMeta");
       tierBProviderHelp.textContent = optT("options.tierB.unsupportedHelp");
       tierBCapabilityStatus.textContent = optT("options.tierB.unsupportedStatus");
+      tierBCapabilityStatus.className = "status-text status-error";
       tierBCapabilityStatus.style.display = "";
     } else if (!briefGate.canTest) {
       tierBLaneSource.textContent = providerDisplayLabel(provider);

@@ -37,6 +37,7 @@ if (dirty && !allowDirty) {
   process.exit(1);
 }
 
+run("npm", ["run", "check:ollama-cloud-capabilities"]);
 run("npm", ["run", "check:public"]);
 run("npm", ["run", "build"]);
 verifyReleaseManifest();
@@ -68,6 +69,7 @@ const report = {
   dirtyFiles,
   builtAt: new Date().toISOString(),
   checks: [
+    "npm run check:ollama-cloud-capabilities",
     "npm run check:public",
     "npm run build",
     "verify release metadata and Preview tag naming",

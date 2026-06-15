@@ -44,12 +44,18 @@ That check blocks releases when `manifest.version`, `package.json`, and
 The first implementation should run:
 
 ```bash
+npm run check:ollama-cloud-capabilities
 npm run check:public
 npm run build
 ```
 
 The command must not require private fixtures, logged-in Facebook state, Chrome
 profiles, local screenshots, or live CDP access.
+
+`check:ollama-cloud-capabilities` is a release-time freshness reminder for the
+small static Ollama Cloud model capability registry. It blocks a Preview build
+when the registry is stale enough that visible model capability warnings may be
+misleading.
 
 ## Artifact Rules
 
@@ -75,6 +81,13 @@ included in the public source package.
 Live Facebook checks and private regression packs are separate human release
 confidence passes. They can block a release decision, but they should not make
 the public package command unusable from a clean checkout.
+
+Endpoint-specific model probes are also opt-in confidence passes. For example,
+`npm run smoke:ollama-vision` can verify that a configured Ollama-compatible
+endpoint accepts an OpenAI-compatible image message and returns a vision-aware
+answer. It is intentionally not part of `check:public` or `release:alpha`
+because it depends on live model availability, endpoint permissions, and the
+operator's current local or cloud model setup.
 
 ## GitHub Release Boundary
 

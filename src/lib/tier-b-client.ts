@@ -303,6 +303,18 @@ export interface TierBReadingBriefRequest {
   outputLang?: Lang;
 }
 
+export interface TierBVisionProbeRequest {
+  endpoint: string;
+  model: string;
+  timeoutMs?: number;
+}
+
+export interface TierBVisionProbeResult {
+  ok: boolean;
+  raw?: string;
+  error?: "vision_probe_network_error" | "vision_probe_timeout" | "vision_probe_http_error" | "vision_probe_format_error";
+}
+
 export interface TierBChatBody {
   model: string;
   messages: Array<{ role: "system" | "user"; content: string | ChatContent[] }>;
@@ -313,6 +325,9 @@ export interface TierBChatBody {
   truncate_prompt_tokens: number;
   chat_template_kwargs: { enable_thinking: boolean };
 }
+
+export const TIER_B_VISION_PROBE_IMAGE =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQTf7/HwAEvwKHHvca0gAAAABJRU5ErkJggg==";
 
 export function tierBCompletionsUrl(endpoint: string): string {
   const baseUrl = endpoint.replace(/\/v1\/?$/, "").replace(/\/$/, "");
@@ -555,6 +570,73 @@ export function buildTierBReadingBriefChatBody(req: TierBReadingBriefRequest): T
     body.reasoning_effort = "none";
   }
   return body;
+}
+
+export function buildTierBVisionProbeChatBody(req: TierBVisionProbeRequest): TierBChatBody {
+  const body: TierBChatBody = {
+    model: req.model,
+    messages: [
+      {
+        role: "system",
+        content: "You are a vision capability probe. Answer with one lowercase English color word only.",
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "What is the dominant color of the attached image? Answer with one word only.",
+          },
+          { type: "image_url", image_url: { url: TIER_B_VISION_PROBE_IMAGE } },
+        ],
+      },
+    ],
+    temperature: 0,
+    max_tokens: 8,
+    truncate_prompt_tokens: 512,
+    chat_template_kwargs: { enable_thinking: false },
+  };
+  if (shouldRequestOpenAICompatNoThinking(req.endpoint, req.model)) {
+    body.reasoning_effort = "none";
+  }
+  return body;
+}
+
+export async function callTierBVisionProbe(
+  req: TierBVisionProbeRequest,
+): Promise<TierBVisionProbeResult> {
+  const url = tierBCompletionsUrl(req.endpoint);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), req.timeoutMs ?? 12_000);
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildTierBVisionProbeChatBody(req)),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      let errBody = "";
+      try { errBody = (await resp.text()).slice(0, 240); } catch { /* ignore */ }
+      console.warn(`[Truly Tier B vision] HTTP ${resp.status}: ${errBody}`);
+      return { ok: false, error: "vision_probe_http_error", raw: errBody };
+    }
+    const data = await resp.json();
+    const raw = String(data?.choices?.[0]?.message?.content || "").trim();
+    return {
+      ok: /\b(blue|cyan)\b/i.test(raw),
+      raw: raw.slice(0, 120),
+      error: /\b(blue|cyan)\b/i.test(raw) ? undefined : "vision_probe_format_error",
+    };
+  } catch (error) {
+    console.warn("[Truly Tier B vision] error:", error);
+    const code = error instanceof DOMException && error.name === "AbortError"
+      ? "vision_probe_timeout"
+      : "vision_probe_network_error";
+    return { ok: false, error: code };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export async function callTierBReadingBrief(

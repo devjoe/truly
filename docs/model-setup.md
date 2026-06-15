@@ -49,6 +49,32 @@ quality. Do not recommend paid cloud APIs unless I explicitly ask for them.
 | 24-36 GB unified memory, or 12 GB+ VRAM | Ollama or private endpoint with **Gemma 4 12B** | Yes | Better quality, slower |
 | You already operate a private model server | OpenAI-compatible endpoint with **Gemma 4 12B** or an equivalent model | Yes | Best if the endpoint supports structured output and images |
 
+## Image-Aware Models
+
+Some posts are mostly text. Others depend on screenshots, photos, posters, or
+text embedded in images. A text-only model can still summarize the written post
+text, but it cannot judge whether an attached image supports, contradicts, or
+changes the claim.
+
+For image-aware reading assistance, choose a model or endpoint that accepts
+image input:
+
+- Chrome built-in Gemini Nano: availability and modality support are decided by
+  Chrome.
+- Ollama: choose a vision-capable local model when image judgement matters.
+- Ollama Cloud: model capabilities vary. Truly keeps a small capability registry
+  for known cloud models and warns when a selected model is listed as text-only.
+- OpenAI-compatible endpoints: choose a model that accepts `image_url` messages,
+  then use **Test and Save** to confirm the endpoint works with Truly.
+
+The live image probe is intentionally separate from the normal public checks,
+because it depends on the current endpoint, model, permissions, and network
+state. Run it when validating a specific Ollama-compatible setup:
+
+```bash
+npm run smoke:ollama-vision
+```
+
 ## Chrome Built-In Gemini Nano
 
 Chrome downloads and manages Gemini Nano itself. Availability is decided by

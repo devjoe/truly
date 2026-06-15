@@ -1,5 +1,5 @@
 import { callOllamaSingle } from "../lib/ollama-client";
-import { callTierBDeepDetailed, callTierBReadingBrief } from "../lib/tier-b-client";
+import { callTierBDeepDetailed, callTierBReadingBrief, callTierBVisionProbe } from "../lib/tier-b-client";
 import {
   callGeminiNanoReadingBrief,
   callGeminiNanoTierA,
@@ -106,6 +106,7 @@ function geminiNanoUnavailableRecord(
     message: preparing
       ? "Chrome 正在準備 Gemini Nano"
       : `此 Chrome 尚未提供 Gemini Nano，${label}暫時無法使用`,
+    capabilities: feature === "ai_analysis" ? { vision: "unsupported" } : undefined,
     technicalDetail: geminiNanoTechnicalDetail(
       fields.availability,
       fields.modalities,
@@ -314,7 +315,30 @@ async function runAiAnalysisReadinessCheck(
       }
       result = await callGeminiNanoTierB({ text: READINESS_SAMPLE_TEXT, imageUrls: [], outputLang });
     } else {
+      const vision = await callTierBVisionProbe({ endpoint, model, timeoutMs: 12_000 });
       result = await callTierBDeepDetailed({ endpoint, model, text: READINESS_SAMPLE_TEXT, imageUrls: [], timeoutMs: 20_000, outputLang });
+      const latencyMs = elapsedSince(start);
+      const failure = tierBReadinessFailure(result.error, "ai_analysis");
+      return baseReadinessRecord("ai_analysis", settings, environment, {
+        provider,
+        effectiveProvider,
+        endpoint,
+        model,
+        status: result.ok && result.deep
+          ? (latencyMs > 10_000 ? "slow_but_usable" : "passed")
+          : failure.status,
+        latencyMs,
+        message: result.ok && result.deep
+          ? (vision.ok ? "摘要可用" : "摘要可用；圖片判讀未通過")
+          : failure.message,
+        capabilities: { vision: vision.ok ? "supported" : "unsupported" },
+        technicalDetail: [
+          result.error ? `error=${result.error}` : "",
+          `vision=${vision.ok ? "supported" : "unsupported"}`,
+          vision.error ? `visionError=${vision.error}` : "",
+          vision.raw ? `visionRaw=${vision.raw}` : "",
+        ].filter(Boolean).join("\n") || undefined,
+      });
     }
     const latencyMs = elapsedSince(start);
     const failure = tierBReadinessFailure(result.error, "ai_analysis");
@@ -328,6 +352,7 @@ async function runAiAnalysisReadinessCheck(
         : failure.status,
       latencyMs,
       message: result.ok && result.deep ? "摘要可用" : failure.message,
+      capabilities: effectiveProvider === GEMINI_NANO_PROVIDER ? { vision: "supported" } : undefined,
       technicalDetail: result.error,
     });
   } catch (error) {
