@@ -29,13 +29,12 @@ Reading hints, expanded view, and side panel.
 
 ## Early Preview Quick Start
 
-```bash
-npm ci
-npm run build
-```
+Download the extension zip from the latest Preview release:
 
-Then open `chrome://extensions`, enable Developer mode, choose **Load
-unpacked**, and select `dist/`.
+<https://github.com/devjoe/truly/releases>
+
+Unzip it. Then open `chrome://extensions`, enable Developer mode, choose **Load
+unpacked**, and select the unzipped extension folder.
 
 After installation:
 
@@ -46,7 +45,7 @@ After installation:
 4. Use the reading hint, expanded view, or side panel.
 5. Send feedback through <https://trulyreader.org/feedback/>.
 
-Public install links will be added after the first preview release.
+Chrome Web Store install links will be added later.
 
 ## Roadmap
 
@@ -122,6 +121,9 @@ npm ci
 npm run check:public
 npm run build
 ```
+
+To load a local build, open `chrome://extensions`, enable Developer mode, choose
+**Load unpacked**, and select `dist/`.
 
 For local extension reload shortcuts during development:
 
