@@ -133,6 +133,12 @@ Truly requests structured output and disables hidden reasoning when the provider
 supports those controls. If a model cannot follow the required output format,
 use a larger model or switch back to Gemini Nano for the affected feature.
 
+If **Test and Save** says the model responded but the output format was wrong,
+the endpoint is reachable but the reading-hint parser could not use the reply.
+Use **Copy diagnostics** in the model card when reporting the issue. The copied
+text includes the provider, endpoint kind, model name, output mode, parse error,
+and a short response excerpt; it does not include API keys.
+
 ### Why Gemma 4 E4B And Gemma 4 12B
 
 Gemma 4 E4B is the lightweight local option: it is suitable for quick reading

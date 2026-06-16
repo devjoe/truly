@@ -1123,6 +1123,7 @@ async function init() {
   ) as HTMLInputElement;
   const ollamaEndpointError = document.getElementById("ollamaEndpointError")!;
   const ollamaStatus = document.getElementById("ollamaStatus")!;
+  const copyTierADiagnosticsButton = document.getElementById("copyTierADiagnostics") as HTMLButtonElement;
   const tierAProviderHelp = document.getElementById("tierAProviderHelp")!;
   const tierALaneSource = document.getElementById("tierALaneSource")!;
   const tierALaneMeta = document.getElementById("tierALaneMeta")!;
@@ -1158,6 +1159,79 @@ async function init() {
       ? className
       : `${className} model-inline-status`;
   }
+
+  let tierADiagnosticsText = "";
+
+  function clearTierADiagnostics(): void {
+    tierADiagnosticsText = "";
+    copyTierADiagnosticsButton.style.display = "none";
+    copyTierADiagnosticsButton.textContent = optT("options.modelTest.copyDiagnostics");
+  }
+
+  function buildTierADiagnostics(details: {
+    phase: string;
+    endpoint?: string;
+    model?: string;
+    endpointKind?: TierAEndpointKind;
+    error?: string;
+    parseError?: string;
+    raw?: string;
+  }): string {
+    const provider = providerSelect.value as TierAProvider;
+    const endpoint = details.endpoint || ollamaEndpoint.value.trim() || "(empty)";
+    const model = details.model || ollamaModel.value.trim() || "(empty)";
+    const raw = details.raw?.replace(/\s+/g, " ").trim();
+    const lines = [
+      "Truly Tier A model diagnostic",
+      `buildId: ${__TRULY_BUILD_ID__}`,
+      `phase: ${details.phase}`,
+      `provider: ${provider}`,
+      `endpointKind: ${details.endpointKind || providerEndpointKind(provider)}`,
+      `openAICompatibleFlavor: ${openAICompatibleFlavor.value}`,
+      `responseFormat: ${openAIResponseFormat.value}`,
+      `outputMode: ${currentTierAOutputMode()}`,
+      `endpoint: ${endpoint}`,
+      `model: ${model}`,
+      `error: ${details.error || "(none)"}`,
+      `parseError: ${details.parseError || "(none)"}`,
+    ];
+    if (raw) {
+      lines.push(`rawExcerpt: ${raw.slice(0, 1200)}`);
+    }
+    return lines.join("\n");
+  }
+
+  function showTierADiagnostics(text: string): void {
+    tierADiagnosticsText = text;
+    copyTierADiagnosticsButton.style.display = "";
+    copyTierADiagnosticsButton.textContent = optT("options.modelTest.copyDiagnostics");
+  }
+
+  async function copyTierADiagnostics(): Promise<void> {
+    if (!tierADiagnosticsText) return;
+    const original = optT("options.modelTest.copyDiagnostics");
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("clipboard_unavailable");
+      await navigator.clipboard.writeText(tierADiagnosticsText);
+      copyTierADiagnosticsButton.textContent = optT("options.modelTest.diagnosticsCopied");
+      setTimeout(() => {
+        if (copyTierADiagnosticsButton.style.display !== "none") {
+          copyTierADiagnosticsButton.textContent = original;
+        }
+      }, 1600);
+    } catch {
+      copyTierADiagnosticsButton.textContent = optT("options.modelTest.diagnosticsCopyFailed");
+      setTimeout(() => {
+        if (copyTierADiagnosticsButton.style.display !== "none") {
+          copyTierADiagnosticsButton.textContent = original;
+        }
+      }, 1800);
+    }
+  }
+
+  copyTierADiagnosticsButton.addEventListener("click", () => {
+    void copyTierADiagnostics();
+  });
 
   function renderGeminiNanoProviderHelp(): void {
     tierAProviderHelp.innerHTML = "";
@@ -1211,6 +1285,7 @@ async function init() {
     ollamaEndpoint.placeholder = defaultEndpointForProvider(provider);
     ollamaModel.placeholder = defaultModelForProvider(provider, "reading-prompt");
     ollamaStatus.textContent = "";
+    clearTierADiagnostics();
     if (provider === "none") {
       tierAProviderHelp.textContent = optT("options.tierA.noneHelp");
     } else if (provider === "chrome-gemini-nano") {
@@ -1353,7 +1428,7 @@ async function init() {
     endpoint: string,
     model: string,
     endpointKind: TierAEndpointKind,
-  ): Promise<{ ok: boolean; error?: string }> {
+  ): Promise<{ ok: boolean; error?: string; raw?: string; parseError?: string }> {
     if (
       endpointKind !== "openai-compatible" ||
       openAIResponseFormat.value === "none" ||
@@ -1375,13 +1450,36 @@ async function init() {
       });
       return result?.ok
         ? { ok: true }
-        : { ok: false, error: result?.error || "response_format check failed" };
+        : {
+            ok: false,
+            error: result?.error || "response_format check failed",
+            raw: result?.raw,
+            parseError: result?.parseError,
+          };
     } catch (e) {
       return {
         ok: false,
         error: e instanceof Error ? e.message : "unknown",
       };
     }
+  }
+
+  function shortModelOutputExcerpt(raw?: string): string {
+    if (!raw) return "";
+    const normalized = raw.replace(/\s+/g, " ").trim();
+    if (normalized.length <= 160) return normalized;
+    return normalized.slice(0, 157).trimEnd() + "...";
+  }
+
+  function formatResponseFormatFailure(
+    result: { error?: string; raw?: string; parseError?: string },
+  ): string {
+    const error = result.parseError || result.error || optT("options.modelTest.outputFormatDefaultError");
+    const raw = shortModelOutputExcerpt(result.raw);
+    if (raw) {
+      return optT("options.modelTest.outputFormatFailedWithExcerpt", { error, raw });
+    }
+    return optT("options.modelTest.outputFormatFailed", { error });
   }
 
   function activeCustomRulesForProbe(): { id: string; prompt: string }[] {
@@ -1531,6 +1629,7 @@ async function init() {
   saveProviderButton.addEventListener("click", () => {
     void runWithPendingButton(saveProviderButton, async () => {
       const provider = providerSelect.value as UserSettings["tierAProvider"];
+      clearTierADiagnostics();
       setTierAInlineStatus(modelTestPendingText(), modelTestWorkingClass);
       applySharedModelSettings(provider);
       settings.openAICompatibleFlavor = openAICompatibleFlavor.value as OpenAICompatibleFlavor;
@@ -1582,10 +1681,17 @@ async function init() {
           ollamaModel.value = resolvedModel;
           const formatCheck = await runResponseFormatCheck(endpoint, resolvedModel, endpointKind);
           if (!formatCheck.ok) {
-            ollamaStatus.textContent = optT("options.modelTest.outputFormatFailed", {
-              error: formatCheck.error || optT("options.modelTest.outputFormatDefaultError"),
-            });
+            ollamaStatus.textContent = formatResponseFormatFailure(formatCheck);
             ollamaStatus.className = "status-text status-error";
+            showTierADiagnostics(buildTierADiagnostics({
+              phase: "response_format",
+              endpoint,
+              model: resolvedModel,
+              endpointKind,
+              error: formatCheck.error,
+              parseError: formatCheck.parseError,
+              raw: formatCheck.raw,
+            }));
             setTierAInlineStatus(optT("options.modelTest.outputFormatNeedsWork"), modelTestErrorClass);
             return;
           }
@@ -1593,6 +1699,13 @@ async function init() {
           if (!compactCheck.ok) {
             ollamaStatus.textContent = optT("options.modelTest.compactDigitsUnsupported", { error: compactCheck.error || "unknown" });
             ollamaStatus.className = "status-text status-error";
+            showTierADiagnostics(buildTierADiagnostics({
+              phase: "compact_digits",
+              endpoint,
+              model: resolvedModel,
+              endpointKind,
+              error: compactCheck.error,
+            }));
             setTierAInlineStatus(optT("options.modelTest.compactDigitsNeedsWork"), modelTestErrorClass);
             return;
           }
@@ -1608,10 +1721,18 @@ async function init() {
             formatNote,
           });
           ollamaStatus.className = "status-text status-ok";
+          clearTierADiagnostics();
         } else {
           ollamaStatus.textContent = formatEndpointError(health.error);
           ollamaStatus.className = "status-text status-error";
           showModelFallback();
+          showTierADiagnostics(buildTierADiagnostics({
+            phase: "health_check",
+            endpoint,
+            model: userModel,
+            endpointKind,
+            error: health.error,
+          }));
           if (settings.tierAOutputMode === "compact_digits") {
             ollamaStatus.textContent = optT("options.modelTest.compactDigitsConnectionFailed", { error: health.error || "unknown" });
             ollamaStatus.className = "status-text status-error";

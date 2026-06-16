@@ -1475,6 +1475,9 @@
       border-color: #9ebce8;
       color: #1461c4;
     }
+    .model-diagnostics-copy {
+      margin-top: 8px;
+    }
     .model-test-link {
       display: inline-flex;
       align-items: center;
@@ -2328,6 +2331,7 @@
             </select>
           </div>
           <div class="status-text" id="ollamaStatus" style="margin-top:6px;"></div>
+          <button type="button" class="btn-soft model-diagnostics-copy" id="copyTierADiagnostics" style="display:none;" data-i18n="options.modelTest.copyDiagnostics">複製診斷</button>
         </div>
         <div class="form-group model-inline-config" id="apiKeyGroup" style="display:none;">
           <label for="apiKey">API Key</label>
