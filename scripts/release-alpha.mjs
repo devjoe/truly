@@ -54,7 +54,7 @@ writeZipFromDirectory(resolve(root, "dist"), extensionZip, {
   rootPrefix: "",
   exclude: shouldExcludeExtensionPath,
 });
-writeZipFromDirectory(root, sourceZip, {
+writeZipFromGitTrackedFiles(sourceZip, {
   rootPrefix: "",
   exclude: shouldExcludeSourcePath,
 });
@@ -114,6 +114,9 @@ function verifyReleaseManifest() {
 function shouldExcludeSourcePath(path) {
   const normalized = path.split(sep).join("/");
   return (
+    normalized === ".DS_Store" ||
+    normalized.endsWith("/.DS_Store") ||
+    normalized.includes("/node_modules/") ||
     normalized === ".git" ||
     normalized.startsWith(".git/") ||
     normalized === "node_modules" ||
@@ -179,6 +182,27 @@ function escapeRegExp(value) {
 
 function writeZipFromDirectory(directory, outputPath, options) {
   const entries = collectFiles(directory, options);
+  writeZip(entries, outputPath);
+}
+
+function writeZipFromGitTrackedFiles(outputPath, options) {
+  const trackedFiles = git(["ls-files", "-z"], "")
+    .split("\0")
+    .filter(Boolean)
+    .sort();
+  const entries = [];
+  for (const relativePath of trackedFiles) {
+    const normalized = relativePath.split(sep).join("/");
+    if (options.exclude(normalized)) continue;
+    const absolutePath = resolve(root, relativePath);
+    const stat = statSync(absolutePath);
+    if (!stat.isFile()) continue;
+    entries.push({
+      name: [options.rootPrefix, normalized].filter(Boolean).join("/"),
+      data: readFileSync(absolutePath),
+      date: stat.mtime,
+    });
+  }
   writeZip(entries, outputPath);
 }
 
