@@ -1,7 +1,8 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help resume build build-dev verify check-public check-build release-preview \
-	dev dev-all dev-daemon dev-reload dev-status dev-stop smoke-ollama-vision
+	dev dev-all dev-daemon dev-reload dev-status dev-stop sync-headsup-css \
+	test-watch smoke-ollama-vision
 
 help:
 	@echo "Truly public development targets"
@@ -13,6 +14,8 @@ help:
 	@echo "  make dev-all             Run watch build + reload server"
 	@echo "  make dev-status          Show dev watcher status"
 	@echo "  make dev-stop            Stop dev watcher processes"
+	@echo "  make test-watch          Run unit tests in watch mode"
+	@echo "  make sync-headsup-css    Sync shared heads-up CSS block"
 	@echo "  make release-preview     Build local Preview artifacts"
 	@echo "  make smoke-ollama-vision Optional live Ollama vision smoke"
 
@@ -56,6 +59,12 @@ dev-status:
 
 dev-stop:
 	npm run dev:stop
+
+sync-headsup-css:
+	npm run sync:headsup-css
+
+test-watch:
+	npm run test:unit:watch
 
 smoke-ollama-vision:
 	npm run smoke:ollama-vision
