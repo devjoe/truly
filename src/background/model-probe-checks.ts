@@ -17,6 +17,7 @@ import type {
   OllamaResponseFormatCheckResultMsg,
 } from "../lib/messages";
 import { defaultEndpointForProvider, defaultModelForProvider } from "../lib/model-source-config";
+import { TIER_B_VISION_PROBE_IMAGE } from "../lib/tier-b-client";
 
 export async function runOllamaHealthCheck(
   message: Extract<TrulyMessage, { type: "OLLAMA_HEALTH_CHECK" }>,
@@ -74,6 +75,18 @@ export async function runGeminiNanoProbe(
 export async function runGeminiNanoSmoke(
   message: Extract<TrulyMessage, { type: "GEMINI_NANO_SMOKE" }>,
 ): Promise<GeminiNanoSmokeResultMsg> {
+  const modalities = message.mode === "tier-b" ? ["text", "image"] as const : ["text"] as const;
+  const availability = await probeGeminiNanoAvailability([...modalities]);
+  if (!availability.ok) {
+    return {
+      type: "GEMINI_NANO_SMOKE_RESULT",
+      ok: false,
+      mode: message.mode,
+      availability: String(availability.availability),
+      error: availability.error,
+    };
+  }
+
   try {
     if (message.mode === "tier-a") {
       const result = await callGeminiNanoTierA([
@@ -87,23 +100,20 @@ export async function runGeminiNanoSmoke(
         type: "GEMINI_NANO_SMOKE_RESULT",
         ok,
         mode: message.mode,
+        availability: String(availability.availability),
         summary: ok ? JSON.stringify(scores) : "missing_scores",
       };
     }
 
-    // Fallback 1x1 PNG. The live CDP probe passes a canvas-generated PNG
-    // from an extension page so the smoke mirrors the real content-script
-    // prefetch path more closely.
-    const tinyPng =
-      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
     const result = await callGeminiNanoTierB({
       text: "這是一則 Gemini Nano 圖片輸入 smoke test；圖片只是 1x1 測試圖，請不要過度解讀。",
-      imageUrls: [message.imageDataUrl || tinyPng],
+      imageUrls: [message.imageDataUrl || TIER_B_VISION_PROBE_IMAGE],
     });
     return {
       type: "GEMINI_NANO_SMOKE_RESULT",
       ok: result.ok,
       mode: message.mode,
+      availability: String(availability.availability),
       summary: result.deep?.summary || result.deep?.imageStatus || undefined,
       error: result.error,
     };
@@ -112,6 +122,7 @@ export async function runGeminiNanoSmoke(
       type: "GEMINI_NANO_SMOKE_RESULT",
       ok: false,
       mode: message.mode,
+      availability: String(availability.availability),
       error: error instanceof Error ? error.message : String(error),
     };
   }

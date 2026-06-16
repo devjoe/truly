@@ -93,6 +93,13 @@ extensions. If Chrome reports the model as downloading or unavailable, Truly
 shows that status and falls back to reading hints that do not require deep model
 analysis.
 
+Chrome also provides `chrome://on-device-internals/` for low-level debugging,
+but treat that page as advisory. After Chrome updates, it can temporarily show a
+stale or confusing model status even when the Prompt API is already usable.
+Truly's model check uses `LanguageModel.availability()` plus a short generation
+smoke test, which is the source of truth for whether the extension can actually
+run Gemini Nano.
+
 ## Ollama
 
 Ollama is the simplest local-model path when Gemini Nano is unavailable or too

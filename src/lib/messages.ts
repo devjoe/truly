@@ -200,6 +200,7 @@ export interface GeminiNanoSmokeResultMsg {
   type: "GEMINI_NANO_SMOKE_RESULT";
   ok: boolean;
   mode: "tier-a" | "tier-b";
+  availability?: string;
   summary?: string;
   error?: string;
 }

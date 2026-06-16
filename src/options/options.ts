@@ -1245,7 +1245,7 @@ async function init() {
   async function probeGeminiNano(mode: "tier-a" | "tier-b"): Promise<{ ok: boolean; availability?: string; error?: string }> {
     try {
       const result = await browser.runtime.sendMessage({
-        type: "GEMINI_NANO_PROBE",
+        type: "GEMINI_NANO_SMOKE",
         mode,
       });
       return {
