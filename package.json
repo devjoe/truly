@@ -7,6 +7,12 @@
   "scripts": {
     "build": "vite build",
     "build:dev": "vite build && node scripts/patch-dev-manifest.mjs",
+    "dev": "node scripts/dev-watch.mjs",
+    "dev:reload": "node scripts/dev-reload-server.mjs",
+    "dev:all": "node scripts/dev-singleton.mjs start",
+    "dev:daemon": "node scripts/dev-singleton.mjs daemon",
+    "dev:stop": "node scripts/dev-singleton.mjs stop",
+    "dev:status": "node scripts/dev-singleton.mjs status",
     "release:alpha": "node scripts/release-alpha.mjs",
     "render:social-preview": "node scripts/render-social-preview.mjs",
     "check:ollama-cloud-capabilities": "node scripts/check-ollama-cloud-capabilities.mjs",

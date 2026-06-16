@@ -125,11 +125,18 @@ npm run build
 To load a local build, open `chrome://extensions`, enable Developer mode, choose
 **Load unpacked**, and select `dist/`.
 
-For local extension reload shortcuts during development:
+For a watch workflow while developing:
 
 ```bash
-npm run build:dev
+make dev-all
 ```
+
+This runs the Vite watch build and the local reload server. Load `dist/` once;
+the dev service worker will reload the extension when `dist/build-id.txt`
+changes.
+
+For a one-off local build with the development reload shortcut patched into the
+manifest, run `npm run build:dev`.
 
 Create a local Alpha artifact:
 
@@ -138,6 +145,8 @@ npm run release:alpha
 ```
 
 `release:alpha` writes ignored artifacts under `artifacts/alpha/`.
+The extension zip is kept clean for Chrome Web Store review. Public-safe
+development scripts and the Makefile can remain in the GitHub source package.
 
 ## License And Notices
 

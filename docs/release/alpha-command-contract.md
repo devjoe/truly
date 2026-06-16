@@ -72,6 +72,10 @@ The extension zip must contain only the built extension. It must not include:
 The source zip must contain the public source package used to build the Preview.
 It must not include private lab material or generated output.
 
+Public-safe development scripts and the Makefile can be included in the GitHub
+source package. They are source-level conveniences, not packaged extension
+runtime files.
+
 Generated demo experiments are excluded from the source zip. The README preview
 asset `docs/assets/demo/truly-demo-balanced.gif` is the only tracked demo GIF
 included in the public source package.
