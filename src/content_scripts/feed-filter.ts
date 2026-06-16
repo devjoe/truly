@@ -1,13 +1,14 @@
 // Content scripts must be IIFE (no ES module imports allowed in MV3 content scripts)
 const browser = chrome;
 import { DEFAULT_SETTINGS } from "../lib/types";
-import type { FilterDecision, PostData, UserSettings, DeepClassification, ZhtwReview, TextCompleteness } from "../lib/types";
-import type { TrulyMessage, DeepClassifyMsg, DeepClassifyResultMsg, ExportLogBufferResultMsg } from "../lib/messages";
+import type { DashboardPostEvent, FilterDecision, PostData, UserSettings, DeepClassification, ZhtwReview, TextCompleteness } from "../lib/types";
+import type { TrulyMessage, DeepClassifyMsg, DeepClassifyResultMsg, ReadingBriefResultMsg, ExportLogBufferResultMsg } from "../lib/messages";
 import { installLogBuffer, snapshotLogBuffer } from "../lib/log-buffer";
 import { buildStructuredPostContext, buildTierBPostText } from "../lib/post-context";
 import { normalizeStructuredPostContext } from "../lib/source-context-normalizer";
 import type { StructuredPostContext } from "../lib/source-context-types";
 import { providerNeedsEndpoint } from "../lib/provider-capabilities";
+import { resolveTierBFeatureGate } from "../lib/feature-readiness";
 import { resolveLanguage } from "../lib/i18n";
 import { debugLog } from "../lib/logger";
 
@@ -122,6 +123,8 @@ const zhtwAppliedKey = new Map<string, string>();
 const lastDispatchedLength = new Map<string, number>();
 const lastDispatchedTextHash = new Map<string, string>();
 const inFlightDispatchedTextHash = new Map<string, string>();
+const readingBriefPrefetchInflight = new Set<string>();
+const readingBriefPrefetchCompleted = new Set<string>();
 
 function rememberPostData(stableId: string, post: PostData): void {
   if (postIdToData.has(stableId)) postIdToData.delete(stableId);
@@ -375,7 +378,7 @@ function emitPostClassified(
     textCompleteness?: TextCompleteness;
     sourceContext?: StructuredPostContext;
   } = {},
-): void {
+): DashboardPostEvent {
   const postUrl = post.postUrl ?? extractPostUrlFromArticle(post.element);
   const pageUrl = post.pageUrl ?? window.location.href;
   post.postUrl = postUrl;
@@ -387,34 +390,116 @@ function emitPostClassified(
     text: fullText,
     fullText,
   }));
+  const event: DashboardPostEvent = {
+    id: stableId,
+    text: fullText.slice(0, 200),
+    fullText: fullText.slice(0, 2000),
+    sourceContext,
+    authorName: post.authorName,
+    sourceName: post.sourceName,
+    hasMedia: post.hasMedia,
+    isSponsored: post.element.dataset.trulySponsored === "true",
+    timestamp: new Date().toISOString(),
+    elapsedMs: opts.elapsedMs ?? 0,
+    decision,
+    summary: opts.summary ?? decision.deepClassification?.summary,
+    postType: post.postType,
+    contentKind: post.contentKind,
+    sharedAttachmentText: post.sharedAttachmentText,
+    reshareOriginalText: post.reshareOriginalText,
+    reshareOriginalAuthor: post.reshareOriginalAuthor,
+    postUrl,
+    pageUrl,
+    textCompleteness,
+    zhtwReview: decision.zhtwReview,
+    zhtwReviewError: decision.zhtwReviewError,
+  };
   const msg: TrulyMessage = {
     type: "POST_CLASSIFIED",
-    event: {
-      id: stableId,
-      text: fullText.slice(0, 200),
-      fullText: fullText.slice(0, 2000),
-      sourceContext,
-      authorName: post.authorName,
-      sourceName: post.sourceName,
-      hasMedia: post.hasMedia,
-      isSponsored: post.element.dataset.trulySponsored === "true",
-      timestamp: new Date().toISOString(),
-      elapsedMs: opts.elapsedMs ?? 0,
-      decision,
-      summary: opts.summary ?? decision.deepClassification?.summary,
-      postType: post.postType,
-      contentKind: post.contentKind,
-      sharedAttachmentText: post.sharedAttachmentText,
-      reshareOriginalText: post.reshareOriginalText,
-      reshareOriginalAuthor: post.reshareOriginalAuthor,
-      postUrl,
-      pageUrl,
-      textCompleteness,
-      zhtwReview: decision.zhtwReview,
-      zhtwReviewError: decision.zhtwReviewError,
-    },
+    event,
   };
   browser.runtime.sendMessage(msg).catch(() => {});
+  return event;
+}
+
+function isMeaningfullyVisible(el: HTMLElement): boolean {
+  const rect = el.getBoundingClientRect();
+  const vh = window.innerHeight || document.documentElement.clientHeight;
+  return rect.bottom > 0 && rect.top < vh;
+}
+
+function readingBriefPrefetchKey(event: DashboardPostEvent, outputLang = currentContentLang()): string {
+  return `${event.id}:${outputLang}:${hashString(event.fullText || event.text || "")}`;
+}
+
+function rememberCompletedReadingBriefPrefetch(key: string): void {
+  if (readingBriefPrefetchCompleted.has(key)) readingBriefPrefetchCompleted.delete(key);
+  readingBriefPrefetchCompleted.add(key);
+
+  while (readingBriefPrefetchCompleted.size > POST_DATA_MAX_SIZE) {
+    const oldest = readingBriefPrefetchCompleted.values().next().value;
+    if (!oldest) break;
+    readingBriefPrefetchCompleted.delete(oldest);
+  }
+}
+
+function maybePrefetchReadingBrief(event: DashboardPostEvent, post: PostData): void {
+  if (!event.decision.deepClassification) return;
+  if (event.readingBrief || event.readingBriefPending || event.readingBriefError) return;
+  if (!isMeaningfullyVisible(post.element)) return;
+
+  const gate = resolveTierBFeatureGate("reading_brief", liveSettings, {
+    tierAEndpoint: liveTierAEndpoint,
+    tierAModel: liveTierAModel,
+  });
+  if (!gate.canRun) {
+    __trulyAudit({
+      ts: performance.now(),
+      event: "reading-brief-prefetch-skip",
+      stableId: event.id,
+      reason: gate.blockedStatus ?? "blocked",
+    });
+    return;
+  }
+
+  const outputLang = currentContentLang();
+  const key = readingBriefPrefetchKey(event, outputLang);
+  if (readingBriefPrefetchInflight.has(key) || readingBriefPrefetchCompleted.has(key)) return;
+
+  readingBriefPrefetchInflight.add(key);
+  __trulyAudit({ ts: performance.now(), event: "reading-brief-prefetch", stableId: event.id });
+
+  const req: TrulyMessage = {
+    type: "READING_BRIEF_REQUEST",
+    postId: event.id,
+    endpoint: gate.endpoint,
+    model: gate.model,
+    provider: gate.effectiveProvider,
+    outputLang,
+    event,
+  };
+  browser.runtime.sendMessage(req).then((reply: ReadingBriefResultMsg | undefined) => {
+    if (reply?.ok) {
+      rememberCompletedReadingBriefPrefetch(key);
+      __trulyAudit({ ts: performance.now(), event: "reading-brief-prefetch-done", stableId: event.id });
+      return;
+    }
+    __trulyAudit({
+      ts: performance.now(),
+      event: "reading-brief-prefetch-failed",
+      stableId: event.id,
+      error: reply?.error ?? "missing_reply",
+    });
+  }).catch((error) => {
+    __trulyAudit({
+      ts: performance.now(),
+      event: "reading-brief-prefetch-error",
+      stableId: event.id,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }).finally(() => {
+    readingBriefPrefetchInflight.delete(key);
+  });
 }
 
 function applyZhtwReview(stableId: string, post: PostData, review: ZhtwReview): void {
@@ -844,7 +929,13 @@ async function dispatchDeepClassify(el: HTMLElement, source: "auto" | "expand" |
       };
       postIdToTierA.set(id, updated);
       applyOverlay(dispatchPost, updated, { lang: currentContentLang() });
-      emitPostClassified(id, dispatchPost, updated, { fullText: text, summary: deep.summary, textCompleteness, sourceContext });
+      const event = emitPostClassified(id, dispatchPost, updated, {
+        fullText: text,
+        summary: deep.summary,
+        textCompleteness,
+        sourceContext,
+      });
+      if (source === "auto") maybePrefetchReadingBrief(event, dispatchPost);
     }
   }).catch((e) => {
     console.warn(`[Truly] Tier B sendMessage error for ${id}:`, e);

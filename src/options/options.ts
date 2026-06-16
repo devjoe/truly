@@ -223,6 +223,11 @@ async function init() {
   const currentLang = (): Lang => resolveLanguage(settings.language);
   const optT = (key: string, params?: Record<string, string | number>): string =>
     t(key, currentLang(), params);
+  function renderBrandSubtitle(): void {
+    const title = document.querySelector<HTMLElement>(".page-header h1");
+    if (!title) return;
+    title.dataset.subtitle = currentLang() === "zh-TW" ? "梳 理" : "";
+  }
   function renderPrivacyPolicyNote(): void {
     const item = document.getElementById("privacyGenerativePolicy");
     if (!item) return;
@@ -236,6 +241,7 @@ async function init() {
     item.appendChild(link);
     item.append(document.createTextNode(currentLang() === "zh-TW" ? "。" : "."));
   }
+  i18nDynamicRenderers.push(renderBrandSubtitle);
   i18nDynamicRenderers.push(renderPrivacyPolicyNote);
   function applyLanguage(): void {
     languageController.setLanguage(settings.language);

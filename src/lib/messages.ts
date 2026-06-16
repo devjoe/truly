@@ -243,9 +243,9 @@ export interface DeepClassifyResultMsg {
 }
 
 /**
- * Tier B-2 reading brief — sidepanel asks the service worker to turn an
- * already-completed Tier B result into a compact reading/investigation plan.
- * This is triggered only by sidepanel focus, not feed viewport scanning.
+ * Tier B-2 reading brief — sidepanel or visible-post prefetch asks the service
+ * worker to turn an already-completed Tier B result into a compact
+ * reading/investigation plan.
  */
 export interface ReadingBriefRequestMsg {
   type: "READING_BRIEF_REQUEST";
