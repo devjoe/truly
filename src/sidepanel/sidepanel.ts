@@ -27,10 +27,11 @@ import type { FeedExpandedRenderOptions } from "./feed-expanded-renderer";
 import { createExtensionThemeController } from "../lib/theme-mode";
 import { createExtensionLanguageController } from "../lib/i18n";
 import type { UserSettings } from "../lib/types";
+import { debugLog } from "../lib/logger";
 
 export { mergeProgressivePostContext } from "./event-merge-state";
 
-console.log(`[Truly Sidepanel] Loaded buildId=${__TRULY_BUILD_ID__}`);
+debugLog(`[Truly Sidepanel] Loaded buildId=${__TRULY_BUILD_ID__}`);
 
 const runtimeState = createSidepanelRuntimeState();
 const historyRuntime = createSidepanelDashboardHistoryRuntime(runtimeState);

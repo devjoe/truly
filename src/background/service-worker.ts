@@ -40,6 +40,7 @@ import {
 import { DashboardRuntimeState } from "./dashboard-state";
 import { createTierBCaptureBuffer, maybeCaptureTierB } from "./tier-b-capture";
 import { classifyTierAPosts } from "./tier-a-classification";
+import { debugLog } from "../lib/logger";
 
 // Capture console output for the debug snapshot bundle. Idempotent — if
 // the SW wakes from suspension this is a no-op. See lib/log-buffer.ts.
@@ -57,7 +58,7 @@ async function clearPersistedClassificationCache(reason: string): Promise<void> 
     );
     if (keys.length === 0) return;
     await chrome.storage.local.remove(keys);
-    console.log(
+    debugLog(
       `[Truly BG] Cleared persisted classification cache on ${reason}: ${keys.join(", ")}`,
     );
   } catch (error) {
@@ -455,7 +456,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
     (async () => {
       try {
         const { requestedIds, results } = await classifyTierAPosts(message);
-        console.log(`[Truly BG] Ollama done: ${Object.keys(results).length} results (rules=${message.customRules?.length ?? 0})`);
+        debugLog(`[Truly BG] Ollama done: ${Object.keys(results).length} results (rules=${message.customRules?.length ?? 0})`);
         if (typeof tabId === "number") {
           await chrome.tabs.sendMessage(tabId, {
             type: "OLLAMA_RESULT" as const,
@@ -482,7 +483,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
 
   if (message.type === "SELECTOR_HEALTH_UPDATE") {
     const tabId = sender.tab?.id;
-    console.log(`[Truly BG] SELECTOR_HEALTH_UPDATE: tabId=${tabId} status=${message.status}`);
+    debugLog(`[Truly BG] SELECTOR_HEALTH_UPDATE: tabId=${tabId} status=${message.status}`);
     if (tabId) {
       if (message.status === "unhealthy") {
         tabHealthState.set(tabId, "unhealthy");
@@ -525,7 +526,7 @@ keepAlive();
 // dev builds may add it through the manifest patch step.
 chrome.commands?.onCommand.addListener((cmd) => {
   if (cmd === "reload-extension") {
-    console.log("[Truly BG] reload-extension command → chrome.runtime.reload()");
+    debugLog("[Truly BG] reload-extension command → chrome.runtime.reload()");
     chrome.runtime.reload();
   }
 });
@@ -534,4 +535,4 @@ chrome.commands?.onCommand.addListener((cmd) => {
 // __TRULY_BUILD_ID__ as a string literal at build time, so it isn't on
 // globalThis unless we assign it explicitly).
 (globalThis as any).__TRULY_BUILD_ID = __TRULY_BUILD_ID__;
-console.log(`[Truly BG] Service worker loaded buildId=${__TRULY_BUILD_ID__}`);
+debugLog(`[Truly BG] Service worker loaded buildId=${__TRULY_BUILD_ID__}`);

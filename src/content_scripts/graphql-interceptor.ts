@@ -7,6 +7,7 @@ import {
   scanScriptForSponsored,
   type ExtractedPost,
 } from "../lib/sponsorship-signals";
+import { debugLog } from "../lib/logger";
 
 const PAGE_ORIGIN = window.location.origin;
 
@@ -69,7 +70,7 @@ async function fetchAndScanSSR(): Promise<void> {
   // Step 1: try cache
   const cached = await requestCacheLookup(url);
   if (cached && cached.length > 0) {
-    console.log(
+    debugLog(
       `[Truly] SSR cache HIT: ${cached.length} posts (skipped fetch). Authors: [${cached
         .map((p) => `"${p.authorName}"`)
         .join(", ")}]`
@@ -79,7 +80,7 @@ async function fetchAndScanSSR(): Promise<void> {
   }
 
   // Step 2: cache miss → live fetch
-  console.log(`[Truly] SSR fetch: starting for ${url} (cache miss)`);
+  debugLog(`[Truly] SSR fetch: starting for ${url} (cache miss)`);
   const start = Date.now();
   try {
     const resp = await fetch(url, {
@@ -92,16 +93,16 @@ async function fetchAndScanSSR(): Promise<void> {
       },
     });
     const html = await resp.text();
-    console.log(
+    debugLog(
       `[Truly] SSR fetch: ${html.length}B in ${Date.now() - start}ms`
     );
     if (html.length === 0) return;
     const posts = scanScriptForSponsored(html);
     if (posts.length === 0) {
-      console.log("[Truly] SSR scan: 0 sponsored posts found");
+      debugLog("[Truly] SSR scan: 0 sponsored posts found");
       return;
     }
-    console.log(
+    debugLog(
       `[Truly] SSR scan: ${posts.length} sponsored posts found. Authors: [${posts
         .map((p) => `"${p.authorName}"`)
         .join(", ")}]`
@@ -146,7 +147,7 @@ function _dispatchPosts(posts: ExtractedPost[]) {
     if (_postsBuffer.length > POSTS_BUFFER_MAX) _postsBuffer.shift();
   }
   if (_postsBuffer.length <= 5) {
-    console.log(
+    debugLog(
       `[Truly] interceptor dispatch: +${posts.length} (total buffered=${_postsBuffer.length}) first author="${posts[0]?.authorName}" sponsored=${posts[0]?.isSponsored}`
     );
   }
@@ -160,7 +161,7 @@ function _dispatchPosts(posts: ExtractedPost[]) {
 window.addEventListener("message", (event) => {
   if (!isSamePageMessage(event)) return;
   if (event.data?.type !== "TRULY_CONTENT_READY") return;
-  console.log(
+  debugLog(
     `[Truly] handshake: buffer=${_postsBuffer.length} gqlXhrSeen=${_gqlXhrCount} extracted=${_gqlPostsExtracted}`
   );
   _resolveIsolatedReady();
@@ -186,7 +187,7 @@ function extractPostsFromGraphQL(data: any): ExtractedPost[] {
     if (seenPostIds.has(id)) continue;
     seenPostIds.add(id);
     if (p.isSponsored) {
-      console.log(
+      debugLog(
         `[Truly] Sponsored detected via GraphQL scan (postId=${id})`
       );
     }
@@ -209,7 +210,7 @@ window.fetch = async function (...args: Parameters<typeof fetch>) {
           : input?.url || "";
     if (url.includes("/api/graphql/")) {
       _gqlXhrCount++;
-      if (_gqlXhrCount <= 5) console.log(`[Truly] interceptor saw fetch /api/graphql/ #${_gqlXhrCount}`);
+      if (_gqlXhrCount <= 5) debugLog(`[Truly] interceptor saw fetch /api/graphql/ #${_gqlXhrCount}`);
       const clone = response.clone();
       clone.text().then((text) => {
         _trulyMaybeDump(text);
@@ -241,7 +242,7 @@ OrigXHR.prototype.send = function (...args: Parameters<XMLHttpRequest["send"]>) 
   const url = (this as any).__trulyUrl || "";
   if (url.includes("/api/graphql/")) {
     _gqlXhrCount++;
-    if (_gqlXhrCount <= 5) console.log(`[Truly] interceptor saw XHR /api/graphql/ #${_gqlXhrCount}`);
+    if (_gqlXhrCount <= 5) debugLog(`[Truly] interceptor saw XHR /api/graphql/ #${_gqlXhrCount}`);
     this.addEventListener("load", function () {
       try {
         const text = this.responseText || "";
@@ -274,22 +275,22 @@ OrigXHR.prototype.send = function (...args: Parameters<XMLHttpRequest["send"]>) 
 let _trulyDumpNeedle: string | null = null;
 (window as any).__trulyDumpGraphQL = (needle: string) => {
   _trulyDumpNeedle = needle;
-  console.log(`[Truly Debug] Will dump next GraphQL response containing "${needle}". Scroll the feed.`);
+  debugLog(`[Truly Debug] Will dump next GraphQL response containing "${needle}". Scroll the feed.`);
 };
 function _trulyMaybeDump(text: string) {
   if (_trulyDumpNeedle && text.includes(_trulyDumpNeedle)) {
-    console.log(`[Truly Debug] === GraphQL response containing "${_trulyDumpNeedle}" ===`);
+    debugLog(`[Truly Debug] === GraphQL response containing "${_trulyDumpNeedle}" ===`);
     // Try to parse and pretty-print each NDJSON line
     for (const line of text.split("\n")) {
       if (!line.trim()) continue;
       try {
         const data = JSON.parse(line);
-        console.log("[Truly Debug] line:", data);
+        debugLog("[Truly Debug] line:", data);
       } catch {
-        console.log("[Truly Debug] (unparseable line):", line.slice(0, 200));
+        debugLog("[Truly Debug] (unparseable line):", line.slice(0, 200));
       }
     }
-    console.log(`[Truly Debug] === end dump ===`);
+    debugLog(`[Truly Debug] === end dump ===`);
     _trulyDumpNeedle = null; // one-shot
   }
 }
@@ -304,17 +305,17 @@ function _trulyMaybeDump(text: string) {
 // nearby. Use this when a sponsored post is visible but the GraphQL
 // interceptor never saw it (i.e. FB pre-rendered it via SSR).
 (window as any).__trulyDumpSSR = (needle: string) => {
-  console.log(`[Truly Debug] Searching SSR for "${needle}"...`);
+  debugLog(`[Truly Debug] Searching SSR for "${needle}"...`);
 
   // 1. JSON script tags
   const jsonScripts = document.querySelectorAll('script[type="application/json"]');
-  console.log(`[Truly Debug] Found ${jsonScripts.length} JSON script tags`);
+  debugLog(`[Truly Debug] Found ${jsonScripts.length} JSON script tags`);
   let jsonHits = 0;
   for (const s of jsonScripts) {
     const txt = s.textContent || "";
     if (!txt.includes(needle)) continue;
     jsonHits++;
-    console.log(
+    debugLog(
       `[Truly Debug] JSON tag match #${jsonHits}: ${txt.length} bytes`
     );
     // Check for sponsorship markers near the needle
@@ -331,12 +332,12 @@ function _trulyMaybeDump(text: string) {
     if (slice.includes('"cat_sensitive"')) markers.push("cat_sensitive");
     if (slice.includes("ghl_mocked")) markers.push("ghl_mocked");
     if (slice.includes("Sponsored")) markers.push("Sponsored (literal)");
-    console.log(
+    debugLog(
       `  ↳ markers found in ±1KB window:`,
       markers.length ? markers : "(none)"
     );
     if (jsonHits === 1) {
-      console.log(`  ↳ context (200 chars after needle):`, slice.slice(1000, 1200));
+      debugLog(`  ↳ context (200 chars after needle):`, slice.slice(1000, 1200));
     }
   }
 
@@ -348,15 +349,15 @@ function _trulyMaybeDump(text: string) {
     if (!txt.includes(needle)) continue;
     inlineHits++;
     if (inlineHits === 1) {
-      console.log(`[Truly Debug] inline <script> match: ${txt.length} bytes`);
+      debugLog(`[Truly Debug] inline <script> match: ${txt.length} bytes`);
       const idx = txt.indexOf(needle);
-      console.log(`  ↳ context: ${txt.slice(Math.max(0, idx - 200), idx + 400)}`);
+      debugLog(`  ↳ context: ${txt.slice(Math.max(0, idx - 200), idx + 400)}`);
     }
   }
-  console.log(`[Truly Debug] inline-script matches: ${inlineHits}`);
+  debugLog(`[Truly Debug] inline-script matches: ${inlineHits}`);
 
   // 3. Stats summary
-  console.log(
+  debugLog(
     `[Truly Debug] SSR search done. JSON-tag hits: ${jsonHits}, inline-script hits: ${inlineHits}`
   );
 };
@@ -367,4 +368,4 @@ function _trulyMaybeDump(text: string) {
 // covers the same use case via plain DOM. See archived change
 // `2026-04-07-react-props-sponsored-detection`.)
 
-console.log("[Truly] GraphQL interceptor installed (fetch + XHR). Debug: __trulyDumpGraphQL(needle), __trulyDumpSSR(needle)");
+debugLog("[Truly] GraphQL interceptor installed (fetch + XHR). Debug: __trulyDumpGraphQL(needle), __trulyDumpSSR(needle)");

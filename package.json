@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "build:dev": "vite build && node scripts/patch-dev-manifest.mjs",
+    "build:dev": "TRULY_DEV_BUILD=1 vite build && node scripts/patch-dev-manifest.mjs",
     "dev": "node scripts/dev-watch.mjs",
     "dev:reload": "node scripts/dev-reload-server.mjs",
     "dev:all": "node scripts/dev-singleton.mjs start",
@@ -22,7 +22,7 @@
     "check:public-boundary": "node scripts/check-public-boundary.mjs",
     "check:release-metadata": "node scripts/check-release-metadata.mjs",
     "test:contract:public": "vitest run tests/contract/model-response-contract.test.ts tests/contract/post-context-boundary-contract.test.ts tests/contract/zhtw-segmentation-contract.test.ts",
-    "test:unit:public": "vitest run tests/unit/i18n.test.ts tests/unit/i18n-hardcoded-strings.test.ts tests/unit/model-display.test.ts tests/unit/model-source-config.test.ts tests/unit/ollama-cloud-capabilities.test.ts tests/unit/provider-capabilities.test.ts tests/unit/reading-question-policy.test.ts tests/unit/theme-mode.test.ts tests/unit/tier-b-vision-probe.test.ts",
+    "test:unit:public": "vitest run tests/unit/i18n.test.ts tests/unit/i18n-hardcoded-strings.test.ts tests/unit/logging-policy.test.ts tests/unit/model-display.test.ts tests/unit/model-source-config.test.ts tests/unit/ollama-cloud-capabilities.test.ts tests/unit/provider-capabilities.test.ts tests/unit/reading-question-policy.test.ts tests/unit/theme-mode.test.ts tests/unit/tier-b-vision-probe.test.ts",
     "test:unit:watch": "vitest",
     "check:public": "npm run check:public-boundary && npm run check:release-metadata && npm run check:type && npm run test:contract:public && npm run test:unit:public && npm run build",
     "check:build": "npm run check:public-boundary && npm run build"

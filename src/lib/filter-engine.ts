@@ -24,6 +24,7 @@ import { providerEndpointKind, providerFixedModel, providerSupportsTierA } from 
 import { modelDisplayIdentity } from "./model-display";
 import { defaultEndpointForProvider, defaultModelForProvider } from "./model-source-config";
 import { resolveLanguage } from "./i18n";
+import { debugLog } from "./logger";
 
 let settings: UserSettings = { ...DEFAULT_SETTINGS };
 let stats: SessionStats = createEmptyStats();
@@ -409,7 +410,7 @@ export async function sweepStaleCacheVersions(): Promise<string[]> {
     );
     if (stale.length > 0) {
       await chrome.storage.local.remove(stale);
-      console.log(
+      debugLog(
         `[Truly] Swept stale cache versions: ${stale.join(", ")}`
       );
     }
@@ -441,7 +442,7 @@ export function hydrateCache(): Promise<void> {
         }
         const storedBuildId = stored?.[CACHE_BUILD_ID_KEY] as string | undefined;
         if (storedBuildId && storedBuildId !== __TRULY_BUILD_ID__) {
-          console.log(
+          debugLog(
             `[Truly] Cache buildId mismatch (stored=${storedBuildId} current=${__TRULY_BUILD_ID__}) — discarding stale cache`
           );
           chrome.storage.local.remove([CACHE_STORAGE_KEY, CACHE_BUILD_ID_KEY]);
@@ -456,7 +457,7 @@ export function hydrateCache(): Promise<void> {
           .sort((a, b) => a[1].ts - b[1].ts)
           .slice(-MAX_CACHE_SIZE);
         for (const [k, v] of entries) classificationCache.set(k, v);
-        console.log(
+        debugLog(
           `[Truly] Cache hydrated: ${entries.length} entries`
         );
         resolve();
@@ -557,7 +558,7 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onMessage) {
     const requestedIds: string[] | undefined = Array.isArray(message.requestedIds)
       ? message.requestedIds
       : undefined;
-    console.log(
+    debugLog(
       `[Truly] Ollama result received: ${Object.keys(results).length} posts (request size ${requestedIds?.length ?? "?"})${pipelineError ? ` error=${pipelineError}` : ""}`,
     );
     const idsToResolve = requestedIds ?? Array.from(pendingOllamaRequests.keys());
@@ -769,7 +770,7 @@ export async function classifyPost(
 
   // Tier 3: Ollama LLM (async). Scores feed the panel and the sponsored
   // overlay; for non-sponsored posts they never trigger blur.
-  console.log(`[Truly] Tier A check: configured=${isTierAConfigured()} textLen=${post.text.length} contentKind=${post.contentKind ?? "standard"} provider=${getTierAProvider(settings)}`);
+  debugLog(`[Truly] Tier A check: configured=${isTierAConfigured()} textLen=${post.text.length} contentKind=${post.contentKind ?? "standard"} provider=${getTierAProvider(settings)}`);
   if (isTierAConfigured() && hasClassifiableText) {
     const aStartTime = performance.now();
     const TIER_A_TIMEOUT_MS = 30_000;
@@ -808,7 +809,7 @@ export async function classifyPost(
 
       if (Object.keys(ollamaScores).length > 0) {
         const finalScores = mergeScores(heuristicScores, ollamaScores, true);
-        console.log(
+        debugLog(
           `[Truly] Ollama result: ${post.id} scores=${JSON.stringify(ollamaScores)} rules=${JSON.stringify(ollamaResult.customRuleScores ?? null)} tierA=${JSON.stringify(ollamaResult.tierAScoring ?? null)}`
         );
         const decision = makeDecision(

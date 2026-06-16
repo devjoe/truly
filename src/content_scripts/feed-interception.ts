@@ -1,4 +1,5 @@
 import type { EngagementHints, PostData, PostType } from "../lib/types";
+import { debugLog } from "../lib/logger";
 import {
   isCandidateFacebookAuthorUrl,
   isFacebookGroupFeedPath,
@@ -734,7 +735,7 @@ function retroMarkSponsored(gqlPost: GraphQLPost): void {
     if (!matched) continue;
 
     el.dataset.trulySponsored = "true";
-    console.log(
+    debugLog(
       `[Truly] Retro-marked sponsored from GraphQL (id=${el.dataset.trulyId}, gqlAuthor="${gqlPost.authorName}")`
     );
     if (onNewPost && el.dataset.trulyId) {
@@ -783,7 +784,7 @@ function retroUpdateTruncatedText(gqlPost: GraphQLPost): void {
     if (gqlPost.text.length <= lastLen + TEXT_UPGRADE_MIN_DELTA) return;
 
     el.dataset.trulyClassifiedLen = String(gqlPost.text.length);
-    console.log(
+    debugLog(
       `[Truly] Text upgrade from GraphQL (id=${el.dataset.trulyId}, ${lastLen} → ${gqlPost.text.length} chars, author="${gqlPost.authorName}")`
     );
     if (onNewPost && el.dataset.trulyId) {
@@ -893,7 +894,7 @@ export function reEvaluateKnownSponsored(): void {
     const text = extractCleanPostText(el, identity).slice(0, 200);
     if (isKnownSponsored(text, author)) {
       el.dataset.trulySponsored = "true";
-      console.log(
+      debugLog(
         `[Truly] Re-evaluated to sponsored via knownSponsoredAuthors (id=${el.dataset.trulyId}, author="${author}")`
       );
       if (onNewPost && el.dataset.trulyId) {
@@ -942,7 +943,7 @@ export function findPostContainers(): HTMLElement[] {
       // Log: no container found for this like button
       const rect = (btn as HTMLElement).getBoundingClientRect();
       if (rect.top > 0 && rect.top < window.innerHeight) {
-        console.log(`[Truly] Skip: no boundary for like btn at y=${Math.round(rect.top)}`);
+        debugLog(`[Truly] Skip: no boundary for like btn at y=${Math.round(rect.top)}`);
       }
       continue;
     }
@@ -966,7 +967,7 @@ export function findPostContainers(): HTMLElement[] {
     if (!author || isGenericFeedWrapperAuthor(author)) {
       const rect = container.getBoundingClientRect();
       if (rect.top > -200 && rect.top < window.innerHeight + 200) {
-        console.log(
+        debugLog(
           `[Truly] Skip: ${author ? "generic feed wrapper author" : "no author extracted"} — w=${Math.round(rect.width)} h=${Math.round(rect.height)} text="${(container.innerText || "").slice(0, 40)}..."`
         );
       }
@@ -1346,7 +1347,7 @@ function processNewPost(el: HTMLElement, id: string) {
 
   if (!authorName && !ownText.trim() && !(sharedAttachmentText || "").trim() && !hasMedia) {
     markSkippedContainer(el, "empty-post-container");
-    console.log(`[Truly] Skip: empty post container (id=${id})`);
+    debugLog(`[Truly] Skip: empty post container (id=${id})`);
     return;
   }
 
@@ -1365,7 +1366,7 @@ function processNewPost(el: HTMLElement, id: string) {
 
   if (isRecommended) {
     el.dataset.trulyRecommended = "true";
-    console.log(
+    debugLog(
       `[Truly] Recommended post: author="${author || ""}" text="${text.slice(0, 60)}..."`
     );
   }
@@ -1403,7 +1404,7 @@ function processNewPost(el: HTMLElement, id: string) {
   const signature = postDomSignature(el);
   if (signature) el.dataset.trulyDomSignature = signature;
 
-  console.log(
+  debugLog(
     `[Truly] Post: author="${post.authorName}" sponsored=${isSponsored} text="${text.slice(0, 60)}..."`
   );
   onNewPost?.(post);
@@ -2056,7 +2057,7 @@ export function markSponsoredInFeed() {
 
         // This tagged post contains a "贊助" label — mark it
         el.dataset.trulySponsored = "true";
-        console.log(`[Truly] Marked sponsored: ${el.dataset.trulyId}`);
+        debugLog(`[Truly] Marked sponsored: ${el.dataset.trulyId}`);
 
         // Re-emit the post for re-classification
         const identity = extractPostIdentity(el);
@@ -2114,7 +2115,7 @@ export function markSponsoredInFeed() {
               authorName: identity.authorName,
               hasMedia: container.querySelector("img, video") !== null,
             };
-            console.log(`[Truly] New sponsored post: ${id} author="${post.authorName}"`);
+            debugLog(`[Truly] New sponsored post: ${id} author="${post.authorName}"`);
             onNewPost?.(post);
           }
           break;

@@ -4,6 +4,7 @@ import { cpSync, mkdirSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 
 const isFirefox = process.env.VITE_BROWSER === "firefox";
+const isDevBuild = process.env.TRULY_DEV_BUILD === "1";
 
 // Build ID: epoch-ms + 7-char git SHA (+ "-dirty" if uncommitted changes).
 // Stamped into every entry point via `define` so we can detect at runtime
@@ -109,6 +110,7 @@ function buildContentScriptIIFE(): Plugin {
         },
         define: {
           __BROWSER__: JSON.stringify(isFirefox ? "firefox" : "chrome"),
+          __TRULY_DEV_BUILD__: JSON.stringify(isDevBuild),
         },
       });
 
@@ -130,6 +132,10 @@ function buildContentScriptIIFE(): Plugin {
             fileName: () => "graphql-interceptor.js",
           },
         },
+        define: {
+          __BROWSER__: JSON.stringify(isFirefox ? "firefox" : "chrome"),
+          __TRULY_DEV_BUILD__: JSON.stringify(isDevBuild),
+        },
       });
 
       // Build service worker (IIFE for non-module SW)
@@ -146,6 +152,10 @@ function buildContentScriptIIFE(): Plugin {
             name: "TrulyBackground",
             fileName: () => "service-worker.js",
           },
+        },
+        define: {
+          __BROWSER__: JSON.stringify(isFirefox ? "firefox" : "chrome"),
+          __TRULY_DEV_BUILD__: JSON.stringify(isDevBuild),
         },
       });
 
@@ -195,5 +205,6 @@ export default defineConfig({
   ],
   define: {
     __BROWSER__: JSON.stringify(isFirefox ? "firefox" : "chrome"),
+    __TRULY_DEV_BUILD__: JSON.stringify(isDevBuild),
   },
 });

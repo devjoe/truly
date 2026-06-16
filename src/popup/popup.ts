@@ -14,8 +14,9 @@ import {
 } from "../lib/readiness";
 import { loadReadinessSnapshot } from "../lib/readiness-storage";
 import type { GetSidePanelStateResultMsg } from "../lib/messages";
+import { debugLog } from "../lib/logger";
 
-console.log(`[Truly Popup] Loaded buildId=${__TRULY_BUILD_ID__}`);
+debugLog(`[Truly Popup] Loaded buildId=${__TRULY_BUILD_ID__}`);
 
 async function loadSettings(): Promise<UserSettings> {
   const result = await browser.storage.sync.get("settings");

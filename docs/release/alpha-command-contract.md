@@ -106,3 +106,9 @@ Preview release artifacts must not include development-only commands. Local
 development can use `npm run build:dev` to patch the built manifest with the
 reload shortcut, but `release:alpha` verifies that the packaged manifest does
 not contain that command.
+
+Local development builds also enable routine debug logs automatically.
+Production and Preview release builds keep `log` / `info` / `debug` output
+quiet by default, while `warn` / `error` remain visible. For one-off production
+debugging, set `globalThis.__TRULY_DEBUG_LOGS = true` or
+`localStorage.trulyDebugLogs = "1"` in the relevant extension context.

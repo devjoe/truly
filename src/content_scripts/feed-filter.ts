@@ -9,6 +9,7 @@ import { normalizeStructuredPostContext } from "../lib/source-context-normalizer
 import type { StructuredPostContext } from "../lib/source-context-types";
 import { providerNeedsEndpoint } from "../lib/provider-capabilities";
 import { resolveLanguage } from "../lib/i18n";
+import { debugLog } from "../lib/logger";
 
 // Capture console output before any [Truly] line fires so the
 // debug snapshot bundle can replay them.
@@ -662,7 +663,7 @@ async function dispatchDeepClassify(el: HTMLElement, source: "auto" | "expand" |
   const prevLen = Math.max(lastDispatchedLength.get(id) ?? 0, source === "expand" ? normalizedSnapshot.length : 0);
   const prevHash = lastDispatchedTextHash.get(id) ?? (source === "expand" ? snapshotHash : undefined);
   if (source === "expand" && prevLen > 0 && normalizedText.length <= prevLen && textHash === prevHash) {
-    console.log(
+    debugLog(
       `[Truly] Tier B skip-${source}: id=${id} len=${normalizedText.length} prev=${prevLen} ` +
         `hashChanged=${textHash !== prevHash} (no expanded text growth)`,
     );
@@ -687,7 +688,7 @@ async function dispatchDeepClassify(el: HTMLElement, source: "auto" | "expand" |
   }
   const inFlightHash = inFlightDispatchedTextHash.get(id);
   if (source !== "manual" && inFlightHash === textHash) {
-    console.log(
+    debugLog(
       `[Truly] Tier B skip-${source}: id=${id} len=${normalizedText.length} ` +
         `(duplicate dispatch in flight)`,
     );
@@ -738,7 +739,7 @@ async function dispatchDeepClassify(el: HTMLElement, source: "auto" | "expand" |
   const totalImageBytes = imageUrls.reduce((s, u) => s + u.length, 0);
 
   if (!text.trim() && imageUrls.length === 0) {
-    console.log(
+    debugLog(
       `[Truly] Tier B skip-${source}: id=${id} empty payload (textLen=0 images=0 filteredImages=${filteredImageCount})`,
     );
     __trulyAudit({
@@ -754,7 +755,7 @@ async function dispatchDeepClassify(el: HTMLElement, source: "auto" | "expand" |
     return Promise.resolve();
   }
 
-  console.log(
+  debugLog(
     `[Truly] Tier B ${source}-fire: id=${id} textLen=${text.length} (snapshot=${post.text.length}) images=${imageUrls.length} (extracted=${extractedUrls.length} extractFiltered=${filteredFromExtract} prefetchDropped=${droppedCount}) imageBytes=${totalImageBytes} provider=${provider} endpoint=${endpoint || "-"}`,
   );
   __trulyAudit({
@@ -818,7 +819,7 @@ async function dispatchDeepClassify(el: HTMLElement, source: "auto" | "expand" |
       return;
     }
     const deep: DeepClassification = reply.deep;
-    console.log(`[Truly] Tier B done: id=${id} aiLikelihood=${deep.aiLikelihood} imageStatus=${deep.imageStatus ?? "?"}`);
+    debugLog(`[Truly] Tier B done: id=${id} aiLikelihood=${deep.aiLikelihood} imageStatus=${deep.imageStatus ?? "?"}`);
     __trulyAudit({
       ts: performance.now(),
       event: "done",
@@ -1210,7 +1211,7 @@ function repairMissingHeadsUpPanels(): void {
     if (repaired >= 8) break;
   }
   if (repaired > 0) {
-    console.log(`[Truly] Repaired missing heads-up panels: ${repaired}`);
+    debugLog(`[Truly] Repaired missing heads-up panels: ${repaired}`);
   }
 }
 
@@ -1219,7 +1220,7 @@ function scheduleVisiblePostRescan(reason: string, delayMs = 250): void {
   visiblePostRescanTimer = window.setTimeout(() => {
     visiblePostRescanTimer = null;
     if (!liveSettings.enabled) return;
-    console.log(`[Truly] Rescanning visible posts: ${reason}`);
+    debugLog(`[Truly] Rescanning visible posts: ${reason}`);
     rescanVisiblePosts();
     repairMissingHeadsUpPanels();
   }, delayMs);
@@ -1288,7 +1289,7 @@ function handleNewPost(post: PostData) {
     textCompleteness: inferTextCompleteness(postWithCleanText, cleanPostText),
   };
 
-  console.log(
+  debugLog(
     `[Truly] New post: id=${normalizedPost.id} author="${normalizedPost.authorName || "?"}" text="${normalizedPost.text.slice(0, 80)}..."`
   );
   if (!liveSettings.enabled) {
@@ -1302,7 +1303,7 @@ function handleNewPost(post: PostData) {
     // reported as 0, which the dashboard renders as "<1ms".
     const rawElapsed = performance.now() - startedAt;
     const elapsedMs = rawElapsed >= 1 ? Math.round(rawElapsed) : 0;
-    console.log(
+    debugLog(
       `[Truly] Decision: id=${normalizedPost.id} filtered=${decision.filtered} reason="${decision.reason || "none"}" foldReason="${decision.foldReason || "none"}" scores=${JSON.stringify(decision.scores)} customRules=${JSON.stringify(decision.customRuleScores ?? null)}`
     );
     const stableId = stableEventId(normalizedPost);
@@ -1568,7 +1569,7 @@ function installFacebookThemeSync(): void {
 // Stamp buildId on the DOM so MAIN-world probes (page.evaluate) can read
 // it — the isolated CS world's `window` isn't visible from MAIN.
 try { document.documentElement.dataset.trulyBuildId = __TRULY_BUILD_ID__; } catch {}
-console.log(`[Truly] Content script loaded buildId=${__TRULY_BUILD_ID__} on ${window.location.href}`);
+debugLog(`[Truly] Content script loaded buildId=${__TRULY_BUILD_ID__} on ${window.location.href}`);
 
 // Init
 async function init() {
@@ -1577,7 +1578,7 @@ async function init() {
   await hydrateCache();
 
   setHealthCallback((status) => {
-    console.log(`[Truly] selector health → ${status}`);
+    debugLog(`[Truly] selector health → ${status}`);
     currentSelectorHealth = status;
     const msg: TrulyMessage = { type: "SELECTOR_HEALTH_UPDATE", status };
     browser.runtime.sendMessage(msg).catch(() => {});

@@ -54,8 +54,9 @@ import {
   t,
 } from "../lib/i18n";
 import type { Lang, LanguageSetting } from "../lib/types";
+import { debugLog } from "../lib/logger";
 
-console.log(`[Truly Options] Loaded buildId=${__TRULY_BUILD_ID__}`);
+debugLog(`[Truly Options] Loaded buildId=${__TRULY_BUILD_ID__}`);
 
 async function loadSettings(): Promise<UserSettings> {
   const result = await browser.storage.sync.get("settings");

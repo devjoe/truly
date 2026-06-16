@@ -17,6 +17,7 @@ import type {
   TierAScoring,
 } from "./types";
 import { TIER_A_SCORING_DIMENSIONS } from "./types";
+import { debugLog } from "./logger";
 
 export const VALID_CATEGORIES = [
   "commercial",
@@ -628,7 +629,7 @@ export async function callOllamaSingle(
       );
       return fallback;
     }
-    console.info(
+    debugLog(
       `[Truly] Tier A compact_digits fallback succeeded for post ${post.id}: reason=${reason}`,
     );
     return {
@@ -697,7 +698,7 @@ export async function callOllamaSingle(
     const compact = parseCompactScores(raw, customRules);
     if (compact) {
       if (useCompact) {
-        console.debug(
+        debugLog(
           `[Truly] Tier A compact_digits parsed for post ${post.id}: expectedLength=${expectedCompactLength}`,
         );
       }
