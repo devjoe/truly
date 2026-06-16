@@ -1,5 +1,5 @@
 <p>
-  <img src="docs/assets/brand/truly-readme-lockup.svg?v=20260615" alt="Truly 梳 理" width="262">
+  <img src="docs/assets/brand/truly-readme-lockup.svg?v=20260615" alt="Truly" width="262">
 </p>
 
 Truly is a local-first Chrome extension for reading social feeds and web pages
@@ -7,7 +7,7 @@ with more context.
 
 It prefers browser-local or user-chosen local AI before cloud services.
 
-Truly · 梳 理: to comb through and clarify.
+Truly · 梳理: to comb through and clarify.
 
 > **Early Preview:** desktop Chrome first, still changing quickly.
 
