@@ -26,9 +26,22 @@ Chrome extension metadata and GitHub release names use different constraints:
 - GitHub Release titles use `Truly 0.1.0 Preview 1` and should be marked as
   pre-release.
 
+In the source tree, `manifest.version_name` represents the **next unreleased
+Preview**. After publishing `v0.1.0-preview.4`, the repo should be bumped to
+`0.1.0 Preview 5` before new development continues. This keeps dev builds and
+the next release candidate from reusing an already-shared label.
+
 The command must run `npm run check:release-metadata` through `check:public`.
 That check blocks releases when `manifest.version`, `package.json`, and
-`manifest.version_name` drift.
+`manifest.version_name` drift, or when the corresponding local release tag
+already exists.
+
+Use this helper after publishing a Preview, or before preparing a new Preview
+when the current label has already been tagged:
+
+```bash
+npm run release:bump-preview
+```
 
 ## Expected Outputs
 

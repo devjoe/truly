@@ -14,6 +14,7 @@
     "dev:stop": "node scripts/dev-singleton.mjs stop",
     "dev:status": "node scripts/dev-singleton.mjs status",
     "release:alpha": "node scripts/release-alpha.mjs",
+    "release:bump-preview": "node scripts/bump-preview-version.mjs",
     "render:social-preview": "node scripts/render-social-preview.mjs",
     "sync:headsup-css": "node scripts/sync-headsup-styles.mjs",
     "check:ollama-cloud-capabilities": "node scripts/check-ollama-cloud-capabilities.mjs",
