@@ -43,6 +43,19 @@ when the current label has already been tagged:
 npm run release:bump-preview
 ```
 
+## Preview Closeout Checklist
+
+After a Preview is published and shared:
+
+1. Confirm the GitHub Release tag exists, for example `v0.1.0-preview.4`.
+2. Run `npm run release:bump-preview`.
+3. Commit and push the resulting `manifest.version_name` bump before starting
+   the next development cycle.
+
+This closeout keeps regular development builds on the next unreleased Preview
+label. If the closeout was missed, `npm run check:release-metadata` should fail
+with a tag-collision message before another release is prepared.
+
 ## Expected Outputs
 
 - extension zip;
