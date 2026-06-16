@@ -3,6 +3,7 @@ import { readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 
 const PORT = Number(process.env.TRULY_DEV_RELOAD_PORT || 9012);
+const HOST = process.env.TRULY_DEV_RELOAD_HOST || "127.0.0.1";
 const BUILD_ID_FILE = resolve(process.cwd(), "dist", "build-id.txt");
 const POLL_INTERVAL_MS = 500;
 
@@ -42,7 +43,7 @@ http
     res.setHeader("Content-Type", "application/json");
     res.end(JSON.stringify({ buildId, ts: new Date().toISOString() }));
   })
-  .listen(PORT, () => {
+  .listen(PORT, HOST, () => {
     console.log(`[dev-reload] watching ${BUILD_ID_FILE}`);
-    console.log(`[dev-reload] listening on http://localhost:${PORT}`);
+    console.log(`[dev-reload] listening on http://${HOST}:${PORT}`);
   });

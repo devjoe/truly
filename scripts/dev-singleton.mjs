@@ -48,12 +48,12 @@ function psCommand(pid) {
   const out = spawnSync("ps", ["-p", String(pid), "-ww", "-o", "command="], {
     encoding: "utf8",
   });
-  return out.stdout.trim();
+  return (out.stdout ?? "").trim();
 }
 
 function childPids(pid) {
   const out = spawnSync("pgrep", ["-P", String(pid)], { encoding: "utf8" });
-  return out.stdout
+  return (out.stdout ?? "")
     .split(/\s+/)
     .map((x) => Number(x))
     .filter((x) => Number.isInteger(x) && x > 0);
@@ -63,7 +63,7 @@ function parentPid(pid) {
   const out = spawnSync("ps", ["-p", String(pid), "-o", "ppid="], {
     encoding: "utf8",
   });
-  const ppid = Number(out.stdout.trim());
+  const ppid = Number((out.stdout ?? "").trim());
   return Number.isInteger(ppid) && ppid > 1 ? ppid : null;
 }
 
