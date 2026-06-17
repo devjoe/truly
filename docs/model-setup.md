@@ -423,6 +423,28 @@ Choose the closest endpoint type in Truly:
 | vLLM | You run vLLM or a vLLM-compatible proxy and want Truly to apply vLLM-oriented probes. |
 | MLX-VLM | You run an MLX-VLM OpenAI-compatible server, especially for local vision models on Apple Silicon. |
 
+### oMLX
+
+oMLX exposes an OpenAI-compatible `/v1` API. In Truly, start with
+**General OpenAI-compatible endpoint** rather than **MLX-VLM**.
+
+For Truly's reading hints and summaries, oMLX should be installed with grammar
+support:
+
+```bash
+brew reinstall jundot/omlx/omlx --with-grammar
+```
+
+Without `--with-grammar`, oMLX may still respond, but structured-output
+requests can behave like prompt guidance instead of a strict response contract.
+In that state, **Test and Save** may fail with an output-format error even
+though the endpoint is reachable.
+
+Model names may also look different from Ollama tags. For example, an oMLX model
+loaded from a local Hugging Face cache may use a name such as
+`mlx-community--gemma-4-12B-it-qat-4bit`; enter the exact model id exposed by
+`GET /v1/models`.
+
 If your OpenAI-compatible endpoint requires authentication, fill in the optional
 API key field in Truly's Options page. The key is stored locally in Chrome
 extension storage and is sent as a Bearer token only to OpenAI-compatible
