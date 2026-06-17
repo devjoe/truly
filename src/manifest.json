@@ -3,7 +3,7 @@
   "default_locale": "en",
   "name": "Truly",
   "version": "0.1.0",
-  "version_name": "0.1.0 Preview 6",
+  "version_name": "0.1.0 Preview 7",
   "description": "Local-first reading clarity for social feeds and web pages.",
   "permissions": ["storage", "activeTab", "sidePanel"],
   "host_permissions": [
