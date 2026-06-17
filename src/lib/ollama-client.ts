@@ -18,6 +18,7 @@ import type {
 } from "./types";
 import { TIER_A_SCORING_DIMENSIONS } from "./types";
 import { debugLog } from "./logger";
+import { jsonRequestHeaders } from "./request-auth";
 
 export const VALID_CATEGORIES = [
   "commercial",
@@ -518,6 +519,7 @@ export interface TierARequestOptions {
   responseFormat?: OpenAIResponseFormatMode;
   outputMode?: TierAOutputMode;
   returnUnparseable?: boolean;
+  apiKey?: string;
 }
 
 export interface TierACompactDigitsProbeResult {
@@ -681,7 +683,7 @@ export async function callOllamaSingle(
         };
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jsonRequestHeaders(useOpenAICompat ? options?.apiKey : undefined),
       body: JSON.stringify(body),
     });
     if (!resp.ok) {
@@ -803,7 +805,7 @@ export async function probeTierACompactDigitsSupport(
 
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jsonRequestHeaders(useOpenAICompat ? options?.apiKey : undefined),
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(10_000),
     });

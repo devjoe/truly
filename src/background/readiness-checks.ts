@@ -23,9 +23,53 @@ import { saveReadinessRecord } from "../lib/readiness-storage";
 import type { DashboardPostEvent, DeepClassification, UserSettings } from "../lib/types";
 
 const READINESS_SAMPLE_TEXT = "今天整理書桌，順手把舊收據分類收好。這是一則低風險生活分享。";
+const OPENAI_COMPAT_PROVIDER = "openai-compatible";
+
+function optionalApiKey(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  return trimmed || undefined;
+}
+
+function tierAReadinessApiKey(
+  message: Extract<TrulyMessage, { type: "READINESS_RUN_CHECKS" }>,
+  provider: UserSettings["tierAProvider"],
+): string | undefined {
+  return provider === OPENAI_COMPAT_PROVIDER ? optionalApiKey(message.tierAApiKey) : undefined;
+}
+
+function tierBReadinessApiKey(
+  message: Extract<TrulyMessage, { type: "READINESS_RUN_CHECKS" }>,
+  provider: UserSettings["tierBProvider"],
+  effectiveProvider: UserSettings["tierBProvider"] | UserSettings["tierAProvider"],
+): string | undefined {
+  if (effectiveProvider !== OPENAI_COMPAT_PROVIDER) return undefined;
+  return provider === "tier-a"
+    ? optionalApiKey(message.tierAApiKey)
+    : optionalApiKey(message.tierBApiKey);
+}
 
 function elapsedSince(start: number): number {
   return Math.max(0, Math.round(performance.now() - start));
+}
+
+function isUsableStatus(status: ReadinessStatus): boolean {
+  return status === "passed" || status === "slow_but_usable";
+}
+
+function isAuthHttpParseError(parseError: string | undefined): boolean {
+  return parseError === "http_401" || parseError === "http_403";
+}
+
+function openAICompatibleApiKeyAccepted(
+  provider: UserSettings["tierAProvider"] | UserSettings["tierBProvider"],
+  apiKey: string | undefined,
+  status: ReadinessStatus,
+  options: { outputFormatReachedModel?: boolean } = {},
+): boolean | undefined {
+  if (provider !== OPENAI_COMPAT_PROVIDER || !apiKey) return undefined;
+  if (isUsableStatus(status)) return true;
+  if (status === "failed_output_format" && options.outputFormatReachedModel) return true;
+  return undefined;
 }
 
 function compactTechnicalValue(value: unknown): string {
@@ -156,6 +200,7 @@ function tierBReadinessFailure(
 async function runRealtimeReadinessCheck(
   settings: UserSettings,
   environment: { tierAEndpoint?: string; tierAModel?: string; buildId?: string },
+  apiKey?: string,
 ): Promise<ReadinessRecord> {
   const provider = settings.tierAProvider;
   const endpoint = providerRuntimeEndpoint(provider, environment.tierAEndpoint);
@@ -232,18 +277,32 @@ async function runRealtimeReadinessCheck(
           responseFormat: settings.openAIResponseFormat,
           outputMode: settings.tierAOutputMode,
           returnUnparseable: true,
+          apiKey,
         },
       );
       const ok = !!result?.scores && Object.keys(result.scores).length > 0;
       const latencyMs = elapsedSince(start);
+      const authFailed = isAuthHttpParseError(result?.parseError);
+      const status: ReadinessStatus = authFailed
+        ? "connection_failed"
+        : ok
+          ? (latencyMs > 5_000 ? "slow_but_usable" : "passed")
+          : "failed_output_format";
       return baseReadinessRecord("realtime", settings, environment, {
         provider,
         effectiveProvider: provider,
         endpoint,
         model,
-        status: ok ? (latencyMs > 5_000 ? "slow_but_usable" : "passed") : "failed_output_format",
+        status,
         latencyMs,
-        message: ok ? "閱讀前提示可用" : "閱讀前提示輸出格式不符",
+        message: authFailed
+          ? "API key 未通過 · 請檢查金鑰或權限"
+          : ok
+            ? "閱讀前提示可用"
+            : "閱讀前提示輸出格式不符",
+        apiKeyAccepted: openAICompatibleApiKeyAccepted(provider, apiKey, status, {
+          outputFormatReachedModel: !!result && !authFailed,
+        }),
         technicalDetail: ok ? undefined : tierAOutputTechnicalDetail({
           provider,
           endpoint,
@@ -280,6 +339,7 @@ async function runRealtimeReadinessCheck(
 async function runAiAnalysisReadinessCheck(
   settings: UserSettings,
   environment: { tierAEndpoint?: string; tierAModel?: string; buildId?: string },
+  apiKey?: string,
 ): Promise<ReadinessRecord> {
   const gate = resolveTierBFeatureGate("ai_analysis", settings, environment);
   const { provider, effectiveProvider, endpoint, model } = gate;
@@ -315,22 +375,24 @@ async function runAiAnalysisReadinessCheck(
       }
       result = await callGeminiNanoTierB({ text: READINESS_SAMPLE_TEXT, imageUrls: [], outputLang });
     } else {
-      const vision = await callTierBVisionProbe({ endpoint, model, timeoutMs: 12_000 });
-      result = await callTierBDeepDetailed({ endpoint, model, text: READINESS_SAMPLE_TEXT, imageUrls: [], timeoutMs: 20_000, outputLang });
+      const vision = await callTierBVisionProbe({ endpoint, model, apiKey, timeoutMs: 12_000 });
+      result = await callTierBDeepDetailed({ endpoint, model, apiKey, text: READINESS_SAMPLE_TEXT, imageUrls: [], timeoutMs: 20_000, outputLang });
       const latencyMs = elapsedSince(start);
       const failure = tierBReadinessFailure(result.error, "ai_analysis");
+      const status: ReadinessStatus = result.ok && result.deep
+        ? (latencyMs > 10_000 ? "slow_but_usable" : "passed")
+        : failure.status;
       return baseReadinessRecord("ai_analysis", settings, environment, {
         provider,
         effectiveProvider,
         endpoint,
         model,
-        status: result.ok && result.deep
-          ? (latencyMs > 10_000 ? "slow_but_usable" : "passed")
-          : failure.status,
+        status,
         latencyMs,
         message: result.ok && result.deep
           ? (vision.ok ? "摘要可用" : "摘要可用；圖片判讀未通過")
           : failure.message,
+        apiKeyAccepted: openAICompatibleApiKeyAccepted(effectiveProvider, apiKey, status),
         capabilities: { vision: vision.ok ? "supported" : "unsupported" },
         technicalDetail: [
           result.error ? `error=${result.error}` : "",
@@ -342,16 +404,18 @@ async function runAiAnalysisReadinessCheck(
     }
     const latencyMs = elapsedSince(start);
     const failure = tierBReadinessFailure(result.error, "ai_analysis");
+    const status: ReadinessStatus = result.ok && result.deep
+      ? (latencyMs > 10_000 ? "slow_but_usable" : "passed")
+      : failure.status;
     return baseReadinessRecord("ai_analysis", settings, environment, {
       provider,
       effectiveProvider,
       endpoint,
       model,
-      status: result.ok && result.deep
-        ? (latencyMs > 10_000 ? "slow_but_usable" : "passed")
-        : failure.status,
+      status,
       latencyMs,
       message: result.ok && result.deep ? "摘要可用" : failure.message,
+      apiKeyAccepted: openAICompatibleApiKeyAccepted(effectiveProvider, apiKey, status),
       capabilities: effectiveProvider === GEMINI_NANO_PROVIDER ? { vision: "supported" } : undefined,
       technicalDetail: result.error,
     });
@@ -391,6 +455,7 @@ function readinessBriefEvent(deep: DeepClassification | undefined): DashboardPos
 async function runReadingBriefReadinessCheck(
   settings: UserSettings,
   environment: { tierAEndpoint?: string; tierAModel?: string; buildId?: string },
+  apiKey?: string,
 ): Promise<ReadinessRecord> {
   const gate = resolveTierBFeatureGate("reading_brief", settings, environment);
   const { provider, effectiveProvider, endpoint, model } = gate;
@@ -431,17 +496,23 @@ async function runReadingBriefReadinessCheck(
       }
       brief = await callGeminiNanoReadingBrief({ event, timeoutMs: 20_000, outputLang });
     } else {
-      brief = await callTierBReadingBrief({ endpoint, model, event, timeoutMs: 20_000, outputLang });
+      brief = await callTierBReadingBrief({ endpoint, model, apiKey, event, timeoutMs: 20_000, outputLang });
     }
     const latencyMs = elapsedSince(start);
+    const status: ReadinessStatus = brief
+      ? (latencyMs > 12_000 ? "slow_but_usable" : "passed")
+      : "failed_output_format";
     return baseReadinessRecord("reading_brief", settings, environment, {
       provider,
       effectiveProvider,
       endpoint,
       model,
-      status: brief ? (latencyMs > 12_000 ? "slow_but_usable" : "passed") : "failed_output_format",
+      status,
       latencyMs,
       message: brief ? "深入閱讀可用" : "目前模型不適合產生深入閱讀",
+      apiKeyAccepted: openAICompatibleApiKeyAccepted(effectiveProvider, apiKey, status, {
+        outputFormatReachedModel: providerNeedsEndpoint(effectiveProvider),
+      }),
     });
   } catch (error) {
     return baseReadinessRecord("reading_brief", settings, environment, {
@@ -496,11 +567,25 @@ export async function runReadinessChecks(
   for (const feature of features) {
     let record: ReadinessRecord;
     if (feature === "realtime") {
-      record = await runRealtimeReadinessCheck(message.settings, environment);
+      record = await runRealtimeReadinessCheck(
+        message.settings,
+        environment,
+        tierAReadinessApiKey(message, message.settings.tierAProvider),
+      );
     } else if (feature === "ai_analysis") {
-      record = await runAiAnalysisReadinessCheck(message.settings, environment);
+      const gate = resolveTierBFeatureGate("ai_analysis", message.settings, environment);
+      record = await runAiAnalysisReadinessCheck(
+        message.settings,
+        environment,
+        tierBReadinessApiKey(message, gate.provider, gate.effectiveProvider),
+      );
     } else if (feature === "reading_brief") {
-      record = await runReadingBriefReadinessCheck(message.settings, environment);
+      const gate = resolveTierBFeatureGate("reading_brief", message.settings, environment);
+      record = await runReadingBriefReadinessCheck(
+        message.settings,
+        environment,
+        tierBReadinessApiKey(message, gate.provider, gate.effectiveProvider),
+      );
     } else if (feature === "language_check") {
       record = await runLanguageCheckReadinessCheck(message.settings, environment);
     } else {

@@ -49,6 +49,34 @@ installLogBuffer();
 const CLASSIFICATION_CACHE_KEY_RE = /^classificationCacheV\d+$/;
 const CLASSIFICATION_CACHE_BUILD_ID_KEY = "classificationCacheBuildId";
 const CLASSIFICATION_CACHE_RUNTIME_CLEAR_KEY = "classificationCacheClearedForRuntime";
+const OPENAI_COMPAT_PROVIDER = "openai-compatible";
+
+async function localString(keys: string[]): Promise<string | undefined> {
+  const stored = await chrome.storage.local.get(keys);
+  for (const key of keys) {
+    const value = stored[key];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+async function tierAApiKeyForMessage(
+  message: Extract<TrulyMessage, { type: "OLLAMA_CLASSIFY" }>,
+): Promise<string | undefined> {
+  if (message.apiKey?.trim()) return message.apiKey.trim();
+  if (message.endpointKind !== OPENAI_COMPAT_PROVIDER && message.provider !== OPENAI_COMPAT_PROVIDER) {
+    return undefined;
+  }
+  return localString(["tierAApiKey", "apiKey"]);
+}
+
+async function tierBApiKeyForMessage(
+  message: Extract<TrulyMessage, { type: "DEEP_CLASSIFY" | "READING_BRIEF_REQUEST" }>,
+): Promise<string | undefined> {
+  if (message.apiKey?.trim()) return message.apiKey.trim();
+  if (message.provider !== OPENAI_COMPAT_PROVIDER) return undefined;
+  return localString(["tierBApiKey"]);
+}
 
 async function clearPersistedClassificationCache(reason: string): Promise<void> {
   try {
@@ -348,7 +376,13 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
         const result = message.provider === GEMINI_NANO_PROVIDER
           ? await callGeminiNanoTierB({ text, imageUrls, filteredImageCount, outputLang })
           : await callTierBDeepDetailed({
-              endpoint, model, text, imageUrls, filteredImageCount, outputLang,
+              endpoint,
+              model,
+              apiKey: await tierBApiKeyForMessage(message),
+              text,
+              imageUrls,
+              filteredImageCount,
+              outputLang,
             });
         const reply: DeepClassifyResultMsg = result.ok && result.deep
           ? { type: "DEEP_CLASSIFY_RESULT", postId, ok: true, deep: result.deep }
@@ -383,7 +417,13 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
         const startedAt = Date.now();
         const brief = message.provider === GEMINI_NANO_PROVIDER
           ? await callGeminiNanoReadingBrief({ event, outputLang })
-          : await callTierBReadingBrief({ endpoint, model, event, outputLang });
+          : await callTierBReadingBrief({
+              endpoint,
+              model,
+              apiKey: await tierBApiKeyForMessage(message),
+              event,
+              outputLang,
+            });
         if (brief) {
           const timedBrief = { ...brief, elapsedMs: Date.now() - startedAt };
           const updated = dashboardState.patchEvent(postId, {
@@ -455,7 +495,10 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
 
     (async () => {
       try {
-        const { requestedIds, results } = await classifyTierAPosts(message);
+        const { requestedIds, results } = await classifyTierAPosts({
+          ...message,
+          apiKey: await tierAApiKeyForMessage(message),
+        });
         debugLog(`[Truly BG] Ollama done: ${Object.keys(results).length} results (rules=${message.customRules?.length ?? 0})`);
         if (typeof tabId === "number") {
           await chrome.tabs.sendMessage(tabId, {

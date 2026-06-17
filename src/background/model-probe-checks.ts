@@ -18,6 +18,7 @@ import type {
 } from "../lib/messages";
 import { defaultEndpointForProvider, defaultModelForProvider } from "../lib/model-source-config";
 import { TIER_B_VISION_PROBE_IMAGE } from "../lib/tier-b-client";
+import { bearerTokenHeaders } from "../lib/request-auth";
 
 export async function runOllamaHealthCheck(
   message: Extract<TrulyMessage, { type: "OLLAMA_HEALTH_CHECK" }>,
@@ -32,7 +33,10 @@ export async function runOllamaHealthCheck(
     ? `${endpoint.replace(/\/v1\/?$/, "").replace(/\/$/, "")}/v1/models`
     : `${endpoint}/api/tags`;
   try {
-    const resp = await fetch(url, { signal: AbortSignal.timeout(5000) });
+    const resp = await fetch(url, {
+      headers: useOpenAICompat ? bearerTokenHeaders(message.apiKey) : {},
+      signal: AbortSignal.timeout(5000),
+    });
     if (!resp.ok) {
       return {
         type: "OLLAMA_HEALTH_CHECK_RESULT",
@@ -147,6 +151,7 @@ export async function runOllamaResponseFormatCheck(
         openAICompatibleFlavor: message.openAICompatibleFlavor,
         responseFormat: message.responseFormat,
         outputMode: message.outputMode,
+        apiKey: message.endpointKind === "openai-compatible" ? message.apiKey : undefined,
         returnUnparseable: true,
       },
     );
@@ -182,6 +187,7 @@ export async function runOllamaCompactDigitsCheck(
         openAICompatibleFlavor: message.openAICompatibleFlavor,
         responseFormat: "none",
         outputMode: "compact_digits",
+        apiKey: message.endpointKind === "openai-compatible" ? message.apiKey : undefined,
       },
     );
     return {

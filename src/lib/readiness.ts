@@ -37,6 +37,7 @@ export interface ReadinessRecord {
   latencyMs?: number;
   message?: string;
   technicalDetail?: string;
+  apiKeyAccepted?: boolean;
   capabilities?: {
     vision?: "supported" | "unsupported" | "unknown";
   };
@@ -137,6 +138,12 @@ export function readinessDisplayMessage(record: ReadinessRecord): string {
 }
 
 export function readinessRecoveryHint(record: ReadinessRecord): string {
+  if (record.message?.includes("API key 未通過")) {
+    return "API key 未通過 · 請檢查金鑰或權限";
+  }
+  if (record.apiKeyAccepted && record.status === "failed_output_format") {
+    return "API key 已通過；輸出格式不符";
+  }
   if (record.status === "connection_failed") {
     if (record.feature === "ai_analysis" || record.feature === "reading_brief") {
       return "端點無法連線。請確認模型服務已啟動，或重新設定摘要與深入閱讀模型。";

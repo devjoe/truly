@@ -6,7 +6,9 @@ OpenAI-compatible endpoint that you control.
 Start with Gemini Nano when Chrome says it is available. It is the easiest path
 because it does not require an endpoint URL or API key. Use Ollama or a private
 endpoint when you want stronger summaries, more predictable availability, or a
-model you can manage yourself.
+model you can manage yourself. If your OpenAI-compatible endpoint requires
+authentication, enter the API key in Truly's settings instead of putting secrets
+in the endpoint URL.
 
 ## Ask An AI Agent To Check Your Machine
 
@@ -145,11 +147,11 @@ own machine.
    | --- | --- |
    | Same computer as Chrome | `http://localhost:11434` |
    | Another trusted machine on your LAN | `http://your-model-host.local:11434` |
-   | Another trusted machine on your LAN | `http://192.168.1.50:11434` |
+   | Another trusted machine on your LAN | `http://lan-model-host:11434` |
 
    Use `localhost` when Ollama runs on the same computer as Chrome. Use a LAN
    hostname or LAN IPv4 address only when Ollama runs on another trusted
-   machine. Replace `your-model-host.local` or `192.168.1.50` with your own
+   machine. Replace `your-model-host.local` or `lan-model-host` with your own
    machine's address. Use **Test and Save** to confirm the extension can reach
    the endpoint and the selected model follows Truly's output format.
 
@@ -189,7 +191,7 @@ IPv4 address. For example:
 
 ```text
 http://your-model-host.local:11434
-http://192.168.1.50:11434
+http://lan-model-host:11434
 ```
 
 Only expose Ollama on the LAN when you intentionally want another machine to
@@ -330,11 +332,11 @@ Use the API root, not the full chat-completions path:
 | --- | --- |
 | Same computer as Chrome | `http://localhost:8000/v1` |
 | Another trusted machine on your LAN | `http://your-model-host.local:8000/v1` |
-| Another trusted machine on your LAN | `http://192.168.1.50:8000/v1` |
+| Another trusted machine on your LAN | `http://lan-model-host:8000/v1` |
 
 Use `localhost` when the model server runs on the same computer as Chrome. Use a
 LAN hostname or LAN IPv4 address only when the model runs on another trusted
-machine. Replace `your-model-host.local` or `192.168.1.50` with your own
+machine. Replace `your-model-host.local` or `lan-model-host` with your own
 machine's address.
 
 Truly expects the endpoint to support:
@@ -364,7 +366,7 @@ For vLLM, the most reliable deployment pattern is:
 
 For same-machine development, `http://localhost:8000/v1` is usually the least
 surprising setup. When a Chrome extension calls a LAN endpoint such as
-`http://your-model-host.local:8000/v1` or `http://192.168.1.50:8000/v1`, Chrome
+`http://your-model-host.local:8000/v1` or `http://lan-model-host:8000/v1`, Chrome
 may send an `OPTIONS` preflight before the real request. The response must
 include `Access-Control-Allow-Private-Network: true`, and the final response
 still needs the normal CORS headers.
@@ -421,10 +423,23 @@ Choose the closest endpoint type in Truly:
 | vLLM | You run vLLM or a vLLM-compatible proxy and want Truly to apply vLLM-oriented probes. |
 | MLX-VLM | You run an MLX-VLM OpenAI-compatible server, especially for local vision models on Apple Silicon. |
 
-Do not expose a raw model server to the public internet. The current preview
-expects a local or private endpoint that does not require an API key. Do not put
-secrets in the endpoint URL. Avoid logging full prompts or images on shared
-model servers.
+If your OpenAI-compatible endpoint requires authentication, fill in the optional
+API key field in Truly's Options page. The key is stored locally in Chrome
+extension storage and is sent as a Bearer token only to OpenAI-compatible
+requests. It is not included in Truly's copyable diagnostics.
+
+If you are running Truly from source or helping debug an authenticated endpoint,
+you can run a live API-key smoke test:
+
+```bash
+TRULY_SMOKE_OPENAI_ENDPOINT=http://host:8000/v1 \
+TRULY_SMOKE_OPENAI_MODEL=model-name \
+TRULY_SMOKE_OPENAI_API_KEY=secret \
+npm run smoke:openai-api-key
+```
+
+Do not expose a raw model server to the public internet. Do not put secrets in
+the endpoint URL. Avoid logging full prompts or images on shared model servers.
 
 Useful references:
 

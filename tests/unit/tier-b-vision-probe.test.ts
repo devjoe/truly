@@ -41,6 +41,28 @@ describe("Tier B vision probe", () => {
     );
   });
 
+  it("uses bearer auth when an OpenAI-compatible endpoint has an API key", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "blue" } }] }),
+    })));
+
+    await callTierBVisionProbe({
+      endpoint: "http://localhost:8000/v1",
+      model: "vision-model",
+      apiKey: "  secret-token  ",
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:8000/v1/chat/completions",
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: "Bearer secret-token",
+        }),
+      }),
+    );
+  });
+
   it("fails closed when the endpoint only returns text-model fallback output", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => ({
       ok: true,

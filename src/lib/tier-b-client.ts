@@ -13,6 +13,7 @@ import type {
 import { compactZhtwEvidence } from "./zhtw-review";
 import { resolveStructuredPostContext } from "./post-context";
 import { applyDeepOutputReview, applyReadingBriefOutputReview } from "./model-output-review";
+import { jsonRequestHeaders } from "./request-auth";
 
 export type { DeepClassification };
 
@@ -270,6 +271,7 @@ export function buildTierBUserContent(
 export interface TierBDeepRequest {
   endpoint: string;
   model: string;
+  apiKey?: string;
   text: string;
   imageUrls: string[];
   /** Count of images dropped by `extractPostImages`'s Tier B unsafe
@@ -298,6 +300,7 @@ export interface TierBDeepResult {
 export interface TierBReadingBriefRequest {
   endpoint: string;
   model: string;
+  apiKey?: string;
   event: DashboardPostEvent;
   timeoutMs?: number;
   outputLang?: Lang;
@@ -306,6 +309,7 @@ export interface TierBReadingBriefRequest {
 export interface TierBVisionProbeRequest {
   endpoint: string;
   model: string;
+  apiKey?: string;
   timeoutMs?: number;
 }
 
@@ -611,7 +615,7 @@ export async function callTierBVisionProbe(
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jsonRequestHeaders(req.apiKey),
       body: JSON.stringify(buildTierBVisionProbeChatBody(req)),
       signal: ctrl.signal,
     });
@@ -648,7 +652,7 @@ export async function callTierBReadingBrief(
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jsonRequestHeaders(req.apiKey),
       body: JSON.stringify(buildTierBReadingBriefChatBody(req)),
       signal: ctrl.signal,
     });
@@ -783,7 +787,7 @@ async function postOnce(
   try {
     const resp = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: jsonRequestHeaders(req.apiKey),
       body: JSON.stringify(buildTierBDeepChatBody(req, includeImages)),
       signal: ctrl.signal,
     });

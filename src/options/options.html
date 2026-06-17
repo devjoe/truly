@@ -1435,6 +1435,9 @@
       display: grid;
       gap: 8px;
     }
+    .endpoint-flavor-group + .form-group {
+      margin-top: 18px;
+    }
     .endpoint-flavor-option {
       display: grid;
       grid-template-columns: auto 1fr;
@@ -2335,8 +2338,8 @@
           <button type="button" class="btn-soft model-diagnostics-copy" id="copyTierADiagnostics" style="display:none;" data-i18n="options.modelTest.copyDiagnostics">複製診斷</button>
         </div>
         <div class="form-group model-inline-config" id="apiKeyGroup" style="display:none;">
-          <label for="apiKey">API Key</label>
-          <input type="password" id="apiKey" placeholder="輸入 API key" data-i18n-placeholder="common.apiKeyPlaceholder">
+          <label for="apiKey" data-i18n="common.apiKeyOptional">API key（選填）</label>
+          <input type="password" id="apiKey" placeholder="需要驗證的端點才填寫" data-i18n-placeholder="common.apiKeyPlaceholder" autocomplete="off" spellcheck="false">
           <div class="status-text" id="apiKeyStatus"></div>
         </div>
         <div class="model-action-row">
@@ -2404,6 +2407,11 @@
                 <span>MLX-VLM</span>
               </label>
             </div>
+          </div>
+          <div class="form-group" id="tierBApiKeyGroup" style="display:none;">
+            <label for="tierBApiKey" data-i18n="common.apiKeyOptional">API key（選填）</label>
+            <input type="password" id="tierBApiKey" placeholder="需要驗證的端點才填寫" data-i18n-placeholder="common.apiKeyPlaceholder" autocomplete="off" spellcheck="false">
+            <div class="status-text" id="tierBApiKeyStatus"></div>
           </div>
         </div>
         <div class="model-action-row">

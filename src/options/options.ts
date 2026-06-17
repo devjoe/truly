@@ -12,7 +12,6 @@ import type {
   ThemeMode,
   UserSettings,
 } from "../lib/types";
-import { requestEndpointPermission } from "../lib/endpoint-permission";
 import { applyUserSettingsPatch, getTierAProvider, getTierBProvider, normalizeUserSettings } from "../lib/settings";
 import {
   defaultEndpointForProvider,
@@ -266,6 +265,18 @@ async function init() {
     };
   }
 
+  function providerSupportsOptionalApiKey(provider: TierAProvider | TierBProvider): boolean {
+    return provider === "openai-compatible";
+  }
+
+  function apiKeyForProvider(
+    provider: TierAProvider | TierBProvider,
+    input: HTMLInputElement,
+  ): string | undefined {
+    if (!providerSupportsOptionalApiKey(provider)) return undefined;
+    return input.value.trim() || undefined;
+  }
+
   function renderThemeControl(): void {
     const control = document.getElementById("themeControl");
     if (!control) return;
@@ -377,7 +388,13 @@ async function init() {
   }
 
   function readinessRecoveryText(record: ReadinessRecord): string {
+    if (record.apiKeyAccepted && record.status === "failed_output_format") {
+      return optT("options.modelTest.apiKeyAcceptedOutputMismatch");
+    }
     if (record.status === "connection_failed") {
+      if (record.message?.includes("API key 未通過")) {
+        return optT("options.modelTest.apiKeyNotAccepted");
+      }
       return record.feature === "ai_analysis" || record.feature === "reading_brief"
         ? optT("readiness.hint.connectionDeep")
         : optT("readiness.hint.connection");
@@ -437,6 +454,9 @@ async function init() {
   function readinessItemMeta(record: ReadinessRecord | undefined): string {
     if (!record) return "";
     const parts: string[] = [];
+    if (record.apiKeyAccepted) {
+      parts.push(optT("options.modelTest.apiKeyAccepted"));
+    }
     if (record.effectiveProvider || record.provider) {
       parts.push(providerDisplayLabel(record.effectiveProvider || record.provider!));
     }
@@ -759,6 +779,8 @@ async function init() {
         type: "READINESS_RUN_CHECKS",
         settings: normalizeUserSettings(settings),
         features,
+        tierAApiKey: apiKeyForProvider(settings.tierAProvider, apiKeyInput),
+        tierBApiKey: apiKeyForProvider(settings.tierBProvider, tierBApiKeyInput),
         ...currentReadinessEnvironment(),
       }) as ReadinessRunChecksResultMsg;
       if (response.ok && (response.snapshot || response.records.length > 0)) {
@@ -1098,6 +1120,7 @@ async function init() {
   const apiKeyGroup = document.getElementById("apiKeyGroup")!;
   const ollamaConfig = document.getElementById("ollamaConfig") as HTMLElement;
   const apiKeyInput = document.getElementById("apiKey") as HTMLInputElement;
+  const apiKeyStatus = document.getElementById("apiKeyStatus")!;
   const ollamaEndpoint = document.getElementById(
     "ollamaEndpoint"
   ) as HTMLInputElement;
@@ -1283,7 +1306,11 @@ async function init() {
     const provider = providerSelect.value as UserSettings["tierAProvider"];
     const capabilities = providerCapabilities(provider);
     const needsEndpoint = providerNeedsEndpoint(provider);
-    apiKeyGroup.style.display = providerNeedsApiKey(provider) ? "block" : "none";
+    apiKeyGroup.style.display = providerSupportsOptionalApiKey(provider) ? "block" : "none";
+    apiKeyStatus.textContent = providerSupportsOptionalApiKey(provider)
+      ? optT("options.provider.apiKeyOptionalHelp")
+      : "";
+    apiKeyStatus.className = "status-text";
     ollamaConfig.style.display = needsEndpoint ? "block" : "none";
     refreshTierAModelsButton.style.display = needsEndpoint ? "" : "none";
     openAICompatConfig.style.display = provider === "openai-compatible" ? "block" : "none";
@@ -1353,6 +1380,7 @@ async function init() {
     endpoint: string,
     endpointKind: TierAEndpointKind,
     statusEl: HTMLElement = ollamaStatus,
+    apiKey?: string,
   ): Promise<HealthCheckOutcome> {
     statusEl.textContent = optT("options.modelTest.checking");
     statusEl.className = statusEl.className.includes("model-inline-status")
@@ -1363,6 +1391,7 @@ async function init() {
         type: "OLLAMA_HEALTH_CHECK",
         endpoint,
         endpointKind,
+        apiKey: endpointKind === "openai-compatible" ? apiKey : undefined,
       });
       if (result?.ok && Array.isArray(result.models)) {
         return { ok: true, models: result.models };
@@ -1377,7 +1406,12 @@ async function init() {
     }
   }
 
+  function isEndpointAuthError(error: string | undefined): boolean {
+    return /\bHTTP\s*(401|403)\b/i.test(error ?? "");
+  }
+
   function formatEndpointError(error: string | undefined): string {
+    if (isEndpointAuthError(error)) return optT("options.modelTest.apiKeyNotAccepted");
     const message = error?.trim();
     return message
       ? optT("options.modelTest.connectionFailedWithMessage", { message })
@@ -1396,6 +1430,7 @@ async function init() {
     endpointInput: HTMLInputElement,
     endpointErrorEl: HTMLElement,
     statusEl: HTMLElement,
+    apiKey?: string,
   ): Promise<{ endpoint: string; health: HealthCheckOutcome } | null> {
     const endpoint = normalizeEndpointInput(
       endpointInput.value,
@@ -1414,19 +1449,7 @@ async function init() {
     }
     endpointErrorEl.style.display = "none";
 
-    const granted = await requestEndpointPermission(endpoint);
-    if (!granted) {
-      endpointErrorEl.textContent = provider === "openai-compatible" || provider === "ollama"
-        ? optT("options.modelTest.permissionBeforeTest")
-        : optT("options.modelTest.permissionTierA");
-      endpointErrorEl.className = "status-text status-error";
-      endpointErrorEl.style.display = "";
-      statusEl.textContent = optT("options.modelTest.permissionBeforeTest");
-      statusEl.className = modelListStatusClass(statusEl, "error");
-      return null;
-    }
-
-    const health = await runHealthCheck(endpoint, providerEndpointKind(provider), statusEl);
+    const health = await runHealthCheck(endpoint, providerEndpointKind(provider), statusEl, apiKey);
     return { endpoint, health };
   }
 
@@ -1434,6 +1457,7 @@ async function init() {
     endpoint: string,
     model: string,
     endpointKind: TierAEndpointKind,
+    apiKey?: string,
   ): Promise<{ ok: boolean; error?: string; raw?: string; parseError?: string }> {
     if (
       endpointKind !== "openai-compatible" ||
@@ -1453,6 +1477,7 @@ async function init() {
         openAICompatibleFlavor: openAICompatibleFlavor.value as OpenAICompatibleFlavor,
         responseFormat: openAIResponseFormat.value as OpenAIResponseFormatMode,
         outputMode: currentTierAOutputMode(),
+        apiKey: endpointKind === "openai-compatible" ? apiKey : undefined,
       });
       return result?.ok
         ? { ok: true }
@@ -1499,6 +1524,7 @@ async function init() {
     endpoint: string,
     model: string,
     endpointKind: TierAEndpointKind,
+    apiKey?: string,
   ): Promise<{ ok: boolean; error?: string }> {
     if (currentTierAOutputMode() !== "compact_digits") return { ok: true };
     const customRules = activeCustomRulesForProbe();
@@ -1513,6 +1539,7 @@ async function init() {
         endpointKind,
         openAICompatibleFlavor: openAICompatibleFlavor.value as OpenAICompatibleFlavor,
         customRules,
+        apiKey: endpointKind === "openai-compatible" ? apiKey : undefined,
       });
       return result?.ok
         ? { ok: true }
@@ -1560,7 +1587,13 @@ async function init() {
   async function refreshTierAModelList(): Promise<void> {
     const provider = providerSelect.value as TierAProvider;
     if (!providerNeedsEndpoint(provider)) return;
-    const result = await fetchEndpointModels(provider, ollamaEndpoint, ollamaEndpointError, ollamaStatus);
+    const result = await fetchEndpointModels(
+      provider,
+      ollamaEndpoint,
+      ollamaEndpointError,
+      ollamaStatus,
+      apiKeyForProvider(provider, apiKeyInput),
+    );
     if (!result) return;
 
     const fallbackModel = defaultModelForProvider(provider, "reading-prompt");
@@ -1590,10 +1623,11 @@ async function init() {
   // Load saved API key and Tier A endpoint config
   const stored = await browser.storage.local.get([
     "apiKey",
+    "tierAApiKey",
     "ollamaEndpoint",
     "ollamaModel",
   ]);
-  if (stored.apiKey) apiKeyInput.value = stored.apiKey as string;
+  apiKeyInput.value = (stored.tierAApiKey as string) || (stored.apiKey as string) || "";
   ollamaEndpoint.value = (stored.ollamaEndpoint as string) || defaultEndpointForProvider("ollama");
   ollamaModel.value = (stored.ollamaModel as string) || defaultModelForProvider("ollama", "reading-prompt");
   refreshTierALaneSummary();
@@ -1646,6 +1680,7 @@ async function init() {
         const endpointKind = providerEndpointKind(provider);
         const defaultEndpoint = defaultEndpointForProvider(provider);
         const defaultModel = defaultModelForProvider(provider, "reading-prompt");
+        const tierAApiKey = apiKeyForProvider(provider, apiKeyInput);
         const endpoint = normalizeEndpointInput(ollamaEndpoint.value, defaultEndpoint);
         ollamaEndpoint.value = endpoint;
 
@@ -1660,16 +1695,6 @@ async function init() {
         }
         ollamaEndpointError.style.display = "none";
 
-        // Request permission for non-localhost endpoints
-        const granted = await requestEndpointPermission(endpoint);
-        if (!granted) {
-          ollamaEndpointError.textContent = optT("options.modelTest.permissionTierA");
-          ollamaEndpointError.className = "status-text status-error";
-          ollamaEndpointError.style.display = "";
-          setTierAInlineStatus(optT("options.modelTest.permissionBeforeTest"), modelTestErrorClass);
-          return;
-        }
-
         // User's raw model input (before resolution).
         const userModel = ollamaModelSelect.style.display !== "none"
           ? ollamaModelSelect.value
@@ -1678,14 +1703,14 @@ async function init() {
 
         // Health check BEFORE persist so we can resolve partial model names
         // (e.g. "qwen3.5" → "qwen3.5:latest") against the server's list.
-        const health = await runHealthCheck(endpoint, endpointKind);
+        const health = await runHealthCheck(endpoint, endpointKind, ollamaStatus, tierAApiKey);
 
         let resolvedModel = userModel;
         if (health.ok) {
           resolvedModel = resolveModelName(userModel, health.models);
           populateModelDropdown(health.models, resolvedModel);
           ollamaModel.value = resolvedModel;
-          const formatCheck = await runResponseFormatCheck(endpoint, resolvedModel, endpointKind);
+          const formatCheck = await runResponseFormatCheck(endpoint, resolvedModel, endpointKind, tierAApiKey);
           if (!formatCheck.ok) {
             ollamaStatus.textContent = formatResponseFormatFailure(formatCheck);
             ollamaStatus.className = "status-text status-error";
@@ -1701,7 +1726,7 @@ async function init() {
             setTierAInlineStatus(optT("options.modelTest.outputFormatNeedsWork"), modelTestErrorClass);
             return;
           }
-          const compactCheck = await runCompactDigitsCheck(endpoint, resolvedModel, endpointKind);
+          const compactCheck = await runCompactDigitsCheck(endpoint, resolvedModel, endpointKind, tierAApiKey);
           if (!compactCheck.ok) {
             ollamaStatus.textContent = optT("options.modelTest.compactDigitsUnsupported", { error: compactCheck.error || "unknown" });
             ollamaStatus.className = "status-text status-error";
@@ -1729,7 +1754,8 @@ async function init() {
           ollamaStatus.className = "status-text status-ok";
           clearTierADiagnostics();
         } else {
-          ollamaStatus.textContent = formatEndpointError(health.error);
+          const endpointError = formatEndpointError(health.error);
+          ollamaStatus.textContent = endpointError;
           ollamaStatus.className = "status-text status-error";
           showModelFallback();
           showTierADiagnostics(buildTierADiagnostics({
@@ -1739,14 +1765,14 @@ async function init() {
             endpointKind,
             error: health.error,
           }));
-          if (settings.tierAOutputMode === "compact_digits") {
+          if (settings.tierAOutputMode === "compact_digits" && !isEndpointAuthError(health.error)) {
             ollamaStatus.textContent = optT("options.modelTest.compactDigitsConnectionFailed", { error: health.error || "unknown" });
             ollamaStatus.className = "status-text status-error";
             setTierAInlineStatus(optT("options.modelTest.connectionCannotComplete"), modelTestErrorClass);
             return;
           }
           if (provider === "openai-compatible") {
-            setTierAInlineStatus(optT("options.modelTest.connectionCannotComplete"), modelTestErrorClass);
+            setTierAInlineStatus(endpointError, modelTestErrorClass);
             return;
           }
         }
@@ -1754,6 +1780,7 @@ async function init() {
         await browser.storage.local.set({
           ollamaEndpoint: endpoint,
           ollamaModel: resolvedModel,
+          ...(providerSupportsOptionalApiKey(provider) ? { tierAApiKey: tierAApiKey || "" } : {}),
         });
         localModelConfig = {
           ...localModelConfig,
@@ -1777,16 +1804,6 @@ async function init() {
         refreshModelComboAfterSave();
         const summary = await runActivationChecksForInlineStatus(["realtime"]);
         setTierAInlineStatus(summary.text, `${summary.className} model-inline-status`);
-      } else if (providerNeedsApiKey(provider)) {
-        await browser.storage.local.set({ apiKey: apiKeyInput.value });
-        await saveSettings(settings);
-        await broadcastSettingsUpdate(settings);
-        refreshModelComboAfterSave();
-        const summary = await runActivationChecksForInlineStatus(["realtime"]);
-        const statusEl = document.getElementById("apiKeyStatus")!;
-        statusEl.textContent = summary.text;
-        statusEl.className = summary.className;
-        setTierAInlineStatus(summary.text, `${summary.className} model-inline-status`);
       } else {
         await saveSettings(settings);
         await broadcastSettingsUpdate(settings);
@@ -1804,6 +1821,9 @@ async function init() {
   const tierBEndpointGroup = document.getElementById("tierBEndpointGroup") as HTMLElement;
   const tierBModelGroup = document.getElementById("tierBModelGroup") as HTMLElement;
   const tierBOpenAICompatConfig = document.getElementById("tierBOpenAICompatConfig") as HTMLElement;
+  const tierBApiKeyGroup = document.getElementById("tierBApiKeyGroup") as HTMLElement;
+  const tierBApiKeyInput = document.getElementById("tierBApiKey") as HTMLInputElement;
+  const tierBApiKeyStatus = document.getElementById("tierBApiKeyStatus")!;
   const tierBEndpoint = document.getElementById("tierBEndpoint") as HTMLInputElement;
   const tierBModelSelect = document.getElementById("tierBModelSelect") as HTMLSelectElement;
   const tierBModel = document.getElementById("tierBModel") as HTMLInputElement;
@@ -1850,6 +1870,8 @@ async function init() {
         ? currentReadinessEnvironment().tierAModel
         : defaultModelForProvider(selectedTierBProvider, "summary-reading"))
     : settings.tierBModel || defaultModelForProvider(selectedTierBProvider, "summary-reading");
+  const tierBStored = await browser.storage.local.get(["tierBApiKey"]);
+  tierBApiKeyInput.value = (tierBStored.tierBApiKey as string) || "";
 
   function refreshModelSelectionUI(): void {
     const brief = displayReadinessRecord("reading_brief");
@@ -1903,7 +1925,13 @@ async function init() {
   async function refreshTierBModelList(): Promise<void> {
     const provider = tierBProviderSelect.value as TierBProvider;
     if (!providerNeedsEndpoint(provider)) return;
-    const result = await fetchEndpointModels(provider, tierBEndpoint, tierBEndpointError, tierBStatus);
+    const result = await fetchEndpointModels(
+      provider,
+      tierBEndpoint,
+      tierBEndpointError,
+      tierBStatus,
+      apiKeyForProvider(provider, tierBApiKeyInput),
+    );
     if (!result) return;
 
     const fallbackModel = defaultModelForProvider(provider, "summary-reading");
@@ -1933,6 +1961,7 @@ async function init() {
     const briefGate = resolveTierBFeatureGate("reading_brief", draftSettings);
     const aiRecord = freshReadinessRecord("ai_analysis");
     const briefRecord = freshReadinessRecord("reading_brief");
+    const failedRecord = [aiRecord, briefRecord].find(readinessIsProblem);
     tierBCapabilityStatus.textContent = "";
     tierBCapabilityStatus.className = "status-text";
     tierBCapabilityStatus.style.display = "none";
@@ -1941,6 +1970,11 @@ async function init() {
     tierBModelGroup.style.display = needsEndpoint ? "" : "none";
     refreshTierBModelsButton.style.display = needsEndpoint ? "" : "none";
     tierBOpenAICompatConfig.style.display = provider === "openai-compatible" ? "block" : "none";
+    tierBApiKeyGroup.style.display = providerSupportsOptionalApiKey(provider) ? "" : "none";
+    tierBApiKeyStatus.textContent = providerSupportsOptionalApiKey(provider)
+      ? optT("options.provider.apiKeyOptionalHelp")
+      : "";
+    tierBApiKeyStatus.className = "status-text";
     if (!needsEndpoint) showTierBModelFallback();
     tierBEndpoint.placeholder = defaultEndpointForProvider(provider);
     tierBModel.placeholder = defaultModelForProvider(provider, "summary-reading");
@@ -1968,11 +2002,11 @@ async function init() {
       const registryVision = useOllamaCloudRegistry
         ? ollamaCloudVisionSupport(tierBModelName)
         : "unknown";
-      if (aiVision === "unsupported") {
+      if (!failedRecord && readinessIsUsable(aiRecord) && aiVision === "unsupported") {
         tierBCapabilityStatus.textContent = optT("options.tierB.visionProbeTextOnly");
         tierBCapabilityStatus.className = "status-text status-warn";
         tierBCapabilityStatus.style.display = "";
-      } else if (registryVision === "unsupported") {
+      } else if (!failedRecord && registryVision === "unsupported") {
         tierBCapabilityStatus.textContent = optT("options.tierB.registryTextOnlyWarning");
         tierBCapabilityStatus.className = "status-text status-warn";
         tierBCapabilityStatus.style.display = "";
@@ -1993,12 +2027,14 @@ async function init() {
       tierBLaneMeta.textContent = optT("options.tierB.fullMeta");
       tierBProviderHelp.textContent = optT("options.tierB.fullHelp");
     }
-    const laneRecord = aiRecord || briefRecord;
+    const laneRecord = failedRecord || aiRecord || briefRecord;
     const aiReady = readinessIsUsable(aiRecord);
     const briefReady = readinessIsUsable(briefRecord);
     const laneStatus = provider === "none"
       ? optT("readiness.status.off")
-      : aiReady && briefReady
+      : failedRecord
+        ? readinessBadgeText(failedRecord)
+        : aiReady && briefReady
         ? optT("readiness.status.passed")
         : aiReady
           ? optT("options.tierB.analysisReady")
@@ -2039,6 +2075,7 @@ async function init() {
       const provider = tierBProviderSelect.value as TierBProvider;
       const defaultEndpoint = defaultEndpointForProvider(provider);
       const defaultModel = defaultModelForProvider(provider, "summary-reading");
+      const tierBApiKey = apiKeyForProvider(provider, tierBApiKeyInput);
       const manualEndpoint = normalizeEndpointInput(
         tierBEndpoint.value,
         providerNeedsEndpoint(provider) ? defaultEndpoint : "",
@@ -2092,16 +2129,7 @@ async function init() {
           return;
         }
 
-        const granted = await requestEndpointPermission(endpoint);
-        if (!granted) {
-          tierBEndpointError.textContent = optT("options.modelTest.permissionTierB");
-          tierBEndpointError.className = "status-text status-error";
-          tierBEndpointError.style.display = "";
-          setTierBStatus(optT("options.modelTest.permissionBeforeTest"), modelTestErrorClass);
-          return;
-        }
-
-        const health = await runHealthCheck(endpoint, providerEndpointKind(provider), tierBStatus);
+        const health = await runHealthCheck(endpoint, providerEndpointKind(provider), tierBStatus, tierBApiKey);
         if (health.ok) {
           manualModel = resolveModelName(manualModel, health.models);
           populateTierBModelDropdown(health.models, manualModel);
@@ -2116,7 +2144,7 @@ async function init() {
           // config and run the activation checks below so a connection_failed
           // readiness record is written and the popup feature-status reflects
           // the failure (otherwise the popup keeps showing the stale state).
-          setTierBStatus(optT("options.modelTest.connectionCannotComplete"), modelTestErrorClass);
+          setTierBStatus(formatEndpointError(health.error), modelTestErrorClass);
           showTierBModelFallback();
         }
       }
@@ -2139,6 +2167,9 @@ async function init() {
       refreshTierBManualInputs();
 
       await saveSettings(settings);
+      if (providerSupportsOptionalApiKey(provider)) {
+        await browser.storage.local.set({ tierBApiKey: tierBApiKey || "" });
+      }
       await broadcastSettingsUpdate(settings);
       refreshModelComboAfterSave();
       if (settings.deepClassifyEnabled) {

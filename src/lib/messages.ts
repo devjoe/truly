@@ -108,6 +108,7 @@ export interface OllamaClassifyMsg {
   posts: OllamaClassifyRequest[];
   endpoint: string;
   model: string;
+  apiKey?: string;
   provider?: TierAProvider;
   endpointKind?: TierAEndpointKind;
   openAICompatibleFlavor?: OpenAICompatibleFlavor;
@@ -134,6 +135,7 @@ export interface OllamaHealthCheckMsg {
   type: "OLLAMA_HEALTH_CHECK";
   endpoint: string;
   endpointKind?: TierAEndpointKind;
+  apiKey?: string;
 }
 
 export interface OllamaHealthCheckResultMsg {
@@ -147,6 +149,7 @@ export interface OllamaResponseFormatCheckMsg {
   type: "OLLAMA_RESPONSE_FORMAT_CHECK";
   endpoint: string;
   model: string;
+  apiKey?: string;
   endpointKind: TierAEndpointKind;
   openAICompatibleFlavor?: OpenAICompatibleFlavor;
   responseFormat?: OpenAIResponseFormatMode;
@@ -165,6 +168,7 @@ export interface OllamaCompactDigitsCheckMsg {
   type: "OLLAMA_COMPACT_DIGITS_CHECK";
   endpoint: string;
   model: string;
+  apiKey?: string;
   endpointKind: TierAEndpointKind;
   openAICompatibleFlavor?: OpenAICompatibleFlavor;
   customRules?: CustomRulePromptInput[];
@@ -225,6 +229,7 @@ export interface DeepClassifyMsg {
   filteredImageCount?: number;
   endpoint: string;
   model: string;
+  apiKey?: string;
   provider?: TierBProvider | UserSettings["tierAProvider"];
   /** Desired locale for Tier B natural-language fields. Follows extension
    *  settings, not Facebook UI locale or post language. */
@@ -252,6 +257,7 @@ export interface ReadingBriefRequestMsg {
   postId: string;
   endpoint: string;
   model: string;
+  apiKey?: string;
   provider?: TierBProvider | UserSettings["tierAProvider"];
   /** Desired locale for Reading Brief natural-language fields. Follows
    *  extension settings, not Facebook UI locale or post language. */
@@ -273,6 +279,8 @@ export interface ReadinessRunChecksMsg {
   features?: ReadinessFeature[];
   tierAEndpoint?: string;
   tierAModel?: string;
+  tierAApiKey?: string;
+  tierBApiKey?: string;
   buildId?: string;
 }
 

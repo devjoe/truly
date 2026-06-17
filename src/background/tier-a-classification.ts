@@ -18,6 +18,7 @@ async function callEndpointTierA(
     openAICompatibleFlavor?: import("../lib/types").OpenAICompatibleFlavor;
     responseFormat?: import("../lib/types").OpenAIResponseFormatMode;
     outputMode?: import("../lib/types").TierAOutputMode;
+    apiKey?: string;
   },
 ): Promise<Record<string, OllamaSingleResult>> {
   const results: Record<string, OllamaSingleResult> = {};
@@ -43,6 +44,7 @@ export async function classifyTierAPosts(
         openAICompatibleFlavor: message.openAICompatibleFlavor,
         responseFormat: message.responseFormat,
         outputMode: message.outputMode,
+        apiKey: message.endpointKind === "openai-compatible" ? message.apiKey : undefined,
       });
   return { requestedIds, results };
 }
