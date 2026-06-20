@@ -21,6 +21,7 @@ import { t } from "../lib/i18n";
 import { normalizeThemeMode } from "../lib/theme-mode";
 import { dedupeModelDisplayNames, modelDisplayIdentity } from "../lib/model-display";
 import { defaultModelForProvider } from "../lib/model-source-config";
+import { shouldRenderPersonalContextChip } from "../lib/heads-up-chip-policy";
 import { HEADS_UP_CSS } from "./heads-up-styles";
 import {
   formatZhtwTermExplanation,
@@ -756,11 +757,12 @@ function buildSummary(
     }
   }
 
-  if (signals.personalContext && signals.topIcons.length > 0) {
+  const personalLabel = t("content.headsup.signal.personal", lang);
+  if (signals.personalContext && signals.topIcons.length > 0 && shouldRenderPersonalContextChip(headline, personalLabel)) {
     const personalChip = document.createElement("span");
     personalChip.className = "truly-headsup-tag truly-personal-context-chip";
-    personalChip.textContent = t("content.headsup.signal.personal", lang);
-    personalChip.title = tooltipWithOptionalScore(t("content.headsup.signal.personal", lang), decision.scores?.personal, t("content.headsup.tooltip.personal", lang), lang);
+    personalChip.textContent = personalLabel;
+    personalChip.title = tooltipWithOptionalScore(personalLabel, decision.scores?.personal, t("content.headsup.tooltip.personal", lang), lang);
     summary.appendChild(personalChip);
   }
 

@@ -16,6 +16,9 @@ The public gate runs:
 - public pure unit tests;
 - production build.
 
+Pure unit tests also cover small UI policy decisions that can be represented
+without DOM or private feed captures, such as Heads-up chip deduplication.
+
 ## Review Hardening Gate
 
 Before publishing a public preview, code-review hardening changes should pass
