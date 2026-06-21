@@ -2,7 +2,7 @@
   "name": "truly",
   "private": true,
   "version": "0.1.0",
-  "description": "A local-first Chrome extension for improving reading clarity in social feeds and web pages.",
+  "description": "A privacy-conscious Chrome extension for improving reading quality in social feeds and web pages.",
   "type": "module",
   "scripts": {
     "build": "vite build",

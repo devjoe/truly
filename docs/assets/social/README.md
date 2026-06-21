@@ -10,6 +10,12 @@ The first release path is:
 2. Chrome Web Store assets
 3. Website Open Graph images
 
+As of 2026-06-22, the GitHub repository social preview intentionally keeps the
+Chrome Extension mockup scene because the public preview is still extension
+first. The copy should match the website's reading-assistance positioning, but
+the visual should not switch to the broader website Open Graph illustration yet.
+Website Open Graph images are maintained in the `trulyreader.org` repository.
+
 GitHub supports only one repository social preview image, so the English image
 is the default candidate. Keep the bilingual image second and the Mandarin image
 third for manual selection on social platforms that expose alternate preview

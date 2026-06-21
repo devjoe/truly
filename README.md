@@ -2,10 +2,14 @@
   <img src="docs/assets/brand/truly-readme-lockup.svg?v=20260615" alt="Truly" width="262">
 </p>
 
-Truly is a local-first Chrome extension for reading social feeds and web pages
-with more context.
+Truly is a privacy-conscious Chrome extension that helps readers improve
+information quality in social feeds and web pages.
 
-It prefers browser-local or user-chosen local AI before cloud services.
+It starts beside the post you are reading: signals first, context when needed,
+and handoff only by choice.
+
+Truly can use Chrome built-in Gemini Nano or a user-chosen local/private model
+source. It does not operate a project-owned backend for feed content.
 
 Truly · 梳理: to comb through and clarify.
 
@@ -17,13 +21,14 @@ Truly · 梳理: to comb through and clarify.
   <img src="docs/assets/demo/truly-demo-balanced.gif" alt="Truly reading hints, expanded view, and side panel" width="100%">
 </p>
 
-Reading hints, expanded view, and side panel.
+Signals first. Context when needed. Handoff only by choice.
 
 ## What It Does
 
-- Shows compact reading signals.
-- Expands signals into summaries and reading cues.
-- Opens a side panel with context, follow-up questions, and handoff tools.
+- Shows compact reading hints above supported posts.
+- Expands hints into a one-sentence summary and reading risk cues.
+- Opens a side panel with context analysis, claims to check, follow-up
+  questions, and handoff tools.
 - Checks Traditional Chinese wording with bundled zhtw-mcp when
   enabled.
 
@@ -51,20 +56,18 @@ Chrome Web Store install links will be added later.
 
 **Now**
 
-- Public early preview and feedback.
-- Bug fixes and stability.
+- Browser extension preview for supported social feed surfaces.
+- Public feedback, bug fixes, and stability.
 
 **Next**
 
-- Comment analysis support.
-- More social feed surfaces.
-- A lightweight universal mode for regular web pages.
+- More supported social feed surfaces and regular web pages.
+- Mobile reading workflows.
+- Desktop reading workflows.
 
 **Later**
 
-- Mobile-friendly reading workflows.
-- Social collaboration features, such as shared signals for suspicious accounts
-  or posts.
+- Community features for shared reading signals and collaborative checks.
 
 ## Current Scope
 

@@ -14,19 +14,19 @@ const variants = [
   {
     id: 'en',
     file: 'truly-github-social-en',
-    headline: 'Local-first reading clarity',
-    subline: 'Calm reading for noisy pages.',
+    headline: 'Reading help beside the post',
+    subline: 'Signals first. Context when needed.',
   },
   {
     id: 'bilingual',
     file: 'truly-github-social-bilingual',
-    headline: 'Local-first reading clarity',
-    subline: '在資訊混亂處，梳理脈絡',
+    headline: 'Reading help beside the post',
+    subline: '在資訊混亂處，梳理脈絡。',
   },
   {
     id: 'zh-tw',
     file: 'truly-github-social-zh-tw',
-    headline: '注重隱私的閱讀幫手',
+    headline: '貼文旁的閱讀小幫手',
     subline: '在資訊混亂處，梳理脈絡。',
   },
 ];
@@ -99,12 +99,12 @@ function renderLogo(x, y, { showSubtitle = true } = {}) {
 }
 
 function extractWordmarkSvg(source) {
-  const match = source.match(/<svg x="18" y="19" width="150" height="53"[^>]*viewBox="77\.2 -33\.2 1765\.5 619\.3">[\s\S]*?<\/svg>/);
+  const match = source.match(/<svg\s+x="[^"]+"\s+y="[^"]+"\s+width="[^"]+"\s+height="[^"]+"[^>]*viewBox="77\.2 -33\.2 1765\.5 619\.3">[\s\S]*?<\/svg>/);
   if (!match) {
     throw new Error('Unable to extract Truly wordmark SVG from docs/assets/brand/truly-readme-lockup.svg');
   }
   return match[0]
-    .replace('x="18" y="19" width="150" height="53"', 'x="{x}" y="{y}" width="{width}" height="{height}"')
+    .replace(/x="[^"]+"\s+y="[^"]+"\s+width="[^"]+"\s+height="[^"]+"/, 'x="{x}" y="{y}" width="{width}" height="{height}"')
     .replace('id="trulyHalo"', 'id="{haloId}"')
     .replaceAll('url(#trulyHalo)', 'url(#{haloId})');
 }
