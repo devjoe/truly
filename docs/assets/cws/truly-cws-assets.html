@@ -11,28 +11,59 @@
   h2 { margin: 0 0 10px; font-size: 14px; color: #dbeafe; }
   h2 span { color: #9fb0c8; font-weight: 500; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 24px; }
+  .compare { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   article { padding: 14px; border: 1px solid #263241; border-radius: 12px; background: #111820; }
   img { display: block; width: 100%; height: auto; border-radius: 8px; }
   .promo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-top: 28px; }
   .promo img { max-width: 440px; }
+  .section-title { margin: 34px 0 14px; font-size: 20px; color: #f7fafc; }
 </style>
 <body>
   <h1>Truly CWS asset candidates</h1>
   <p>Generated from the same balanced demo frames used for <code>docs/assets/demo/truly-demo-balanced.gif</code>.</p>
+  <h2 class="section-title">Original vs professional</h2>
+  <section class="grid compare">
+    <article>
+      <h2>Heads-up before you read <span>Original</span></h2>
+      <img src="truly-cws-screenshot-01-feed-signal.png" alt="Heads-up before you read original">
+    </article>
+    <article>
+      <h2>Heads-up before you read <span>Professional candidate</span></h2>
+      <img src="truly-cws-professional-screenshot-01-feed-signal.png" alt="Heads-up before you read professional candidate">
+    </article>
+
+    <article>
+      <h2>Expand for context <span>Original</span></h2>
+      <img src="truly-cws-screenshot-02-expanded-context.png" alt="Expand for context original">
+    </article>
+    <article>
+      <h2>Expand for context <span>Professional candidate</span></h2>
+      <img src="truly-cws-professional-screenshot-02-expanded-context.png" alt="Expand for context professional candidate">
+    </article>
+
+    <article>
+      <h2>Read deeper in the side panel <span>Original</span></h2>
+      <img src="truly-cws-screenshot-03-side-panel-handoff.png" alt="Read deeper in the side panel original">
+    </article>
+    <article>
+      <h2>Read deeper in the side panel <span>Professional candidate</span></h2>
+      <img src="truly-cws-professional-screenshot-03-side-panel-handoff.png" alt="Read deeper in the side panel professional candidate">
+    </article></section>
+  <h2 class="section-title">Current selected set</h2>
   <section class="grid">
     <article>
-      <h2>01-feed-signal <span>Feed signal</span></h2>
-      <img src="truly-cws-screenshot-01-feed-signal.png" alt="Feed signal">
+      <h2>01-feed-signal <span>Heads-up before you read</span></h2>
+      <img src="truly-cws-professional-screenshot-01-feed-signal.png" alt="Heads-up before you read">
     </article>
 
     <article>
-      <h2>02-expanded-context <span>Expanded context</span></h2>
-      <img src="truly-cws-screenshot-02-expanded-context.png" alt="Expanded context">
+      <h2>02-expanded-context <span>Expand for context</span></h2>
+      <img src="truly-cws-professional-screenshot-02-expanded-context.png" alt="Expand for context">
     </article>
 
     <article>
-      <h2>03-side-panel-handoff <span>Side panel handoff</span></h2>
-      <img src="truly-cws-screenshot-03-side-panel-handoff.png" alt="Side panel handoff">
+      <h2>03-side-panel-handoff <span>Read deeper in the side panel</span></h2>
+      <img src="truly-cws-professional-screenshot-03-side-panel-handoff.png" alt="Read deeper in the side panel">
     </article></section>
   <section class="promo-grid">
     <article class="promo">

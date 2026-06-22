@@ -422,7 +422,7 @@ function renderFrame(variant, p) {
   }
 
   function renderSummary(x, y, w, h, v, p, opacity1, opacity2, scale) {
-    const dot = v.name === 'calm' ? '#35c267' : '#eab308';
+    const dot = v.name === 'calm' ? '#35c267' : '#ef4444';
     const click = fade(p, 0.16, 0.28) * (1 - fade(p, 0.34, 0.44));
     const detailReveal = fade(p, 0.34, 0.56);
     const cursorOpacity = (1 - fade(p, 0.43, 0.58)).toFixed(3);
@@ -471,7 +471,7 @@ function renderFrame(variant, p) {
       <rect x="${x}" y="${y}" width="${w}" height="42" rx="14" fill="${theme.postHeader}"/>
       <rect x="${x}" y="${y + 24}" width="${w}" height="20" fill="${theme.postHeader}"/>
       <circle cx="${x + 18}" cy="${y + 21}" r="6" fill="${dot}"/>
-      ${textSvg('Needs context', x + 31, y + 27, 13, text, 780)}
+      ${textSvg('Needs source', x + 31, y + 27, 13, text, 780)}
       <rect x="${buttonX + 9}" y="${y + 8}" width="78" height="26" rx="13" fill="rgba(37,99,235,0.18)" stroke="rgba(96,165,250,0.5)" stroke-width="1"/>
       ${textSvg('Details', buttonX + 25, y + 26, 12, '#bfdbfe', 800)}
       ${detailAperture}
@@ -578,7 +578,7 @@ function renderFrame(variant, p) {
         <rect x="${previewX}" y="${previewY + 34}" width="${previewW}" height="${browserH - 62}" rx="14" fill="#202327" stroke="rgba(148,163,184,0.2)" stroke-width="1"/>
         <rect x="${previewX}" y="${previewY + 34}" width="${previewW}" height="42" rx="14" fill="#1e2228"/>
         <rect x="${previewX}" y="${previewY + 58}" width="${previewW}" height="20" fill="#1e2228"/>
-        <circle cx="${previewX + 18}" cy="${previewY + 55}" r="6" fill="#eab308"/>
+        <circle cx="${previewX + 18}" cy="${previewY + 55}" r="6" fill="#ef4444"/>
         ${textSvg('Needs source', previewX + 31, previewY + 61, 13, '#d6dbe4', 780)}
         <rect x="${openX}" y="${openY}" width="72" height="30" rx="15" fill="rgba(37,99,235,0.2)" stroke="rgba(96,165,250,0.55)" stroke-width="1"/>
         ${textSvg('Open', openX + 21, openY + 20, 12, '#bfdbfe', 800)}

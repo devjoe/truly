@@ -49,7 +49,7 @@ Privacy-conscious reading assistance for social feeds and web pages.
 ### Full Description
 
 Truly is a privacy-conscious Chrome extension that helps readers improve
-reading quality in social feeds and web pages.
+information quality in social feeds and web pages.
 
 It starts beside the post you are reading. Truly can show a compact reading
 hint, expand into a short explanation, and open a side panel with summary,

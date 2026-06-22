@@ -36,6 +36,24 @@ const screenshotCandidates = [
   },
 ];
 
+const screenshotProfessionalCandidates = [
+  {
+    id: '01-feed-signal',
+    label: 'Heads-up before you read',
+    variant: 'signal',
+  },
+  {
+    id: '02-expanded-context',
+    label: 'Expand for context',
+    variant: 'context',
+  },
+  {
+    id: '03-side-panel-handoff',
+    label: 'Read deeper in the side panel',
+    variant: 'handoff',
+  },
+];
+
 const promoCandidates = [
   { id: 'promo-og-image', label: 'Native 440x280 promo tile, 2x supersampled', renderScale: 2 },
 ];
@@ -50,6 +68,11 @@ renderDemoFrames();
 for (const item of screenshotCandidates) {
   const svgPath = join(tmpDir, `${item.id}.svg`);
   writeFileSync(svgPath, renderScreenshotSvg(item));
+}
+
+for (const item of screenshotProfessionalCandidates) {
+  const svgPath = join(tmpDir, `professional-${item.id}.svg`);
+  writeFileSync(svgPath, renderProfessionalScreenshotSvg(item));
 }
 
 for (const item of promoCandidates) {
@@ -96,6 +119,196 @@ function renderScreenshotSvg(item) {
     <image href="${href}" x="0" y="0" width="${demoW}" height="${demoH}"/>
   </svg>
 </svg>`;
+}
+
+function renderProfessionalScreenshotSvg(item) {
+  const href = toFileHref(join(demoFrameDir, frameName(60, 'svg')));
+  if (item.variant === 'signal') {
+    const crop = { x: 30, y: 30, w: 562, h: 342 };
+    const layout = screenshotLayout(crop, { fitW: 980, x: 54, y: 170 });
+    const signalBox = { x: 56, y: 32, w: 164, h: 34 };
+    const signalPoint = sourcePointToCanvas(crop, layout, { x: 218, y: 49 });
+    return renderScreenshotFrame(`
+      ${renderOriginalCrop(href, crop, layout)}
+      ${renderProfessionalBracketFromSource(crop, layout, signalBox)}
+      ${renderEditorialLabel(720, 110, 'Heads-up before', 'you read')}
+      ${renderProfessionalConnector(`M704 146 L${signalPoint.x} ${signalPoint.y}`)}
+    `);
+  }
+
+  if (item.variant === 'context') {
+    const crop = { x: 30, y: 388, w: 562, h: 342 };
+    const layout = screenshotLayout(crop, { fitW: 940, x: 58, y: 194 });
+    const contextBox = { x: 70, y: 470, w: 482, h: 112 };
+    const contextPoint = sourcePointToCanvas(crop, layout, { x: 250, y: 470 });
+    return renderScreenshotFrame(`
+      ${renderOriginalCrop(href, crop, layout)}
+      ${renderProfessionalBracketFromSource(crop, layout, contextBox)}
+      ${renderEditorialLabel(708, 112, 'Expand for', 'context')}
+      ${renderProfessionalConnector(`M696 154 L${contextPoint.x} ${contextPoint.y}`)}
+    `);
+  }
+
+  // Crop inside the side panel's clip region (x=758..1140) so neither the dimmed
+  // feed sliver on the left nor the browser content on the right can leak in.
+  // Include the "Selected post" header (y=110) down to just below the External
+  // tools buttons (y=622).
+  const crop = { x: 760, y: 88, w: 378, h: 554 };
+  const layout = { x: 729, y: 40, fitW: 491, fitH: 720 };
+  // Highlight "What to check" (the claims to verify) — the panel's distinctive
+  // value, and not a repeat of 02's context box.
+  const focusBox = { x: 766, y: 312, w: 370, h: 88 };
+  const focusPoint = sourcePointToCanvas(crop, layout, { x: 766, y: 356 });
+  return renderScreenshotFrame(`
+    ${renderOriginalCrop(href, crop, layout)}
+    ${renderProfessionalHighlightFromSource(crop, layout, focusBox)}
+    ${renderEditorialBlock(96, 250, 'Read deeper in', 'the side panel')}
+    ${professionalBodyText('Summary, context, claims to check,', 96, 352, 22)}
+    ${professionalBodyText('and follow-up questions — then', 96, 382, 22)}
+    ${professionalBodyText('hand off only when you choose.', 96, 412, 22)}
+    ${renderProfessionalConnector(`M450 404 L${focusPoint.x} ${focusPoint.y}`)}
+  `);
+}
+
+function renderScreenshotFrame(content) {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${screenshotW}" height="${screenshotH}" viewBox="0 0 ${screenshotW} ${screenshotH}">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="44%" r="68%">
+      <stop offset="0" stop-color="#162033"/>
+      <stop offset="0.58" stop-color="#0c1118"/>
+      <stop offset="1" stop-color="#090d12"/>
+    </radialGradient>
+    <filter id="shadow" x="-14%" y="-14%" width="128%" height="132%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000814" flood-opacity="0.42"/>
+    </filter>
+    <marker id="arrowTip" markerWidth="16" markerHeight="16" refX="11" refY="5" orient="auto" markerUnits="strokeWidth">
+      <path d="M1 1 L11 5 L1 9" fill="none" stroke="#5b9cff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+  <rect width="${screenshotW}" height="${screenshotH}" fill="url(#bgGlow)"/>
+  ${content}
+</svg>`;
+}
+
+function screenshotLayout(crop, override = {}) {
+  const cropAspect = crop.w / crop.h;
+  const fitW = override.fitW ?? (cropAspect > 1.1 ? 1180 : 690);
+  const fitH = override.fitH ?? (cropAspect > 1.1 ? Math.round(fitW / cropAspect) : 720);
+  return {
+    fitW,
+    fitH,
+    x: override.x ?? Math.round((screenshotW - fitW) / 2),
+    y: override.y ?? Math.round((screenshotH - fitH) / 2),
+  };
+}
+
+function renderOriginalCrop(href, crop, layout) {
+  return `<rect x="${layout.x - 16}" y="${layout.y - 16}" width="${layout.fitW + 32}" height="${layout.fitH + 32}" rx="26" fill="#111820" stroke="rgba(148,163,184,0.22)" filter="url(#shadow)"/>
+  ${renderSourceCrop(href, crop, layout.x, layout.y, layout.fitW, layout.fitH)}`;
+}
+
+function renderSourceCrop(href, crop, x, y, width, height, opacity = 1) {
+  return `<svg x="${x}" y="${y}" width="${width}" height="${height}" viewBox="${crop.x} ${crop.y} ${crop.w} ${crop.h}" preserveAspectRatio="xMidYMid meet" opacity="${opacity}">
+    <image href="${href}" x="0" y="0" width="${demoW}" height="${demoH}"/>
+  </svg>`;
+}
+
+function sourceRectToCanvas(crop, layout, rect) {
+  const scale = Math.min(layout.fitW / crop.w, layout.fitH / crop.h);
+  const contentW = crop.w * scale;
+  const contentH = crop.h * scale;
+  const baseX = layout.x + (layout.fitW - contentW) / 2;
+  const baseY = layout.y + (layout.fitH - contentH) / 2;
+  return {
+    x: Math.round(baseX + (rect.x - crop.x) * scale),
+    y: Math.round(baseY + (rect.y - crop.y) * scale),
+    width: Math.round(rect.w * scale),
+    height: Math.round(rect.h * scale),
+  };
+}
+
+function sourcePointToCanvas(crop, layout, point) {
+  const box = sourceRectToCanvas(crop, layout, { x: point.x, y: point.y, w: 0, h: 0 });
+  return { x: box.x, y: box.y };
+}
+
+function renderProfessionalCallout(x, y, width, height, label, lines = 1) {
+  const parts = lines === 1 ? [label] : label.split(' ');
+  const text = lines === 1
+    ? professionalText(label, x + 28, y + 58, 32)
+    : `${professionalText(parts.slice(0, 2).join(' '), x + 28, y + 54, 31)}
+       ${professionalText(parts.slice(2).join(' '), x + 28, y + 92, 31)}`;
+  return `<g>
+    <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="22" fill="#07131A" fill-opacity="0.94" stroke="#5b9cff" stroke-opacity="0.58" stroke-width="1.5"/>
+    <rect x="${x + 18}" y="${y + 20}" width="4" height="${height - 40}" rx="2" fill="#5b9cff"/>
+    ${text}
+  </g>`;
+}
+
+function renderEditorialLabel(x, y, lineOne, lineTwo = '') {
+  return `<g>
+    <line x1="${x}" y1="${y - 44}" x2="${x + 68}" y2="${y - 44}" stroke="#5b9cff" stroke-opacity="0.72" stroke-width="1.6" stroke-linecap="round"/>
+    ${professionalText(lineOne, x, y, 38)}
+    ${lineTwo ? professionalText(lineTwo, x, y + 46, 38) : ''}
+  </g>`;
+}
+
+function renderEditorialBlock(x, y, lineOne, lineTwo) {
+  return `<g>
+    <line x1="${x}" y1="${y - 50}" x2="${x + 72}" y2="${y - 50}" stroke="#5b9cff" stroke-opacity="0.72" stroke-width="1.6" stroke-linecap="round"/>
+    ${professionalText(lineOne, x, y, 40)}
+    ${professionalText(lineTwo, x, y + 50, 40)}
+  </g>`;
+}
+
+function professionalText(value, x, y, size) {
+  return `<text x="${x}" y="${y}" fill="#F2E8D0" font-family="Avenir Next, Aptos, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="${size}" font-weight="700" letter-spacing="0">${escapeHtml(value)}</text>`;
+}
+
+function professionalBodyText(value, x, y, size) {
+  return `<text x="${x}" y="${y}" fill="#9FB0C8" font-family="Avenir Next, Aptos, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="${size}" font-weight="600" letter-spacing="0">${escapeHtml(value)}</text>`;
+}
+
+function renderProfessionalHighlight(x, y, width, height) {
+  return `<g>
+    <rect x="${x}" y="${y}" width="${width}" height="${height}" rx="18" fill="#5b9cff" fill-opacity="0.035" stroke="#5b9cff" stroke-opacity="0.56" stroke-width="1.6"/>
+  </g>`;
+}
+
+function renderProfessionalHighlightFromSource(crop, layout, rect) {
+  const box = sourceRectToCanvas(crop, layout, rect);
+  return renderProfessionalHighlight(box.x, box.y, box.width, box.height);
+}
+
+function renderProfessionalBracket(x, y, width, height) {
+  const l = 28;
+  const color = '#5b9cff';
+  return `<g fill="none" stroke="${color}" stroke-opacity="0.64" stroke-width="1.7" stroke-linecap="round">
+    <path d="M${x + l} ${y} H${x} V${y + l}"/>
+    <path d="M${x + width - l} ${y} H${x + width} V${y + l}"/>
+    <path d="M${x + l} ${y + height} H${x} V${y + height - l}"/>
+    <path d="M${x + width - l} ${y + height} H${x + width} V${y + height - l}"/>
+  </g>`;
+}
+
+function renderProfessionalBracketFromSource(crop, layout, rect) {
+  const box = sourceRectToCanvas(crop, layout, rect);
+  return renderProfessionalBracket(box.x, box.y, box.width, box.height);
+}
+
+function renderProfessionalConnector(path) {
+  return `<g fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <path d="${path}" stroke="#07131A" stroke-width="5" stroke-opacity="0.84"/>
+    <path d="${path}" stroke="#5b9cff" stroke-opacity="0.68" stroke-width="1.7"/>
+    <circle cx="${pathEndpoint(path).x}" cy="${pathEndpoint(path).y}" r="4" fill="#5b9cff" fill-opacity="0.84"/>
+  </g>`;
+}
+
+function pathEndpoint(path) {
+  const matches = [...path.matchAll(/(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)/g)];
+  const last = matches.at(-1);
+  return { x: Number(last[1]), y: Number(last[2]) };
 }
 
 function renderPromoSvg(item, outputScale = 1) {
@@ -183,7 +396,7 @@ function renderPromoMockup() {
     <rect x="34" y="145" width="64" height="7" rx="3.5" fill="#CBD5E1" opacity="0.42"/>
 
     <path d="M112 86 C132 79 151 83 162 99" fill="none" stroke="#2563FF" stroke-width="3" stroke-linecap="round" opacity="0.76"/>
-    <path d="M111 116 C132 126 150 124 164 111" fill="none" stroke="#20E4D5" stroke-width="3" stroke-linecap="round" opacity="0.78"/>
+    <path d="M111 116 C132 126 150 124 164 111" fill="none" stroke="#5b9cff" stroke-width="3" stroke-linecap="round" opacity="0.78"/>
 
     <g transform="translate(88 76)">
       <rect x="0" y="0" width="80" height="106" rx="15" fill="#F8FAFC"/>
@@ -201,6 +414,10 @@ function promoText(value, x, y, size, fill, weight = 700) {
   return `<text x="${x}" y="${y}" fill="${fill}" font-family="Avenir Next, Aptos, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="${size}" font-weight="${weight}" letter-spacing="0">${escapeHtml(value)}</text>`;
 }
 
+function cwsText(value, x, y, size, fill, weight = 700, anchor = 'start') {
+  return `<text x="${x}" y="${y}" text-anchor="${anchor}" fill="${fill}" font-family="Avenir Next, Aptos, Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="${size}" font-weight="${weight}" letter-spacing="0">${escapeHtml(value)}</text>`;
+}
+
 async function renderPngs() {
   try {
     const { chromium } = await import('playwright');
@@ -210,6 +427,11 @@ async function renderPngs() {
       await page.setViewportSize({ width: screenshotW, height: screenshotH });
       await page.goto(toFileHref(join(tmpDir, `${item.id}.svg`)));
       await page.screenshot({ path: join(outDir, `truly-cws-screenshot-${item.id}.png`), clip: { x: 0, y: 0, width: screenshotW, height: screenshotH } });
+    }
+    for (const item of screenshotProfessionalCandidates) {
+      await page.setViewportSize({ width: screenshotW, height: screenshotH });
+      await page.goto(toFileHref(join(tmpDir, `professional-${item.id}.svg`)));
+      await page.screenshot({ path: join(outDir, `truly-cws-professional-screenshot-${item.id}.png`), clip: { x: 0, y: 0, width: screenshotW, height: screenshotH } });
     }
     for (const item of promoCandidates) {
       const scale = item.renderScale ?? 1;
@@ -255,6 +477,9 @@ async function renderWithChromeCdp() {
     await waitForCdp(port);
     for (const item of screenshotCandidates) {
       await captureCdp(port, join(tmpDir, `${item.id}.svg`), join(outDir, `truly-cws-screenshot-${item.id}.png`), screenshotW, screenshotH);
+    }
+    for (const item of screenshotProfessionalCandidates) {
+      await captureCdp(port, join(tmpDir, `professional-${item.id}.svg`), join(outDir, `truly-cws-professional-screenshot-${item.id}.png`), screenshotW, screenshotH);
     }
     for (const item of promoCandidates) {
       const scale = item.renderScale ?? 1;
@@ -404,10 +629,19 @@ async function downsamplePngWithPlaywright(page, sourceBuffer, width, height) {
 }
 
 function renderReviewHtml() {
-  const screenshotItems = screenshotCandidates.map((item) => `
+  const screenshotItems = screenshotProfessionalCandidates.map((item) => `
     <article>
       <h2>${escapeHtml(item.id)} <span>${escapeHtml(item.label)}</span></h2>
-      <img src="truly-cws-screenshot-${item.id}.png" alt="${escapeHtml(item.label)}">
+      <img src="truly-cws-professional-screenshot-${item.id}.png" alt="${escapeHtml(item.label)}">
+    </article>`).join('\n');
+  const comparisonItems = screenshotProfessionalCandidates.map((item) => `
+    <article>
+      <h2>${escapeHtml(item.label)} <span>Original</span></h2>
+      <img src="truly-cws-screenshot-${item.id}.png" alt="${escapeHtml(item.label)} original">
+    </article>
+    <article>
+      <h2>${escapeHtml(item.label)} <span>Professional candidate</span></h2>
+      <img src="truly-cws-professional-screenshot-${item.id}.png" alt="${escapeHtml(item.label)} professional candidate">
     </article>`).join('\n');
   const promoItems = promoCandidates.map((item) => `
     <article class="promo">
@@ -427,14 +661,19 @@ function renderReviewHtml() {
   h2 { margin: 0 0 10px; font-size: 14px; color: #dbeafe; }
   h2 span { color: #9fb0c8; font-weight: 500; }
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(520px, 1fr)); gap: 24px; }
+  .compare { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   article { padding: 14px; border: 1px solid #263241; border-radius: 12px; background: #111820; }
   img { display: block; width: 100%; height: auto; border-radius: 8px; }
   .promo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; margin-top: 28px; }
   .promo img { max-width: 440px; }
+  .section-title { margin: 34px 0 14px; font-size: 20px; color: #f7fafc; }
 </style>
 <body>
   <h1>Truly CWS asset candidates</h1>
   <p>Generated from the same balanced demo frames used for <code>docs/assets/demo/truly-demo-balanced.gif</code>.</p>
+  <h2 class="section-title">Original vs professional</h2>
+  <section class="grid compare">${comparisonItems}</section>
+  <h2 class="section-title">Current selected set</h2>
   <section class="grid">${screenshotItems}</section>
   <section class="promo-grid">${promoItems}</section>
 </body>

@@ -1,7 +1,7 @@
 # Chrome Web Store Asset Inventory
 
 Status: CWS asset checklist; first Unlisted asset set selected
-Last updated: 2026-06-22
+Last updated: 2026-06-23
 
 This inventory lists assets already present in the public-bound repo and the
 selected Chrome Web Store visual deliverables for the first Unlisted review.
@@ -50,9 +50,9 @@ Review gallery:
 
 Screenshots:
 
-- `docs/assets/cws/truly-cws-screenshot-01-feed-signal.png`
-- `docs/assets/cws/truly-cws-screenshot-02-expanded-context.png`
-- `docs/assets/cws/truly-cws-screenshot-03-side-panel-handoff.png`
+- `docs/assets/cws/truly-cws-professional-screenshot-01-feed-signal.png`
+- `docs/assets/cws/truly-cws-professional-screenshot-02-expanded-context.png`
+- `docs/assets/cws/truly-cws-professional-screenshot-03-side-panel-handoff.png`
 
 Small promotional tile:
 
@@ -73,12 +73,12 @@ Small promotional tile:
 
 ## Selected Screenshot Set
 
-1. **Signals first**: a supported post with the compact reading hint above or
-   beside it.
-2. **Context when needed**: the expanded hint showing one-sentence summary and
+1. **Heads-up before you read**: a supported post with a compact reading hint
+   before the reader reacts.
+2. **Expand for context**: the expanded hint showing a short explanation and
    reading risk reminders.
-3. **Handoff only by choice**: the side panel with context, claims to verify,
-   and manual search/copy/export actions.
+3. **Read deeper in the side panel**: the side panel with context, claims to
+   verify, follow-up questions, and manual handoff actions.
 
 ## Production Notes
 
