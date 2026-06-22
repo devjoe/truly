@@ -6,12 +6,19 @@ import { fileURLToPath } from "node:url";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const BUILD_ID_FILE = path.join(ROOT, "dist", "build-id.txt");
 const PATCH_SCRIPT = path.join(ROOT, "scripts", "patch-dev-manifest.mjs");
+const RELEASE_LOCK_FILE = path.join(ROOT, "tmp", "release-alpha.lock");
 const VITE_BIN = path.join(
   ROOT,
   "node_modules",
   ".bin",
   process.platform === "win32" ? "vite.cmd" : "vite",
 );
+
+if (existsSync(RELEASE_LOCK_FILE)) {
+  console.error("[dev-watch] refusing to start while release:alpha is running.");
+  console.error("[dev-watch] wait for the release command to finish before starting dev mode.");
+  process.exit(1);
+}
 
 let patchInFlight = false;
 let patchQueued = false;

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   readdirSync,
@@ -8,11 +9,13 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
+const releaseLockPath = resolve(root, "tmp/release-alpha.lock");
+const devStatePath = resolve(root, "tmp/dev-singleton.json");
 const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
 const sourceManifest = JSON.parse(readFileSync(resolve(root, "src/manifest.json"), "utf8"));
 const version = packageJson.version ?? "0.0.0";
@@ -37,61 +40,67 @@ if (dirty && !allowDirty) {
   process.exit(1);
 }
 
-rmSync(resolve(root, "dist"), { recursive: true, force: true });
-run("npm", ["run", "check:ollama-cloud-capabilities"]);
-run("npm", ["run", "check:public"]);
-run("npm", ["run", "build"]);
-verifyReleaseManifest();
+assertNoDevProcesses();
+createReleaseLock();
+try {
+  rmSync(resolve(root, "dist"), { recursive: true, force: true });
+  run("npm", ["run", "check:ollama-cloud-capabilities"]);
+  run("npm", ["run", "check:public"]);
+  run("npm", ["run", "build"]);
+  verifyReleaseManifest();
 
-const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-const suffix = dirty ? `${version}-${commit}-dirty-${stamp}` : `${version}-${commit}-${stamp}`;
-const outDir = resolve(root, "artifacts/alpha", suffix);
-rmSync(outDir, { recursive: true, force: true });
-mkdirSync(outDir, { recursive: true });
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const suffix = dirty ? `${version}-${commit}-dirty-${stamp}` : `${version}-${commit}-${stamp}`;
+  const outDir = resolve(root, "artifacts/alpha", suffix);
+  rmSync(outDir, { recursive: true, force: true });
+  mkdirSync(outDir, { recursive: true });
 
-const extensionZip = join(outDir, `truly-extension-${version}-${commit}${dirty ? "-dirty" : ""}.zip`);
-const sourceZip = join(outDir, `truly-source-${version}-${commit}${dirty ? "-dirty" : ""}.zip`);
-writeZipFromDirectory(resolve(root, "dist"), extensionZip, {
-  rootPrefix: "",
-  exclude: shouldExcludeExtensionPath,
-});
-writeZipFromGitTrackedFiles(sourceZip, {
-  rootPrefix: "",
-  exclude: shouldExcludeSourcePath,
-});
+  const extensionZip = join(outDir, `truly-extension-${version}-${commit}${dirty ? "-dirty" : ""}.zip`);
+  const sourceZip = join(outDir, `truly-source-${version}-${commit}${dirty ? "-dirty" : ""}.zip`);
+  writeZipFromDirectory(resolve(root, "dist"), extensionZip, {
+    rootPrefix: "",
+    exclude: shouldExcludeExtensionPath,
+  });
+  writeZipFromGitTrackedFiles(sourceZip, {
+    rootPrefix: "",
+    exclude: shouldExcludeSourcePath,
+  });
 
-const report = {
-  name: packageJson.name,
-  version,
-  versionName: sourceManifest.version_name,
-  recommendedTag,
-  commit,
-  dirty,
-  dirtyFiles,
-  builtAt: new Date().toISOString(),
-  checks: [
-    "npm run check:ollama-cloud-capabilities",
-    "npm run check:public",
-    "npm run build",
-    "verify release metadata and Preview tag naming",
-    "verify dist/manifest.json excludes commands.reload-extension",
-  ],
-  artifacts: {
-    extensionZip: relative(root, extensionZip),
-    sourceZip: relative(root, sourceZip),
-  },
-  reviewerDocs: [
-    "docs/release/privacy-policy.md",
-    "docs/release/permission-justification.md",
-    "docs/release/cws-reviewer-notes.md",
-    "THIRD_PARTY_NOTICES.md",
-  ],
-};
+  const report = {
+    name: packageJson.name,
+    version,
+    versionName: sourceManifest.version_name,
+    recommendedTag,
+    commit,
+    dirty,
+    dirtyFiles,
+    builtAt: new Date().toISOString(),
+    checks: [
+      "npm run check:ollama-cloud-capabilities",
+      "npm run check:public",
+      "npm run build",
+      "verify release metadata and Preview tag naming",
+      "verify dist/manifest.json excludes commands.reload-extension",
+    ],
+    artifacts: {
+      extensionZip: relative(root, extensionZip),
+      sourceZip: relative(root, sourceZip),
+    },
+    reviewerDocs: [
+      "docs/release/privacy-policy.md",
+      "docs/release/permission-justification.md",
+      "docs/release/cws-reviewer-notes.md",
+      "THIRD_PARTY_NOTICES.md",
+    ],
+  };
 
-writeFileSync(join(outDir, "build-report.json"), `${JSON.stringify(report, null, 2)}\n`);
-writeFileSync(join(outDir, "build-report.md"), renderReport(report));
+  writeFileSync(join(outDir, "build-report.json"), `${JSON.stringify(report, null, 2)}\n`);
+  writeFileSync(join(outDir, "build-report.md"), renderReport(report));
 
-console.log(`Preview artifacts written to ${relative(root, outDir)}`);
+  console.log(`Preview artifacts written to ${relative(root, outDir)}`);
+} finally {
+  clearReleaseLock();
+}
 
 function git(args, fallback) {
   try {
@@ -105,11 +114,101 @@ function run(command, args) {
   execFileSync(command, args, { cwd: root, stdio: "inherit" });
 }
 
+function createReleaseLock() {
+  if (existsSync(releaseLockPath)) {
+    throw new Error(`Release lock already exists: ${relative(root, releaseLockPath)}`);
+  }
+  mkdirSync(dirname(releaseLockPath), { recursive: true });
+  writeFileSync(releaseLockPath, `${JSON.stringify({
+    pid: process.pid,
+    startedAt: new Date().toISOString(),
+    command: "release:alpha",
+  }, null, 2)}\n`);
+}
+
+function clearReleaseLock() {
+  rmSync(releaseLockPath, { force: true });
+}
+
 function verifyReleaseManifest() {
   const manifest = JSON.parse(readFileSync(resolve(root, "dist/manifest.json"), "utf8"));
   if (manifest.commands?.["reload-extension"]) {
     throw new Error("Release build must not include commands.reload-extension.");
   }
+}
+
+function assertNoDevProcesses() {
+  const devProcesses = repoDevProcesses();
+  const devState = readDevState();
+  const managedPids = [
+    devState?.managerPid,
+    devState?.watchPid,
+    devState?.reloadPid,
+  ].filter((pid) => Number.isInteger(pid) && pid > 0);
+  const liveManaged = managedPids.filter(isAlive);
+  if (devProcesses.length === 0 && liveManaged.length === 0) return;
+
+  console.error("Refusing to create a Preview artifact while Truly dev processes are running.");
+  console.error("Stop them first with `npm run dev:stop` or by stopping `make dev-all`.");
+  for (const processInfo of devProcesses) {
+    console.error(`- pid ${processInfo.pid}: ${processInfo.command}`);
+  }
+  for (const pid of liveManaged) {
+    if (devProcesses.some((processInfo) => processInfo.pid === pid)) continue;
+    console.error(`- managed dev pid ${pid}`);
+  }
+  process.exit(1);
+}
+
+function readDevState() {
+  try {
+    const state = JSON.parse(readFileSync(devStatePath, "utf8"));
+    return state?.root === root ? state : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function repoDevProcesses() {
+  const out = spawnSync("ps", ["-ax", "-ww", "-o", "pid=", "-o", "command="], {
+    encoding: "utf8",
+  });
+  if (out.error || out.status !== 0) {
+    const reason = out.error ? String(out.error) : `status ${out.status}${out.signal ? ` signal ${out.signal}` : ""}`;
+    const stderr = (out.stderr ?? "").trim();
+    console.warn(
+      `Warning: unable to inspect repo dev processes before release (${reason}${stderr ? `: ${stderr}` : ""}).`,
+    );
+    console.warn("Falling back to managed dev state only.");
+    return [];
+  }
+  const processes = [];
+  for (const line of (out.stdout ?? "").split("\n")) {
+    const match = line.match(/^\s*(\d+)\s+(.+)$/);
+    if (!match) continue;
+    const pid = Number(match[1]);
+    const command = match[2];
+    if (pid === process.pid) continue;
+    if (!command.includes(root)) continue;
+    if (
+      command.includes("scripts/dev-singleton.mjs") ||
+      command.includes("scripts/dev-watch.mjs") ||
+      command.includes("scripts/dev-reload-server.mjs") ||
+      command.includes("make dev-all")
+    ) {
+      processes.push({ pid, command });
+    }
+  }
+  return processes;
 }
 
 function shouldExcludeSourcePath(path) {

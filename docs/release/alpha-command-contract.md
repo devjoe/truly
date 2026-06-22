@@ -133,6 +133,14 @@ development can use `npm run build:dev` to patch the built manifest with the
 reload shortcut, but `release:alpha` verifies that the packaged manifest does
 not contain that command.
 
+`release:alpha` refuses to run while repo-local dev processes are active,
+including `make dev-all`, `scripts/dev-singleton.mjs`, `scripts/dev-watch.mjs`,
+and `scripts/dev-reload-server.mjs`. It also writes a short-lived
+`tmp/release-alpha.lock` while producing the Preview artifact. The dev watcher
+and dev manifest patcher treat that lock as authoritative: the watcher will not
+start, and the patcher will not mutate `dist/manifest.json`, while a release is
+in progress.
+
 Local development builds also enable routine debug logs automatically.
 Production and Preview release builds keep `log` / `info` / `debug` output
 quiet by default, while `warn` / `error` remain visible. For one-off production

@@ -1,11 +1,19 @@
 #!/usr/bin/env node
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const manifestPath = resolve(root, "dist/manifest.json");
+const releaseLockPath = resolve(root, "tmp/release-alpha.lock");
+
+if (existsSync(releaseLockPath)) {
+  console.error("Refusing to patch dist/manifest.json while release:alpha is running.");
+  console.error("Stop the release command or wait for it to finish, then rebuild the dev manifest.");
+  process.exit(1);
+}
+
 const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
 
 manifest.commands = {
