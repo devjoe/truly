@@ -1,12 +1,14 @@
 # Privacy Policy
 
-Last updated: 2026-06-12
+Last updated: 2026-06-22
 
 Canonical URL: https://trulyreader.org/privacy/
 
-Truly is a local-first reading assistant for social feeds and web pages.
-Reading analysis runs in the model environment you choose. Content is sent to
-external tools only when you explicitly use those tools.
+Truly is a privacy-conscious reading assistant for social feeds and web pages.
+Reading analysis runs in the model environment you choose, such as Chrome
+built-in Gemini Nano, a local model endpoint, or a private endpoint you
+configure. Content is sent to external tools only when you explicitly use those
+tools.
 
 Truly does not operate a project-owned backend for feed content and does not
 include product analytics or telemetry.

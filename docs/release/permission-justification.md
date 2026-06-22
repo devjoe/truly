@@ -1,6 +1,6 @@
 # Permission And Host Permission Justification
 
-Last updated: 2026-06-10
+Last updated: 2026-06-22
 
 This document explains why Truly requests each Chrome permission and host
 permission. It should stay aligned with `src/manifest.json`.
@@ -19,7 +19,7 @@ permission. It should stay aligned with `src/manifest.json`.
 |---|---|---|
 | `*://*.facebook.com/*` | Inject the reading UI and read supported Facebook post/page structure. | Used only for supported Facebook reading surfaces. |
 | `*://*.fbcdn.net/*` | Read Facebook-hosted media or asset context needed for image-aware analysis and display. | Used only as context for the current Facebook reading surface. |
-| `http://localhost/*` | Support local model endpoints during local-first use and development. | User-configured model calls only. |
+| `http://localhost/*` | Support local model endpoints when the user chooses a local model source. | User-configured model calls only. |
 | `http://127.0.0.1/*` | Support local model endpoints exposed on loopback. | User-configured model calls only. |
 
 ## Optional Host Permissions

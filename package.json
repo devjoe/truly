@@ -16,6 +16,7 @@
     "release:alpha": "node scripts/release-alpha.mjs",
     "release:bump-preview": "node scripts/bump-preview-version.mjs",
     "render:social-preview": "node scripts/render-social-preview.mjs",
+    "render:cws-assets": "node scripts/render-cws-assets.mjs",
     "sync:headsup-css": "node scripts/sync-headsup-styles.mjs",
     "check:ollama-cloud-capabilities": "node scripts/check-ollama-cloud-capabilities.mjs",
     "smoke:openai-api-key": "node scripts/smoke-openai-api-key.mjs",

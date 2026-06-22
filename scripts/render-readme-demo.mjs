@@ -440,7 +440,6 @@ function renderFrame(variant, p) {
   function renderInteractivePost(x, y, w, h, dot, buttonX, buttonY, detailReveal, v) {
     const push = ease(detailReveal) * 136;
     const detailOpacity = fade(detailReveal, 0.28, 1).toFixed(3);
-    const bottomMaskOpacity = Math.min(1, detailReveal * 1.35).toFixed(3);
     const active = ease(fade(detailReveal, 0.18, 1));
     const accent = v.accent ?? variant.accent;
     const glowDetail = v.glow?.detail === true;
@@ -499,10 +498,6 @@ function renderFrame(variant, p) {
           ${textSvg('Share', x + 184, y + 262, 10, subtle, 700)}
         </g>
       </g>
-      </g>
-      <g opacity="${bottomMaskOpacity}">
-        <rect x="${x + 1}" y="${y + h - 14}" width="${w - 2}" height="13" fill="${theme.post}"/>
-        <line x1="${x + 1}" y1="${y + h - 1}" x2="${x + w - 1}" y2="${y + h - 1}" stroke="rgba(148,163,184,0.2)" stroke-width="1"/>
       </g>
     </g>`;
   }
