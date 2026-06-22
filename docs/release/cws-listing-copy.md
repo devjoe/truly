@@ -1,7 +1,7 @@
 # Chrome Web Store Listing Copy
 
 Status: CWS preparation draft for review
-Last updated: 2026-06-22
+Last updated: 2026-06-23
 
 This draft is meant to be copied into the Chrome Web Store dashboard after
 final review. It should stay aligned with `README.md`,
@@ -113,3 +113,82 @@ the public website has a zh-TW version.
 
 Use the selected first Unlisted review assets in
 `docs/release/store-assets.md`.
+
+## Dashboard Submission Packet
+
+Use this packet for the first Unlisted Chrome Web Store submission.
+
+### Package
+
+- Version: `0.1.0`
+- Version name: `0.1.0 Preview 7`
+- Recommended tag: `v0.1.0-preview.7`
+- Extension ZIP: use the `truly-extension-0.1.0-<commit>.zip` path from the
+  latest `npm run release:alpha` build report.
+- Commit: use the commit recorded in the latest `npm run release:alpha` build
+  report.
+- Build report: use the latest
+  `artifacts/alpha/0.1.0-<commit>-<timestamp>/build-report.md`.
+
+### Graphics
+
+- Icon: `src/icons/icon-128.png`
+- Screenshot 1:
+  `docs/assets/cws/truly-cws-professional-screenshot-01-feed-signal.png`
+- Screenshot 2:
+  `docs/assets/cws/truly-cws-professional-screenshot-02-expanded-context.png`
+- Screenshot 3:
+  `docs/assets/cws/truly-cws-professional-screenshot-03-side-panel-handoff.png`
+- Small promotional tile:
+  `docs/assets/cws/truly-cws-promo-og-image.png`
+
+### Store Listing Fields
+
+- Name: `Truly`
+- Category: `Productivity`
+- Visibility: `Unlisted`
+- Default locale: `English`
+- Privacy policy URL: `https://trulyreader.org/privacy/`
+- Support / CWS contact: `cws@trulyreader.org`
+- Feedback URL: `https://trulyreader.org/feedback/`
+- Reviewer notes: use `docs/release/cws-reviewer-notes.md`.
+
+### Single Purpose Statement
+
+Truly helps readers understand information more carefully by showing reading
+signals, summaries, contextual notes, follow-up questions, and user-triggered
+handoff actions beside supported social feed content.
+
+### Privacy Practices Fill-In Basis
+
+Use the current Chrome Web Store privacy form wording, but keep these product
+facts intact:
+
+- Truly does not sell user data.
+- Truly does not use data for unrelated purposes.
+- Truly does not include product analytics or telemetry.
+- Truly does not operate a project-owned backend for feed content.
+- The extension processes visible website content on supported Facebook
+  surfaces to provide reading assistance.
+- The extension stores settings and readiness state in Chrome extension
+  storage, including model endpoint configuration chosen by the user.
+- Content can be sent to Chrome built-in Gemini Nano, a local model endpoint, or
+  a private endpoint configured by the user, depending on the selected model
+  source.
+- External tool handoff is manual and user-triggered.
+
+### Permission Justification Pointers
+
+Use `docs/release/permission-justification.md` for the full table. Short
+dashboard-facing summary:
+
+- `storage`: saves settings, readiness state, and model configuration.
+- `activeTab`: supports current-tab actions after user gesture.
+- `sidePanel`: provides the reading side panel.
+- Facebook host permissions: injects the supported reading UI and reads visible
+  post context on supported Facebook surfaces.
+- FB CDN host permission: reads Facebook-hosted media context when needed for
+  image-aware reading assistance.
+- `localhost` / `127.0.0.1`: supports local model endpoints.
+- Optional `http://*/*` / `https://*/*`: requested only when a user-configured
+  private endpoint requires that origin.

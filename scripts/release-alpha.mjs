@@ -37,6 +37,7 @@ if (dirty && !allowDirty) {
   process.exit(1);
 }
 
+rmSync(resolve(root, "dist"), { recursive: true, force: true });
 run("npm", ["run", "check:ollama-cloud-capabilities"]);
 run("npm", ["run", "check:public"]);
 run("npm", ["run", "build"]);

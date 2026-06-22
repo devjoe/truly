@@ -1,8 +1,25 @@
 # Chrome Web Store Reviewer Notes
 
-Last updated: 2026-06-22
+Last updated: 2026-06-23
 
 Status: CWS preparation draft for review
+
+## Submission Build
+
+- Version: `0.1.0`
+- Version name: `0.1.0 Preview 7`
+- Recommended tag: `v0.1.0-preview.7`
+- Commit: use the commit recorded in the latest `npm run release:alpha` build
+  report.
+- Extension ZIP: use the `truly-extension-0.1.0-<commit>.zip` path from the
+  latest `npm run release:alpha` build report.
+- Build report: use the latest
+  `artifacts/alpha/0.1.0-<commit>-<timestamp>/build-report.md`.
+
+Release artifact checks passed through `npm run release:alpha`, including
+Ollama Cloud capability freshness, public-boundary checks, release metadata,
+typecheck, public contract tests, public unit tests, production build, and
+release manifest verification.
 
 ## Product Summary
 
@@ -52,6 +69,10 @@ surface failures instead of silently claiming analysis is complete.
   make the built-in model available before analysis starts. If Gemini Nano is
   unavailable or too slow in the review environment, use a local/private
   endpoint for functional review.
+- Gemini Nano speed is expected to vary substantially across reviewer devices.
+  Slow first-run analysis is not a network failure or server dependency; it
+  usually means Chrome is preparing, downloading, or running the browser-managed
+  model locally.
 - The extension may request optional host permission only when the reviewer
   saves or tests a non-default model endpoint that requires that origin.
 
