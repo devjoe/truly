@@ -25,4 +25,9 @@ jobs:
         run: npm ci
 
       - name: Run public gate
+        if: github.ref_type != 'tag'
         run: npm run check:public
+
+      - name: Run release tag gate
+        if: github.ref_type == 'tag'
+        run: npm run check:public:release-tag
