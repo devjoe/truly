@@ -38,6 +38,11 @@ Install the Unlisted Chrome Web Store preview:
 
 <https://chromewebstore.google.com/detail/truly/kdgkgifmdflocjockbfnhkkncbdihpoj>
 
+Chrome Enhanced Safe Browsing may show an extra trust warning because Truly is
+a new Unlisted preview from a new publisher. This does not limit extension
+functionality after installation. Before installing, verify the publisher is
+`Truly` and the extension ID is `kdgkgifmdflocjockbfnhkkncbdihpoj`.
+
 For manual testing or development, download the extension zip from the latest
 Preview release:
 

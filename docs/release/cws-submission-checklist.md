@@ -127,6 +127,12 @@ Store. The dashboard copy should still come from
   - Published visibility: `Unlisted`
   - Published item link:
     <https://chromewebstore.google.com/detail/truly/kdgkgifmdflocjockbfnhkkncbdihpoj>
+- [x] Record Chrome Web Store installed smoke test.
+  - Smoke test completed: 2026-06-25
+  - Result: CWS-installed extension starts and runs successfully.
+  - Note: Chrome Enhanced Safe Browsing may show an extra trust warning for the
+    new Unlisted preview, but it does not limit extension functionality after
+    installation.
 - [ ] Save any Chrome Web Store warning or reviewer feedback before changing the
   listing.
 - [ ] If the item is rejected, update the relevant release docs before
