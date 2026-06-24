@@ -1,7 +1,7 @@
 # Chrome Web Store Submission Checklist
 
-Status: first Unlisted submission checklist
-Last updated: 2026-06-23
+Status: Preview 8 submitted for Unlisted review
+Last updated: 2026-06-24
 
 Use this checklist when submitting the first Truly Preview build to Chrome Web
 Store. The dashboard copy should still come from
@@ -115,8 +115,12 @@ Store. The dashboard copy should still come from
 
 ## After Submission
 
-- [ ] Record submission date and time in release notes or a short follow-up
+- [x] Record submission date and time in release notes or a short follow-up
   comment.
+  - Submitted for Chrome Web Store review: 2026-06-24 14:48 CST
+  - Submitted package: `truly-extension-0.1.0-37029fbf2def.zip`
+  - Package commit: `37029fbf2def`
+  - GitHub Release: `v0.1.0-preview.8`
 - [ ] Save any Chrome Web Store warning or reviewer feedback before changing the
   listing.
 - [ ] If the item is rejected, update the relevant release docs before
