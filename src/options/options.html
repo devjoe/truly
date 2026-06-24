@@ -1773,6 +1773,15 @@
       border-bottom: 1px solid var(--truly-options-border);
       margin-bottom: 12px;
     }
+    .developer-build-meta {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid var(--truly-options-border);
+      color: var(--truly-options-muted);
+      font-size: 11px;
+      line-height: 1.4;
+      text-align: right;
+    }
     .custom-rule-row {
       border-top: 1px solid var(--truly-options-border);
       padding-top: 12px;
@@ -1883,6 +1892,9 @@
     html[data-truly-theme="dark"] .model-failure-note,
     html[data-truly-theme="dark"] .developer-tools {
       background: #18191a;
+      border-color: #3e4042;
+    }
+    html[data-truly-theme="dark"] .developer-build-meta {
       border-color: #3e4042;
     }
     html[data-truly-theme="dark"] .model-task-card {
@@ -2599,6 +2611,7 @@
         </div>
       </div>
     </details>
+    <div class="developer-build-meta" id="developerBuildMeta"></div>
   </div>
 
   <section class="privacy-note" id="data-privacy" aria-labelledby="privacy-title">

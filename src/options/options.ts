@@ -264,6 +264,14 @@ async function init() {
   const currentLang = (): Lang => resolveLanguage(settings.language);
   const optT = (key: string, params?: Record<string, string | number>): string =>
     t(key, currentLang(), params);
+  function renderDeveloperBuildMeta(): void {
+    const meta = document.getElementById("developerBuildMeta");
+    if (!meta) return;
+    const manifest = chrome.runtime.getManifest() as chrome.runtime.Manifest & {
+      version_name?: string;
+    };
+    meta.textContent = `Truly ${manifest.version_name || manifest.version} · Build ${__TRULY_BUILD_ID__}`;
+  }
   function renderBrandSubtitle(): void {
     const title = document.querySelector<HTMLElement>(".page-header h1");
     if (!title) return;
@@ -284,6 +292,7 @@ async function init() {
   }
   i18nDynamicRenderers.push(renderBrandSubtitle);
   i18nDynamicRenderers.push(renderPrivacyPolicyNote);
+  renderDeveloperBuildMeta();
   function applyLanguage(): void {
     languageController.setLanguage(settings.language);
     for (const render of i18nDynamicRenderers) render();
