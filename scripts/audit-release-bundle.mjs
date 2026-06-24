@@ -99,7 +99,7 @@ function parseArgs(values) {
 function usage(message) {
   console.error(`Error: ${message}`);
   console.error("Usage: node scripts/audit-release-bundle.mjs --dist dist");
-  console.error("   or: node scripts/audit-release-bundle.mjs --zip artifacts/alpha/.../truly-extension.zip");
+  console.error("   or: node scripts/audit-release-bundle.mjs --zip artifacts/preview/.../truly-extension.zip");
   process.exit(2);
 }
 

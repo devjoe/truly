@@ -40,7 +40,7 @@ check-build:
 	npm run check:build
 
 release-preview:
-	npm run release:alpha
+	npm run release:preview
 
 dev:
 	npm run dev

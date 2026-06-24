@@ -145,13 +145,13 @@ Use `npm run test:unit:watch` while working on focused tests. If you edit
 `src/content_scripts/heads-up-styles.css`, run `npm run sync:headsup-css`
 before building.
 
-Create a local Alpha artifact:
+Create a local Preview artifact:
 
 ```bash
-npm run release:alpha
+npm run release:preview
 ```
 
-`release:alpha` writes ignored artifacts under `artifacts/alpha/`.
+`release:preview` writes ignored artifacts under `artifacts/preview/`.
 The extension zip is kept clean for Chrome Web Store review. Public-safe
 development scripts and the Makefile can remain in the GitHub source package.
 

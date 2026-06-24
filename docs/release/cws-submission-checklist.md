@@ -19,18 +19,15 @@ Store. The dashboard copy should still come from
 
 ## Package
 
-- [ ] Use the latest clean `npm run release:alpha` artifact.
-- [ ] Confirm `npm run dev:status` reports `state: not running` and
-  `repo dev processes: none` before uploading.
-- [ ] Upload extension ZIP:
-  `artifacts/alpha/0.1.0-ac9c68535675-2026-06-22T19-02-03-728Z/truly-extension-0.1.0-ac9c68535675.zip`
-- [ ] Keep build report open while filling the dashboard:
-  `artifacts/alpha/0.1.0-ac9c68535675-2026-06-22T19-02-03-728Z/build-report.md`
+- [ ] Run `npm run cws:package` from a clean, pushed branch.
+- [ ] Upload the extension ZIP recorded in the generated
+  `artifacts/cws/0.1.0-<commit>-<timestamp>/cws-package-report.md`.
+- [ ] Keep the CWS package report open while filling the dashboard.
 - [ ] Confirm package metadata:
   - Version: `0.1.0`
-  - Version name: `0.1.0 Preview 7`
-  - Recommended tag: `v0.1.0-preview.7`
-  - Commit: `ac9c68535675`
+  - Version name: `0.1.0 Preview 8`
+  - Recommended tag: `v0.1.0-preview.8`
+  - Commit: use the commit recorded in the CWS package report.
 - [ ] Confirm the packaged manifest does not include
   `commands.reload-extension`.
 
@@ -101,6 +98,10 @@ Store. The dashboard copy should still come from
 
 ## Final Manual Review
 
+- [ ] Review the package diff and the latest release notes for behavior that
+  should be reflected in the CWS listing, privacy fields, or reviewer notes.
+- [ ] Confirm the latest security review findings are either fixed, documented,
+  or intentionally accepted before uploading the package.
 - [ ] Dashboard package upload succeeds.
 - [ ] Dashboard warnings are understood and either resolved or documented.
 - [ ] Listing text matches the current README, website, and manifest purpose.

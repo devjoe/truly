@@ -8,7 +8,7 @@ It is intentionally smaller than the private migration plan.
 ## Command
 
 ```bash
-npm run release:alpha
+npm run release:preview
 ```
 
 The command should create a reviewable Chrome MV3 Preview artifact from a clean
@@ -115,7 +115,7 @@ the public package command unusable from a clean checkout.
 Endpoint-specific model probes are also opt-in confidence passes. For example,
 `npm run smoke:ollama-vision` can verify that a configured Ollama-compatible
 endpoint accepts an OpenAI-compatible image message and returns a vision-aware
-answer. It is intentionally not part of `check:public` or `release:alpha`
+answer. It is intentionally not part of `check:public` or `release:preview`
 because it depends on live model availability, endpoint permissions, and the
 operator's current local or cloud model setup.
 
@@ -135,24 +135,24 @@ at missing maps.
 
 Preview release artifacts must not include development-only commands. Local
 development can use `npm run build:dev` to patch the built manifest with the
-reload shortcut, but `release:alpha` verifies that the packaged manifest does
+reload shortcut, but `release:preview` verifies that the packaged manifest does
 not contain that command. Preview release artifacts also must not include the
-dev-reload localhost probe; `release:alpha` verifies the packaged service
+dev-reload localhost probe; `release:preview` verifies the packaged service
 worker excludes `http://localhost:9012/` and the dev-reload reload markers.
 
 `npm run audit:release-bundle` is the shared artifact boundary check used by
-`check:public`, release-tag CI, and `release:alpha`. It audits the built
+`check:public`, release-tag CI, and `release:preview`. It audits the built
 extension for CWS-sensitive drift that manifest-only checks do not catch:
 unexpected required permissions, unexpected host permissions, exposed
 `externally_connectable` / `web_accessible_resources`, remote executable code
 loaders, development reload markers, and forbidden packaged paths. The
-`release:alpha` command runs the same audit twice: once against `dist`, and
+`release:preview` command runs the same audit twice: once against `dist`, and
 again against the final extension zip that will be uploaded.
 
-`release:alpha` refuses to run while repo-local dev processes are active,
+`release:preview` refuses to run while repo-local dev processes are active,
 including `make dev-all`, `scripts/dev-singleton.mjs`, `scripts/dev-watch.mjs`,
 and `scripts/dev-reload-server.mjs`. It also writes a short-lived
-`tmp/release-alpha.lock` while producing the Preview artifact. The dev watcher
+`tmp/release-preview.lock` while producing the Preview artifact. The dev watcher
 and dev manifest patcher treat that lock as authoritative: the watcher will not
 start, and the patcher will not mutate `dist/manifest.json`, while a release is
 in progress.
@@ -162,3 +162,22 @@ Production and Preview release builds keep `log` / `info` / `debug` output
 quiet by default, while `warn` / `error` remain visible. For one-off production
 debugging, set `globalThis.__TRULY_DEBUG_LOGS = true` or
 `localStorage.trulyDebugLogs = "1"` in the relevant extension context.
+
+## CWS Package Boundary
+
+`release:preview` remains the Preview release artifact builder. It produces the
+extension ZIP, source ZIP, and build report that can later become a GitHub
+Release, but it does not itself create the GitHub Release.
+
+`npm run cws:package` is the Chrome Web Store upload-package entrypoint. It
+requires a clean tree, a branch that is not behind its upstream, no repo-local
+dev processes, `check:public`, a packaged ZIP audit, and `cws:preflight`. It
+writes a CWS-specific package report under `artifacts/cws/` with the extension
+ZIP path, SHA-256, commit, build ID, and submission input paths.
+
+`npm run cws:preflight` is intentionally deterministic and local. It verifies
+that the CWS docs mention the current version, version name, and recommended
+Preview tag, and that the selected CWS screenshots and promo tile exist at the
+required dimensions. Manual code review and security review remain human gates;
+the package report records the deterministic checks that support that review
+instead of claiming an automated reviewer approved the release.

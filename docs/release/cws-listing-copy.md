@@ -121,14 +121,13 @@ Use this packet for the first Unlisted Chrome Web Store submission.
 ### Package
 
 - Version: `0.1.0`
-- Version name: `0.1.0 Preview 7`
-- Recommended tag: `v0.1.0-preview.7`
-- Extension ZIP: use the `truly-extension-0.1.0-<commit>.zip` path from the
-  latest `npm run release:alpha` build report.
-- Commit: use the commit recorded in the latest `npm run release:alpha` build
-  report.
-- Build report: use the latest
-  `artifacts/alpha/0.1.0-<commit>-<timestamp>/build-report.md`.
+- Version name: `0.1.0 Preview 8`
+- Recommended tag: `v0.1.0-preview.8`
+- Extension ZIP: use the `truly-cws-extension-0.1.0-<commit>.zip` path from the
+  latest `npm run cws:package` report.
+- Commit: use the commit recorded in the latest `npm run cws:package` report.
+- Package report: use the latest
+  `artifacts/cws/0.1.0-<commit>-<timestamp>/cws-package-report.md`.
 
 ### Graphics
 

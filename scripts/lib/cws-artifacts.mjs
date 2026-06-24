@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import {
   existsSync,
   mkdirSync,
@@ -10,21 +8,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const root = fileURLToPath(new URL("..", import.meta.url));
-const releaseLockPath = resolve(root, "tmp/release-alpha.lock");
-const devStatePath = resolve(root, "tmp/dev-singleton.json");
-const packageJson = JSON.parse(readFileSync(resolve(root, "package.json"), "utf8"));
-const sourceManifest = JSON.parse(readFileSync(resolve(root, "src/manifest.json"), "utf8"));
-const version = packageJson.version ?? "0.0.0";
-const previewNumber = parsePreviewNumber(sourceManifest.version_name, version);
-const recommendedTag = previewNumber ? `v${version}-preview.${previewNumber}` : `v${version}`;
-const commit = git(["rev-parse", "--short=12", "HEAD"], "unknown").trim();
-const dirtyFiles = git(["status", "--porcelain", "--", "."], "").split("\n").filter(Boolean);
-const dirty = dirtyFiles.length > 0;
-const allowDirty = process.env.TRULY_ALLOW_DIRTY_RELEASE === "1";
+export const root = fileURLToPath(new URL("../..", import.meta.url));
+export const releaseLockPath = resolve(root, "tmp/release-preview.lock");
+export const devStatePath = resolve(root, "tmp/dev-singleton.json");
+
 const crcTable = Array.from({ length: 256 }, (_, index) => {
   let crc = index;
   for (let bit = 0; bit < 8; bit += 1) {
@@ -33,79 +24,28 @@ const crcTable = Array.from({ length: 256 }, (_, index) => {
   return crc >>> 0;
 });
 
-if (dirty && !allowDirty) {
-  console.error("Refusing to create a Preview artifact from a dirty tree.");
-  console.error("Commit or stash changes first, or run with TRULY_ALLOW_DIRTY_RELEASE=1 for a local smoke artifact.");
-  for (const file of dirtyFiles) console.error(`- ${file}`);
-  process.exit(1);
-}
-
-assertNoDevProcesses();
-createReleaseLock();
-try {
-  rmSync(resolve(root, "dist"), { recursive: true, force: true });
-  run("npm", ["run", "check:ollama-cloud-capabilities"]);
-  run("npm", ["run", "check:public"]);
-  run("npm", ["run", "build"]);
-  run("node", ["scripts/audit-release-bundle.mjs", "--dist", "dist"]);
-
-  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const suffix = dirty ? `${version}-${commit}-dirty-${stamp}` : `${version}-${commit}-${stamp}`;
-  const outDir = resolve(root, "artifacts/alpha", suffix);
-  rmSync(outDir, { recursive: true, force: true });
-  mkdirSync(outDir, { recursive: true });
-
-  const extensionZip = join(outDir, `truly-extension-${version}-${commit}${dirty ? "-dirty" : ""}.zip`);
-  const sourceZip = join(outDir, `truly-source-${version}-${commit}${dirty ? "-dirty" : ""}.zip`);
-  writeZipFromDirectory(resolve(root, "dist"), extensionZip, {
-    rootPrefix: "",
-    exclude: shouldExcludeExtensionPath,
-    transform: transformExtensionEntry,
-  });
-  run("node", ["scripts/audit-release-bundle.mjs", "--zip", extensionZip]);
-  writeZipFromGitTrackedFiles(sourceZip, {
-    rootPrefix: "",
-    exclude: shouldExcludeSourcePath,
-  });
-
-  const report = {
-    name: packageJson.name,
+export function readProjectMetadata() {
+  const packageJson = readJson("package.json");
+  const manifest = readJson("src/manifest.json");
+  const version = packageJson.version ?? "0.0.0";
+  const previewNumber = parsePreviewNumber(manifest.version_name, version);
+  return {
+    packageJson,
+    manifest,
     version,
-    versionName: sourceManifest.version_name,
-    recommendedTag,
-    commit,
-    dirty,
-    dirtyFiles,
-    builtAt: new Date().toISOString(),
-    checks: [
-      "npm run check:ollama-cloud-capabilities",
-      "npm run check:public",
-      "npm run build",
-      "verify release metadata and Preview tag naming",
-      "audit dist release bundle boundary",
-      "audit packaged extension zip boundary",
-    ],
-    artifacts: {
-      extensionZip: relative(root, extensionZip),
-      sourceZip: relative(root, sourceZip),
-    },
-    reviewerDocs: [
-      "docs/release/privacy-policy.md",
-      "docs/release/permission-justification.md",
-      "docs/release/cws-reviewer-notes.md",
-      "THIRD_PARTY_NOTICES.md",
-    ],
+    versionName: manifest.version_name,
+    previewNumber,
+    recommendedTag: previewNumber ? `v${version}-preview.${previewNumber}` : `v${version}`,
+    commit: git(["rev-parse", "--short=12", "HEAD"], "unknown").trim(),
+    branch: git(["rev-parse", "--abbrev-ref", "HEAD"], "unknown").trim(),
   };
-
-  writeFileSync(join(outDir, "build-report.json"), `${JSON.stringify(report, null, 2)}\n`);
-  writeFileSync(join(outDir, "build-report.md"), renderReport(report));
-
-  console.log(`Preview artifacts written to ${relative(root, outDir)}`);
-} finally {
-  clearReleaseLock();
 }
 
-function git(args, fallback) {
+export function readJson(path) {
+  return JSON.parse(readFileSync(resolve(root, path), "utf8"));
+}
+
+export function git(args, fallback = "") {
   try {
     return execFileSync("git", args, { cwd: root, encoding: "utf8" });
   } catch {
@@ -113,11 +53,47 @@ function git(args, fallback) {
   }
 }
 
-function run(command, args) {
+export function run(command, args) {
   execFileSync(command, args, { cwd: root, stdio: "inherit" });
 }
 
-function createReleaseLock() {
+export function assertCleanTree({ allowDirtyEnv, label }) {
+  const dirtyFiles = git(["status", "--porcelain", "--", "."], "").split("\n").filter(Boolean);
+  if (dirtyFiles.length === 0 || process.env[allowDirtyEnv] === "1") return dirtyFiles;
+
+  console.error(`Refusing to create a ${label} artifact from a dirty tree.`);
+  console.error(`Commit or stash changes first, or run with ${allowDirtyEnv}=1 for a local smoke artifact.`);
+  for (const file of dirtyFiles) console.error(`- ${file}`);
+  process.exit(1);
+}
+
+export function assertUpstreamSynced({ allowUnpushedEnv }) {
+  const upstream = git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"], "").trim();
+  if (!upstream) {
+    console.error("Refusing to package for CWS because the current branch has no configured upstream.");
+    console.error("Push the branch first, or configure an upstream remote branch.");
+    process.exit(1);
+  }
+
+  const [aheadRaw, behindRaw] = git(["rev-list", "--left-right", "--count", "HEAD...@{u}"], "0\t0")
+    .trim()
+    .split(/\s+/);
+  const ahead = Number(aheadRaw);
+  const behind = Number(behindRaw);
+  if (behind > 0) {
+    console.error(`Refusing to package for CWS because the branch is behind ${upstream} by ${behind} commit(s).`);
+    process.exit(1);
+  }
+  if (ahead > 0 && process.env[allowUnpushedEnv] !== "1") {
+    console.error(`Refusing to package for CWS because the branch has ${ahead} unpushed commit(s).`);
+    console.error(`Push first, or run with ${allowUnpushedEnv}=1 for a local smoke artifact.`);
+    process.exit(1);
+  }
+
+  return { upstream, ahead, behind };
+}
+
+export function createReleaseLock(command) {
   if (existsSync(releaseLockPath)) {
     throw new Error(`Release lock already exists: ${relative(root, releaseLockPath)}`);
   }
@@ -125,15 +101,15 @@ function createReleaseLock() {
   writeFileSync(releaseLockPath, `${JSON.stringify({
     pid: process.pid,
     startedAt: new Date().toISOString(),
-    command: "release:alpha",
+    command,
   }, null, 2)}\n`);
 }
 
-function clearReleaseLock() {
+export function clearReleaseLock() {
   rmSync(releaseLockPath, { force: true });
 }
 
-function assertNoDevProcesses() {
+export function assertNoDevProcesses() {
   const devProcesses = repoDevProcesses();
   const devState = readDevState();
   const managedPids = [
@@ -144,7 +120,7 @@ function assertNoDevProcesses() {
   const liveManaged = managedPids.filter(isAlive);
   if (devProcesses.length === 0 && liveManaged.length === 0) return;
 
-  console.error("Refusing to create a Preview artifact while Truly dev processes are running.");
+  console.error("Refusing to create a CWS artifact while Truly dev processes are running.");
   console.error("Stop them first with `npm run dev:stop` or by stopping `make dev-all`.");
   for (const processInfo of devProcesses) {
     console.error(`- pid ${processInfo.pid}: ${processInfo.command}`);
@@ -154,6 +130,38 @@ function assertNoDevProcesses() {
     console.error(`- managed dev pid ${pid}`);
   }
   process.exit(1);
+}
+
+export function writeExtensionZipFromDist(outputPath) {
+  writeZipFromDirectory(resolve(root, "dist"), outputPath, {
+    rootPrefix: "",
+    exclude: shouldExcludeExtensionPath,
+    transform: transformExtensionEntry,
+  });
+}
+
+export function writeSourceZipFromGitTrackedFiles(outputPath) {
+  writeZipFromGitTrackedFiles(outputPath, {
+    rootPrefix: "",
+    exclude: shouldExcludeSourcePath,
+  });
+}
+
+export function sha256File(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+export function readDistBuildId() {
+  try {
+    return readFileSync(resolve(root, "dist/build-id.txt"), "utf8").trim();
+  } catch {
+    return null;
+  }
+}
+
+export function parsePreviewNumber(versionName, version) {
+  const match = new RegExp(`^${escapeRegExp(version)} Preview ([1-9]\\d*)$`).exec(versionName ?? "");
+  return match?.[1] ?? null;
 }
 
 function readDevState() {
@@ -182,7 +190,7 @@ function repoDevProcesses() {
     const reason = out.error ? String(out.error) : `status ${out.status}${out.signal ? ` signal ${out.signal}` : ""}`;
     const stderr = (out.stderr ?? "").trim();
     console.warn(
-      `Warning: unable to inspect repo dev processes before release (${reason}${stderr ? `: ${stderr}` : ""}).`,
+      `Warning: unable to inspect repo dev processes before packaging (${reason}${stderr ? `: ${stderr}` : ""}).`,
     );
     console.warn("Falling back to managed dev state only.");
     return [];
@@ -205,6 +213,10 @@ function repoDevProcesses() {
     }
   }
   return processes;
+}
+
+function shouldExcludeExtensionPath(path) {
+  return path.endsWith(".map");
 }
 
 function shouldExcludeSourcePath(path) {
@@ -235,53 +247,12 @@ function shouldExcludeSourcePath(path) {
   );
 }
 
-function shouldExcludeExtensionPath(path) {
-  return path.endsWith(".map");
-}
-
 function transformExtensionEntry(path, data) {
   if (!path.endsWith(".js")) return data;
   return Buffer.from(
     data.toString("utf8").replace(/\n?\/\/# sourceMappingURL=.*$/gm, ""),
     "utf8",
   );
-}
-
-function renderReport(report) {
-  const dirtyLine = report.dirty ? "yes" : "no";
-  return [
-    "# Truly Preview Build Report",
-    "",
-    `- Version: ${report.version}`,
-    `- Version name: ${report.versionName}`,
-    `- Recommended tag: ${report.recommendedTag}`,
-    `- Commit: ${report.commit}`,
-    `- Built at: ${report.builtAt}`,
-    `- Dirty tree: ${dirtyLine}`,
-    "",
-    "## Checks",
-    "",
-    ...report.checks.map((check) => `- ${check}`),
-    "",
-    "## Artifacts",
-    "",
-    `- Extension zip: \`${report.artifacts.extensionZip}\``,
-    `- Source zip: \`${report.artifacts.sourceZip}\``,
-    "",
-    "## Reviewer Docs",
-    "",
-    ...report.reviewerDocs.map((doc) => `- \`${doc}\``),
-    "",
-  ].join("\n");
-}
-
-function parsePreviewNumber(versionName, version) {
-  const match = new RegExp(`^${escapeRegExp(version)} Preview ([1-9]\\d*)$`).exec(versionName ?? "");
-  return match?.[1] ?? null;
-}
-
-function escapeRegExp(value) {
-  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function writeZipFromDirectory(directory, outputPath, options) {
@@ -417,4 +388,8 @@ function writeZip(entries, outputPath) {
   eocd.writeUInt16LE(0, 20);
 
   writeFileSync(outputPath, Buffer.concat([...chunks, ...central, eocd]));
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

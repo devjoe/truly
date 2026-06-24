@@ -7,19 +7,19 @@ Status: CWS preparation draft for review
 ## Submission Build
 
 - Version: `0.1.0`
-- Version name: `0.1.0 Preview 7`
-- Recommended tag: `v0.1.0-preview.7`
-- Commit: use the commit recorded in the latest `npm run release:alpha` build
+- Version name: `0.1.0 Preview 8`
+- Recommended tag: `v0.1.0-preview.8`
+- Commit: use the commit recorded in the latest `npm run cws:package`
   report.
-- Extension ZIP: use the `truly-extension-0.1.0-<commit>.zip` path from the
-  latest `npm run release:alpha` build report.
-- Build report: use the latest
-  `artifacts/alpha/0.1.0-<commit>-<timestamp>/build-report.md`.
+- Extension ZIP: use the `truly-cws-extension-0.1.0-<commit>.zip` path from the
+  latest `npm run cws:package` report.
+- Package report: use the latest
+  `artifacts/cws/0.1.0-<commit>-<timestamp>/cws-package-report.md`.
 
-Release artifact checks passed through `npm run release:alpha`, including
-Ollama Cloud capability freshness, public-boundary checks, release metadata,
-typecheck, public contract tests, public unit tests, production build, and
-release manifest verification.
+The CWS package checks pass through `npm run cws:package`, including clean-tree
+and upstream checks, public-boundary checks, release metadata, typecheck, public
+contract tests, public unit tests, production build, packaged ZIP audit, and
+CWS preflight.
 
 ## Product Summary
 
