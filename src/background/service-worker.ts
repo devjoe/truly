@@ -51,11 +51,17 @@ const CLASSIFICATION_CACHE_BUILD_ID_KEY = "classificationCacheBuildId";
 const CLASSIFICATION_CACHE_RUNTIME_CLEAR_KEY = "classificationCacheClearedForRuntime";
 const OPENAI_COMPAT_PROVIDER = "openai-compatible";
 
-async function localString(keys: string[]): Promise<string | undefined> {
-  const stored = await chrome.storage.local.get(keys);
-  for (const key of keys) {
-    const value = stored[key];
-    if (typeof value === "string" && value.trim()) return value.trim();
+async function storedSecretString(keys: string[]): Promise<string | undefined> {
+  const [sessionStored, localStored] = await Promise.all([
+    chrome.storage.session?.get(keys).catch(() => ({} as Record<string, unknown>)) ??
+      Promise.resolve({} as Record<string, unknown>),
+    chrome.storage.local.get(keys),
+  ]);
+  for (const stored of [sessionStored, localStored]) {
+    for (const key of keys) {
+      const value = stored[key];
+      if (typeof value === "string" && value.trim()) return value.trim();
+    }
   }
   return undefined;
 }
@@ -67,7 +73,7 @@ async function tierAApiKeyForMessage(
   if (message.endpointKind !== OPENAI_COMPAT_PROVIDER && message.provider !== OPENAI_COMPAT_PROVIDER) {
     return undefined;
   }
-  return localString(["tierAApiKey", "apiKey"]);
+  return storedSecretString(["tierAApiKey", "apiKey"]);
 }
 
 async function tierBApiKeyForMessage(
@@ -75,7 +81,7 @@ async function tierBApiKeyForMessage(
 ): Promise<string | undefined> {
   if (message.apiKey?.trim()) return message.apiKey.trim();
   if (message.provider !== OPENAI_COMPAT_PROVIDER) return undefined;
-  return localString(["tierBApiKey"]);
+  return storedSecretString(["tierBApiKey"]);
 }
 
 async function clearPersistedClassificationCache(reason: string): Promise<void> {
@@ -131,9 +137,11 @@ const __trulyTierBCapture = createTierBCaptureBuffer(60);
 (globalThis as any).__trulyTierBCapture = __trulyTierBCapture;
 
 // Dev-only auto-reload: probes http://localhost:9012 (served by
-// scripts/dev-reload-server.ts). When the dev server isn't listening
-// (production), this is a single failed fetch on startup and then no-op.
-void initDevReloadClient();
+// scripts/dev-reload-server.mjs). Production builds must not probe localhost
+// or accept reload signals from local processes.
+if (__TRULY_DEV_BUILD__) {
+  void initDevReloadClient();
+}
 
 // ---------------------------------------------------------------------------
 // Dashboard event replay buffer

@@ -66,6 +66,48 @@ async function saveSettings(settings: UserSettings): Promise<void> {
   await browser.storage.sync.set({ settings: normalizeUserSettings(settings) });
 }
 
+type ApiKeyStorageKey = "tierAApiKey" | "tierBApiKey";
+type ApiKeySessionFlagKey = "tierAApiKeySessionOnly" | "tierBApiKeySessionOnly";
+
+async function sessionStorageGet(keys: string[]): Promise<Record<string, unknown>> {
+  return chrome.storage.session?.get(keys).catch(() => ({} as Record<string, unknown>)) ??
+    ({} as Record<string, unknown>);
+}
+
+async function sessionStorageSet(values: Record<string, unknown>): Promise<void> {
+  await chrome.storage.session?.set(values).catch(() => {});
+}
+
+async function sessionStorageRemove(keys: string[]): Promise<void> {
+  await chrome.storage.session?.remove(keys).catch(() => {});
+}
+
+async function persistApiKeyPreference(options: {
+  key: ApiKeyStorageKey;
+  sessionFlag: ApiKeySessionFlagKey;
+  value: string;
+  sessionOnly: boolean;
+  clearLegacyApiKey?: boolean;
+}): Promise<void> {
+  const localUpdate: Record<string, unknown> = {
+    [options.sessionFlag]: options.sessionOnly,
+  };
+  if (options.clearLegacyApiKey) localUpdate.apiKey = "";
+  if (options.sessionOnly) {
+    localUpdate[options.key] = "";
+    await Promise.all([
+      browser.storage.local.set(localUpdate),
+      sessionStorageSet({ [options.key]: options.value }),
+    ]);
+    return;
+  }
+  localUpdate[options.key] = options.value;
+  await Promise.all([
+    browser.storage.local.set(localUpdate),
+    sessionStorageRemove([options.key]),
+  ]);
+}
+
 /** Broadcast the updated settings to all open FB tabs so liveSettings in
  *  each content script picks up rule edits / fold-threshold tweaks
  *  without a page reload. The runtime broadcast also reaches sidepanel. */
@@ -1120,6 +1162,7 @@ async function init() {
   const apiKeyGroup = document.getElementById("apiKeyGroup")!;
   const ollamaConfig = document.getElementById("ollamaConfig") as HTMLElement;
   const apiKeyInput = document.getElementById("apiKey") as HTMLInputElement;
+  const tierAApiKeySessionOnly = document.getElementById("tierAApiKeySessionOnly") as HTMLInputElement;
   const apiKeyStatus = document.getElementById("apiKeyStatus")!;
   const ollamaEndpoint = document.getElementById(
     "ollamaEndpoint"
@@ -1624,10 +1667,16 @@ async function init() {
   const stored = await browser.storage.local.get([
     "apiKey",
     "tierAApiKey",
+    "tierAApiKeySessionOnly",
     "ollamaEndpoint",
     "ollamaModel",
   ]);
-  apiKeyInput.value = (stored.tierAApiKey as string) || (stored.apiKey as string) || "";
+  const storedSession = await sessionStorageGet(["tierAApiKey"]);
+  const storedTierAApiKey = (stored.tierAApiKey as string) || (stored.apiKey as string) || "";
+  tierAApiKeySessionOnly.checked = stored.tierAApiKeySessionOnly !== false;
+  apiKeyInput.value = tierAApiKeySessionOnly.checked
+    ? (storedSession.tierAApiKey as string) || storedTierAApiKey
+    : storedTierAApiKey;
   ollamaEndpoint.value = (stored.ollamaEndpoint as string) || defaultEndpointForProvider("ollama");
   ollamaModel.value = (stored.ollamaModel as string) || defaultModelForProvider("ollama", "reading-prompt");
   refreshTierALaneSummary();
@@ -1780,8 +1829,16 @@ async function init() {
         await browser.storage.local.set({
           ollamaEndpoint: endpoint,
           ollamaModel: resolvedModel,
-          ...(providerSupportsOptionalApiKey(provider) ? { tierAApiKey: tierAApiKey || "" } : {}),
         });
+        if (providerSupportsOptionalApiKey(provider)) {
+          await persistApiKeyPreference({
+            key: "tierAApiKey",
+            sessionFlag: "tierAApiKeySessionOnly",
+            value: tierAApiKey || "",
+            sessionOnly: tierAApiKeySessionOnly.checked,
+            clearLegacyApiKey: true,
+          });
+        }
         localModelConfig = {
           ...localModelConfig,
           ollamaEndpoint: endpoint,
@@ -1823,6 +1880,7 @@ async function init() {
   const tierBOpenAICompatConfig = document.getElementById("tierBOpenAICompatConfig") as HTMLElement;
   const tierBApiKeyGroup = document.getElementById("tierBApiKeyGroup") as HTMLElement;
   const tierBApiKeyInput = document.getElementById("tierBApiKey") as HTMLInputElement;
+  const tierBApiKeySessionOnly = document.getElementById("tierBApiKeySessionOnly") as HTMLInputElement;
   const tierBApiKeyStatus = document.getElementById("tierBApiKeyStatus")!;
   const tierBEndpoint = document.getElementById("tierBEndpoint") as HTMLInputElement;
   const tierBModelSelect = document.getElementById("tierBModelSelect") as HTMLSelectElement;
@@ -1870,8 +1928,13 @@ async function init() {
         ? currentReadinessEnvironment().tierAModel
         : defaultModelForProvider(selectedTierBProvider, "summary-reading"))
     : settings.tierBModel || defaultModelForProvider(selectedTierBProvider, "summary-reading");
-  const tierBStored = await browser.storage.local.get(["tierBApiKey"]);
-  tierBApiKeyInput.value = (tierBStored.tierBApiKey as string) || "";
+  const tierBStored = await browser.storage.local.get(["tierBApiKey", "tierBApiKeySessionOnly"]);
+  const tierBStoredSession = await sessionStorageGet(["tierBApiKey"]);
+  const storedTierBApiKey = (tierBStored.tierBApiKey as string) || "";
+  tierBApiKeySessionOnly.checked = tierBStored.tierBApiKeySessionOnly !== false;
+  tierBApiKeyInput.value = tierBApiKeySessionOnly.checked
+    ? (tierBStoredSession.tierBApiKey as string) || storedTierBApiKey
+    : storedTierBApiKey;
 
   function refreshModelSelectionUI(): void {
     const brief = displayReadinessRecord("reading_brief");
@@ -2168,7 +2231,12 @@ async function init() {
 
       await saveSettings(settings);
       if (providerSupportsOptionalApiKey(provider)) {
-        await browser.storage.local.set({ tierBApiKey: tierBApiKey || "" });
+        await persistApiKeyPreference({
+          key: "tierBApiKey",
+          sessionFlag: "tierBApiKeySessionOnly",
+          value: tierBApiKey || "",
+          sessionOnly: tierBApiKeySessionOnly.checked,
+        });
       }
       await broadcastSettingsUpdate(settings);
       refreshModelComboAfterSave();

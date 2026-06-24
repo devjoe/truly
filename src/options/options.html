@@ -367,6 +367,20 @@
       width: auto;
       accent-color: #1877f2;
     }
+    .api-key-session-option {
+      display: flex !important;
+      align-items: flex-start;
+      gap: 8px;
+      margin: 8px 0 0;
+      color: #65676b;
+      font-size: 12px !important;
+      font-weight: 500 !important;
+      line-height: 1.45;
+    }
+    .api-key-session-option input {
+      flex: 0 0 auto;
+      margin-top: 2px;
+    }
     .form-group textarea { min-height: 120px; resize: vertical; }
     .status-text {
       font-size: 12px;
@@ -2340,6 +2354,10 @@
         <div class="form-group model-inline-config" id="apiKeyGroup" style="display:none;">
           <label for="apiKey" data-i18n="common.apiKeyOptional">API key（選填）</label>
           <input type="password" id="apiKey" placeholder="需要驗證的端點才填寫" data-i18n-placeholder="common.apiKeyPlaceholder" autocomplete="off" spellcheck="false">
+          <label class="api-key-session-option" for="tierAApiKeySessionOnly">
+            <input type="checkbox" id="tierAApiKeySessionOnly">
+            <span data-i18n="options.provider.apiKeySessionOnly">只保存在本次瀏覽器工作階段</span>
+          </label>
           <div class="status-text" id="apiKeyStatus"></div>
         </div>
         <div class="model-action-row">
@@ -2411,6 +2429,10 @@
           <div class="form-group" id="tierBApiKeyGroup" style="display:none;">
             <label for="tierBApiKey" data-i18n="common.apiKeyOptional">API key（選填）</label>
             <input type="password" id="tierBApiKey" placeholder="需要驗證的端點才填寫" data-i18n-placeholder="common.apiKeyPlaceholder" autocomplete="off" spellcheck="false">
+            <label class="api-key-session-option" for="tierBApiKeySessionOnly">
+              <input type="checkbox" id="tierBApiKeySessionOnly">
+              <span data-i18n="options.provider.apiKeySessionOnly">只保存在本次瀏覽器工作階段</span>
+            </label>
             <div class="status-text" id="tierBApiKeyStatus"></div>
           </div>
         </div>

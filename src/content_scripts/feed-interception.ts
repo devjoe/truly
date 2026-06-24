@@ -2149,6 +2149,21 @@ export function markSponsoredInFeed() {
 // See proposal `cache-ssr-fetch-in-session-storage` for the original rationale.
 const SSR_CACHE_TTL_MS = 5 * 60 * 1000;
 const SSR_CACHE_KEY_PREFIX = "truly-ssr:";
+const SSR_CACHE_MAX_POSTS = 30;
+const SSR_CACHE_MAX_SERIALIZED_BYTES = 120_000;
+const SSR_CACHE_MAX_URL_LENGTH = 2048;
+const SSR_CACHE_MAX_REQ_ID_LENGTH = 80;
+const SSR_CACHE_MAX_TEXT_LENGTH = 5000;
+const SSR_CACHE_MAX_FIELD_LENGTH = 240;
+const SSR_CACHE_REQ_ID_RE = /^[A-Za-z0-9:_-]{1,80}$/;
+const SSR_CACHE_ALLOWED_POST_TYPES: ReadonlySet<PostType> = new Set([
+  "reshare",
+  "group",
+  "reel",
+  "text_only",
+  "page",
+  "standard",
+]);
 const PAGE_ORIGIN = window.location.origin;
 
 function isSamePageMessage(event: MessageEvent): boolean {
@@ -2160,7 +2175,77 @@ interface SsrCacheEntry {
   posts: GraphQLPost[];
 }
 
+function isValidSsrCacheUrl(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0 || value.length > SSR_CACHE_MAX_URL_LENGTH) {
+    return false;
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.origin !== PAGE_ORIGIN) return false;
+    if (parsed.protocol !== "https:" && parsed.protocol !== "http:") return false;
+    return isFacebookHost(parsed.hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isValidSsrCacheReqId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= SSR_CACHE_MAX_REQ_ID_LENGTH &&
+    SSR_CACHE_REQ_ID_RE.test(value)
+  );
+}
+
+function boundedString(value: unknown, maxLength: number): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length > maxLength) return null;
+  return trimmed;
+}
+
+function optionalBoundedString(value: unknown, maxLength: number): string | undefined {
+  if (value === undefined || value === null || value === "") return undefined;
+  return boundedString(value, maxLength) ?? undefined;
+}
+
+function normalizeSsrCachePost(value: unknown): GraphQLPost | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  const postId = boundedString(raw.postId, SSR_CACHE_MAX_FIELD_LENGTH);
+  const text = boundedString(raw.text, SSR_CACHE_MAX_TEXT_LENGTH);
+  const authorName = boundedString(raw.authorName, SSR_CACHE_MAX_FIELD_LENGTH);
+  if (!postId || !text || !authorName || typeof raw.isSponsored !== "boolean") return null;
+
+  const postType = optionalBoundedString(raw.postType, SSR_CACHE_MAX_FIELD_LENGTH);
+  const normalized: GraphQLPost = {
+    postId,
+    text,
+    authorName,
+    isSponsored: raw.isSponsored,
+  };
+  if (postType && SSR_CACHE_ALLOWED_POST_TYPES.has(postType as PostType)) {
+    normalized.postType = postType as PostType;
+  }
+  const reshareOriginalText = optionalBoundedString(raw.reshareOriginalText, SSR_CACHE_MAX_TEXT_LENGTH);
+  if (reshareOriginalText) normalized.reshareOriginalText = reshareOriginalText;
+  const reshareOriginalAuthor = optionalBoundedString(raw.reshareOriginalAuthor, SSR_CACHE_MAX_FIELD_LENGTH);
+  if (reshareOriginalAuthor) normalized.reshareOriginalAuthor = reshareOriginalAuthor;
+  return normalized;
+}
+
+function normalizeSsrCachePosts(value: unknown): GraphQLPost[] | null {
+  if (!Array.isArray(value) || value.length > SSR_CACHE_MAX_POSTS) return null;
+  const posts = value.map(normalizeSsrCachePost);
+  if (posts.some((post) => post === null)) return null;
+  const normalized = posts as GraphQLPost[];
+  if (JSON.stringify(normalized).length > SSR_CACHE_MAX_SERIALIZED_BYTES) return null;
+  return normalized;
+}
+
 async function handleSsrCacheQuery(url: string, reqId: string): Promise<void> {
+  if (!isValidSsrCacheUrl(url) || !isValidSsrCacheReqId(reqId)) return;
   let posts: GraphQLPost[] | null = null;
   if (typeof chrome !== "undefined" && chrome.storage?.local) {
     try {
@@ -2168,7 +2253,7 @@ async function handleSsrCacheQuery(url: string, reqId: string): Promise<void> {
       const result = await chrome.storage.local.get(key);
       const entry = result[key] as SsrCacheEntry | undefined;
       if (entry && Date.now() - entry.ts < SSR_CACHE_TTL_MS) {
-        posts = entry.posts;
+        posts = normalizeSsrCachePosts(entry.posts);
       }
     } catch {
       posts = null;
@@ -2177,10 +2262,13 @@ async function handleSsrCacheQuery(url: string, reqId: string): Promise<void> {
   window.postMessage({ type: "TRULY_SSR_CACHE_REPLY", reqId, posts }, PAGE_ORIGIN);
 }
 
-function handleSsrCacheStore(url: string, posts: GraphQLPost[]): void {
+function handleSsrCacheStore(url: string, posts: unknown): void {
+  if (!isValidSsrCacheUrl(url)) return;
+  const normalizedPosts = normalizeSsrCachePosts(posts);
+  if (!normalizedPosts) return;
   if (typeof chrome === "undefined" || !chrome.storage?.local) return;
   const key = SSR_CACHE_KEY_PREFIX + url;
-  const entry: SsrCacheEntry = { ts: Date.now(), posts };
+  const entry: SsrCacheEntry = { ts: Date.now(), posts: normalizedPosts };
   chrome.storage.local.set({ [key]: entry }).catch(() => {});
 }
 
@@ -2190,7 +2278,8 @@ export function injectGraphQLInterceptor(): void {
     const data = event.data;
     if (!data || typeof data !== "object") return;
     if (data.type === "TRULY_GRAPHQL_POSTS") {
-      handleGraphQLPosts(data.posts);
+      const posts = normalizeSsrCachePosts(data.posts);
+      if (posts) handleGraphQLPosts(posts);
       return;
     }
     if (data.type === "TRULY_SSR_CACHE_QUERY") {
@@ -2216,6 +2305,7 @@ export const __ssrCacheInternals = {
   KEY_PREFIX: SSR_CACHE_KEY_PREFIX,
   handleSsrCacheQuery,
   handleSsrCacheStore,
+  normalizeSsrCachePosts,
 };
 
 // --- Public API ---

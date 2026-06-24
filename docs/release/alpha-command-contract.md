@@ -131,7 +131,9 @@ source zip, and build report.
 Preview release artifacts must not include development-only commands. Local
 development can use `npm run build:dev` to patch the built manifest with the
 reload shortcut, but `release:alpha` verifies that the packaged manifest does
-not contain that command.
+not contain that command. Preview release artifacts also must not include the
+dev-reload localhost probe; `release:alpha` verifies the packaged service
+worker excludes `http://localhost:9012/` and the dev-reload reload markers.
 
 `release:alpha` refuses to run while repo-local dev processes are active,
 including `make dev-all`, `scripts/dev-singleton.mjs`, `scripts/dev-watch.mjs`,

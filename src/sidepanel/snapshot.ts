@@ -63,6 +63,8 @@ export interface SnapshotBundle {
 }
 
 declare const __TRULY_BUILD_ID__: string;
+const REDACTED_SECRET = "[redacted]";
+const SECRET_KEY_RE = /api[-_]?key$/i;
 
 async function fetchSwLogs(): Promise<ComponentLogs | { error: string }> {
   try {
@@ -118,7 +120,33 @@ async function readStorage(): Promise<{
       .get(null)
       .catch(() => ({}) as Record<string, unknown>),
   ]);
-  return { sync, session };
+  return {
+    sync: redactStorageSecrets(sync),
+    session: redactStorageSecrets(session),
+  };
+}
+
+function redactStorageSecrets(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  return redactObject(value as Record<string, unknown>);
+}
+
+function redactObject(value: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, nested] of Object.entries(value)) {
+    if (SECRET_KEY_RE.test(key)) {
+      out[key] = REDACTED_SECRET;
+    } else {
+      out[key] = redactNestedValue(nested);
+    }
+  }
+  return out;
+}
+
+function redactNestedValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactNestedValue);
+  if (value && typeof value === "object") return redactObject(value as Record<string, unknown>);
+  return value;
 }
 
 export async function buildSnapshotBundle(
@@ -212,3 +240,9 @@ export async function probeBuildIds(): Promise<{
   }
   return { sw: sw?.buildId ?? null, cs };
 }
+
+export const __snapshotInternals = {
+  REDACTED_SECRET,
+  readStorage,
+  redactStorageSecrets,
+};
