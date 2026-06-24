@@ -25,11 +25,6 @@ const commit = git(["rev-parse", "--short=12", "HEAD"], "unknown").trim();
 const dirtyFiles = git(["status", "--porcelain", "--", "."], "").split("\n").filter(Boolean);
 const dirty = dirtyFiles.length > 0;
 const allowDirty = process.env.TRULY_ALLOW_DIRTY_RELEASE === "1";
-const devReloadReleaseMarkers = [
-  "http://localhost:9012/",
-  "[dev-reload]",
-  "devReloadPendingTabRefresh",
-];
 const crcTable = Array.from({ length: 256 }, (_, index) => {
   let crc = index;
   for (let bit = 0; bit < 8; bit += 1) {
@@ -52,8 +47,7 @@ try {
   run("npm", ["run", "check:ollama-cloud-capabilities"]);
   run("npm", ["run", "check:public"]);
   run("npm", ["run", "build"]);
-  verifyReleaseManifest();
-  verifyReleaseBundle();
+  run("node", ["scripts/audit-release-bundle.mjs", "--dist", "dist"]);
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const suffix = dirty ? `${version}-${commit}-dirty-${stamp}` : `${version}-${commit}-${stamp}`;
@@ -66,7 +60,9 @@ try {
   writeZipFromDirectory(resolve(root, "dist"), extensionZip, {
     rootPrefix: "",
     exclude: shouldExcludeExtensionPath,
+    transform: transformExtensionEntry,
   });
+  run("node", ["scripts/audit-release-bundle.mjs", "--zip", extensionZip]);
   writeZipFromGitTrackedFiles(sourceZip, {
     rootPrefix: "",
     exclude: shouldExcludeSourcePath,
@@ -86,8 +82,8 @@ try {
       "npm run check:public",
       "npm run build",
       "verify release metadata and Preview tag naming",
-      "verify dist/manifest.json excludes commands.reload-extension",
-      "verify release bundle excludes dev-reload localhost probes",
+      "audit dist release bundle boundary",
+      "audit packaged extension zip boundary",
     ],
     artifacts: {
       extensionZip: relative(root, extensionZip),
@@ -135,24 +131,6 @@ function createReleaseLock() {
 
 function clearReleaseLock() {
   rmSync(releaseLockPath, { force: true });
-}
-
-function verifyReleaseManifest() {
-  const manifest = JSON.parse(readFileSync(resolve(root, "dist/manifest.json"), "utf8"));
-  if (manifest.commands?.["reload-extension"]) {
-    throw new Error("Release build must not include commands.reload-extension.");
-  }
-}
-
-function verifyReleaseBundle() {
-  const serviceWorkerPath = resolve(root, "dist/background/service-worker.js");
-  const serviceWorker = readFileSync(serviceWorkerPath, "utf8");
-  const found = devReloadReleaseMarkers.filter((marker) => serviceWorker.includes(marker));
-  if (found.length > 0) {
-    throw new Error(
-      `Release service worker must not include dev-reload code (${found.join(", ")}).`,
-    );
-  }
 }
 
 function assertNoDevProcesses() {
@@ -261,6 +239,14 @@ function shouldExcludeExtensionPath(path) {
   return path.endsWith(".map");
 }
 
+function transformExtensionEntry(path, data) {
+  if (!path.endsWith(".js")) return data;
+  return Buffer.from(
+    data.toString("utf8").replace(/\n?\/\/# sourceMappingURL=.*$/gm, ""),
+    "utf8",
+  );
+}
+
 function renderReport(report) {
   const dirtyLine = report.dirty ? "yes" : "no";
   return [
@@ -340,9 +326,10 @@ function collectFiles(directory, options) {
       return;
     }
     if (!stat.isFile()) return;
+    const data = readFileSync(current);
     files.push({
       name: [options.rootPrefix, relativePath].filter(Boolean).join("/"),
-      data: readFileSync(current),
+      data: options.transform ? options.transform(relativePath, data) : data,
       date: stat.mtime,
     });
   }

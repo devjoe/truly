@@ -126,6 +126,11 @@ upload artifacts for review, but the human release step is still to create the
 GitHub Release from the Preview tag and attach the generated extension zip,
 source zip, and build report.
 
+The extension zip strips JavaScript `sourceMappingURL` comments while excluding
+the `.map` files themselves. Local `dist` builds may keep sourcemaps for
+debugging, but the CWS-facing artifact should not point reviewers or browsers
+at missing maps.
+
 ## Dev Shortcut Boundary
 
 Preview release artifacts must not include development-only commands. Local
@@ -134,6 +139,15 @@ reload shortcut, but `release:alpha` verifies that the packaged manifest does
 not contain that command. Preview release artifacts also must not include the
 dev-reload localhost probe; `release:alpha` verifies the packaged service
 worker excludes `http://localhost:9012/` and the dev-reload reload markers.
+
+`npm run audit:release-bundle` is the shared artifact boundary check used by
+`check:public`, release-tag CI, and `release:alpha`. It audits the built
+extension for CWS-sensitive drift that manifest-only checks do not catch:
+unexpected required permissions, unexpected host permissions, exposed
+`externally_connectable` / `web_accessible_resources`, remote executable code
+loaders, development reload markers, and forbidden packaged paths. The
+`release:alpha` command runs the same audit twice: once against `dist`, and
+again against the final extension zip that will be uploaded.
 
 `release:alpha` refuses to run while repo-local dev processes are active,
 including `make dev-all`, `scripts/dev-singleton.mjs`, `scripts/dev-watch.mjs`,

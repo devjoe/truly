@@ -575,12 +575,14 @@ keepAlive();
 
 // Dev-only command handler. Public manifests do not declare this command;
 // dev builds may add it through the manifest patch step.
-chrome.commands?.onCommand.addListener((cmd) => {
-  if (cmd === "reload-extension") {
-    debugLog("[Truly BG] reload-extension command → chrome.runtime.reload()");
-    chrome.runtime.reload();
-  }
-});
+if (__TRULY_DEV_BUILD__) {
+  chrome.commands?.onCommand.addListener((cmd) => {
+    if (cmd === "reload-extension") {
+      debugLog("[Truly BG] reload-extension command → chrome.runtime.reload()");
+      chrome.runtime.reload();
+    }
+  });
+}
 
 // Expose the buildId so probes can read it via sw.evaluate (Vite inlines
 // __TRULY_BUILD_ID__ as a string literal at build time, so it isn't on
