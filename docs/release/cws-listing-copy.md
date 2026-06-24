@@ -1,10 +1,10 @@
 # Chrome Web Store Listing Copy
 
-Status: CWS preparation draft for review
-Last updated: 2026-06-23
+Status: published Preview 8 listing reference
+Last updated: 2026-06-25
 
-This draft is meant to be copied into the Chrome Web Store dashboard after
-final review. It should stay aligned with `README.md`,
+This copy was used for the first Unlisted Chrome Web Store publication. It
+should stay aligned with `README.md`,
 `src/manifest.json`, `src/_locales/*/messages.json`, and
 https://trulyreader.org/.
 

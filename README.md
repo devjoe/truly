@@ -34,11 +34,16 @@ Signals first. Context when needed. Handoff only by choice.
 
 ## Early Preview Quick Start
 
-Download the extension zip from the latest Preview release:
+Install the Unlisted Chrome Web Store preview:
+
+<https://chromewebstore.google.com/detail/truly/kdgkgifmdflocjockbfnhkkncbdihpoj>
+
+For manual testing or development, download the extension zip from the latest
+Preview release:
 
 <https://github.com/devjoe/truly/releases>
 
-Unzip it. Then open `chrome://extensions`, enable Developer mode, choose **Load
+Unzip it, then open `chrome://extensions`, enable Developer mode, choose **Load
 unpacked**, and select the unzipped extension folder.
 
 After installation:
@@ -49,8 +54,6 @@ After installation:
 3. Open a supported page in desktop Chrome.
 4. Use the reading hint, expanded view, or side panel.
 5. Send feedback through <https://trulyreader.org/feedback/>.
-
-Chrome Web Store install links will be added later.
 
 ## Roadmap
 

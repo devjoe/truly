@@ -1,8 +1,8 @@
 # Chrome Web Store Reviewer Notes
 
-Last updated: 2026-06-23
+Last updated: 2026-06-25
 
-Status: CWS preparation draft for review
+Status: published Preview 8 reviewer-notes reference
 
 ## Submission Build
 
