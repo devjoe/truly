@@ -17,9 +17,9 @@ Status: CWS preparation draft for review
   `artifacts/cws/0.1.0-<commit>-<timestamp>/cws-package-report.md`.
 
 The CWS package checks pass through `npm run cws:package`, including clean-tree
-and upstream checks, public-boundary checks, release metadata, typecheck, public
-contract tests, public unit tests, production build, packaged ZIP audit, and
-CWS preflight.
+and upstream checks, release-tag-to-commit verification, public-boundary checks,
+release metadata, typecheck, public contract tests, public unit tests,
+production build, packaged ZIP audit, and CWS preflight.
 
 ## Product Summary
 

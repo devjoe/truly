@@ -5,6 +5,7 @@ import { join, relative, resolve } from "node:path";
 import {
   assertCleanTree,
   assertNoDevProcesses,
+  assertTagMatchesHead,
   assertUpstreamSynced,
   clearReleaseLock,
   createReleaseLock,
@@ -12,6 +13,7 @@ import {
   readProjectMetadata,
   root,
   run,
+  runWithEnv,
   sha256File,
   writeExtensionZipFromDist,
 } from "./lib/cws-artifacts.mjs";
@@ -33,12 +35,15 @@ const dirty = dirtyFiles.length > 0;
 const upstream = assertUpstreamSynced({
   allowUnpushedEnv: "TRULY_ALLOW_UNPUSHED_CWS_PACKAGE",
 });
+const releaseTag = assertTagMatchesHead(recommendedTag);
 
 assertNoDevProcesses();
 createReleaseLock("cws:package");
 try {
   rmSync(resolve(root, "dist"), { recursive: true, force: true });
-  run("npm", ["run", "check:public"]);
+  runWithEnv("npm", ["run", "check:public"], {
+    TRULY_ALLOW_RELEASE_TAG_COLLISION: "1",
+  });
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const dirtySuffix = dirty ? "-dirty" : "";
@@ -59,6 +64,7 @@ try {
     commit,
     branch,
     upstream,
+    releaseTag,
     dirty,
     dirtyFiles,
     buildId: readDistBuildId(),
@@ -70,8 +76,9 @@ try {
     checks: [
       dirty ? "dirty tree allowed for local smoke package" : "git tree clean",
       "branch synced with upstream",
+      "release tag points at HEAD",
       "no repo-local dev processes",
-      "npm run check:public",
+      "npm run check:public with verified release tag collision",
       "audit packaged extension zip boundary",
       "npm run cws:preflight",
     ],
@@ -105,6 +112,7 @@ function renderReport(report) {
     `- Commit: ${report.commit}`,
     `- Branch: ${report.branch}`,
     `- Upstream: ${report.upstream.upstream}`,
+    `- Release tag: ${report.releaseTag.tag}`,
     `- Dirty tree: ${dirtyLine}`,
     `- Build ID: ${report.buildId ?? "not found"}`,
     `- Built at: ${report.builtAt}`,

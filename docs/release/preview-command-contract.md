@@ -171,9 +171,12 @@ Release, but it does not itself create the GitHub Release.
 
 `npm run cws:package` is the Chrome Web Store upload-package entrypoint. It
 requires a clean tree, a branch that is not behind its upstream, no repo-local
-dev processes, `check:public`, a packaged ZIP audit, and `cws:preflight`. It
-writes a CWS-specific package report under `artifacts/cws/` with the extension
-ZIP path, SHA-256, commit, build ID, and submission input paths.
+dev processes, the current Preview release tag pointing at `HEAD`,
+`check:public`, a packaged ZIP audit, and `cws:preflight`. Since CWS packaging
+happens after the GitHub Release tag exists, it allows the release metadata tag
+collision only after verifying that the tag is the current commit. It writes a
+CWS-specific package report under `artifacts/cws/` with the extension ZIP path,
+SHA-256, commit, build ID, and submission input paths.
 
 `npm run cws:preflight` is intentionally deterministic and local. It verifies
 that the CWS docs mention the current version, version name, and recommended

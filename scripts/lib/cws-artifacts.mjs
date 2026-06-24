@@ -57,6 +57,17 @@ export function run(command, args) {
   execFileSync(command, args, { cwd: root, stdio: "inherit" });
 }
 
+export function runWithEnv(command, args, env) {
+  execFileSync(command, args, {
+    cwd: root,
+    stdio: "inherit",
+    env: {
+      ...process.env,
+      ...env,
+    },
+  });
+}
+
 export function assertCleanTree({ allowDirtyEnv, label }) {
   const dirtyFiles = git(["status", "--porcelain", "--", "."], "").split("\n").filter(Boolean);
   if (dirtyFiles.length === 0 || process.env[allowDirtyEnv] === "1") return dirtyFiles;
@@ -91,6 +102,23 @@ export function assertUpstreamSynced({ allowUnpushedEnv }) {
   }
 
   return { upstream, ahead, behind };
+}
+
+export function assertTagMatchesHead(tag) {
+  const head = git(["rev-parse", "HEAD"], "").trim();
+  const tagCommit = git(["rev-list", "-n", "1", tag], "").trim();
+  if (!tagCommit) {
+    console.error(`Refusing to package for CWS because release tag does not exist locally: ${tag}`);
+    console.error("Create or fetch the GitHub Release tag before packaging for CWS.");
+    process.exit(1);
+  }
+  if (tagCommit !== head) {
+    console.error(`Refusing to package for CWS because ${tag} does not point at HEAD.`);
+    console.error(`- ${tag}: ${tagCommit}`);
+    console.error(`- HEAD: ${head}`);
+    process.exit(1);
+  }
+  return { tag, commit: tagCommit };
 }
 
 export function createReleaseLock(command) {

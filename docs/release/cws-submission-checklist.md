@@ -20,6 +20,8 @@ Store. The dashboard copy should still come from
 ## Package
 
 - [ ] Run `npm run cws:package` from a clean, pushed branch.
+- [ ] Confirm the package report says the current Preview release tag points at
+  the package commit.
 - [ ] Upload the extension ZIP recorded in the generated
   `artifacts/cws/0.1.0-<commit>-<timestamp>/cws-package-report.md`.
 - [ ] Keep the CWS package report open while filling the dashboard.
