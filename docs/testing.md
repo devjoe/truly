@@ -19,6 +19,12 @@ The public gate runs:
 Pure unit tests also cover small UI policy decisions that can be represented
 without DOM or private feed captures, such as Heads-up chip deduplication.
 
+Sponsored detection regressions must prefer precision over recall. The public
+suite uses synthetic GraphQL-style post records to verify that a sponsored
+signal does not create author-level memory and collapse unrelated posts from
+the same author. Live feed checks can be used as a private confidence pass, but
+only their counts and local `tmp/` artifact paths should be recorded.
+
 ## Review Hardening Gate
 
 Before publishing a public preview, code-review hardening changes should pass

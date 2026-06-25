@@ -114,15 +114,13 @@ interface GraphQLPost {
 const gqlPostsByAuthor = new Map<string, GraphQLPost>();
 const gqlPostsByText = new Map<string, GraphQLPost>();
 
-// Session-level memory of "this author/text is sponsored" that survives DOM
+// Session-level memory of "this text is sponsored" that survives DOM
 // remounts. Facebook virtual-scrolls articles in/out of the DOM, so the
 // `data-truly-sponsored` attribute on a node dies when the node is unmounted.
 // When the same post comes back into view, scanForNewPosts treats it as a
-// fresh post and would re-classify from scratch — without these sets, the
-// GraphQL signal that originally tagged it as sponsored is long gone (it
-// was consumed by findGqlMatch and never replayed). These sets are
-// append-only for the page session.
-const knownSponsoredAuthors = new Set<string>();
+// fresh post and would re-classify from scratch. Keep text seeds only:
+// author-level memory is too broad on profile/feed pages and can turn one
+// false positive into many collapsed organic posts from the same author.
 const knownSponsoredTextSeeds = new Set<string>();
 
 interface PostIdentity {
@@ -662,16 +660,12 @@ export function extractSharedAttachmentText(el: HTMLElement, ownText?: string): 
 }
 
 export function handleGraphQLPosts(posts: GraphQLPost[]) {
-  let addedSponsored = false;
+  let addedSponsoredSeed = false;
   for (const post of posts) {
     if (post.authorName) {
       const key = normalizeAuthor(post.authorName);
       if (key.length > 1) {
         gqlPostsByAuthor.set(key, post);
-        if (post.isSponsored) {
-          knownSponsoredAuthors.add(key);
-          addedSponsored = true;
-        }
       }
     }
     if (post.text.length > 20) {
@@ -679,7 +673,7 @@ export function handleGraphQLPosts(posts: GraphQLPost[]) {
       gqlPostsByText.set(seed, post);
       if (post.isSponsored) {
         knownSponsoredTextSeeds.add(seed);
-        addedSponsored = true;
+        addedSponsoredSeed = true;
       }
     }
 
@@ -704,35 +698,22 @@ export function handleGraphQLPosts(posts: GraphQLPost[]) {
       retroUpdateTruncatedText(post);
     }
   }
-  // Sweep all currently-tagged-but-not-sponsored posts in case the new
-  // entries we just added to knownSponsoredAuthors match a post that was
-  // tagged before this payload arrived.
-  if (addedSponsored) reEvaluateKnownSponsored();
+  // Sweep all currently-tagged-but-not-sponsored posts in case the new text
+  // seeds we just added match a post that was tagged before this payload
+  // arrived.
+  if (addedSponsoredSeed) reEvaluateKnownSponsored();
 }
 
 function retroMarkSponsored(gqlPost: GraphQLPost): void {
-  const targetAuthor = gqlPost.authorName
-    ? normalizeAuthor(gqlPost.authorName)
-    : "";
   const textKey = gqlPost.text.length >= 30 ? gqlPost.text.slice(0, 30) : "";
-  if (!targetAuthor && !textKey) return;
+  if (!textKey) return;
 
   const candidates = document.querySelectorAll<HTMLElement>("[data-truly-id]");
   for (const el of candidates) {
     if (el.dataset.trulySponsored === "true") continue; // already marked
 
-    let matched = false;
-    if (targetAuthor) {
-      const author = extractPostIdentity(el).authorName;
-      if (author && normalizeAuthor(author).includes(targetAuthor)) {
-        matched = true;
-      }
-    }
-    if (!matched && textKey) {
-      const domText = extractPostBody(el);
-      if (domText.includes(textKey)) matched = true;
-    }
-    if (!matched) continue;
+    const domText = extractPostBody(el);
+    if (!graphQLTextMatchesDom(domText, gqlPost.text)) continue;
 
     el.dataset.trulySponsored = "true";
     debugLog(
@@ -855,21 +836,7 @@ export function __findGqlMatchForTesting(text: string, author: string): GraphQLP
 }
 
 export function isKnownSponsored(text: string, author: string): boolean {
-  if (author) {
-    const key = normalizeAuthor(author);
-    if (key && key.length >= 2) {
-      // Bidirectional substring match: SSR scanner sometimes extracts a
-      // shorter actor name ("Hahow") than the DOM ("Hahow 好學校"), and
-      // sometimes longer. Check both directions, but require the shorter
-      // side to be at least 2 chars to avoid trivial false positives.
-      for (const known of knownSponsoredAuthors) {
-        if (known.length < 2) continue;
-        if (key === known) return true;
-        if (key.length >= known.length && key.includes(known)) return true;
-        if (known.length > key.length && known.includes(key)) return true;
-      }
-    }
-  }
+  void author;
   for (const seed of knownSponsoredTextSeeds) {
     if (text.includes(seed.slice(0, 30))) return true;
   }
@@ -877,14 +844,12 @@ export function isKnownSponsored(text: string, author: string): boolean {
 }
 
 // Walk currently-tagged posts that have NOT yet been marked sponsored and
-// re-check them against the session-level knownSponsoredAuthors set. This
+// re-check them against the session-level knownSponsoredTextSeeds set. This
 // is the recovery path for when GraphQL/SSR sponsored data arrives AFTER
 // scanForNewPosts has already tagged the post (race between MAIN-world
 // dispatch and isolated-world handleGraphQLPosts).
 export function reEvaluateKnownSponsored(): void {
-  if (knownSponsoredAuthors.size === 0 && knownSponsoredTextSeeds.size === 0) {
-    return;
-  }
+  if (knownSponsoredTextSeeds.size === 0) return;
   const candidates = document.querySelectorAll<HTMLElement>(
     "[data-truly-id]:not([data-truly-sponsored='true'])"
   );
@@ -895,7 +860,7 @@ export function reEvaluateKnownSponsored(): void {
     if (isKnownSponsored(text, author)) {
       el.dataset.trulySponsored = "true";
       debugLog(
-        `[Truly] Re-evaluated to sponsored via knownSponsoredAuthors (id=${el.dataset.trulyId}, author="${author}")`
+        `[Truly] Re-evaluated to sponsored via knownSponsoredTextSeeds (id=${el.dataset.trulyId}, author="${author}")`
       );
       if (onNewPost && el.dataset.trulyId) {
         onNewPost({
@@ -1349,15 +1314,6 @@ function processNewPost(el: HTMLElement, id: string) {
     markSkippedContainer(el, "empty-post-container");
     debugLog(`[Truly] Skip: empty post container (id=${id})`);
     return;
-  }
-
-  // Forward-propagate: once a post is detected as sponsored via ANY
-  // path, persist its author into the session set so future re-mounts
-  // of the same advertiser are caught by isKnownSponsored even if the
-  // DOM heuristic flakes on a later render.
-  if (isSponsored && author) {
-    const key = normalizeAuthor(author);
-    if (key.length >= 2) knownSponsoredAuthors.add(key);
   }
 
   if (isSponsored) {
@@ -2345,7 +2301,6 @@ export function startFeedInterception(
 export function __resetForTesting(): void {
   gqlPostsByAuthor.clear();
   gqlPostsByText.clear();
-  knownSponsoredAuthors.clear();
   knownSponsoredTextSeeds.clear();
   processedElements = new WeakSet<HTMLElement>();
   postCounter = 0;
