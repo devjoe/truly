@@ -53,7 +53,7 @@ function runPatch(reason) {
 const vite = spawn(VITE_BIN, ["build", "--watch", "--mode", "development"], {
   cwd: ROOT,
   stdio: "inherit",
-  env: process.env,
+  env: { ...process.env, TRULY_DEV_BUILD: "1" },
 });
 
 watchFile(BUILD_ID_FILE, { interval: 500 }, (current, previous) => {
