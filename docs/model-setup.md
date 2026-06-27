@@ -10,6 +10,12 @@ model you can manage yourself. If your OpenAI-compatible endpoint requires
 authentication, enter the API key in Truly's settings instead of putting secrets
 in the endpoint URL.
 
+Truly keeps endpoint-backed provider drafts separate in the Options page. If you
+try Ollama first, then switch the same reading lane to an OpenAI-compatible
+endpoint, the Ollama endpoint and model are remembered when you switch back.
+This applies to both **Pre-reading prompt** and **Summary / deep reading**. The
+provider you last save is still the active runtime configuration for that lane.
+
 ## Ask An AI Agent To Check Your Machine
 
 If you are unsure what your computer can run, paste this prompt into your AI

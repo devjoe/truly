@@ -16,10 +16,15 @@ import { applyUserSettingsPatch, getTierAProvider, getTierBProvider, normalizeUs
 import {
   defaultEndpointForProvider,
   defaultModelForProvider,
+  isEndpointBackedModelProvider,
   normalizeEndpointInput,
+  normalizeProviderModelConfigMap,
+  providerModelConfigOrDefault,
   resolveModelName,
   validateEndpointUrl,
+  withProviderModelConfig,
 } from "../lib/model-source-config";
+import type { ProviderModelConfigMap } from "../lib/model-source-config";
 import {
   providerCapabilities,
   providerEndpointKind,
@@ -300,11 +305,51 @@ async function init() {
   let localModelConfig = await browser.storage.local.get([
     "ollamaEndpoint",
     "ollamaModel",
+    "tierAProviderConfigs",
+    "tierBProviderConfigs",
   ]);
+  let tierAProviderConfigs: ProviderModelConfigMap = normalizeProviderModelConfigMap(
+    localModelConfig.tierAProviderConfigs,
+  );
+  const initialTierAProvider = getTierAProvider(settings);
+  if (isEndpointBackedModelProvider(initialTierAProvider)) {
+    tierAProviderConfigs = withProviderModelConfig(
+      tierAProviderConfigs,
+      initialTierAProvider,
+      {
+        endpoint: typeof localModelConfig.ollamaEndpoint === "string"
+          ? localModelConfig.ollamaEndpoint
+          : providerModelConfigOrDefault(
+              tierAProviderConfigs,
+              initialTierAProvider,
+              "reading-prompt",
+            ).endpoint,
+        model: typeof localModelConfig.ollamaModel === "string"
+          ? localModelConfig.ollamaModel
+          : providerModelConfigOrDefault(
+              tierAProviderConfigs,
+              initialTierAProvider,
+              "reading-prompt",
+            ).model,
+      },
+    );
+  }
+  let tierBProviderConfigs: ProviderModelConfigMap = normalizeProviderModelConfigMap(
+    localModelConfig.tierBProviderConfigs,
+  );
   let readinessSnapshot = await loadReadinessSnapshot(browser.storage.local as any);
   let refreshTierBManualInputsAfterReadiness: (() => void) | undefined;
 
   function currentReadinessEnvironment() {
+    const provider = getTierAProvider(settings);
+    if (isEndpointBackedModelProvider(provider)) {
+      const config = providerModelConfigOrDefault(tierAProviderConfigs, provider, "reading-prompt");
+      return {
+        tierAEndpoint: config.endpoint,
+        tierAModel: config.model,
+        buildId: __TRULY_BUILD_ID__,
+      };
+    }
     return {
       tierAEndpoint: typeof localModelConfig.ollamaEndpoint === "string"
         ? localModelConfig.ollamaEndpoint.trim()
@@ -1354,6 +1399,37 @@ async function init() {
     setLaneStatus(tierALaneStatus, readinessBadgeText(record), record);
   }
 
+  function currentTierAEndpointInput(provider: TierAProvider): string {
+    return normalizeEndpointInput(
+      ollamaEndpoint.value,
+      isEndpointBackedModelProvider(provider) ? defaultEndpointForProvider(provider) : "",
+    );
+  }
+
+  function currentTierAModelInput(provider: TierAProvider): string {
+    const value = ollamaModelSelect.style.display !== "none"
+      ? ollamaModelSelect.value
+      : ollamaModel.value.trim();
+    return value || defaultModelForProvider(provider, "reading-prompt");
+  }
+
+  function rememberTierAProviderDraft(provider: TierAProvider): void {
+    if (!isEndpointBackedModelProvider(provider)) return;
+    tierAProviderConfigs = withProviderModelConfig(tierAProviderConfigs, provider, {
+      endpoint: currentTierAEndpointInput(provider),
+      model: currentTierAModelInput(provider),
+    });
+  }
+
+  function restoreTierAProviderDraft(provider: TierAProvider): void {
+    if (!isEndpointBackedModelProvider(provider)) return;
+    const config = providerModelConfigOrDefault(tierAProviderConfigs, provider, "reading-prompt");
+    ollamaEndpoint.value = config.endpoint;
+    ollamaModel.value = config.model;
+  }
+
+  let activeTierAProviderDraft = providerSelect.value as TierAProvider;
+
   function updateProviderUI() {
     const provider = providerSelect.value as UserSettings["tierAProvider"];
     const capabilities = providerCapabilities(provider);
@@ -1390,6 +1466,9 @@ async function init() {
   updateProviderUI();
   i18nDynamicRenderers.push(updateProviderUI);
   providerSelect.addEventListener("change", () => {
+    rememberTierAProviderDraft(activeTierAProviderDraft);
+    activeTierAProviderDraft = providerSelect.value as TierAProvider;
+    restoreTierAProviderDraft(activeTierAProviderDraft);
     showModelFallback();
     updateProviderUI();
   });
@@ -1626,6 +1705,7 @@ async function init() {
       "change",
       () => {
         ollamaModel.value = ollamaModelSelect.value;
+        rememberTierAProviderDraft(providerSelect.value as TierAProvider);
       },
       { once: true },
     );
@@ -1664,6 +1744,7 @@ async function init() {
         formatNote: "",
       });
       ollamaStatus.className = modelListStatusClass(ollamaStatus, "ok");
+      rememberTierAProviderDraft(provider);
       refreshTierALaneSummary();
     } else {
       showModelFallback();
@@ -1677,8 +1758,6 @@ async function init() {
     "apiKey",
     "tierAApiKey",
     "tierAApiKeySessionOnly",
-    "ollamaEndpoint",
-    "ollamaModel",
   ]);
   const storedSession = await sessionStorageGet(["tierAApiKey"]);
   const storedTierAApiKey = (stored.tierAApiKey as string) || (stored.apiKey as string) || "";
@@ -1686,14 +1765,17 @@ async function init() {
   apiKeyInput.value = tierAApiKeySessionOnly.checked
     ? (storedSession.tierAApiKey as string) || storedTierAApiKey
     : storedTierAApiKey;
-  ollamaEndpoint.value = (stored.ollamaEndpoint as string) || defaultEndpointForProvider("ollama");
-  ollamaModel.value = (stored.ollamaModel as string) || defaultModelForProvider("ollama", "reading-prompt");
+  restoreTierAProviderDraft(providerSelect.value as TierAProvider);
   refreshTierALaneSummary();
   ollamaEndpoint.addEventListener("input", () => {
     showModelFallback();
+    rememberTierAProviderDraft(providerSelect.value as TierAProvider);
     refreshTierALaneSummary();
   });
-  ollamaModel.addEventListener("input", refreshTierALaneSummary);
+  ollamaModel.addEventListener("input", () => {
+    rememberTierAProviderDraft(providerSelect.value as TierAProvider);
+    refreshTierALaneSummary();
+  });
   refreshTierAModelsButton.addEventListener("click", () => {
     void runWithPendingButton(
       refreshTierAModelsButton,
@@ -1835,9 +1917,16 @@ async function init() {
           }
         }
 
+        if (isEndpointBackedModelProvider(provider)) {
+          tierAProviderConfigs = withProviderModelConfig(tierAProviderConfigs, provider, {
+            endpoint,
+            model: resolvedModel,
+          });
+        }
         await browser.storage.local.set({
           ollamaEndpoint: endpoint,
           ollamaModel: resolvedModel,
+          tierAProviderConfigs,
         });
         if (providerSupportsOptionalApiKey(provider)) {
           await persistApiKeyPreference({
@@ -1852,6 +1941,7 @@ async function init() {
           ...localModelConfig,
           ollamaEndpoint: endpoint,
           ollamaModel: resolvedModel,
+          tierAProviderConfigs,
         };
         await saveSettings(settings);
         await broadcastSettingsUpdate(settings);
@@ -1937,6 +2027,12 @@ async function init() {
         ? currentReadinessEnvironment().tierAModel
         : defaultModelForProvider(selectedTierBProvider, "summary-reading"))
     : settings.tierBModel || defaultModelForProvider(selectedTierBProvider, "summary-reading");
+  if (isEndpointBackedModelProvider(selectedTierBProvider)) {
+    tierBProviderConfigs = withProviderModelConfig(tierBProviderConfigs, selectedTierBProvider, {
+      endpoint: tierBEndpoint.value || defaultEndpointForProvider(selectedTierBProvider),
+      model: tierBModel.value || defaultModelForProvider(selectedTierBProvider, "summary-reading"),
+    });
+  }
   const tierBStored = await browser.storage.local.get(["tierBApiKey", "tierBApiKeySessionOnly"]);
   const tierBStoredSession = await sessionStorageGet(["tierBApiKey"]);
   const storedTierBApiKey = (tierBStored.tierBApiKey as string) || "";
@@ -1971,6 +2067,32 @@ async function init() {
     return tierBModelSelect.style.display !== "none"
       ? tierBModelSelect.value.trim()
       : tierBModel.value.trim();
+  }
+
+  function currentTierBEndpointInput(provider: TierBProvider): string {
+    return normalizeEndpointInput(
+      tierBEndpoint.value,
+      isEndpointBackedModelProvider(provider) ? defaultEndpointForProvider(provider) : "",
+    );
+  }
+
+  function currentTierBModelInputOrDefault(provider: TierBProvider): string {
+    return currentTierBModelInput() || defaultModelForProvider(provider, "summary-reading");
+  }
+
+  function rememberTierBProviderDraft(provider: TierBProvider): void {
+    if (!isEndpointBackedModelProvider(provider)) return;
+    tierBProviderConfigs = withProviderModelConfig(tierBProviderConfigs, provider, {
+      endpoint: currentTierBEndpointInput(provider),
+      model: currentTierBModelInputOrDefault(provider),
+    });
+  }
+
+  function restoreTierBProviderDraft(provider: TierBProvider): void {
+    if (!isEndpointBackedModelProvider(provider)) return;
+    const config = providerModelConfigOrDefault(tierBProviderConfigs, provider, "summary-reading");
+    tierBEndpoint.value = config.endpoint;
+    tierBModel.value = config.model;
   }
 
   function populateTierBModelDropdown(models: string[], resolvedModel: string): void {
@@ -2018,6 +2140,7 @@ async function init() {
           : "",
         formatNote: "",
       }), modelListStatusClass(tierBStatus, "ok"));
+      rememberTierBProviderDraft(provider);
       refreshTierBManualInputs();
     } else {
       showTierBModelFallback();
@@ -2118,18 +2241,28 @@ async function init() {
     refreshModelSelectionUI();
   }
   refreshTierBManualInputsAfterReadiness = refreshTierBManualInputs;
+  let activeTierBProviderDraft = tierBProviderSelect.value as TierBProvider;
   tierBProviderSelect.addEventListener("change", () => {
+    rememberTierBProviderDraft(activeTierBProviderDraft);
+    activeTierBProviderDraft = tierBProviderSelect.value as TierBProvider;
+    restoreTierBProviderDraft(activeTierBProviderDraft);
+    showTierBModelFallback();
     refreshTierBManualInputs();
   });
   providerSelect.addEventListener("change", refreshTierBManualInputs);
   deepClassifyEnabled.addEventListener("change", refreshTierBManualInputs);
   tierBEndpoint.addEventListener("input", () => {
     showTierBModelFallback();
+    rememberTierBProviderDraft(tierBProviderSelect.value as TierBProvider);
     refreshTierBManualInputs();
   });
-  tierBModel.addEventListener("input", refreshTierBManualInputs);
+  tierBModel.addEventListener("input", () => {
+    rememberTierBProviderDraft(tierBProviderSelect.value as TierBProvider);
+    refreshTierBManualInputs();
+  });
   tierBModelSelect.addEventListener("change", () => {
     tierBModel.value = tierBModelSelect.value;
+    rememberTierBProviderDraft(tierBProviderSelect.value as TierBProvider);
     refreshTierBManualInputs();
   });
   refreshTierBModelsButton.addEventListener("click", () => {
@@ -2234,6 +2367,17 @@ async function init() {
           tierBModel: manualModel,
         }),
       );
+      if (isEndpointBackedModelProvider(provider)) {
+        tierBProviderConfigs = withProviderModelConfig(tierBProviderConfigs, provider, {
+          endpoint: manualEndpoint,
+          model: manualModel,
+        });
+        await browser.storage.local.set({ tierBProviderConfigs });
+        localModelConfig = {
+          ...localModelConfig,
+          tierBProviderConfigs,
+        };
+      }
       tierBEndpoint.value = manualEndpoint;
       tierBModel.value = manualModel;
       refreshTierBManualInputs();

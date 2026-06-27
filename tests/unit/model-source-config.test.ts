@@ -3,9 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   defaultEndpointForProvider,
   defaultModelForProvider,
+  normalizeProviderModelConfigMap,
   normalizeEndpointInput,
+  providerModelConfigOrDefault,
   resolveModelName,
   validateEndpointUrl,
+  withProviderModelConfig,
 } from "@src/lib/model-source-config";
 
 describe("model source config", () => {
@@ -30,6 +33,28 @@ describe("model source config", () => {
     expect(normalizeEndpointInput("   ", "http://localhost:8000/v1/")).toBe(
       "http://localhost:8000/v1",
     );
+  });
+
+  it("keeps endpoint-backed provider drafts separate", () => {
+    let configs = normalizeProviderModelConfigMap({
+      ollama: {
+        endpoint: " http://localhost:11434/ ",
+        model: " gemma4:e4b-it-qat ",
+      },
+    });
+    configs = withProviderModelConfig(configs, "openai-compatible", {
+      endpoint: "http://gx10.local:8000/v1",
+      model: "gemma-4-e4b-it-4bit",
+    });
+
+    expect(providerModelConfigOrDefault(configs, "ollama", "reading-prompt")).toEqual({
+      endpoint: "http://localhost:11434/",
+      model: "gemma4:e4b-it-qat",
+    });
+    expect(providerModelConfigOrDefault(configs, "openai-compatible", "reading-prompt")).toEqual({
+      endpoint: "http://gx10.local:8000/v1",
+      model: "gemma-4-e4b-it-4bit",
+    });
   });
 
   it("rejects unsupported endpoint URL schemes", () => {
