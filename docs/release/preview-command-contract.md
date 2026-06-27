@@ -25,6 +25,9 @@ Chrome extension metadata and GitHub release names use different constraints:
 - Git tags use the public preview label, for example `v0.1.0-preview.1`.
 - GitHub Release titles use `Truly 0.1.0 Preview 1` and should be marked as
   pre-release.
+- Chrome Web Store upload validation requires `manifest.version` to be greater
+  than the already published package version. A CWS update cannot rely on
+  changing only `manifest.version_name`.
 
 In the source tree, `manifest.version_name` represents the **next unreleased
 Preview**. After publishing `v0.1.0-preview.4`, the repo should be bumped to

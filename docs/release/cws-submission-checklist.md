@@ -23,12 +23,12 @@ Store. The dashboard copy should still come from
 - [ ] Confirm the package report says the current Preview release tag points at
   the package commit.
 - [ ] Upload the extension ZIP recorded in the generated
-  `artifacts/cws/0.1.0-<commit>-<timestamp>/cws-package-report.md`.
+  `artifacts/cws/0.1.1-<commit>-<timestamp>/cws-package-report.md`.
 - [ ] Keep the CWS package report open while filling the dashboard.
 - [ ] Confirm package metadata:
-  - Version: `0.1.0`
-  - Version name: `0.1.0 Preview 9`
-  - Recommended tag: `v0.1.0-preview.9`
+  - Version: `0.1.1`
+  - Version name: `0.1.1 Preview 9`
+  - Recommended tag: `v0.1.1-preview.9`
   - Commit: use the commit recorded in the CWS package report.
 - [ ] Confirm the packaged manifest does not include
   `commands.reload-extension`.

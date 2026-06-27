@@ -1,7 +1,7 @@
 {
   "name": "truly",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A privacy-conscious Chrome extension for improving information quality in social feeds and web pages.",
   "type": "module",
   "scripts": {

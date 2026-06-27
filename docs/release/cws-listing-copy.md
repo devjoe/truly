@@ -120,14 +120,14 @@ Use this packet for the Preview 9 Unlisted Chrome Web Store submission.
 
 ### Package
 
-- Version: `0.1.0`
-- Version name: `0.1.0 Preview 9`
-- Recommended tag: `v0.1.0-preview.9`
-- Extension ZIP: use the `truly-cws-extension-0.1.0-<commit>.zip` path from the
+- Version: `0.1.1`
+- Version name: `0.1.1 Preview 9`
+- Recommended tag: `v0.1.1-preview.9`
+- Extension ZIP: use the `truly-cws-extension-0.1.1-<commit>.zip` path from the
   latest `npm run cws:package` report.
 - Commit: use the commit recorded in the latest `npm run cws:package` report.
 - Package report: use the latest
-  `artifacts/cws/0.1.0-<commit>-<timestamp>/cws-package-report.md`.
+  `artifacts/cws/0.1.1-<commit>-<timestamp>/cws-package-report.md`.
 
 ### Graphics
 
