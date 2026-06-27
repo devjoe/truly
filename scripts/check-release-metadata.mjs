@@ -33,7 +33,7 @@ const tag = previewNumber === "unknown" ? "unknown" : `v${version}-preview.${pre
 if (tag !== "unknown" && tagExists(tag) && process.env.TRULY_ALLOW_RELEASE_TAG_COLLISION !== "1") {
   ok = false;
   console.error(
-    `Release tag already exists: ${tag}. Run "npm run release:bump-preview" before preparing another Preview.`,
+    `Release tag already exists: ${tag}. Run "npm run release:bump-preview" for GitHub-only Preview work, or "npm run release:bump-cws-preview" before preparing a CWS-bound Preview.`,
   );
 }
 

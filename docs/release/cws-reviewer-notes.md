@@ -19,7 +19,9 @@ Status: Preview 9 reviewer-notes reference
 The CWS package checks pass through `npm run cws:package`, including clean-tree
 and upstream checks, release-tag-to-commit verification, public-boundary checks,
 release metadata, typecheck, public contract tests, public unit tests,
-production build, packaged ZIP audit, and CWS preflight.
+production build, packaged ZIP audit, and CWS preflight. CWS preflight also
+checks the recorded published package version so a submitted package does not
+reuse the numeric `manifest.version` from the currently published item.
 
 Preview 9 fixes model endpoint settings behavior and hardens release packaging
 so development-only reload hooks are excluded from the submitted package.

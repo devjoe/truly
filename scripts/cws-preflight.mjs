@@ -16,6 +16,7 @@ const requiredFiles = [
   "docs/release/cws-submission-checklist.md",
   "docs/release/cws-listing-copy.md",
   "docs/release/cws-reviewer-notes.md",
+  "docs/release/cws-published-version.json",
   "docs/release/privacy-policy.md",
   "docs/release/permission-justification.md",
   "docs/release/store-assets.md",
@@ -75,6 +76,17 @@ for (const path of versionedDocs) {
   }
 }
 
+const publishedStatePath = "docs/release/cws-published-version.json";
+const publishedState = readJsonIfExists(publishedStatePath);
+if (publishedState?.publishedVersion) {
+  const comparison = compareChromeVersions(version, publishedState.publishedVersion);
+  if (comparison <= 0) {
+    errors.push(
+      `${publishedStatePath} says CWS already published manifest.version ${publishedState.publishedVersion}; current manifest.version ${version} must be greater before CWS upload`,
+    );
+  }
+}
+
 if (errors.length > 0) {
   console.error("CWS preflight failed:");
   for (const error of errors) console.error(`- ${error}`);
@@ -94,6 +106,38 @@ function readPngDimensions(path) {
     height: data.readUInt32BE(20),
     path: relative(root, path),
   };
+}
+
+function readJsonIfExists(path) {
+  const absolutePath = resolve(root, path);
+  if (!existsSync(absolutePath)) return null;
+  try {
+    return JSON.parse(readFileSync(absolutePath, "utf8"));
+  } catch (error) {
+    errors.push(`${path} is not valid JSON: ${error.message}`);
+    return null;
+  }
+}
+
+function compareChromeVersions(left, right) {
+  const leftParts = parseChromeVersion(left);
+  const rightParts = parseChromeVersion(right);
+  if (!leftParts || !rightParts) return 0;
+  const width = Math.max(leftParts.length, rightParts.length);
+  for (let index = 0; index < width; index += 1) {
+    const diff = (leftParts[index] ?? 0) - (rightParts[index] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+function parseChromeVersion(value) {
+  const parts = String(value).split(".");
+  if (parts.length < 1 || parts.length > 4 || parts.some((part) => !/^\d+$/.test(part))) {
+    errors.push(`invalid Chrome manifest version in CWS preflight: ${value}`);
+    return null;
+  }
+  return parts.map(Number);
 }
 
 function escapeRegExp(value) {

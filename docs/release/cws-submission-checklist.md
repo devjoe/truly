@@ -19,6 +19,9 @@ Store. The dashboard copy should still come from
 
 ## Package
 
+- [ ] If starting a new CWS-bound Preview, run
+  `npm run release:bump-cws-preview` instead of only bumping
+  `manifest.version_name`.
 - [ ] Run `npm run cws:package` from a clean, pushed branch.
 - [ ] Confirm the package report says the current Preview release tag points at
   the package commit.
@@ -135,5 +138,8 @@ Store. The dashboard copy should still come from
     installation.
 - [ ] Save any Chrome Web Store warning or reviewer feedback before changing the
   listing.
+- [ ] After successful publication, update
+  `docs/release/cws-published-version.json` to the newly published numeric
+  version and visible Preview label.
 - [ ] If the item is rejected, update the relevant release docs before
   resubmitting.

@@ -128,6 +128,8 @@ Use this packet for the Preview 9 Unlisted Chrome Web Store submission.
 - Commit: use the commit recorded in the latest `npm run cws:package` report.
 - Package report: use the latest
   `artifacts/cws/0.1.1-<commit>-<timestamp>/cws-package-report.md`.
+- CWS published-version gate: current `manifest.version` must be greater than
+  `docs/release/cws-published-version.json`'s `publishedVersion`.
 
 ### Graphics
 

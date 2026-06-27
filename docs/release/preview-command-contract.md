@@ -39,16 +39,26 @@ That check blocks releases when `manifest.version`, `package.json`, and
 `manifest.version_name` drift, or when the corresponding local release tag
 already exists.
 
-Use this helper after publishing a Preview, or before preparing a new Preview
-when the current label has already been tagged:
+Use this helper after publishing a GitHub-only Preview, or before preparing a
+new GitHub-only Preview when the current label has already been tagged:
 
 ```bash
 npm run release:bump-preview
 ```
 
+Use this helper when the next Preview will be submitted to Chrome Web Store:
+
+```bash
+npm run release:bump-cws-preview
+```
+
+The CWS helper bumps both the Chrome-compatible numeric version and the human
+Preview label. For example, after `0.1.1 Preview 9`, the next CWS Preview is
+`0.1.2 Preview 10`, with tag `v0.1.2-preview.10`.
+
 ## Preview Closeout Checklist
 
-After a Preview is published and shared:
+After a GitHub-only Preview is published and shared:
 
 1. Confirm the GitHub Release tag exists, for example `v0.1.0-preview.4`.
 2. Run `npm run release:bump-preview`.
@@ -58,6 +68,18 @@ After a Preview is published and shared:
 This closeout keeps regular development builds on the next unreleased Preview
 label. If the closeout was missed, `npm run check:release-metadata` should fail
 with a tag-collision message before another release is prepared.
+
+After a Chrome Web Store Preview is published:
+
+1. Update `docs/release/cws-published-version.json` with the newly published
+   numeric version, visible version name, tag, publication date, and visibility.
+2. Run `npm run release:bump-cws-preview` before starting the next CWS-bound
+   Preview.
+3. Commit and push the resulting numeric version and Preview label bump.
+
+`npm run cws:preflight` checks `docs/release/cws-published-version.json` and
+refuses to package a CWS upload whose `manifest.version` is not greater than the
+last recorded CWS publication.
 
 ## Expected Outputs
 
