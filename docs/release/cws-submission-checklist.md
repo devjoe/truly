@@ -1,9 +1,9 @@
 # Chrome Web Store Submission Checklist
 
-Status: Preview 8 published as Unlisted
-Last updated: 2026-06-25
+Status: Preview 9 submission checklist
+Last updated: 2026-06-27
 
-Use this checklist when submitting the first Truly Preview build to Chrome Web
+Use this checklist when submitting the Preview 9 build to Chrome Web
 Store. The dashboard copy should still come from
 `docs/release/cws-listing-copy.md`; this file is the operational checklist.
 
@@ -27,8 +27,8 @@ Store. The dashboard copy should still come from
 - [ ] Keep the CWS package report open while filling the dashboard.
 - [ ] Confirm package metadata:
   - Version: `0.1.0`
-  - Version name: `0.1.0 Preview 8`
-  - Recommended tag: `v0.1.0-preview.8`
+  - Version name: `0.1.0 Preview 9`
+  - Recommended tag: `v0.1.0-preview.9`
   - Commit: use the commit recorded in the CWS package report.
 - [ ] Confirm the packaged manifest does not include
   `commands.reload-extension`.
@@ -115,15 +115,15 @@ Store. The dashboard copy should still come from
 
 ## After Submission
 
-- [x] Record submission date and time in release notes or a short follow-up
-  comment.
+- [x] Record the previous submission date and time in release notes or a short
+  follow-up comment.
   - Submitted for Chrome Web Store review: 2026-06-24 14:48 CST
   - Submitted package: `truly-extension-0.1.0-37029fbf2def.zip`
   - Package commit: `37029fbf2def`
   - GitHub Release: `v0.1.0-preview.8`
 - [x] Record Chrome Web Store publication result.
   - Published notification received: 2026-06-25
-  - Published version: `0.1.0 Preview 8`
+  - Published version: Preview 8 of version `0.1.0`
   - Published visibility: `Unlisted`
   - Published item link:
     <https://chromewebstore.google.com/detail/truly/kdgkgifmdflocjockbfnhkkncbdihpoj>

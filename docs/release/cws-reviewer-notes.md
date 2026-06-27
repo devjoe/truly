@@ -1,14 +1,14 @@
 # Chrome Web Store Reviewer Notes
 
-Last updated: 2026-06-25
+Last updated: 2026-06-27
 
-Status: published Preview 8 reviewer-notes reference
+Status: Preview 9 reviewer-notes reference
 
 ## Submission Build
 
 - Version: `0.1.0`
-- Version name: `0.1.0 Preview 8`
-- Recommended tag: `v0.1.0-preview.8`
+- Version name: `0.1.0 Preview 9`
+- Recommended tag: `v0.1.0-preview.9`
 - Commit: use the commit recorded in the latest `npm run cws:package`
   report.
 - Extension ZIP: use the `truly-cws-extension-0.1.0-<commit>.zip` path from the
@@ -20,6 +20,9 @@ The CWS package checks pass through `npm run cws:package`, including clean-tree
 and upstream checks, release-tag-to-commit verification, public-boundary checks,
 release metadata, typecheck, public contract tests, public unit tests,
 production build, packaged ZIP audit, and CWS preflight.
+
+Preview 9 fixes model endpoint settings behavior and hardens release packaging
+so development-only reload hooks are excluded from the submitted package.
 
 ## Product Summary
 

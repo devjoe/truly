@@ -1,9 +1,9 @@
 # Chrome Web Store Listing Copy
 
-Status: published Preview 8 listing reference
-Last updated: 2026-06-25
+Status: Preview 9 listing reference
+Last updated: 2026-06-27
 
-This copy was used for the first Unlisted Chrome Web Store publication. It
+This copy is used for the Preview 9 Unlisted Chrome Web Store submission. It
 should stay aligned with `README.md`,
 `src/manifest.json`, `src/_locales/*/messages.json`, and
 https://trulyreader.org/.
@@ -116,13 +116,13 @@ Use the selected first Unlisted review assets in
 
 ## Dashboard Submission Packet
 
-Use this packet for the first Unlisted Chrome Web Store submission.
+Use this packet for the Preview 9 Unlisted Chrome Web Store submission.
 
 ### Package
 
 - Version: `0.1.0`
-- Version name: `0.1.0 Preview 8`
-- Recommended tag: `v0.1.0-preview.8`
+- Version name: `0.1.0 Preview 9`
+- Recommended tag: `v0.1.0-preview.9`
 - Extension ZIP: use the `truly-cws-extension-0.1.0-<commit>.zip` path from the
   latest `npm run cws:package` report.
 - Commit: use the commit recorded in the latest `npm run cws:package` report.
