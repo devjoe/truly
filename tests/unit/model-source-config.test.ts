@@ -16,7 +16,10 @@ describe("model source config", () => {
 
     expect(defaultModelForProvider("ollama", "reading-prompt")).toBe("gemma4:e4b-it-qat");
     expect(defaultModelForProvider("openai-compatible", "reading-prompt")).toBe(
-      "mlx-community/gemma-4-e4b-it-4bit",
+      "gemma-4-e4b-it-4bit",
+    );
+    expect(defaultModelForProvider("openai-compatible", "summary-reading")).toBe(
+      "gemma-4-e4b-it-4bit",
     );
   });
 
