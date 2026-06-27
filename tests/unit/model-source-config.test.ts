@@ -43,7 +43,7 @@ describe("model source config", () => {
       },
     });
     configs = withProviderModelConfig(configs, "openai-compatible", {
-      endpoint: "http://gx10.local:8000/v1",
+      endpoint: "https://models.example.test/v1",
       model: "gemma-4-e4b-it-4bit",
     });
 
@@ -52,7 +52,7 @@ describe("model source config", () => {
       model: "gemma4:e4b-it-qat",
     });
     expect(providerModelConfigOrDefault(configs, "openai-compatible", "reading-prompt")).toEqual({
-      endpoint: "http://gx10.local:8000/v1",
+      endpoint: "https://models.example.test/v1",
       model: "gemma-4-e4b-it-4bit",
     });
   });

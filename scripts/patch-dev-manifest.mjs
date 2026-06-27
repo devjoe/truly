@@ -8,6 +8,12 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const manifestPath = resolve(root, "dist/manifest.json");
 const releaseLockPath = resolve(root, "tmp/release-preview.lock");
 
+if (process.env.TRULY_DEV_BUILD !== "1" && process.env.TRULY_PATCH_DEV_MANIFEST !== "1") {
+  console.error("Refusing to patch dist/manifest.json outside an explicit dev build.");
+  console.error("Use npm run build:dev, or set TRULY_PATCH_DEV_MANIFEST=1 for a manual dev-only patch.");
+  process.exit(1);
+}
+
 if (existsSync(releaseLockPath)) {
   console.error("Refusing to patch dist/manifest.json while release:preview is running.");
   console.error("Stop the release command or wait for it to finish, then rebuild the dev manifest.");

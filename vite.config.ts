@@ -1,6 +1,6 @@
 import { defineConfig, build, type Plugin } from "vite";
 import { resolve } from "path";
-import { cpSync, mkdirSync, writeFileSync } from "fs";
+import { cpSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { execSync } from "child_process";
 
 const isFirefox = process.env.VITE_BROWSER === "firefox";
@@ -53,7 +53,7 @@ function copyStaticAssets(): Plugin {
       const dist = resolve(__dirname, "dist");
       const src = resolve(__dirname, "src");
 
-      cpSync(`${src}/manifest.json`, `${dist}/manifest.json`);
+      writeManifest(`${src}/manifest.json`, `${dist}/manifest.json`);
       cpSync(`${src}/popup/popup.html`, `${dist}/popup/popup.html`);
       cpSync(`${src}/options/options.html`, `${dist}/options/options.html`);
       cpSync(
@@ -69,6 +69,26 @@ function copyStaticAssets(): Plugin {
       } catch {}
     },
   };
+}
+
+function writeManifest(sourcePath: string, targetPath: string) {
+  const manifest = JSON.parse(readFileSync(sourcePath, "utf8"));
+  if (isDevBuild) {
+    manifest.commands = {
+      ...(manifest.commands ?? {}),
+      "reload-extension": {
+        suggested_key: {
+          default: "Alt+Shift+R",
+          mac: "Alt+Shift+R",
+        },
+        description: "Reload Truly during local development",
+      },
+    };
+  } else if (manifest.commands?.["reload-extension"]) {
+    delete manifest.commands["reload-extension"];
+    if (Object.keys(manifest.commands).length === 0) delete manifest.commands;
+  }
+  writeFileSync(targetPath, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 function syncHeadsUpStyles(): Plugin {

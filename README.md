@@ -146,8 +146,8 @@ This runs the Vite watch build and the local reload server. Load `dist/` once;
 the dev service worker will reload the extension when `dist/build-id.txt`
 changes.
 
-For a one-off local build with the development reload shortcut patched into the
-manifest, run `npm run build:dev`.
+For a one-off local build with the development reload shortcut in the manifest,
+run `npm run build:dev`.
 
 Use `npm run test:unit:watch` while working on focused tests. If you edit
 `src/content_scripts/heads-up-styles.css`, run `npm run sync:headsup-css`
