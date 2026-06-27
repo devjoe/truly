@@ -118,6 +118,14 @@ Store. The dashboard copy should still come from
 
 ## After Submission
 
+- [x] Record Preview 9 submission date and time.
+  - Submitted for Chrome Web Store review: 2026-06-27 19:13 CST
+  - Submitted package:
+    `truly-cws-extension-0.1.1-7bdb3a06170c.zip`
+  - Package commit: `7bdb3a06170c`
+  - GitHub Release: `v0.1.1-preview.9`
+  - Submitted version: `0.1.1 Preview 9`
+  - Submitted visibility: `Unlisted`
 - [x] Record the previous submission date and time in release notes or a short
   follow-up comment.
   - Submitted for Chrome Web Store review: 2026-06-24 14:48 CST
