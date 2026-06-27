@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 
 .PHONY: help resume build build-dev verify check-public check-build release-preview \
-	dev dev-all dev-daemon dev-reload dev-status dev-stop sync-headsup-css \
+	dev dev-all dev-daemon dev-reload dev-status dev-check dev-stop sync-headsup-css \
 	test-watch smoke-ollama-vision
 
 help:
@@ -13,6 +13,7 @@ help:
 	@echo "  make build-dev           Build and patch local dev shortcut"
 	@echo "  make dev-all             Run watch build + reload server"
 	@echo "  make dev-status          Show dev watcher status"
+	@echo "  make dev-check           Verify dist/reload-server/Chrome build IDs"
 	@echo "  make dev-stop            Stop dev watcher processes"
 	@echo "  make test-watch          Run unit tests in watch mode"
 	@echo "  make sync-headsup-css    Sync shared heads-up CSS block"
@@ -56,6 +57,9 @@ dev-reload:
 
 dev-status:
 	npm run dev:status
+
+dev-check:
+	npm run dev:check
 
 dev-stop:
 	npm run dev:stop

@@ -13,6 +13,7 @@
     "dev:daemon": "node scripts/dev-singleton.mjs daemon",
     "dev:stop": "node scripts/dev-singleton.mjs stop",
     "dev:status": "node scripts/dev-singleton.mjs status",
+    "dev:check": "node scripts/dev-check.mjs",
     "release:preview": "node scripts/release-preview.mjs",
     "release:alpha": "npm run release:preview",
     "release:bump-preview": "node scripts/bump-preview-version.mjs",
