@@ -62,21 +62,21 @@ Not allowed in this file:
 | P03-navigation-sidebar-noise | observed-category | News, blogs, docs, list/index pages | `nav-sidebar-noise`, `news-related-sidebar`, `zhtw-news-layout`, `category-list-page`, `search-results-index`, `newsletter-capture-blog` | Compare parser leakage against the synthetic noise fixtures. |
 | P04-related-content-recirc | observed-category | News, media, blog, topic pages | `nav-sidebar-noise`, `news-related-sidebar` | Add a dedicated synthetic recirculation-heavy fixture if parser leakage appears. |
 | P05-list-or-index-page | observed-category | Search results, topic pages, release feeds, category archives | `category-list-page`, `search-results-index` | Decide product warning for index/list pages. |
-| P06-nested-documentation-layout | seeded | Technical docs, knowledge bases, official guidance | `documentation-page`, `docs-nested-layout`, `api-reference-long` | Compare docs app shells and side-rail behavior. |
-| P07-api-reference-multipanel | seeded | API docs, SDK docs, developer portals | `docs-nested-layout`, `api-reference-long` | Observe code-pane/copy-button leakage patterns. |
+| P06-nested-documentation-layout | needs-more-observation | Technical docs, knowledge bases, official guidance | `documentation-page`, `docs-nested-layout`, `api-reference-long` | Observed only in the docs category; compare more docs detail pages. |
+| P07-api-reference-multipanel | needs-more-observation | API docs, SDK docs, developer portals | `docs-nested-layout`, `api-reference-long` | Observed only in the docs category; inspect API reference detail pages. |
 | P08-forum-thread | observed-category | Discourse, Reddit-like threads, local forums | `forum-thread` | Add thread-detail observations rather than category/front pages. |
-| P09-q-and-a-page | seeded | Stack Overflow-like Q&A, help communities | `qa-accepted-answer` | Decide accepted-answer versus whole-thread target policy. |
-| P10-feed-like-social-page | seeded | Threads, public social posts, release feeds, product pages | `public-social-feed` | Keep social public pages separate from article extraction. |
+| P09-q-and-a-page | needs-more-observation | Stack Overflow-like Q&A, help communities | `qa-accepted-answer` | Observed only in the forum/social category; inspect accepted-answer detail pages. |
+| P10-feed-like-social-page | needs-more-observation | Threads, public social posts, release feeds, product pages | `public-social-feed` | Observed only in feed-like/social targets; inspect post detail pages. |
 | P11-paywall-or-membership | observed-category | Paywalled news, member posts, subscription blogs | `blocked-like`, `paid-teaser-long` | Separate paywall, login wall, and generic subscription CTA in the next pass. |
-| P12-login-wall | seeded | Social public pages, paywalled pages, login-required apps | `blocked-like`, `paid-teaser-long` | Distinguish login wall from readable teaser. |
-| P13-consent-and-overlay | seeded | News, blogs, newsletter sites, consent-heavy pages | `consent-banner`, `newsletter-capture-blog` | Observe banner text and overlay placement categories. |
-| P14-client-rendered-empty-shell | seeded | SPA article shells, social apps, video-first apps | `js-shell-bad-page` | Determine product wording for empty/static shell extraction. |
+| P12-login-wall | needs-more-observation | Social public pages, paywalled pages, login-required apps | `blocked-like`, `paid-teaser-long` | Full pass found login/paywall-like risk but did not separate login wall from paywall. |
+| P13-consent-and-overlay | needs-more-observation | News, blogs, newsletter sites, consent-heavy pages | `consent-banner`, `newsletter-capture-blog` | Low observation count; run consent-heavy targets directly. |
+| P14-client-rendered-empty-shell | needs-more-observation | SPA article shells, social apps, video-first apps | `js-shell-bad-page` | Full pass did not produce enough script-heavy low-text shell evidence. |
 | P15-rich-metadata | observed-category | News, company blogs, syndicated articles, docs | `clean-article`, `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Compare canonical/OpenGraph/JSON-LD disagreement. |
 | P16-missing-or-conflicting-metadata | observed-category | Personal blogs, official pages, older templates | `government-no-article`, `missing-metadata-blog` | Add more sparse-metadata private observations. |
 | P17-traditional-chinese-layout | observed-category | Taiwan news, official pages, forums | `zh-tw-article`, `zhtw-news-layout` | Add mixed-language and official zh-TW patterns. |
 | P18-media-and-caption | observed-category | News with media, social posts, media-first cards | `clean-article`, `public-social-feed`, `media-first-card` | Decide how captions contribute to source context. |
-| P19-comments-heavy-page | seeded | Forums, Q&A, social replies, comment-heavy news | `forum-thread`, `qa-accepted-answer` | Separate primary body from discussion context. |
-| P20-canonical-amp-syndication | seeded | Syndicated news, AMP copies, canonical variants | `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Decide source identity precedence after private observation. |
+| P19-comments-heavy-page | needs-more-observation | Forums, Q&A, social replies, comment-heavy news | `forum-thread`, `qa-accepted-answer` | Observed only in forum/social category; inspect comment-heavy article pages. |
+| P20-canonical-amp-syndication | needs-more-observation | Syndicated news, AMP copies, canonical variants | `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Full pass did not produce canonical/AMP variant evidence. |
 
 ## Evaluation V2 Exit Criteria
 
