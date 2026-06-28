@@ -33,6 +33,7 @@
     "check:ollama-cloud-capabilities": "node scripts/check-ollama-cloud-capabilities.mjs",
     "smoke:openai-api-key": "node scripts/smoke-openai-api-key.mjs",
     "smoke:ollama-vision": "node scripts/smoke-ollama-vision.mjs",
+    "spike:general-page-parsers": "node scripts/spike-general-page-parsers.mjs",
     "check:type": "tsc --noEmit",
     "check:public-boundary": "node scripts/check-public-boundary.mjs",
     "check:release-metadata": "node scripts/check-release-metadata.mjs",
@@ -48,7 +49,10 @@
     "webextension-polyfill": "^0.12.0"
   },
   "devDependencies": {
+    "@mozilla/readability": "^0.6.0",
     "@types/chrome": "^0.1.39",
+    "defuddle": "^0.19.1",
+    "jsdom": "^29.1.1",
     "typescript": "^5.7.0",
     "vite": "^6.0.0",
     "vitest": "^4.1.3"

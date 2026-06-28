@@ -364,6 +364,49 @@ Metrics:
 - bundled size impact;
 - CSP/MV3 compatibility.
 
+## Parser Spike Harness
+
+The first reproducible parser spike is implemented as:
+
+```bash
+npm run spike:general-page-parsers
+```
+
+It reads the public HTML fixtures in `tests/fixtures/general-pages`, runs:
+
+- `@mozilla/readability`;
+- `defuddle`;
+- `defuddle` with Markdown output;
+
+and writes a JSON report to:
+
+```text
+tmp/parser-spikes/general-page-parser-spike-2026-06-28.json
+```
+
+Initial run on 2026-06-28:
+
+| Candidate | Parsed fixtures | Contains score | Leaks | Average time |
+| --- | ---: | ---: | ---: | ---: |
+| `@mozilla/readability` | 6/6 | 1.000 | 0 | 3.51 ms |
+| `defuddle` | 6/6 | 1.000 | 0 | 17.47 ms |
+| `defuddle` Markdown | 6/6 | 1.000 | 0 | 15.08 ms |
+
+Interpretation:
+
+- Both packages are viable parser-spike candidates on the current synthetic
+  fixtures.
+- Readability is faster on this tiny fixture corpus and maps directly to article
+  fields.
+- Defuddle's Markdown mode is worth keeping in the spike because Truly may use
+  Markdown/context output for model prompts rather than rendering third-party
+  HTML.
+- The fixture corpus is still too small to choose a default parser. The next
+  evaluation should add larger and messier synthetic pages before adopting
+  either dependency in runtime code.
+- Neither candidate removes the need for a separate live DOM `ReadingTarget`
+  layer for selected/current-region actions.
+
 ## Changes To The Implementation Plan
 
 Update the first implementation slice:
