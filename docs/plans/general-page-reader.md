@@ -1,0 +1,366 @@
+# General Page Reader Plan
+
+Status: planning draft
+Last updated: 2026-06-28
+
+## Decision
+
+Build the General Page Reader before adding another social-feed platform such
+as Threads.
+
+The first version should be a side-panel-first reading mode for normal web
+pages. It should not try to inject heads-up UI into every page. A user opens
+Truly on the current tab, Truly extracts the main readable page content, and
+the existing analysis pipeline produces a summary, reading brief, follow-up
+questions, and manual handoff actions.
+
+This keeps the project loyal to the existing product promise: signals first,
+context when needed, and handoff only by choice. It also advances the public
+README promise of social feeds and web pages without taking on the live-DOM
+volatility of a second feed platform too early.
+
+## Why This Comes Before Threads
+
+General web-page support has a better product-to-risk ratio than Threads.
+
+- It broadens Truly beyond Facebook while staying inside the current reading
+  assistant mission.
+- It can start from a user gesture and `activeTab`, avoiding new broad host
+  permissions for the MVP.
+- It mostly reuses the current side panel, model readiness, Tier B, zhtw, and
+  handoff surfaces.
+- It forces the right abstraction first: reading surfaces, not platform clones.
+- It creates reusable extraction and context contracts that will make Threads
+  easier later.
+
+Threads should still remain a future platform adapter, but it should consume the
+same reading-surface contracts created here instead of driving those contracts.
+
+## Product Scope
+
+### MVP
+
+The MVP handles one current browser tab after an explicit user action.
+
+Supported first:
+
+- article pages;
+- blog posts;
+- news pages;
+- documentation pages;
+- simple static content pages;
+- pages where the main readable content is present in the DOM.
+
+The side panel should show:
+
+- page title;
+- source domain;
+- canonical/current URL;
+- extraction status;
+- concise summary;
+- reading brief;
+- claims or questions to check when useful;
+- manual external-tool actions;
+- Markdown copy/download.
+
+### Non-goals
+
+Do not include these in the first version:
+
+- automatic injection into all web pages;
+- always-on background page scanning;
+- in-page floating widgets;
+- comment-section analysis;
+- account automation;
+- automatic fact-check verdicts;
+- paywall bypassing;
+- login-gated content scraping beyond what is visible to the user;
+- broad host permission prompts at install time;
+- Threads-specific DOM support.
+
+## Permission Boundary
+
+The MVP should use the current permission model:
+
+- `activeTab` for user-triggered current-page extraction;
+- `sidePanel` for the reading workspace;
+- `storage` for settings and readiness state.
+
+Avoid adding `<all_urls>` or broad static host permissions for page reading.
+If a future in-page overlay needs persistent page access, that should be a
+separate permission decision with updated reviewer notes and privacy docs.
+
+Optional endpoint host permissions remain only for user-configured model
+endpoints.
+
+## Information Architecture
+
+Introduce a platform-neutral reading-surface model.
+
+```ts
+export type ReadingSurfaceKind = "social-post" | "web-page";
+
+export type ReadingSurfaceSource =
+  | "facebook"
+  | "general"
+  | "threads";
+
+export interface ReadingSurface {
+  id: string;
+  kind: ReadingSurfaceKind;
+  source: ReadingSurfaceSource;
+  url: string;
+  canonicalUrl?: string;
+  title?: string;
+  authorName?: string;
+  sourceName?: string;
+  publishedAt?: string;
+  mainText: string;
+  selectedText?: string;
+  excerpt?: string;
+  links?: Array<{ href: string; text?: string }>;
+  images?: Array<{ src: string; alt?: string; title?: string }>;
+  extraction: {
+    method: "semantic-html" | "readability-heuristic" | "selection" | "fallback";
+    status: "complete" | "partial" | "empty" | "blocked";
+    warnings: string[];
+  };
+}
+```
+
+Keep Facebook post data compatible by adapting it into this shape over time.
+Do not replace `PostData` and `DashboardPostEvent` in one large migration.
+
+## Architecture
+
+### New Files
+
+Planned additions:
+
+- `src/lib/reading-surface-types.ts`
+- `src/lib/general-page-extraction.ts`
+- `src/lib/general-page-context.ts`
+- `src/content_scripts/page-reader.ts`
+- `tests/fixtures/general-pages/*.html`
+- `tests/contract/general-page-extraction-contract.test.ts`
+
+### Existing Areas To Reuse
+
+Reuse:
+
+- service-worker model routing;
+- Tier A/Tier B provider settings;
+- readiness checks;
+- side panel shell;
+- reading brief request/response path;
+- zhtw scanning;
+- Markdown export and external-tool handoff;
+- theme/language settings.
+
+### Existing Areas To Untangle
+
+These areas currently contain Facebook-shaped assumptions and should be
+generalized incrementally:
+
+- `src/lib/messages.ts`: add current-page reading messages without disturbing
+  existing feed messages.
+- `src/background/service-worker.ts`: support one current-page extraction path
+  instead of querying only Facebook tabs for every action.
+- `src/popup/popup.ts`: distinguish supported Facebook surface from manual
+  general-page reading availability.
+- `src/sidepanel/*`: add a page-reading view or state branch while preserving
+  the current feed dashboard.
+- `src/lib/tier-b-client.ts`: change prompts from "Facebook post" to a
+  surface-aware label, for example "web page" or "social post".
+- `src/lib/i18n.ts`: replace hard-coded Facebook strings in handoff text where
+  the surface may be general.
+
+## Runtime Flow
+
+1. User opens a normal web page.
+2. User clicks the Truly popup or side-panel action.
+3. Popup opens the side panel and sends a current-page reading request.
+4. Service worker injects or messages `page-reader.ts` into the active tab via
+   `activeTab`.
+5. Page reader extracts a `ReadingSurface`.
+6. Service worker stores the current page reading event in the same replayable
+   runtime state used by the side panel.
+7. Side panel renders the page-reading workspace.
+8. Existing model pipeline generates summary and reading brief.
+9. User may copy, download, search, or hand off manually.
+
+## Extraction Strategy
+
+Start with deterministic DOM extraction before adding dependencies.
+
+Preferred extraction order:
+
+1. User selected text, when a meaningful selection exists.
+2. Semantic article roots: `article`, `main`, `[role="main"]`.
+3. Metadata: `document.title`, canonical link, Open Graph title/description,
+   author meta tags, publish-time meta tags.
+4. Readability-style heuristic: largest coherent text container after removing
+   nav, header, footer, aside, form controls, scripts, styles, ads, and hidden
+   content.
+5. Fallback: visible body text with aggressive length and quality guards.
+
+The extractor should return warnings instead of pretending confidence:
+
+- `no-main-content`
+- `selection-only`
+- `very-short-content`
+- `large-navigation-noise`
+- `login-or-paywall-like`
+- `dynamic-content-partial`
+
+## Side Panel UX
+
+General page mode should feel like a reading workspace, not a feed dashboard.
+
+Header:
+
+- title;
+- domain;
+- URL/canonical URL;
+- extraction status chip;
+- refresh button.
+
+Primary sections:
+
+- Summary;
+- Reading context;
+- Claims or checks;
+- Follow-up questions;
+- Source links found on page;
+- External tools;
+- Markdown export.
+
+Avoid an in-page overlay in the MVP. If a later version adds one, it should be
+small and user-triggered, such as a selected-text mini action, not an always-on
+badge on every paragraph.
+
+## Prompt And Output Changes
+
+Tier B prompts should receive a surface label and source context:
+
+- `surfaceKind`: `web-page` or `social-post`;
+- `surfaceSource`: `general`, `facebook`, or future platform id;
+- `title`;
+- `url`;
+- `domain`;
+- `selectedText`;
+- `mainText`;
+- `links`;
+- `imageAltText`;
+- extraction warnings.
+
+The model instruction should say "web page" for General Page Reader and avoid
+Facebook-specific assumptions such as "post", "share", or "repost" unless the
+surface kind is social.
+
+## Testing Plan
+
+Use fixture-first tests. Do not rely on live websites in public tests.
+
+Fixtures should cover:
+
+- clean article page;
+- blog post with nav/sidebar noise;
+- documentation page;
+- news-like page with author/date metadata;
+- page with selected text;
+- page with mostly comments/noise;
+- login/paywall-like page;
+- Traditional Chinese article;
+- page with image alt text and captions;
+- SPA-like content container.
+
+Public tests should assert:
+
+- extraction status;
+- title/domain/canonical URL normalization;
+- main text excludes navigation and footer text;
+- selected text takes priority only when useful;
+- warnings are emitted for partial extraction;
+- no private URLs or local paths enter fixtures;
+- reading-surface conversion is stable.
+
+## Implementation Slices
+
+### Slice 1: Contracts And Fixtures
+
+- Add `ReadingSurface` types.
+- Add fixture HTML files.
+- Add pure extractor tests.
+- No extension runtime changes yet.
+
+### Slice 2: Page Reader Content Script
+
+- Add `page-reader.ts`.
+- Extract current page into `ReadingSurface`.
+- Add message types for page reading request/result.
+- Keep this manually triggered.
+
+### Slice 3: Side Panel Page Mode
+
+- Add page-reading runtime state.
+- Render extracted title, domain, status, and text preview.
+- Reuse summary/brief/handoff UI where possible.
+
+### Slice 4: Model Integration
+
+- Route page surfaces through Tier B summary and reading brief.
+- Make prompts surface-aware.
+- Add copy/export output format for web pages.
+
+### Slice 5: Product Hardening
+
+- Update popup activation wording.
+- Update CWS reviewer notes and permission justification.
+- Add browser QA against a small manually selected page matrix.
+- Decide whether selected-text mini-actions belong in the next preview.
+
+## Verification Gates
+
+Each implementation slice should pass:
+
+```bash
+npm run check:type
+npm run test:contract:public
+npm run test:unit:public
+```
+
+Before a public preview:
+
+```bash
+npm run check:public
+```
+
+If runtime behavior changes, also verify in Chrome with a real browser session.
+For local development, compare the dev reload build id with the active extension
+runtime before declaring reload healthy.
+
+## Open Questions
+
+- Should General Page Reader appear as a new side-panel tab or replace the
+  empty state when the active tab is not a supported feed?
+- Should selected text become the default input when selected text exists, or
+  should the user choose "Analyze selection" explicitly?
+- How much of source-link extraction should be shown to users versus kept only
+  as model context?
+- Should page-reading history persist, or should it remain current-tab only for
+  the first version?
+- What minimum content length should be required before model calls are allowed?
+
+## Success Criteria
+
+The first version is successful when:
+
+- a user can open Truly on a normal article page and get useful reading context
+  without configuring a new site permission;
+- extraction failures are visible and understandable;
+- no background scanning occurs;
+- privacy copy remains accurate;
+- existing Facebook reading surfaces keep working;
+- the new reading-surface contract makes future Threads support easier rather
+  than harder.
