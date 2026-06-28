@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help resume build build-dev verify check-public check-build release-preview release-bump-cws-preview \
+.PHONY: help resume build build-dev verify check-public check-build release-preview release-review release-review-github release-bump-cws-preview cws-review cws-review-github \
 	dev dev-all dev-daemon dev-reload dev-status dev-check dev-stop sync-headsup-css \
 	test-watch smoke-ollama-vision
 
@@ -18,8 +18,13 @@ help:
 	@echo "  make test-watch          Run unit tests in watch mode"
 	@echo "  make sync-headsup-css    Sync shared heads-up CSS block"
 	@echo "  make release-preview     Build local Preview artifacts"
+	@echo "  make release-review      Run advisory Claude release review"
+	@echo "  make release-review-github"
+	@echo "                           Run advisory Claude release review from public GitHub URLs"
 	@echo "  make release-bump-cws-preview"
 	@echo "                           Bump numeric version and Preview label for CWS"
+	@echo "  make cws-review          Run advisory Claude CWS review"
+	@echo "  make cws-review-github   Run advisory Claude CWS review from public GitHub URLs"
 	@echo "  make smoke-ollama-vision Optional live Ollama vision smoke"
 
 resume:
@@ -45,8 +50,20 @@ check-build:
 release-preview:
 	npm run release:preview
 
+release-review:
+	npm run release:review
+
+release-review-github:
+	npm run release:review:github
+
 release-bump-cws-preview:
 	npm run release:bump-cws-preview
+
+cws-review:
+	npm run cws:review
+
+cws-review-github:
+	npm run cws:review:github
 
 dev:
 	npm run dev

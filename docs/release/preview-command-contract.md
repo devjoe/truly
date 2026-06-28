@@ -103,6 +103,60 @@ npm run build
 The command must not require private fixtures, logged-in Facebook state, Chrome
 profiles, local screenshots, or live CDP access.
 
+## Advisory Claude Review
+
+`claude -p` can be used as an advisory release reviewer, but it is not part of
+the deterministic `check:public`, `release:preview`, or `cws:package` gates.
+Run these commands manually when a release needs an extra semantic review pass:
+
+```bash
+TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review
+TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review
+```
+
+For already committed and pushed public-repo releases, prefer GitHub URL source
+mode so Claude reviews immutable public commit and compare URLs instead of
+receiving local file contents:
+
+```bash
+TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review:github
+TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:github
+```
+
+GitHub source mode requires a clean working tree. It is appropriate after the
+release candidate commit has been pushed and before creating the GitHub Release
+or uploading to Chrome Web Store. Use local source mode only when reviewing
+uncommitted local changes or local-only package reports.
+
+Use `-- --dry-run` to generate the exact prompt/context without sending it to
+Claude:
+
+```bash
+npm run release:review -- --dry-run
+npm run cws:review -- --dry-run
+npm run release:review:github -- --dry-run
+npm run cws:review:github -- --dry-run
+```
+
+The wrapper writes review artifacts under `artifacts/review/`, which remains
+gitignored. It sends only bounded, public-safe release context: metadata,
+changed-file summaries, capped diffs, manifest/package metadata, and relevant
+release docs. It excludes generated extension output, private fixtures,
+environment files, local browser profiles, and binary/WASM contents.
+In GitHub source mode, it sends only public immutable URLs and metadata, and
+allows Claude to fetch those public URLs.
+
+Claude review results are advisory. Blocking or high-confidence findings should
+be fixed or explicitly dispositioned before continuing, but the final release
+decision remains human-owned.
+
+Recommended release placement:
+
+1. Run `release:review` or `release:review:github` before
+   `release:preview` / GitHub Release creation.
+2. Run `cws:review` or `cws:review:github` after `cws:package` and before
+   Chrome Web Store dashboard upload.
+
 `check:ollama-cloud-capabilities` is a release-time freshness reminder for the
 small static Ollama Cloud model capability registry. It blocks a Preview build
 when the registry is stale enough that visible model capability warnings may be

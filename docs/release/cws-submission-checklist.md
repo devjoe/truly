@@ -107,6 +107,10 @@ Store. The dashboard copy should still come from
   should be reflected in the CWS listing, privacy fields, or reviewer notes.
 - [ ] Confirm the latest security review findings are either fixed, documented,
   or intentionally accepted before uploading the package.
+- [ ] Run `npm run cws:review` or `npm run cws:review:github` when Claude
+  review is available, or document why the advisory review was skipped.
+- [ ] Confirm any blocking Claude review findings are fixed or explicitly
+  dispositioned before upload.
 - [ ] Dashboard package upload succeeds.
 - [ ] Dashboard warnings are understood and either resolved or documented.
 - [ ] Listing text matches the current README, website, and manifest purpose.
