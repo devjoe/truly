@@ -57,24 +57,24 @@ Not allowed in this file:
 
 | Pattern | Public Evidence Status | Target Categories To Observe | Synthetic Fixture Coverage | Next Evidence Need |
 | --- | --- | --- | --- | --- |
-| P01-semantic-article | seeded | International news, Taiwan news, blog/personal, company announcements | `clean-article`, `news-related-sidebar`, `consent-banner`, `jsonld-og-metadata`, `media-first-card` | Confirm metadata variation across news/blog sources. |
-| P02-main-role-without-article | seeded | Government/official, NGO, municipal pages | `government-no-article` | Add private observations from official pages without clean `article`. |
-| P03-navigation-sidebar-noise | seeded | News, blogs, docs, list/index pages | `nav-sidebar-noise`, `news-related-sidebar`, `zhtw-news-layout`, `category-list-page`, `search-results-index`, `newsletter-capture-blog` | Record aggregate noise sources by category. |
-| P04-related-content-recirc | seeded | News, media, blog, topic pages | `nav-sidebar-noise`, `news-related-sidebar` | Observe related-story modules in news and blog layouts. |
-| P05-list-or-index-page | seeded | Search results, topic pages, release feeds, category archives | `category-list-page`, `search-results-index` | Decide product warning for index/list pages. |
+| P01-semantic-article | observed-category | International news, Taiwan news, blog/personal, company announcements | `clean-article`, `news-related-sidebar`, `consent-banner`, `jsonld-og-metadata`, `media-first-card` | Confirm parser behavior on individual article URLs, not only category/home pages. |
+| P02-main-role-without-article | observed-category | Government/official, NGO, municipal pages | `government-no-article` | Add more official-page article-detail observations before runtime selection. |
+| P03-navigation-sidebar-noise | observed-category | News, blogs, docs, list/index pages | `nav-sidebar-noise`, `news-related-sidebar`, `zhtw-news-layout`, `category-list-page`, `search-results-index`, `newsletter-capture-blog` | Compare parser leakage against the synthetic noise fixtures. |
+| P04-related-content-recirc | observed-category | News, media, blog, topic pages | `nav-sidebar-noise`, `news-related-sidebar` | Add a dedicated synthetic recirculation-heavy fixture if parser leakage appears. |
+| P05-list-or-index-page | observed-category | Search results, topic pages, release feeds, category archives | `category-list-page`, `search-results-index` | Decide product warning for index/list pages. |
 | P06-nested-documentation-layout | seeded | Technical docs, knowledge bases, official guidance | `documentation-page`, `docs-nested-layout`, `api-reference-long` | Compare docs app shells and side-rail behavior. |
 | P07-api-reference-multipanel | seeded | API docs, SDK docs, developer portals | `docs-nested-layout`, `api-reference-long` | Observe code-pane/copy-button leakage patterns. |
-| P08-forum-thread | seeded | Discourse, Reddit-like threads, local forums | `forum-thread` | Add aggregate evidence for multi-author discussion pages. |
+| P08-forum-thread | observed-category | Discourse, Reddit-like threads, local forums | `forum-thread` | Add thread-detail observations rather than category/front pages. |
 | P09-q-and-a-page | seeded | Stack Overflow-like Q&A, help communities | `qa-accepted-answer` | Decide accepted-answer versus whole-thread target policy. |
 | P10-feed-like-social-page | seeded | Threads, public social posts, release feeds, product pages | `public-social-feed` | Keep social public pages separate from article extraction. |
-| P11-paywall-or-membership | seeded | Paywalled news, member posts, subscription blogs | `blocked-like`, `paid-teaser-long` | Record private observations of teaser length and warning copy. |
+| P11-paywall-or-membership | observed-category | Paywalled news, member posts, subscription blogs | `blocked-like`, `paid-teaser-long` | Separate paywall, login wall, and generic subscription CTA in the next pass. |
 | P12-login-wall | seeded | Social public pages, paywalled pages, login-required apps | `blocked-like`, `paid-teaser-long` | Distinguish login wall from readable teaser. |
 | P13-consent-and-overlay | seeded | News, blogs, newsletter sites, consent-heavy pages | `consent-banner`, `newsletter-capture-blog` | Observe banner text and overlay placement categories. |
 | P14-client-rendered-empty-shell | seeded | SPA article shells, social apps, video-first apps | `js-shell-bad-page` | Determine product wording for empty/static shell extraction. |
-| P15-rich-metadata | seeded | News, company blogs, syndicated articles, docs | `clean-article`, `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Compare canonical/OpenGraph/JSON-LD disagreement. |
-| P16-missing-or-conflicting-metadata | seeded | Personal blogs, official pages, older templates | `government-no-article`, `missing-metadata-blog` | Add more sparse-metadata private observations. |
-| P17-traditional-chinese-layout | seeded | Taiwan news, official pages, forums | `zh-tw-article`, `zhtw-news-layout` | Add mixed-language and official zh-TW patterns. |
-| P18-media-and-caption | seeded | News with media, social posts, media-first cards | `clean-article`, `public-social-feed`, `media-first-card` | Decide how captions contribute to source context. |
+| P15-rich-metadata | observed-category | News, company blogs, syndicated articles, docs | `clean-article`, `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Compare canonical/OpenGraph/JSON-LD disagreement. |
+| P16-missing-or-conflicting-metadata | observed-category | Personal blogs, official pages, older templates | `government-no-article`, `missing-metadata-blog` | Add more sparse-metadata private observations. |
+| P17-traditional-chinese-layout | observed-category | Taiwan news, official pages, forums | `zh-tw-article`, `zhtw-news-layout` | Add mixed-language and official zh-TW patterns. |
+| P18-media-and-caption | observed-category | News with media, social posts, media-first cards | `clean-article`, `public-social-feed`, `media-first-card` | Decide how captions contribute to source context. |
 | P19-comments-heavy-page | seeded | Forums, Q&A, social replies, comment-heavy news | `forum-thread`, `qa-accepted-answer` | Separate primary body from discussion context. |
 | P20-canonical-amp-syndication | seeded | Syndicated news, AMP copies, canonical variants | `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Decide source identity precedence after private observation. |
 
@@ -107,6 +107,35 @@ The report is written under `tmp/general-page-observations/` and must not be
 committed. It records element counts, metadata presence, noise ratios, risk
 labels, and pattern hints. It does not write HTML, text excerpts, screenshots,
 or DOM snapshots.
+
+Convert a private report into a public-safe aggregate with:
+
+```bash
+npm run summarize:general-page-observations -- \
+  tmp/general-page-observations/structure-observations-YYYY-MM-DD.json \
+  tmp/general-page-observations/aggregate-YYYY-MM-DD.json
+```
+
+Only the aggregate conclusions should be folded back into this document. The
+aggregate omits target URLs, labels, HTML, text excerpts, screenshots, and DOM
+snapshots.
+
+### Full Private Pass, 2026-06-29
+
+A private 72-target pass completed with 63 successful fetches and 9 fetch
+errors. The sanitized aggregate contained no per-target URLs, labels, HTML,
+text excerpts, screenshots, or DOM snapshots.
+
+Aggregate pattern evidence:
+
+- `observed-category`: `P01`, `P02`, `P03`, `P04`, `P05`, `P08`, `P11`,
+  `P15`, `P16`, `P17`, `P18`;
+- `needs-more-observation`: `P06`, `P07`, `P09`, `P10`, `P13`, `P19`;
+- not observed by this runner pass: `P12`, `P14`, `P20`.
+
+The pass is broad enough for Evaluation v2 parser-candidate comparison. It is
+not enough to choose a runtime parser, because several specialized patterns
+still need targeted detail-page observations.
 
 ### Runner Smoke, 2026-06-29
 

@@ -84,7 +84,7 @@ async function observeTarget(target) {
   const html = await response.text();
   const dom = new JSDOM(html, { url: response.url });
   const document = dom.window.document;
-  const signals = collectSignals(document, html.length);
+  const signals = collectSignals(document, html.length, target);
   return {
     url: target.url,
     finalUrl: response.url,
@@ -101,7 +101,7 @@ async function observeTarget(target) {
   };
 }
 
-function collectSignals(document, htmlLength) {
+function collectSignals(document, htmlLength, target) {
   const structure = {
     htmlLength,
     lang: document.documentElement.getAttribute("lang") || undefined,
@@ -156,6 +156,10 @@ function collectSignals(document, htmlLength) {
     noise.chromeTextRatio > 0.35 ? "high-navigation-or-sidebar-text" : undefined,
     noise.dialogTextRatio > 0.05 ? "dialog-or-consent-overlay" : undefined,
     looksLoginOrPaywall(fullText) ? "login-or-paywall-like" : undefined,
+    noise.linkDensity > 4 && structure.articleCount === 0 ? "list-or-index-like" : undefined,
+    isDocsCategory(target.category) ? "documentation-like-category" : undefined,
+    isForumCategory(target.category) ? "discussion-like-category" : undefined,
+    isSocialCategory(target.category) ? "social-public-like-category" : undefined,
     structure.scriptCount > 20 && bodyTextLength < 500 ? "script-heavy-low-text-shell" : undefined,
     metadata.canonical && metadata.amphtml ? "canonical-amp-variant" : undefined,
     metadata.openGraphCount === 0 && metadata.jsonLdCount === 0 ? "sparse-metadata" : undefined,
@@ -166,11 +170,11 @@ function collectSignals(document, htmlLength) {
     metadata,
     noise,
     risks,
-    patternHints: patternHints(structure, metadata, noise, risks),
+    patternHints: patternHints(structure, metadata, noise, risks, target),
   };
 }
 
-function patternHints(structure, metadata, noise, risks) {
+function patternHints(structure, metadata, noise, risks, target) {
   const hints = new Set();
   if (structure.articleCount === 1)
     hints.add("P01-semantic-article");
@@ -180,8 +184,18 @@ function patternHints(structure, metadata, noise, risks) {
     hints.add("P03-navigation-sidebar-noise");
   if (structure.asideCount > 0 && structure.linkCount > structure.paragraphCount)
     hints.add("P04-related-content-recirc");
+  if (risks.includes("list-or-index-like"))
+    hints.add("P05-list-or-index-page");
+  if (isDocsCategory(target.category))
+    hints.add("P06-nested-documentation-layout");
+  if (isDocsCategory(target.category) && structure.linkCount > 20)
+    hints.add("P07-api-reference-multipanel");
   if (structure.articleCount > 1 || risks.includes("multi-article-page"))
     hints.add("P08-forum-thread");
+  if (isForumCategory(target.category) && structure.formCount > 0)
+    hints.add("P09-q-and-a-page");
+  if (isSocialCategory(target.category))
+    hints.add("P10-feed-like-social-page");
   if (risks.includes("login-or-paywall-like"))
     hints.add("P11-paywall-or-membership");
   if (risks.includes("dialog-or-consent-overlay"))
@@ -196,9 +210,23 @@ function patternHints(structure, metadata, noise, risks) {
     hints.add("P17-traditional-chinese-layout");
   if (structure.imageCount > 0)
     hints.add("P18-media-and-caption");
+  if (isForumCategory(target.category))
+    hints.add("P19-comments-heavy-page");
   if (metadata.canonical && metadata.amphtml)
     hints.add("P20-canonical-amp-syndication");
   return [...hints].sort();
+}
+
+function isDocsCategory(category) {
+  return category === "Technical docs/knowledge base";
+}
+
+function isForumCategory(category) {
+  return category === "Forum/social discussion";
+}
+
+function isSocialCategory(category) {
+  return category === "Feed-like/social public pages";
 }
 
 function aggregate(items) {
