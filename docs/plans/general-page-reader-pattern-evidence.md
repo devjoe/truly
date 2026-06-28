@@ -1,0 +1,96 @@
+# General Page Reader Pattern Evidence Matrix
+
+This matrix is the public-safe bridge from private Observation Corpus work to
+the committed synthetic fixtures. It intentionally avoids one record per real
+website or page URL. Per-target observation notes remain private working
+material; public commits keep only derived pattern evidence and synthetic test
+artifacts.
+
+## Decision
+
+The public repository should not commit per-target Observation Corpus records.
+Do not commit one record per observed target.
+The decision was pressure-tested with `$grill-your-sub-agents` on 2026-06-29.
+The accepted route is:
+
+- keep raw per-target observations private;
+- commit target categories and pattern-level findings;
+- commit synthetic fixtures only;
+- require automated checks that committed fixtures are synthetic and use
+  example-only hosts.
+
+Decision report:
+
+```text
+tmp/grill-reports/general-page-observation-corpus-2026-06-29.html
+```
+
+## Public Evidence Rules
+
+Allowed in this file:
+
+- pattern IDs and pattern-level risk summaries;
+- observation target categories and page-family descriptions;
+- aggregate confidence, such as `seeded`, `observed-category`, or
+  `needs-more-observation`;
+- synthetic fixture IDs that model the pattern.
+
+Not allowed in this file:
+
+- real page HTML or DOM snapshots;
+- copied article text, headlines, comments, or captions;
+- screenshots;
+- account-only or private content;
+- one record per observed URL;
+- claims that a named real page behaved a certain way unless backed by a
+  public, stable, high-level source and phrased without copied content.
+
+## Evidence Status
+
+| Status | Meaning |
+| --- | --- |
+| `seeded` | Modeled by synthetic fixtures and target-category planning, but not yet backed by completed private observations. |
+| `observed-category` | Backed by private structural observation across at least two target categories. Public notes stay aggregate-only. |
+| `needs-more-observation` | Fixture exists or target category exists, but the pattern needs more private observation before parser selection. |
+
+## Pattern Matrix
+
+| Pattern | Public Evidence Status | Target Categories To Observe | Synthetic Fixture Coverage | Next Evidence Need |
+| --- | --- | --- | --- | --- |
+| P01-semantic-article | seeded | International news, Taiwan news, blog/personal, company announcements | `clean-article`, `news-related-sidebar`, `consent-banner`, `jsonld-og-metadata`, `media-first-card` | Confirm metadata variation across news/blog sources. |
+| P02-main-role-without-article | seeded | Government/official, NGO, municipal pages | `government-no-article` | Add private observations from official pages without clean `article`. |
+| P03-navigation-sidebar-noise | seeded | News, blogs, docs, list/index pages | `nav-sidebar-noise`, `news-related-sidebar`, `zhtw-news-layout`, `category-list-page`, `search-results-index`, `newsletter-capture-blog` | Record aggregate noise sources by category. |
+| P04-related-content-recirc | seeded | News, media, blog, topic pages | `nav-sidebar-noise`, `news-related-sidebar` | Observe related-story modules in news and blog layouts. |
+| P05-list-or-index-page | seeded | Search results, topic pages, release feeds, category archives | `category-list-page`, `search-results-index` | Decide product warning for index/list pages. |
+| P06-nested-documentation-layout | seeded | Technical docs, knowledge bases, official guidance | `documentation-page`, `docs-nested-layout`, `api-reference-long` | Compare docs app shells and side-rail behavior. |
+| P07-api-reference-multipanel | seeded | API docs, SDK docs, developer portals | `docs-nested-layout`, `api-reference-long` | Observe code-pane/copy-button leakage patterns. |
+| P08-forum-thread | seeded | Discourse, Reddit-like threads, local forums | `forum-thread` | Add aggregate evidence for multi-author discussion pages. |
+| P09-q-and-a-page | seeded | Stack Overflow-like Q&A, help communities | `qa-accepted-answer` | Decide accepted-answer versus whole-thread target policy. |
+| P10-feed-like-social-page | seeded | Threads, public social posts, release feeds, product pages | `public-social-feed` | Keep social public pages separate from article extraction. |
+| P11-paywall-or-membership | seeded | Paywalled news, member posts, subscription blogs | `blocked-like`, `paid-teaser-long` | Record private observations of teaser length and warning copy. |
+| P12-login-wall | seeded | Social public pages, paywalled pages, login-required apps | `blocked-like`, `paid-teaser-long` | Distinguish login wall from readable teaser. |
+| P13-consent-and-overlay | seeded | News, blogs, newsletter sites, consent-heavy pages | `consent-banner`, `newsletter-capture-blog` | Observe banner text and overlay placement categories. |
+| P14-client-rendered-empty-shell | seeded | SPA article shells, social apps, video-first apps | `js-shell-bad-page` | Determine product wording for empty/static shell extraction. |
+| P15-rich-metadata | seeded | News, company blogs, syndicated articles, docs | `clean-article`, `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Compare canonical/OpenGraph/JSON-LD disagreement. |
+| P16-missing-or-conflicting-metadata | seeded | Personal blogs, official pages, older templates | `government-no-article`, `missing-metadata-blog` | Add more sparse-metadata private observations. |
+| P17-traditional-chinese-layout | seeded | Taiwan news, official pages, forums | `zh-tw-article`, `zhtw-news-layout` | Add mixed-language and official zh-TW patterns. |
+| P18-media-and-caption | seeded | News with media, social posts, media-first cards | `clean-article`, `public-social-feed`, `media-first-card` | Decide how captions contribute to source context. |
+| P19-comments-heavy-page | seeded | Forums, Q&A, social replies, comment-heavy news | `forum-thread`, `qa-accepted-answer` | Separate primary body from discussion context. |
+| P20-canonical-amp-syndication | seeded | Syndicated news, AMP copies, canonical variants | `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Decide source identity precedence after private observation. |
+
+## Evaluation V2 Exit Criteria
+
+Evaluation v2 is complete enough for parser-candidate comparison when:
+
+- the target list contains 60-80 public observation targets;
+- the pattern catalog has 15-25 patterns;
+- the synthetic fixture corpus contains 25-35 public-safe fixtures;
+- every pattern has at least one synthetic fixture;
+- every fixture is explicitly `synthetic: true`;
+- every committed fixture URL and embedded URL uses `example.test` or a
+  subdomain;
+- parser spike threshold passes across all committed fixtures;
+- no third-party parser is connected to extension runtime code.
+
+Evaluation v2 is not enough to choose a runtime parser until private
+observations move the key patterns from `seeded` to `observed-category`.

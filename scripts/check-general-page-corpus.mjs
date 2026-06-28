@@ -7,12 +7,14 @@ import process from "node:process";
 const FIXTURE_DIR = "tests/fixtures/general-pages";
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "manifest.json");
 const CORPUS_DOC_PATH = "docs/plans/general-page-reader-corpus-v2.md";
+const EVIDENCE_DOC_PATH = "docs/plans/general-page-reader-pattern-evidence.md";
 const MIN_SYNTHETIC_FIXTURES = 25;
 const MAX_SYNTHETIC_FIXTURES = 35;
 const EXPECTED_OBSERVATION_TARGETS = 72;
 
 const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));
 const corpusDoc = fs.readFileSync(CORPUS_DOC_PATH, "utf8");
+const evidenceDoc = fs.readFileSync(EVIDENCE_DOC_PATH, "utf8");
 const failures = [];
 
 if (manifest.schemaVersion !== 1)
@@ -77,6 +79,8 @@ for (const fixture of fixtures) {
 for (const patternId of patternIds) {
   if (!coveredPatterns.has(patternId))
     failures.push(`Pattern has no synthetic fixture coverage: ${patternId}`);
+  if (!evidenceDoc.includes(`| ${patternId} |`))
+    failures.push(`Pattern evidence matrix is missing: ${patternId}`);
 }
 
 const observationTargetCount = observationTargetsFromDoc(corpusDoc).length;
@@ -85,6 +89,11 @@ if (observationTargetCount !== EXPECTED_OBSERVATION_TARGETS) {
     `Expected ${EXPECTED_OBSERVATION_TARGETS} observation targets, found ${observationTargetCount}.`,
   );
 }
+
+if (!evidenceDoc.includes("Do not commit one record per observed target"))
+  failures.push("Pattern evidence doc must state the public per-target observation boundary.");
+if (!evidenceDoc.includes("Evaluation V2 Exit Criteria"))
+  failures.push("Pattern evidence doc must define Evaluation v2 exit criteria.");
 
 if (failures.length > 0) {
   console.error("General Page corpus check failed:");

@@ -26,6 +26,10 @@ notes, or full DOM snapshots. Observation notes should be abstract enough that a
 synthetic fixture can be authored from the pattern rather than from the original
 source.
 
+Public commits should use
+`docs/plans/general-page-reader-pattern-evidence.md` for derived pattern-level
+evidence. Do not commit one record per observed target.
+
 ### 2. Pattern Catalog
 
 The pattern catalog is the reusable bridge between observations and fixtures.

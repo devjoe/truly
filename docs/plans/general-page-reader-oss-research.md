@@ -410,6 +410,11 @@ Interpretation:
 - Neither candidate removes the need for a separate live DOM `ReadingTarget`
   layer for selected/current-region actions.
 
+The public v2 evidence boundary is documented in
+`docs/plans/general-page-reader-pattern-evidence.md`: raw per-target
+observations stay private, while the repository commits only pattern-level
+evidence, synthetic fixtures, and automated corpus checks.
+
 ## Changes To The Implementation Plan
 
 Update the first implementation slice:
