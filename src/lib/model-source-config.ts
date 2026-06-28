@@ -75,15 +75,17 @@ export function normalizeEndpointInput(input: string, fallback = ""): string {
   return (input.trim() || fallback).replace(/\/+$/, "");
 }
 
-export function validateEndpointUrl(url: string): string | null {
+export type EndpointValidationError = "unsupported-scheme" | "invalid-url";
+
+export function validateEndpointUrl(url: string): EndpointValidationError | null {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return "端點網址請使用 http:// 或 https://";
+      return "unsupported-scheme";
     }
     return null;
   } catch {
-    return "端點網址格式無法辨識";
+    return "invalid-url";
   }
 }
 

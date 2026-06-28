@@ -25,7 +25,7 @@ import {
   validateEndpointUrl,
   withProviderModelConfig,
 } from "../lib/model-source-config";
-import type { ProviderModelConfigMap } from "../lib/model-source-config";
+import type { EndpointValidationError, ProviderModelConfigMap } from "../lib/model-source-config";
 import {
   providerCapabilities,
   providerEndpointKind,
@@ -1568,6 +1568,12 @@ async function init() {
       : optT("options.modelTest.connectionFailed");
   }
 
+  function endpointValidationErrorText(error: EndpointValidationError): string {
+    return error === "unsupported-scheme"
+      ? optT("options.modelTest.endpointUnsupportedScheme")
+      : optT("options.modelTest.endpointInvalidUrl");
+  }
+
   function modelListStatusClass(statusEl: HTMLElement, kind: "ok" | "error"): string {
     const base = kind === "ok" ? "status-text status-ok" : "status-text status-error";
     return statusEl.className.includes("model-inline-status")
@@ -1590,7 +1596,7 @@ async function init() {
 
     const validationError = validateEndpointUrl(endpoint);
     if (validationError) {
-      endpointErrorEl.textContent = validationError;
+      endpointErrorEl.textContent = endpointValidationErrorText(validationError);
       endpointErrorEl.className = "status-text status-error";
       endpointErrorEl.style.display = "";
       statusEl.textContent = optT("options.modelTest.endpointNeedsWork");
@@ -1848,7 +1854,7 @@ async function init() {
         // Validate URL
         const validationError = validateEndpointUrl(endpoint);
         if (validationError) {
-          ollamaEndpointError.textContent = validationError;
+          ollamaEndpointError.textContent = endpointValidationErrorText(validationError);
           ollamaEndpointError.className = "status-text status-error";
           ollamaEndpointError.style.display = "";
           setTierAInlineStatus(optT("options.modelTest.endpointNeedsWork"), modelTestErrorClass);
@@ -2356,7 +2362,7 @@ async function init() {
       if (endpoint) {
         const validationError = validateEndpointUrl(endpoint);
         if (validationError) {
-          tierBEndpointError.textContent = validationError;
+          tierBEndpointError.textContent = endpointValidationErrorText(validationError);
           tierBEndpointError.className = "status-text status-error";
           tierBEndpointError.style.display = "";
           setTierBStatus(optT("options.modelTest.endpointNeedsWork"), modelTestErrorClass);

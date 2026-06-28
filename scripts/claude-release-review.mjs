@@ -21,7 +21,7 @@ const kindArg = valueAfter("--kind") ?? "release";
 const sourceArg = normalizeSource(valueAfter("--source") ?? "local-limited-context");
 const dryRun = args.has("--dry-run");
 const timeoutMs = Number(valueAfter("--timeout-ms") ?? 300000);
-const budgetUsd = valueAfter("--max-budget-usd") ?? "1";
+const budgetUsd = valueAfter("--max-budget-usd") ?? defaultBudgetUsd(sourceArg);
 
 const reviewKinds = expandKind(kindArg);
 const metadata = readProjectMetadata();
@@ -77,6 +77,10 @@ function normalizeSource(source) {
   if (source === "local-read") return "local-repo-read";
   if (["local-limited-context", "github", "local-repo-read"].includes(source)) return source;
   throw new Error(`Unknown review source: ${source}`);
+}
+
+function defaultBudgetUsd(source) {
+  return source === "local-repo-read" ? "5" : "1";
 }
 
 function expandKind(kind) {
@@ -340,6 +344,13 @@ function runClaudeReview(reviewKind, prompt) {
       cwd: root,
       input: prompt,
       encoding: "utf8",
+      env: {
+        ...process.env,
+        CI: "1",
+        NO_COLOR: "1",
+        FORCE_COLOR: "0",
+        TERM: "dumb",
+      },
       timeout: timeoutMs,
       maxBuffer: 8 * 1024 * 1024,
     },
@@ -347,9 +358,29 @@ function runClaudeReview(reviewKind, prompt) {
   writeFileSync(join(outDir, `${reviewKind}-review-raw.json`), result.stdout || "");
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`claude -p exited with status ${result.status}: ${(result.stderr ?? "").trim()}`);
+    throw new Error(`claude -p exited with status ${result.status}: ${describeClaudeFailure(result.stdout, result.stderr)}`);
   }
   return validateReport(extractReport(result.stdout), reviewKind);
+}
+
+function describeClaudeFailure(stdout, stderr) {
+  const stderrText = (stderr ?? "").trim();
+  try {
+    const parsed = JSON.parse(stdout || "{}");
+    const parts = [];
+    if (parsed.subtype) parts.push(parsed.subtype);
+    if (Array.isArray(parsed.errors) && parsed.errors.length > 0) {
+      parts.push(parsed.errors.join("; "));
+    }
+    if (typeof parsed.total_cost_usd === "number") {
+      parts.push(`cost=$${parsed.total_cost_usd.toFixed(4)}`);
+    }
+    if (parsed.stop_reason) parts.push(`stop_reason=${parsed.stop_reason}`);
+    if (parts.length > 0) return parts.join(" | ");
+  } catch {
+    // Fall through to raw stderr/stdout.
+  }
+  return stderrText || capText((stdout ?? "").trim(), 2000) || "no stderr; see *-review-raw.json";
 }
 
 function claudeToolConfig() {

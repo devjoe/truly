@@ -61,9 +61,9 @@ describe("model source config", () => {
   it("rejects unsupported endpoint URL schemes", () => {
     expect(validateEndpointUrl("https://models.example.test/v1")).toBeNull();
     expect(validateEndpointUrl("ftp://models.example.test")).toBe(
-      "端點網址請使用 http:// 或 https://",
+      "unsupported-scheme",
     );
-    expect(validateEndpointUrl("not a url")).toBe("端點網址格式無法辨識");
+    expect(validateEndpointUrl("not a url")).toBe("invalid-url");
   });
 
   it("warns when endpoint URLs carry likely secrets", () => {
