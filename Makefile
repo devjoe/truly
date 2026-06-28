@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help resume build build-dev verify check-public check-build release-preview release-review release-review-github release-bump-cws-preview cws-review cws-review-github \
+.PHONY: help resume build build-dev verify check-public check-build release-preview release-review release-review-local-limited-context release-review-github release-review-local-repo-read release-review-local-read release-bump-cws-preview cws-review cws-review-local-limited-context cws-review-github cws-review-local-repo-read cws-review-local-read \
 	dev dev-all dev-daemon dev-reload dev-status dev-check dev-stop sync-headsup-css \
 	test-watch smoke-ollama-vision
 
@@ -19,12 +19,20 @@ help:
 	@echo "  make sync-headsup-css    Sync shared heads-up CSS block"
 	@echo "  make release-preview     Build local Preview artifacts"
 	@echo "  make release-review      Run advisory Claude release review"
+	@echo "  make release-review-local-limited-context"
+	@echo "                           Run advisory Claude release review with bounded local context"
 	@echo "  make release-review-github"
 	@echo "                           Run advisory Claude release review from public GitHub URLs"
+	@echo "  make release-review-local-repo-read"
+	@echo "                           Run advisory Claude release review with repo-root read tools"
 	@echo "  make release-bump-cws-preview"
 	@echo "                           Bump numeric version and Preview label for CWS"
 	@echo "  make cws-review          Run advisory Claude CWS review"
+	@echo "  make cws-review-local-limited-context"
+	@echo "                           Run advisory Claude CWS review with bounded local context"
 	@echo "  make cws-review-github   Run advisory Claude CWS review from public GitHub URLs"
+	@echo "  make cws-review-local-repo-read"
+	@echo "                           Run advisory Claude CWS review with repo-root read tools"
 	@echo "  make smoke-ollama-vision Optional live Ollama vision smoke"
 
 resume:
@@ -53,8 +61,17 @@ release-preview:
 release-review:
 	npm run release:review
 
+release-review-local-limited-context:
+	npm run release:review:local-limited-context
+
 release-review-github:
 	npm run release:review:github
+
+release-review-local-repo-read:
+	npm run release:review:local-repo-read
+
+release-review-local-read:
+	npm run release:review:local-read
 
 release-bump-cws-preview:
 	npm run release:bump-cws-preview
@@ -62,8 +79,17 @@ release-bump-cws-preview:
 cws-review:
 	npm run cws:review
 
+cws-review-local-limited-context:
+	npm run cws:review:local-limited-context
+
 cws-review-github:
 	npm run cws:review:github
+
+cws-review-local-repo-read:
+	npm run cws:review:local-repo-read
+
+cws-review-local-read:
+	npm run cws:review:local-read
 
 dev:
 	npm run dev

@@ -87,6 +87,35 @@ export function validateEndpointUrl(url: string): string | null {
   }
 }
 
+export type EndpointSecurityWarning = "secret-in-url" | "non-local-http";
+
+export function endpointSecurityWarnings(rawEndpoint: string): EndpointSecurityWarning[] {
+  const endpoint = rawEndpoint.trim();
+  if (!endpoint) return [];
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    return [];
+  }
+
+  const warnings: EndpointSecurityWarning[] = [];
+  const sensitiveQuery = Array.from(parsed.searchParams.keys()).some((key) =>
+    /(^|[_-])(api[_-]?key|access[_-]?token|auth|authorization|bearer|secret|token)([_-]|$)/i.test(key),
+  );
+  if (parsed.username || parsed.password || sensitiveQuery) {
+    warnings.push("secret-in-url");
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  if (parsed.protocol === "http:" && !isLoopback) {
+    warnings.push("non-local-http");
+  }
+
+  return warnings;
+}
+
 /**
  * Resolve a user-supplied model name against the server's model list.
  * Exact match wins; otherwise prefix-match on the base name before a tag, so

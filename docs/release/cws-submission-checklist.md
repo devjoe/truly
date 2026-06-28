@@ -109,8 +109,13 @@ Store. The dashboard copy should still come from
   or intentionally accepted before uploading the package.
 - [ ] Run `npm run cws:review:github` against the pushed release candidate
   when Claude review is available, or document why the advisory review was
-  skipped. Use `npm run cws:review` instead only when the review must include
-  local-only package reports or unpushed changes.
+  skipped. Use `npm run cws:review:local-limited-context` when the review must
+  include bounded local-only package reports or unpushed diffs. Use
+  `npm run cws:review:local-repo-read` only when the reviewer should inspect
+  the repo root for public/private boundary, architecture, or cross-file
+  security risks.
+- [ ] Open the generated `artifacts/review/.../review-disposition.md` and record
+  the human decision for each finding.
 - [ ] Confirm any blocking Claude review findings are fixed or explicitly
   dispositioned before upload.
 - [ ] Dashboard package upload succeeds.

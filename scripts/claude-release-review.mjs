@@ -18,14 +18,10 @@ import {
 
 const args = new Set(process.argv.slice(2));
 const kindArg = valueAfter("--kind") ?? "release";
-const sourceArg = valueAfter("--source") ?? "local";
+const sourceArg = normalizeSource(valueAfter("--source") ?? "local-limited-context");
 const dryRun = args.has("--dry-run");
 const timeoutMs = Number(valueAfter("--timeout-ms") ?? 300000);
 const budgetUsd = valueAfter("--max-budget-usd") ?? "1";
-
-if (!["local", "github"].includes(sourceArg)) {
-  throw new Error(`Unknown review source: ${sourceArg}`);
-}
 
 const reviewKinds = expandKind(kindArg);
 const metadata = readProjectMetadata();
@@ -59,6 +55,7 @@ for (const reviewKind of reviewKinds) {
 
 const summary = renderSummary(reports);
 writeFileSync(join(outDir, "summary.md"), summary);
+writeFileSync(join(outDir, "review-disposition.md"), renderDisposition(reports));
 console.log(`Claude release review artifacts written to ${relativePath(outDir)}`);
 
 const blocking = reports.flatMap(blockingFindings);
@@ -75,6 +72,13 @@ function valueAfter(name) {
   return index >= 0 ? process.argv[index + 1] : null;
 }
 
+function normalizeSource(source) {
+  if (source === "local") return "local-limited-context";
+  if (source === "local-read") return "local-repo-read";
+  if (["local-limited-context", "github", "local-repo-read"].includes(source)) return source;
+  throw new Error(`Unknown review source: ${source}`);
+}
+
 function expandKind(kind) {
   if (kind === "release") return ["functional", "security"];
   if (["functional", "security", "cws"].includes(kind)) return [kind];
@@ -85,6 +89,7 @@ function buildContext(reviewKind) {
   const base = resolveBaseRef();
   const head = git(["rev-parse", "HEAD"], "unknown").trim();
   if (sourceArg === "github") return buildGithubContext(reviewKind, base, head);
+  if (sourceArg === "local-repo-read") return buildLocalRepoReadContext(reviewKind, base, head);
 
   const changedFiles = git(["diff", "--name-only", `${base}...HEAD`], "").trim().split("\n").filter(Boolean);
   const diffStat = git(["diff", "--stat", `${base}...HEAD`], "").trim();
@@ -145,11 +150,56 @@ function buildContext(reviewKind) {
   };
 }
 
+function buildLocalRepoReadContext(reviewKind, base, head) {
+  const changedFiles = git(["diff", "--name-only", `${base}...HEAD`], "").trim().split("\n").filter(Boolean);
+  const diffStat = git(["diff", "--stat", `${base}...HEAD`], "").trim();
+  const workingTreeDiffStat = git(["diff", "--stat"], "").trim();
+  const untrackedFiles = git(["ls-files", "--others", "--exclude-standard"], "").trim().split("\n").filter(Boolean);
+  const status = git(["status", "--short", "--branch"], "").trim();
+
+  return {
+    reviewKind,
+    source: "local-repo-read",
+    reviewed: {
+      version: metadata.version,
+      versionName: metadata.versionName,
+      tag: metadata.recommendedTag,
+      base,
+      head,
+      commit: metadata.commit,
+      branch: metadata.branch,
+    },
+    workingTreeStatus: status,
+    changedFiles,
+    untrackedFiles,
+    diffStat,
+    workingTreeDiffStat,
+    repositoryFacts: {
+      packageLockPresent: existsSync(resolve(root, "package-lock.json")),
+    },
+    instructions: [
+      "Inspect the repository root with Read, Grep, and Glob as needed.",
+      "Review the whole repository, not only changed files, when architecture or public/private boundary risk requires it.",
+      "Look for public/private boundary mistakes, local-only artifacts, secrets, generated output, fixture leakage, and release-packaging risks.",
+      "Do not use Bash, Edit, Write, WebFetch, or WebSearch.",
+      "If a file looks private, local-only, or sensitive, report the exact path and why it is risky.",
+      "Back findings with concrete file evidence and separate limitations from findings.",
+    ],
+    limits: {
+      repoRootReadAllowed: true,
+      localFileContentsExcludedFromPrompt: true,
+      noShellExecution: true,
+      noFileMutation: true,
+      noNetworkAccess: true,
+    },
+  };
+}
+
 function buildGithubContext(reviewKind, base, head) {
   const status = git(["status", "--short", "--branch"], "").trim();
   const dirtyLines = git(["status", "--porcelain"], "").trim();
   if (dirtyLines) {
-    throw new Error("GitHub-source Claude review requires a clean working tree. Commit/stash changes or use --source local.");
+    throw new Error("GitHub-source Claude review requires a clean working tree. Commit/stash changes or use --source local-limited-context.");
   }
 
   const repoUrl = githubRepoUrl();
@@ -243,6 +293,10 @@ function buildPrompt(reviewKind, context) {
     ],
   }[reviewKind];
 
+  const contextRule = sourceArg === "local-repo-read"
+    ? "- Use Read, Grep, and Glob to inspect the repository root when needed; the JSON context is only orientation."
+    : "- Do not invent project behavior beyond the provided context.";
+
   return [
     `You are reviewing the Truly Chrome extension release as an advisory ${reviewKind} reviewer.`,
     "",
@@ -250,7 +304,7 @@ function buildPrompt(reviewKind, context) {
     "- This is advisory. Do not claim final release approval.",
     "- Report only findings backed by concrete file, line, diff, or metadata evidence.",
     "- If evidence is weak, use questions or limitations instead of findings.",
-    "- Do not invent project behavior beyond the provided context.",
+    contextRule,
     "- Return only JSON matching the provided schema.",
     "",
     "Focus areas:",
@@ -265,12 +319,7 @@ function buildPrompt(reviewKind, context) {
 
 function runClaudeReview(reviewKind, prompt) {
   const schema = JSON.stringify(reviewSchema(reviewKind));
-  const disallowedTools = sourceArg === "github"
-    ? "Bash,Edit,Write,Read,Grep,Glob,WebSearch"
-    : "Bash,Edit,Write,Read,Grep,Glob,WebFetch,WebSearch";
-  const toolArgs = sourceArg === "github"
-    ? ["--tools=WebFetch", "--allowedTools=WebFetch"]
-    : ["--tools="];
+  const toolConfig = claudeToolConfig();
   const result = spawnSync(
     "claude",
     [
@@ -284,8 +333,8 @@ function runClaudeReview(reviewKind, prompt) {
       schema,
       "--max-budget-usd",
       budgetUsd,
-      ...toolArgs,
-      `--disallowedTools=${disallowedTools}`,
+      ...toolConfig.toolArgs,
+      `--disallowedTools=${toolConfig.disallowedTools}`,
     ],
     {
       cwd: root,
@@ -301,6 +350,25 @@ function runClaudeReview(reviewKind, prompt) {
     throw new Error(`claude -p exited with status ${result.status}: ${(result.stderr ?? "").trim()}`);
   }
   return validateReport(extractReport(result.stdout), reviewKind);
+}
+
+function claudeToolConfig() {
+  if (sourceArg === "github") {
+    return {
+      toolArgs: ["--tools=WebFetch", "--allowedTools=WebFetch"],
+      disallowedTools: "Bash,Edit,Write,Read,Grep,Glob,WebSearch",
+    };
+  }
+  if (sourceArg === "local-repo-read") {
+    return {
+      toolArgs: ["--tools=Read,Grep,Glob", "--allowedTools=Read,Grep,Glob"],
+      disallowedTools: "Bash,Edit,Write,WebFetch,WebSearch",
+    };
+  }
+  return {
+    toolArgs: ["--tools="],
+    disallowedTools: "Bash,Edit,Write,Read,Grep,Glob,WebFetch,WebSearch",
+  };
 }
 
 function extractReport(stdout) {
@@ -443,6 +511,71 @@ function renderSummary(reports) {
     }
     lines.push("");
   }
+  return `${lines.join("\n")}\n`;
+}
+
+function renderDisposition(reports) {
+  const lines = [
+    "# Claude Review Disposition",
+    "",
+    `- Version: ${metadata.version}`,
+    `- Version name: ${metadata.versionName}`,
+    `- Recommended tag: ${metadata.recommendedTag}`,
+    `- Commit: ${metadata.commit}`,
+    `- Source: ${sourceArg}`,
+    `- Generated at: ${new Date().toISOString()}`,
+    "",
+    "Use this file to close the loop after advisory review.",
+    "Set each finding to one of: fixed, accepted, false_positive, defer.",
+    "Do not continue a release with open blocker/high findings.",
+    "",
+  ];
+
+  let findingCount = 0;
+  for (const report of reports) {
+    lines.push(`## ${report.kind}`);
+    lines.push("");
+    if (report.findings.length === 0) {
+      lines.push("- No findings.");
+      lines.push("");
+      continue;
+    }
+
+    for (const finding of report.findings) {
+      findingCount += 1;
+      const files = finding.files
+        .map((file) => file.line ? `${file.path}:${file.line}` : file.path)
+        .join(", ");
+      lines.push(`### ${finding.id}: ${finding.title}`);
+      lines.push("");
+      lines.push(`- Severity: ${finding.severity}`);
+      lines.push(`- Confidence: ${finding.confidence}`);
+      lines.push(`- Blocks release: ${finding.blocksRelease ? "yes" : "no"}`);
+      lines.push(`- Reviewer disposition: ${finding.disposition}`);
+      lines.push(`- Files: ${files || "n/a"}`);
+      lines.push(`- Evidence: ${finding.evidence}`);
+      lines.push(`- Recommendation: ${finding.recommendation}`);
+      lines.push("- Human disposition: open");
+      lines.push("- Human notes:");
+      lines.push("");
+    }
+  }
+
+  if (findingCount === 0) {
+    lines.push("## Release Decision");
+    lines.push("");
+    lines.push("- Human decision: no findings to disposition");
+    lines.push("- Notes:");
+    lines.push("");
+  } else {
+    lines.push("## Release Decision");
+    lines.push("");
+    lines.push("- Human decision: open");
+    lines.push("- Remaining blockers:");
+    lines.push("- Notes:");
+    lines.push("");
+  }
+
   return `${lines.join("\n")}\n`;
 }
 

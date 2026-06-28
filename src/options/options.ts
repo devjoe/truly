@@ -16,6 +16,7 @@ import { applyUserSettingsPatch, getTierAProvider, getTierBProvider, normalizeUs
 import {
   defaultEndpointForProvider,
   defaultModelForProvider,
+  endpointSecurityWarnings,
   isEndpointBackedModelProvider,
   normalizeEndpointInput,
   normalizeProviderModelConfigMap,
@@ -1288,27 +1289,13 @@ async function init() {
   }
 
   function endpointWarningText(rawEndpoint: string): string {
-    const endpoint = rawEndpoint.trim();
-    if (!endpoint) return "";
-    let parsed: URL;
-    try {
-      parsed = new URL(endpoint);
-    } catch {
-      return "";
-    }
-    const warnings: string[] = [];
-    const sensitiveQuery = Array.from(parsed.searchParams.keys()).some((key) =>
-      /(^|[_-])(api[_-]?key|access[_-]?token|auth|authorization|bearer|secret|token)([_-]|$)/i.test(key),
-    );
-    if (parsed.username || parsed.password || sensitiveQuery) {
-      warnings.push(optT("common.endpointWarnSecret"));
-    }
-    const host = parsed.hostname.toLowerCase();
-    const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
-    if (parsed.protocol === "http:" && !isLoopback) {
-      warnings.push(optT("common.endpointWarnHttp"));
-    }
-    return warnings.join("\n");
+    return endpointSecurityWarnings(rawEndpoint)
+      .map((warning) =>
+        warning === "secret-in-url"
+          ? optT("common.endpointWarnSecret")
+          : optT("common.endpointWarnHttp")
+      )
+      .join("\n");
   }
 
   function renderEndpointWarning(input: HTMLInputElement, warningEl: HTMLElement): void {

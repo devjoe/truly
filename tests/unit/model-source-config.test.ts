@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   defaultEndpointForProvider,
   defaultModelForProvider,
+  endpointSecurityWarnings,
   normalizeProviderModelConfigMap,
   normalizeEndpointInput,
   providerModelConfigOrDefault,
@@ -63,6 +64,39 @@ describe("model source config", () => {
       "端點網址請使用 http:// 或 https://",
     );
     expect(validateEndpointUrl("not a url")).toBe("端點網址格式無法辨識");
+  });
+
+  it("warns when endpoint URLs carry likely secrets", () => {
+    expect(endpointSecurityWarnings("https://models.example.test/v1?api_key=sk-test")).toContain(
+      "secret-in-url",
+    );
+    expect(endpointSecurityWarnings("https://token@example.test/v1")).toContain(
+      "secret-in-url",
+    );
+    expect(endpointSecurityWarnings("https://models.example.test/v1?access_token=abc")).toContain(
+      "secret-in-url",
+    );
+  });
+
+  it("warns about cleartext non-local HTTP but allows loopback HTTP", () => {
+    expect(endpointSecurityWarnings("http://api.example.test/v1")).toContain(
+      "non-local-http",
+    );
+    expect(endpointSecurityWarnings("http://localhost:11434")).not.toContain(
+      "non-local-http",
+    );
+    expect(endpointSecurityWarnings("http://127.0.0.1:11434")).not.toContain(
+      "non-local-http",
+    );
+    expect(endpointSecurityWarnings("http://[::1]:11434")).not.toContain(
+      "non-local-http",
+    );
+  });
+
+  it("does not warn for clean HTTPS endpoints or invalid in-progress input", () => {
+    expect(endpointSecurityWarnings("https://models.example.test/v1")).toEqual([]);
+    expect(endpointSecurityWarnings("not a url")).toEqual([]);
+    expect(endpointSecurityWarnings("   ")).toEqual([]);
   });
 
   it("resolves model names against server-provided tags", () => {

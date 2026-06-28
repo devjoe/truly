@@ -109,11 +109,12 @@ profiles, local screenshots, or live CDP access.
 the deterministic `check:public`, `release:preview`, or `cws:package` gates.
 Use it selectively during development and explicitly during release/CWS review.
 
-Local source mode is for pre-push review. It can inspect local-only commits,
-uncommitted diffs, and newly added public-safe text files, so it is the right
-tool when a problem should be caught before it becomes public. Do not run it for
-every small edit. Run it when requested by the maintainer, when a change is
-large enough to deserve semantic review, or when a change touches sensitive
+Local limited-context mode is for pre-push review. It receives local-only
+commits, uncommitted diffs, and newly added public-safe text files in a bounded
+prompt, so it is the right tool when a problem should be caught before it
+becomes public but repo-root file access is not needed. Do not run it for every
+small edit. Run it when requested by the maintainer, when a change is large
+enough to deserve semantic review, or when a change touches sensitive
 release/security surfaces:
 
 - manifest permissions, host permissions, CSP, or web-accessible resources;
@@ -128,7 +129,42 @@ release/security surfaces:
 ```bash
 TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review
 TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review
+TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review:local-limited-context
+TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:local-limited-context
 ```
+
+Local repo-read mode is for high-trust broad review. It runs Claude from the
+repository root with `Read`, `Grep`, and `Glob` enabled, so the reviewer can
+inspect the whole repo and catch public/private boundary mistakes,
+architecture risks, release packaging leaks, and cross-file security issues
+that a bounded diff prompt may miss. It still disables shell execution, file
+mutation, web fetch, and web search:
+
+```bash
+TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review:local-repo-read
+TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:local-repo-read
+```
+
+Use local repo-read mode intentionally. Anything readable under the repo root
+is in scope for the external reviewer, including uncommitted local files. The
+old `local-read` source name remains an alias, but new docs and commands should
+use `local-repo-read`.
+
+Run local repo-read mode when any of these are true:
+
+- the change is large enough that architectural coupling or project boundaries
+  may have shifted;
+- the change touches manifest permissions, CSP, optional host permissions,
+  storage, diagnostics, model endpoints, or external handoff behavior;
+- release/CWS scripts, package contents, public-boundary checks, privacy docs,
+  reviewer notes, or source-package rules changed;
+- there is any risk that private fixtures, generated output, secrets, local
+  profiles, internal notes, or public/private repo boundaries were mixed up;
+- a release or CWS submission needs a second whole-repo perspective before
+  pushing or uploading.
+
+If the goal is only to review public release state after push, prefer GitHub
+source mode instead.
 
 GitHub source mode is for post-push release verification. Use it after the
 release candidate commit has been pushed and before creating the GitHub Release
@@ -141,7 +177,8 @@ TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:github
 ```
 
 GitHub source mode requires a clean working tree and a commit that exists on
-GitHub. If the commit only exists locally, use local source mode instead.
+GitHub. If the commit only exists locally, use local limited-context or local
+repo-read mode instead.
 
 Use `-- --dry-run` to generate the exact prompt/context without sending it to
 Claude:
@@ -149,31 +186,48 @@ Claude:
 ```bash
 npm run release:review -- --dry-run
 npm run cws:review -- --dry-run
+npm run release:review:local-limited-context -- --dry-run
+npm run cws:review:local-limited-context -- --dry-run
 npm run release:review:github -- --dry-run
 npm run cws:review:github -- --dry-run
+npm run release:review:local-repo-read -- --dry-run
+npm run cws:review:local-repo-read -- --dry-run
 ```
 
 The wrapper writes review artifacts under `artifacts/review/`, which remains
-gitignored. It sends only bounded, public-safe release context: metadata,
-changed-file summaries, capped diffs, manifest/package metadata, and relevant
-release docs. It excludes generated extension output, private fixtures,
-environment files, local browser profiles, and binary/WASM contents.
+gitignored. In local limited-context mode, it sends only bounded, public-safe
+release context: metadata, changed-file summaries, capped diffs,
+manifest/package metadata, and relevant release docs. It excludes generated
+extension output, private fixtures, environment files, local browser profiles,
+and binary/WASM contents.
 In GitHub source mode, it sends only public immutable URLs and metadata, and
 allows Claude to fetch those public URLs.
+In local repo-read mode, it sends only orientation metadata in the prompt and
+allows Claude to inspect the repo root through read-only tools.
 
 Claude review results are advisory. Blocking or high-confidence findings should
 be fixed or explicitly dispositioned before continuing, but the final release
 decision remains human-owned.
 
+Each review writes `summary.md` and `review-disposition.md` under the same
+`artifacts/review/...` directory. Use `summary.md` to see the findings quickly,
+then use `review-disposition.md` to record the human decision for each finding:
+`fixed`, `accepted`, `false_positive`, or `defer`. A release must not continue
+with open blocker/high findings.
+
 Recommended release placement:
 
-1. For large or sensitive changes, run local source review before commit/push,
-   then fix or explicitly disposition findings.
-2. Before GitHub Release creation, run `release:review:github` against the
+1. For large or sensitive changes, run local limited-context review before
+   commit/push, then fix or explicitly disposition findings.
+2. For public/private boundary, architecture, or cross-file security concerns,
+   run `release:review:local-repo-read` or `cws:review:local-repo-read` before
+   push.
+3. Before GitHub Release creation, run `release:review:github` against the
    pushed release candidate commit.
-3. After `cws:package` and before Chrome Web Store dashboard upload, run
-   `cws:review:github`. Use local source mode instead only when the CWS review
-   must include local-only package reports or unpushed changes.
+4. After `cws:package` and before Chrome Web Store dashboard upload, run
+   `cws:review:github`. Use local limited-context or local repo-read mode
+   instead only when the CWS review must include local-only package reports or
+   unpushed changes.
 
 `check:ollama-cloud-capabilities` is a release-time freshness reminder for the
 small static Ollama Cloud model capability registry. It blocks a Preview build
