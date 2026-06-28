@@ -94,3 +94,35 @@ Evaluation v2 is complete enough for parser-candidate comparison when:
 
 Evaluation v2 is not enough to choose a runtime parser until private
 observations move the key patterns from `seeded` to `observed-category`.
+
+## Private Observation Runner
+
+Use this dev-only command to produce private structural summaries:
+
+```bash
+npm run observe:general-page-structure -- --input tmp/general-page-observation-targets.json
+```
+
+The report is written under `tmp/general-page-observations/` and must not be
+committed. It records element counts, metadata presence, noise ratios, risk
+labels, and pattern hints. It does not write HTML, text excerpts, screenshots,
+or DOM snapshots.
+
+### Runner Smoke, 2026-06-29
+
+A private 8-target smoke run completed with 7 successful fetches and 1 fetch
+error. The aggregate structural hints covered:
+
+- `P01-semantic-article`: 1;
+- `P02-main-role-without-article`: 3;
+- `P03-navigation-sidebar-noise`: 2;
+- `P04-related-content-recirc`: 1;
+- `P11-paywall-or-membership`: 2;
+- `P15-rich-metadata`: 5;
+- `P16-missing-or-conflicting-metadata`: 2;
+- `P17-traditional-chinese-layout`: 2;
+- `P18-media-and-caption`: 4.
+
+The smoke run proves the private runner path works, but it does not move any
+pattern from `seeded` to `observed-category`. That upgrade requires the broader
+60-80 target private observation pass.
