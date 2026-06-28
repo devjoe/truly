@@ -22,6 +22,11 @@ First prove the required output shape, failure states, and side-panel behavior
 with synthetic fixtures. Then compare the hand-rolled extractor against
 Readability on the same fixtures.
 
+For current-mouse-region actions, do not rely on article extraction alone.
+Reader and translation extensions that feel fast use live DOM observation,
+selection snapshots, and point-based element targeting. Truly should model this
+as a second target type that can share context with the whole-page extractor.
+
 ## Projects Reviewed
 
 ### Mozilla Readability
@@ -105,6 +110,101 @@ Implementation implications for Truly:
 - Truly still needs its own `ReadingSurface` boundary because the product is not
   a reader-mode renderer; it is a reading-assistance and handoff tool.
 
+## Interaction Pattern Projects Reviewed
+
+### Read Frog
+
+Repository: <https://github.com/mengxi-ream/read-frog>
+
+Read Frog is an open-source AI language-learning extension. It supports
+full-page translation, selected-text translation, current hovered paragraph
+translation, context-aware LLM translation, TTS, subtitle translation, and
+multiple providers. The inspected revision was
+`c62cf6d2694db9f1425edbb2f60860d3c633ca65`.
+
+The most relevant architectural lesson is that it uses two separate extraction
+layers:
+
+- live DOM walking for paragraph/node translation;
+- Defuddle-based article extraction for compact page context sent to the model.
+
+Important patterns:
+
+- Full-page translation walks the live DOM, labels nodes with data attributes,
+  classifies block/inline/paragraph nodes, and processes paragraph-like nodes
+  when they enter an `IntersectionObserver` preload region.
+- Current-node translation tracks mouse position, resolves the nearest block
+  ancestor at the trigger point, and toggles work for that node only.
+- Selection actions snapshot ranges and surrounding paragraphs before opening
+  the toolbar, so the action remains stable after focus moves.
+- Expensive translation work, queues, cache, and context menus are coordinated
+  through background messages.
+- The page-context helper clones the document and uses `defuddle/full` to
+  produce Markdown context, capped before prompt use.
+
+Implications for Truly:
+
+- Separate "whole page context" from "current visible/selected region".
+- Use article extraction as supporting context, not as the only way to find the
+  paragraph under the mouse.
+- Track mouse point and modifier/click-hold state in a small tested state
+  machine.
+- Resolve the nearest valid reading block from `elementFromPoint`, including
+  Shadow DOM where possible.
+- Keep the current-region action user-triggered and scoped. Avoid translation-
+  style "process everything" fan-out for analysis actions.
+- Avoid replacing page content for Truly's trust/reading workflow; source
+  fidelity matters more than bilingual replacement.
+
+License note: Read Frog is GPLv3 with a commercial-license path. Treat it as an
+architectural reference only unless license review says otherwise.
+
+### Kiss Translator
+
+Repository: <https://github.com/fishjar/kiss-translator>
+
+Kiss Translator is a bilingual translation extension and userscript. It
+supports whole-page bilingual translation, selection translation, input-box
+translation, mouse-hover paragraph translation, subtitle translation, multiple
+providers, rule subscriptions, rich-text preservation, and custom trigger
+events. The inspected revision was
+`d37c97eb818e916805ecb4ee3876ca24bcdf53b9`.
+
+The most relevant architectural lesson is that it is rule-driven first and
+heuristic second. It defines root/block/ignore/keep selector rules, observes the
+matched translation nodes, and lazily processes nodes near the viewport.
+
+Important patterns:
+
+- Page scanning merges personal, subscription, and global rules. The global
+  defaults target headings, list items, paragraphs, blockquotes, captions,
+  labels, and legends.
+- Heuristic fallback scans block-like DOM nodes when a rule is not enough.
+- `IntersectionObserver` drives lazy translation for visible/near-visible
+  nodes, while `MutationObserver` queues dirty containers for rescan.
+- Mouse-hover translation is off by default and can require a modifier key.
+  "Current paragraph" means the currently hovered observed translation node.
+- UI is mostly injected into the page through isolated Shadow DOM surfaces:
+  inline translation, floating action button, popup, and selection translator.
+- It also exposes a custom window event surface for commands such as page
+  translation, popup, selection box, hover-node, and input translation.
+
+Implications for Truly:
+
+- Keep a rule/heuristic split in the General Page Reader. A generic article
+  extractor will not be enough for all pages, and social feeds will need
+  platform adapters later.
+- Represent current-region targets as observed DOM units with stable state, not
+  as an ad hoc string from the current mouse event.
+- Use lazy viewport processing for automatic refresh. This is more appropriate
+  than analyzing the entire page immediately.
+- Keep Shadow DOM UI isolation for any in-page mini surface.
+- Do not expose Kiss-style low-level rule subscriptions in the primary Truly UX.
+  They are powerful but would distract from the reading assistant promise.
+- Avoid making ambient hover the primary interaction. It is efficient for
+  translation, but Truly analysis should remain explicit because it may trigger
+  model calls and produce trust-sensitive output.
+
 ## Design Principles For Truly
 
 ### 1. Extraction Is A Contract, Not A UI Detail
@@ -127,20 +227,40 @@ Minimum useful fields:
 - extraction status;
 - warnings.
 
-### 2. Start Text-First
+### 2. Current Region Is A Target, Not A Parser Mode
+
+The one-key paragraph interaction should not mutate the whole-page extractor.
+Model it as a smaller `ReadingTarget` that can be derived from selection,
+current mouse point, or a known observed DOM node.
+
+Minimum useful fields:
+
+- target id;
+- target kind: selection, paragraph, visible-region, or element;
+- stable element reference while the page is alive;
+- text;
+- surrounding text;
+- page metadata;
+- source rect for optional in-page anchoring;
+- extraction warnings.
+
+The current target can then be analyzed in the side panel, shown in a small
+in-page popover, or both without changing the detection layer.
+
+### 3. Start Text-First
 
 Reader-mode projects often preserve article HTML for display. Truly does not
 need that in the MVP. Rendering third-party article HTML inside the side panel
 adds sanitizer, style, and CSP concerns. The first version should render
 Truly-generated UI over extracted text and metadata.
 
-### 3. Clone Before Parsing
+### 4. Clone Before Parsing
 
 Any parser that mutates nodes must run on `document.cloneNode(true)`. This is
 important even for user-triggered analysis because content scripts share the
 page DOM with the site.
 
-### 4. Use A Readerability Gate
+### 5. Use A Readerability Gate
 
 Before model calls, run a cheap page-quality check:
 
@@ -152,18 +272,34 @@ Before model calls, run a cheap page-quality check:
 
 If the gate fails, show extraction status and do not spend model calls.
 
-### 5. Keep Site-Specific Overrides Out Of The MVP
+### 6. Keep Site-Specific Overrides Out Of The MVP
 
 Mercury's custom extractor model is useful, but starting there would create a
 maintenance treadmill. The MVP should rely on semantic HTML, generic heuristics,
 and clear failure states. Site-specific overrides can be added later only for
 high-value targets.
 
-### 6. Treat Parser Output As Untrusted
+### 7. Treat Parser Output As Untrusted
 
 Even if extraction happens from the current tab, the content is still page-owned
 input. Do not render parser HTML directly without sanitization. Prefer plain
 text and extension-owned markup.
+
+## Side Panel Versus In-Page Output
+
+The current recommendation is a hybrid policy:
+
+- Side panel remains the durable workspace for whole-page analysis, history,
+  model status, copy/export, and external-tool handoff.
+- In-page UI should be a small, user-triggered anchor for selected/current
+  paragraph actions. It can show progress, the chosen target, and a short
+  result, then hand off to the side panel for the full analysis.
+- Inline replacement should remain out of scope for trust/credibility workflows.
+  Translation extensions can replace text because the task is bilingual reading;
+  Truly should preserve source fidelity.
+
+This leaves room to decide later whether current-region results render mostly
+in the side panel or as an anchored popover without changing extraction.
 
 ## Proposed Evaluation Matrix
 
@@ -175,6 +311,8 @@ suite:
 | Truly heuristic extractor | Baseline/fallback | Simplicity, warning quality, fixture stability |
 | Mozilla Readability | Main candidate | Text quality, metadata quality, false positives, bundle cost |
 | Postlight Parser concepts | Design reference | Custom extractor pattern, output contract breadth |
+| Read Frog patterns | Interaction reference | Current-node targeting, selection snapshots, Defuddle context |
+| Kiss Translator patterns | Interaction reference | Observed nodes, lazy viewport processing, rule/heuristic split |
 
 Metrics:
 
@@ -198,6 +336,8 @@ Update the first implementation slice:
 4. Add test expectations that are independent of any one parser library.
 5. Add a follow-up spike to run `@mozilla/readability` against the same
    fixtures and compare outputs.
+6. Add a later current-region spike for point/selection targeting and surface
+   placement.
 
 Do not add `@mozilla/readability` in the first code commit unless the team
 explicitly accepts the dependency and bundle-size tradeoff.
@@ -214,3 +354,13 @@ explicitly accepts the dependency and bundle-size tradeoff.
   <https://github.com/postlight/parser>
 - Omnivore:
   <https://github.com/omnivore-app/omnivore>
+- Read Frog:
+  <https://github.com/mengxi-ream/read-frog>
+- Read Frog node trigger:
+  <https://github.com/mengxi-ream/read-frog/blob/c62cf6d2694db9f1425edbb2f60860d3c633ca65/src/entrypoints/host.content/translation-control/node-translation-trigger.ts>
+- Read Frog page context:
+  <https://github.com/mengxi-ream/read-frog/blob/c62cf6d2694db9f1425edbb2f60860d3c633ca65/src/utils/host/translate/webpage-context.ts>
+- Kiss Translator:
+  <https://github.com/fishjar/kiss-translator>
+- Kiss Translator settings:
+  <https://github.com/fishjar/kiss-translator/blob/d37c97eb818e916805ecb4ee3876ca24bcdf53b9/src/config/setting.js>

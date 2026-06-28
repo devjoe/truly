@@ -14,6 +14,13 @@ Truly on the current tab, Truly extracts the main readable page content, and
 the existing analysis pipeline produces a summary, reading brief, follow-up
 questions, and manual handoff actions.
 
+Future current-region actions should be planned now but implemented after the
+whole-page contract is stable. The target experience is similar to immersive
+translation shortcuts: a user can press a key while the mouse is over a
+paragraph and ask Truly to analyze, summarize, explain, or hand off that
+specific region. The output surface can remain a product experiment, but the
+targeting contract should be designed up front.
+
 This keeps the project loyal to the existing product promise: signals first,
 context when needed, and handoff only by choice. It also advances the public
 README promise of social feeds and web pages without taking on the live-DOM
@@ -63,6 +70,13 @@ The side panel should show:
 - manual external-tool actions;
 - Markdown copy/download.
 
+Planned follow-up:
+
+- current mouse-region or selected-text action;
+- one-key trigger for the paragraph or element under the mouse;
+- optional small in-page progress/result anchor;
+- side-panel handoff for durable analysis and export.
+
 ### Non-goals
 
 Do not include these in the first version:
@@ -70,6 +84,7 @@ Do not include these in the first version:
 - automatic injection into all web pages;
 - always-on background page scanning;
 - in-page floating widgets;
+- current-region hotkeys;
 - comment-section analysis;
 - account automation;
 - automatic fact-check verdicts;
@@ -128,6 +143,28 @@ export interface ReadingSurface {
 }
 ```
 
+Also reserve a smaller current-target model for selected or pointed-at page
+regions. This should not replace `ReadingSurface`; it is the unit that a
+shortcut, context menu, or selection toolbar acts on.
+
+```ts
+export type ReadingTargetKind = "selection" | "paragraph" | "visible-region" | "element";
+
+export interface ReadingTarget {
+  id: string;
+  surfaceId: string;
+  kind: ReadingTargetKind;
+  text: string;
+  surroundingText?: string;
+  sourceRect?: { x: number; y: number; width: number; height: number };
+  extraction: {
+    method: "selection" | "point-target" | "observed-node" | "fallback";
+    status: "complete" | "partial" | "empty" | "blocked";
+    warnings: string[];
+  };
+}
+```
+
 Keep Facebook post data compatible by adapting it into this shape over time.
 Do not replace `PostData` and `DashboardPostEvent` in one large migration.
 
@@ -144,16 +181,25 @@ The main implementation consequence is that Truly should define its own
 `@mozilla/readability` against the same fixtures before deciding whether to
 vendor or depend on it.
 
+The interaction-pattern consequence from Read Frog and Kiss Translator is that
+article extraction is not enough for one-key paragraph actions. Truly needs a
+live-page target layer: observed text nodes, selection snapshots, mouse-point
+resolution, Shadow DOM awareness, and lazy viewport processing.
+
 ### New Files
 
 Planned additions:
 
 - `src/lib/reading-surface-types.ts`
+- `src/lib/reading-target-types.ts`
 - `src/lib/general-page-extraction.ts`
+- `src/lib/current-region-targeting.ts`
 - `src/lib/general-page-context.ts`
 - `src/content_scripts/page-reader.ts`
+- `src/content_scripts/current-region-reader.ts`
 - `tests/fixtures/general-pages/*.html`
 - `tests/contract/general-page-extraction-contract.test.ts`
+- `tests/contract/current-region-targeting-contract.test.ts`
 
 ### Existing Areas To Reuse
 
@@ -199,6 +245,26 @@ generalized incrementally:
 7. Side panel renders the page-reading workspace.
 8. Existing model pipeline generates summary and reading brief.
 9. User may copy, download, search, or hand off manually.
+
+## Current-Region Flow
+
+This is not the first runtime slice, but the architecture should leave room for
+it.
+
+1. Content script tracks the last meaningful mouse point and optionally the
+   active selection.
+2. User triggers a configured hotkey, context-menu action, or click-hold
+   gesture.
+3. Targeting resolves a `ReadingTarget` from the selected text, observed node,
+   or nearest valid block at the mouse point.
+4. The target includes region text, surrounding text, page metadata, and source
+   rect.
+5. The service worker routes the target through the same model/readiness path
+   as a whole page but with a smaller prompt scope.
+6. UI shows progress and the result in the chosen surface: side panel, in-page
+   anchor, or both.
+
+Initial design rule: explicit trigger only. Do not analyze on ambient hover.
 
 ## Extraction Strategy
 
@@ -250,6 +316,16 @@ Avoid an in-page overlay in the MVP. If a later version adds one, it should be
 small and user-triggered, such as a selected-text mini action, not an always-on
 badge on every paragraph.
 
+For current-region actions, prefer a hybrid surface:
+
+- side panel for durable result, history, model status, copy/export, and
+  external-tool handoff;
+- small in-page anchor for progress, target confirmation, and short result;
+- no inline replacement of source text.
+
+This keeps the first version clean while preserving the directness of
+immersive-translation-style shortcuts.
+
 ## Prompt And Output Changes
 
 Tier B prompts should receive a surface label and source context:
@@ -264,6 +340,7 @@ Tier B prompts should receive a surface label and source context:
 - `links`;
 - `imageAltText`;
 - extraction warnings.
+- `targetKind` and `surroundingText` when analyzing a `ReadingTarget`.
 
 The model instruction should say "web page" for General Page Reader and avoid
 Facebook-specific assumptions such as "post", "share", or "repost" unless the
@@ -333,6 +410,17 @@ Public tests should assert:
 - Update CWS reviewer notes and permission justification.
 - Add browser QA against a small manually selected page matrix.
 - Decide whether selected-text mini-actions belong in the next preview.
+
+### Slice 6: Current Region Interaction Spike
+
+- Add `ReadingTarget` contract tests.
+- Track mouse point and selection snapshots in a content script.
+- Resolve current target via selection, observed node, then nearest block at the
+  mouse point.
+- Ignore editable controls, extension UI, hidden content, and document surface
+  clicks.
+- Prototype hotkey and click-hold triggers.
+- Compare side-panel-only, in-page-anchor-only, and hybrid result surfaces.
 
 ## Verification Gates
 
