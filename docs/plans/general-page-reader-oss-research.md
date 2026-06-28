@@ -372,38 +372,40 @@ The first reproducible parser spike is implemented as:
 npm run spike:general-page-parsers
 ```
 
-It reads the public HTML fixtures in `tests/fixtures/general-pages`, runs:
+It reads the public synthetic fixture manifest in
+`tests/fixtures/general-pages/manifest.json`, runs:
 
 - `@mozilla/readability`;
 - `defuddle`;
 - `defuddle` with Markdown output;
 
-and writes a JSON report to:
+and writes a JSON report with per-fixture threshold results to:
 
 ```text
-tmp/parser-spikes/general-page-parser-spike-2026-06-28.json
+tmp/parser-spikes/general-page-parser-spike-YYYY-MM-DD.json
 ```
 
-Initial run on 2026-06-28:
+V2 run on 2026-06-29:
 
-| Candidate | Parsed fixtures | Contains score | Leaks | Average time |
-| --- | ---: | ---: | ---: | ---: |
-| `@mozilla/readability` | 6/6 | 1.000 | 0 | 3.51 ms |
-| `defuddle` | 6/6 | 1.000 | 0 | 17.47 ms |
-| `defuddle` Markdown | 6/6 | 1.000 | 0 | 15.08 ms |
+| Candidate | Parsed fixtures | Contains score | Leaks | Average time | Threshold |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| `@mozilla/readability` | 16/16 | 1.000 | 0 | 2.12 ms | 16/16 |
+| `defuddle` | 16/16 | 1.000 | 0 | 16.48 ms | 16/16 |
+| `defuddle` Markdown | 16/16 | 1.000 | 0 | 15.25 ms | 16/16 |
 
 Interpretation:
 
-- Both packages are viable parser-spike candidates on the current synthetic
+- Both packages remain viable parser-spike candidates on the expanded synthetic
   fixtures.
-- Readability is faster on this tiny fixture corpus and maps directly to article
-  fields.
+- Readability is faster on this fixture corpus and maps directly to article
+  fields, but the JSON report should still be inspected for secondary noise
+  patterns that are not the primary threshold target for a fixture.
 - Defuddle's Markdown mode is worth keeping in the spike because Truly may use
   Markdown/context output for model prompts rather than rendering third-party
   HTML.
 - The fixture corpus is still too small to choose a default parser. The next
-  evaluation should add larger and messier synthetic pages before adopting
-  either dependency in runtime code.
+  evaluation should add more list/index, Q&A, canonical conflict, and paid
+  teaser fixtures before adopting either dependency in runtime code.
 - Neither candidate removes the need for a separate live DOM `ReadingTarget`
   layer for selected/current-region actions.
 

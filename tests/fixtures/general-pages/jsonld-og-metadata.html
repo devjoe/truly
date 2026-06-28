@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Metadata Rich Fixture</title>
+  <link rel="canonical" href="https://example.test/features/metadata-rich">
+  <link rel="amphtml" href="https://amp.example.test/features/metadata-rich">
+  <meta property="og:title" content="Metadata Rich Fixture">
+  <meta property="og:site_name" content="Example Features">
+  <meta property="article:author" content="Synthetic Metadata Team">
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "NewsArticle",
+      "headline": "Metadata Rich Fixture",
+      "author": {"@type": "Person", "name": "Synthetic Metadata Team"}
+    }
+  </script>
+</head>
+<body>
+  <header>Share this article Save Print</header>
+  <article>
+    <h1>Metadata Rich Fixture</h1>
+    <p>The metadata rich fixture uses OpenGraph and JSON LD while keeping all body text synthetic. The goal is to evaluate whether parser candidates preserve useful title, author, source, and canonical URL fields.</p>
+    <p>The article body describes a fictional release note, a fictional reader workflow, and a fictional review process. These details are generic enough for an open repository while still resembling a real editorial page.</p>
+    <p>A final paragraph mentions syndication and alternate links so the evaluation can record canonical behavior without copying any real AMP or article markup.</p>
+  </article>
+  <aside>Related briefing Related briefing Related briefing</aside>
+</body>
+</html>

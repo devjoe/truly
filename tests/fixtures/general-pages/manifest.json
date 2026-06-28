@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 1,
+  "description": "Synthetic, public-safe fixtures for the General Page Reader parser spike. These files model observed page patterns without copying real site HTML or text.",
+  "fixtureRoot": "tests/fixtures/general-pages",
+  "defaults": {
+    "thresholds": {
+      "minContainsScore": 1,
+      "maxLeakCount": 0,
+      "maxDurationMs": 750
+    }
+  },
+  "fixtures": [
+    {
+      "id": "clean-article",
+      "file": "clean-article.html",
+      "url": "https://example.test/articles/clean-article",
+      "locale": "en",
+      "pageType": "article",
+      "patterns": ["P01-semantic-article", "P15-rich-metadata"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["public planning meeting", "meeting notes"],
+        "excludes": []
+      }
+    },
+    {
+      "id": "nav-sidebar-noise",
+      "file": "nav-sidebar-noise.html",
+      "url": "https://example.test/blog/noise-fixture",
+      "locale": "en",
+      "pageType": "blog",
+      "patterns": ["P03-navigation-sidebar-noise", "P04-related-content-recirc"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["small research team keeps notes useful"],
+        "excludes": ["Home Products Pricing", "Promotional sidebar", "Privacy Terms Contact"]
+      }
+    },
+    {
+      "id": "documentation-page",
+      "file": "documentation-page.html",
+      "url": "https://docs.example.test/client/setup",
+      "locale": "en",
+      "pageType": "documentation",
+      "patterns": ["P06-nested-documentation-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["Create a local configuration file", "model endpoint that the user controls"],
+        "excludes": []
+      }
+    },
+    {
+      "id": "selected-text",
+      "file": "selected-text.html",
+      "url": "https://example.test/articles/selection",
+      "locale": "en",
+      "pageType": "article",
+      "patterns": ["P01-semantic-article"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["meaningful selection", "selected text has priority"],
+        "excludes": []
+      }
+    },
+    {
+      "id": "blocked-like",
+      "file": "blocked-like.html",
+      "url": "https://example.test/private/story",
+      "locale": "en",
+      "pageType": "blocked",
+      "patterns": ["P11-paywall-or-membership", "P12-login-wall"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["log in or subscribe"],
+        "excludes": []
+      }
+    },
+    {
+      "id": "zh-tw-article",
+      "file": "zh-tw-article.html",
+      "url": "https://example.test/zh-tw/article",
+      "locale": "zh-TW",
+      "pageType": "article",
+      "patterns": ["P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["這是一篇合成的繁體中文文章", "不包含真實人物、真實帳號或私人網址"],
+        "excludes": []
+      }
+    },
+    {
+      "id": "news-related-sidebar",
+      "file": "news-related-sidebar.html",
+      "url": "https://example.test/news/civic-budget-review",
+      "locale": "en",
+      "pageType": "news",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P04-related-content-recirc"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["civic budget review", "neutral background for the synthetic newsroom"],
+        "excludes": ["Most viewed", "Sponsored comparison", "Newsletter signup"]
+      }
+    },
+    {
+      "id": "government-no-article",
+      "file": "government-no-article.html",
+      "url": "https://official.example.test/news/accessibility-update",
+      "locale": "en",
+      "pageType": "official-announcement",
+      "patterns": ["P02-main-role-without-article", "P16-missing-or-conflicting-metadata"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["accessibility update for public service counters", "pilot schedule for appointment reminders"],
+        "excludes": ["Minister profile", "Public records"]
+      }
+    },
+    {
+      "id": "docs-nested-layout",
+      "file": "docs-nested-layout.html",
+      "url": "https://docs.example.test/platform/local-storage",
+      "locale": "en",
+      "pageType": "documentation",
+      "patterns": ["P06-nested-documentation-layout", "P07-api-reference-multipanel"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["configure a local storage adapter", "retry queue keeps pending records on the device"],
+        "excludes": ["On this page", "SDK status", "Copy curl"]
+      }
+    },
+    {
+      "id": "forum-thread",
+      "file": "forum-thread.html",
+      "url": "https://community.example.test/t/release-checklist",
+      "locale": "en",
+      "pageType": "forum-thread",
+      "patterns": ["P08-forum-thread", "P19-comments-heavy-page"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["release checklist for a browser extension", "second reply adds a reminder about review notes"],
+        "excludes": ["Unread", "Badges", "Suggested topics"]
+      }
+    },
+    {
+      "id": "consent-banner",
+      "file": "consent-banner.html",
+      "url": "https://example.test/features/privacy-panel",
+      "locale": "en",
+      "pageType": "article",
+      "patterns": ["P13-consent-and-overlay", "P01-semantic-article"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["privacy panel explains how readers can inspect local decisions"],
+        "excludes": ["Accept all cookies", "Reject nonessential", "Manage preferences"]
+      }
+    },
+    {
+      "id": "jsonld-og-metadata",
+      "file": "jsonld-og-metadata.html",
+      "url": "https://example.test/features/metadata-rich",
+      "locale": "en",
+      "pageType": "article",
+      "patterns": ["P15-rich-metadata", "P20-canonical-amp-syndication"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["metadata rich fixture uses OpenGraph and JSON LD"],
+        "excludes": ["Share this article", "Related briefing"]
+      }
+    },
+    {
+      "id": "missing-metadata-blog",
+      "file": "missing-metadata-blog.html",
+      "url": "https://personal.example.test/posts/quiet-parser-notes",
+      "locale": "en",
+      "pageType": "blog",
+      "patterns": ["P16-missing-or-conflicting-metadata"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["quiet parser notes describe the page without metadata"],
+        "excludes": ["Archive", "Tag cloud", "Previous posts"]
+      }
+    },
+    {
+      "id": "zhtw-news-layout",
+      "file": "zhtw-news-layout.html",
+      "url": "https://example.test/tw/news/local-service",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P17-traditional-chinese-layout", "P03-navigation-sidebar-noise"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["這個合成新聞頁面描述一項公共服務測試", "段落保留繁體中文標點與語氣"],
+        "excludes": ["熱門新聞", "即時排行", "訂閱電子報"]
+      }
+    },
+    {
+      "id": "public-social-feed",
+      "file": "public-social-feed.html",
+      "url": "https://social.example.test/@fixture/post/123",
+      "locale": "en",
+      "pageType": "social-public-page",
+      "patterns": ["P10-feed-like-social-page", "P18-media-and-caption"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["public social page contains one focused post", "linked public notice before sharing it"],
+        "excludes": ["Trending now", "Suggested accounts", "Install app"]
+      }
+    },
+    {
+      "id": "js-shell-bad-page",
+      "file": "js-shell-bad-page.html",
+      "url": "https://app-shell.example.test/story/empty",
+      "locale": "en",
+      "pageType": "bad-page",
+      "patterns": ["P14-client-rendered-empty-shell"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["Enable JavaScript to read this page"],
+        "excludes": ["fictional article body should never appear"]
+      },
+      "thresholds": {
+        "minContainsScore": 1,
+        "maxLeakCount": 0,
+        "maxDurationMs": 750
+      }
+    }
+  ]
+}

@@ -9,57 +9,51 @@ import { JSDOM } from "jsdom";
 import { Defuddle } from "defuddle/node";
 
 const FIXTURE_DIR = "tests/fixtures/general-pages";
+const MANIFEST_PATH = path.join(FIXTURE_DIR, "manifest.json");
 const OUTPUT_DIR = "tmp/parser-spikes";
 const REPORT_DATE = process.env.TRULY_PARSER_SPIKE_DATE ?? new Date().toISOString().slice(0, 10);
 const REPORT_PATH = path.join(OUTPUT_DIR, `general-page-parser-spike-${REPORT_DATE}.json`);
 
-const fixtures = [
-  {
-    id: "clean-article",
-    file: "clean-article.html",
-    url: "https://example.test/articles/clean-article",
-    expectedContains: ["public planning meeting", "meeting notes"],
-    expectedExcludes: [],
-  },
-  {
-    id: "nav-sidebar-noise",
-    file: "nav-sidebar-noise.html",
-    url: "https://example.test/blog/noise-fixture",
-    expectedContains: ["small research team keeps notes useful"],
-    expectedExcludes: ["Home Products Pricing", "Promotional sidebar", "Privacy Terms Contact"],
-  },
-  {
-    id: "documentation-page",
-    file: "documentation-page.html",
-    url: "https://docs.example.test/client/setup",
-    expectedContains: ["Create a local configuration file", "model endpoint that the user controls"],
-    expectedExcludes: [],
-  },
-  {
-    id: "selected-text",
-    file: "selected-text.html",
-    url: "https://example.test/articles/selection",
-    expectedContains: ["meaningful selection", "selected text has priority"],
-    expectedExcludes: [],
-  },
-  {
-    id: "blocked-like",
-    file: "blocked-like.html",
-    url: "https://example.test/private/story",
-    expectedContains: ["log in or subscribe"],
-    expectedExcludes: [],
-  },
-  {
-    id: "zh-tw-article",
-    file: "zh-tw-article.html",
-    url: "https://example.test/zh-tw/article",
-    expectedContains: ["這是一篇合成的繁體中文文章", "不包含真實人物、真實帳號或私人網址"],
-    expectedExcludes: [],
-  },
-];
+const manifest = readManifest();
+const fixtures = manifest.fixtures.map(normalizeFixture);
 
 function readFixture(file) {
   return fs.readFileSync(path.join(FIXTURE_DIR, file), "utf8");
+}
+
+function readManifest() {
+  const raw = fs.readFileSync(MANIFEST_PATH, "utf8");
+  const parsed = JSON.parse(raw);
+  if (parsed.schemaVersion !== 1)
+    throw new Error(`Unsupported fixture manifest schema: ${parsed.schemaVersion}`);
+  if (!Array.isArray(parsed.fixtures) || parsed.fixtures.length === 0)
+    throw new Error("Fixture manifest must include at least one fixture.");
+  return parsed;
+}
+
+function normalizeFixture(fixture) {
+  if (!fixture.id || !fixture.file || !fixture.url)
+    throw new Error(`Invalid fixture entry: ${JSON.stringify(fixture)}`);
+  if (fixture.synthetic !== true)
+    throw new Error(`Fixture ${fixture.id} must be explicitly marked synthetic.`);
+  if (!fs.existsSync(path.join(FIXTURE_DIR, fixture.file)))
+    throw new Error(`Fixture file does not exist: ${fixture.file}`);
+
+  const expected = fixture.expected ?? {};
+  const thresholds = {
+    ...manifest.defaults?.thresholds,
+    ...fixture.thresholds,
+  };
+  return {
+    ...fixture,
+    expectedContains: expected.contains ?? [],
+    expectedExcludes: expected.excludes ?? [],
+    thresholds: {
+      minContainsScore: thresholds.minContainsScore ?? 1,
+      maxLeakCount: thresholds.maxLeakCount ?? 0,
+      maxDurationMs: thresholds.maxDurationMs ?? Number.POSITIVE_INFINITY,
+    },
+  };
 }
 
 function domFor(html, url) {
@@ -85,6 +79,42 @@ function scoreText(text, fixture) {
       ? 1
       : containsHits.length / fixture.expectedContains.length,
     leakCount: excludeLeaks.length,
+  };
+}
+
+function evaluateThresholds(engineResult, fixture) {
+  const failures = [];
+  const score = engineResult.score ?? {
+    containsScore: 0,
+    leakCount: Number.POSITIVE_INFINITY,
+  };
+
+  if (!engineResult.ok)
+    failures.push("empty-result");
+  if (engineResult.error)
+    failures.push("parser-error");
+  if (score.containsScore < fixture.thresholds.minContainsScore) {
+    failures.push(
+      `contains-score ${score.containsScore} < ${fixture.thresholds.minContainsScore}`,
+    );
+  }
+  if (score.leakCount > fixture.thresholds.maxLeakCount) {
+    failures.push(
+      `leak-count ${score.leakCount} > ${fixture.thresholds.maxLeakCount}`,
+    );
+  }
+  if (
+    typeof engineResult.durationMs === "number" &&
+    engineResult.durationMs > fixture.thresholds.maxDurationMs
+  ) {
+    failures.push(
+      `duration-ms ${engineResult.durationMs} > ${fixture.thresholds.maxDurationMs}`,
+    );
+  }
+
+  return {
+    pass: failures.length === 0,
+    failures,
   };
 }
 
@@ -161,12 +191,20 @@ async function main() {
       { engine: "defuddle-markdown", parse: () => parseDefuddle(html, fixture, { markdown: true }) },
     ]) {
       try {
-        engineResults.push(await candidate.parse());
-      } catch (error) {
+        const result = await candidate.parse();
         engineResults.push({
+          ...result,
+          threshold: evaluateThresholds(result, fixture),
+        });
+      } catch (error) {
+        const result = {
           engine: candidate.engine,
           ok: false,
           error: error instanceof Error ? error.message : String(error),
+        };
+        engineResults.push({
+          ...result,
+          threshold: evaluateThresholds(result, fixture),
         });
       }
     }
@@ -174,8 +212,13 @@ async function main() {
       id: fixture.id,
       file: fixture.file,
       url: fixture.url,
+      locale: fixture.locale,
+      pageType: fixture.pageType,
+      patterns: fixture.patterns,
+      synthetic: fixture.synthetic,
       expectedContains: fixture.expectedContains,
       expectedExcludes: fixture.expectedExcludes,
+      thresholds: fixture.thresholds,
       engines: engineResults,
     });
   }
@@ -197,11 +240,14 @@ async function main() {
     fixtureCount: fixtures.length,
     results,
     summary: summarize(results),
+    threshold: summarizeThresholds(results),
   };
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`);
   printSummary(report);
+  if (!report.threshold.pass)
+    process.exitCode = 1;
 }
 
 function summarize(results) {
@@ -216,6 +262,7 @@ function summarize(results) {
         totalDurationMs: 0,
         parsedFixtures: 0,
         errors: 0,
+        thresholdPassCount: 0,
       };
       if (engine.ok)
         current.okCount += 1;
@@ -227,6 +274,8 @@ function summarize(results) {
       }
       if (typeof engine.durationMs === "number")
         current.totalDurationMs += engine.durationMs;
+      if (engine.threshold?.pass)
+        current.thresholdPassCount += 1;
       current.parsedFixtures += 1;
       byEngine.set(engine.engine, current);
     }
@@ -239,7 +288,28 @@ function summarize(results) {
     totalLeaks: item.totalLeaks,
     averageDurationMs: Number((item.totalDurationMs / item.parsedFixtures).toFixed(2)),
     errors: item.errors,
+    thresholdPassCount: item.thresholdPassCount,
   }));
+}
+
+function summarizeThresholds(results) {
+  const failures = [];
+  for (const fixture of results) {
+    for (const engine of fixture.engines) {
+      if (engine.threshold?.pass)
+        continue;
+      failures.push({
+        fixtureId: fixture.id,
+        engine: engine.engine,
+        failures: engine.threshold?.failures ?? ["missing-threshold-result"],
+      });
+    }
+  }
+  return {
+    pass: failures.length === 0,
+    failureCount: failures.length,
+    failures,
+  };
 }
 
 function printSummary(report) {
@@ -248,8 +318,19 @@ function printSummary(report) {
     console.log(
       `${item.engine}: ok ${item.okCount}/${item.fixtureCount}, ` +
       `contains ${item.averageContainsScore}, leaks ${item.totalLeaks}, ` +
-      `avg ${item.averageDurationMs}ms, errors ${item.errors}`,
+      `avg ${item.averageDurationMs}ms, errors ${item.errors}, ` +
+      `threshold ${item.thresholdPassCount}/${item.fixtureCount}`,
     );
+  }
+  if (report.threshold.pass) {
+    console.log("threshold: pass");
+  } else {
+    console.error(`threshold: fail (${report.threshold.failureCount})`);
+    for (const failure of report.threshold.failures) {
+      console.error(
+        `${failure.engine}/${failure.fixtureId}: ${failure.failures.join("; ")}`,
+      );
+    }
   }
 }
 
