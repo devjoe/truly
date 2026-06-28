@@ -387,6 +387,10 @@
       color: #65676b;
       margin-top: 4px;
     }
+    .endpoint-warning {
+      line-height: 1.45;
+      white-space: pre-line;
+    }
     .status-info {
       display: inline-grid;
       place-items: center;
@@ -2323,6 +2327,7 @@
               <label id="llmEndpointLabel" for="ollamaEndpoint" data-i18n="common.endpoint">端點</label>
               <input type="text" id="ollamaEndpoint" placeholder="自動帶入預設端點" data-i18n-placeholder="common.endpointPlaceholder">
               <div class="status-text" id="ollamaEndpointError" style="display:none;"></div>
+              <div class="status-text status-warn endpoint-warning" id="ollamaEndpointWarning" style="display:none;"></div>
             </div>
             <div class="form-group">
               <div class="model-label-row">
@@ -2411,6 +2416,7 @@
               <label for="tierBEndpoint" data-i18n="common.endpoint">端點</label>
               <input type="text" id="tierBEndpoint" placeholder="自動帶入預設端點" data-i18n-placeholder="common.endpointPlaceholder">
               <div class="status-text" id="tierBEndpointError" style="display:none;"></div>
+              <div class="status-text status-warn endpoint-warning" id="tierBEndpointWarning" style="display:none;"></div>
             </div>
             <div class="form-group" id="tierBModelGroup">
               <div class="model-label-row">

@@ -1248,6 +1248,7 @@ async function init() {
     "tierAOutputMode"
   ) as HTMLInputElement;
   const ollamaEndpointError = document.getElementById("ollamaEndpointError")!;
+  const ollamaEndpointWarning = document.getElementById("ollamaEndpointWarning")!;
   const ollamaStatus = document.getElementById("ollamaStatus")!;
   const copyTierADiagnosticsButton = document.getElementById("copyTierADiagnostics") as HTMLButtonElement;
   const tierAProviderHelp = document.getElementById("tierAProviderHelp")!;
@@ -1284,6 +1285,36 @@ async function init() {
     tierAInlineStatus.className = className.includes("model-inline-status")
       ? className
       : `${className} model-inline-status`;
+  }
+
+  function endpointWarningText(rawEndpoint: string): string {
+    const endpoint = rawEndpoint.trim();
+    if (!endpoint) return "";
+    let parsed: URL;
+    try {
+      parsed = new URL(endpoint);
+    } catch {
+      return "";
+    }
+    const warnings: string[] = [];
+    const sensitiveQuery = Array.from(parsed.searchParams.keys()).some((key) =>
+      /(^|[_-])(api[_-]?key|access[_-]?token|auth|authorization|bearer|secret|token)([_-]|$)/i.test(key),
+    );
+    if (parsed.username || parsed.password || sensitiveQuery) {
+      warnings.push(optT("common.endpointWarnSecret"));
+    }
+    const host = parsed.hostname.toLowerCase();
+    const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+    if (parsed.protocol === "http:" && !isLoopback) {
+      warnings.push(optT("common.endpointWarnHttp"));
+    }
+    return warnings.join("\n");
+  }
+
+  function renderEndpointWarning(input: HTMLInputElement, warningEl: HTMLElement): void {
+    const text = endpointWarningText(input.value || input.placeholder);
+    warningEl.textContent = text;
+    warningEl.style.display = text ? "" : "none";
   }
 
   let tierADiagnosticsText = "";
@@ -1445,6 +1476,7 @@ async function init() {
     llmEndpointLabel.textContent = optT("common.endpoint");
     ollamaEndpoint.placeholder = defaultEndpointForProvider(provider);
     ollamaModel.placeholder = defaultModelForProvider(provider, "reading-prompt");
+    renderEndpointWarning(ollamaEndpoint, ollamaEndpointWarning);
     ollamaStatus.textContent = "";
     clearTierADiagnostics();
     if (provider === "none") {
@@ -1770,6 +1802,7 @@ async function init() {
   ollamaEndpoint.addEventListener("input", () => {
     showModelFallback();
     rememberTierAProviderDraft(providerSelect.value as TierAProvider);
+    renderEndpointWarning(ollamaEndpoint, ollamaEndpointWarning);
     refreshTierALaneSummary();
   });
   ollamaModel.addEventListener("input", () => {
@@ -1823,6 +1856,7 @@ async function init() {
         const tierAApiKey = apiKeyForProvider(provider, apiKeyInput);
         const endpoint = normalizeEndpointInput(ollamaEndpoint.value, defaultEndpoint);
         ollamaEndpoint.value = endpoint;
+        renderEndpointWarning(ollamaEndpoint, ollamaEndpointWarning);
 
         // Validate URL
         const validationError = validateEndpointUrl(endpoint);
@@ -1986,6 +2020,7 @@ async function init() {
   const tierBModel = document.getElementById("tierBModel") as HTMLInputElement;
   const refreshTierBModelsButton = document.getElementById("refreshTierBModels") as HTMLButtonElement;
   const tierBEndpointError = document.getElementById("tierBEndpointError")!;
+  const tierBEndpointWarning = document.getElementById("tierBEndpointWarning")!;
   const tierBSetupError = document.getElementById("tierBSetupError")!;
   const tierBStatus = document.getElementById("tierBStatus")!;
   const tierBProviderHelp = document.getElementById("tierBProviderHelp")!;
@@ -2173,6 +2208,7 @@ async function init() {
     if (!needsEndpoint) showTierBModelFallback();
     tierBEndpoint.placeholder = defaultEndpointForProvider(provider);
     tierBModel.placeholder = defaultModelForProvider(provider, "summary-reading");
+    renderEndpointWarning(tierBEndpoint, tierBEndpointWarning);
     if (provider === "none") {
       tierBLaneSource.textContent = optT("options.tierB.disabledSource");
       tierBLaneMeta.textContent = optT("options.tierB.disabledMeta");
@@ -2254,6 +2290,7 @@ async function init() {
   tierBEndpoint.addEventListener("input", () => {
     showTierBModelFallback();
     rememberTierBProviderDraft(tierBProviderSelect.value as TierBProvider);
+    renderEndpointWarning(tierBEndpoint, tierBEndpointWarning);
     refreshTierBManualInputs();
   });
   tierBModel.addEventListener("input", () => {
@@ -2272,6 +2309,7 @@ async function init() {
       optT("options.modelTest.fetchingModels"),
     );
   });
+  i18nDynamicRenderers.push(refreshTierBManualInputs);
   refreshTierBManualInputs();
 
   const saveDeepAnalysisButton = document.getElementById("saveDeepAnalysis") as HTMLButtonElement;
@@ -2288,6 +2326,10 @@ async function init() {
       const endpoint = providerNeedsEndpoint(provider)
         ? manualEndpoint
         : "";
+      if (providerNeedsEndpoint(provider)) {
+        tierBEndpoint.value = manualEndpoint;
+        renderEndpointWarning(tierBEndpoint, tierBEndpointWarning);
+      }
       const enabled = deepClassifyEnabled.checked;
       let manualModel = currentTierBModelInput() || defaultModel;
       const aiGate = resolveTierBFeatureGate("ai_analysis", draftTierBSettings());
