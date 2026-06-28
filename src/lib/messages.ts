@@ -30,6 +30,8 @@ import type {
   Lang,
 } from "./types";
 import type { LlmPostContext } from "./ollama-client";
+import type { ReadingSurface } from "./reading-surface-types";
+import type { ReadingTarget } from "./reading-target-types";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./readiness";
 
 // ---------------------------------------------------------------------------
@@ -73,6 +75,31 @@ export interface RequestCurrentViewPostMsg {
 export interface ManualViewPostMsg {
   type: "MANUAL_VIEW_POST";
   id: string;
+}
+
+// ---------------------------------------------------------------------------
+// General page reader seams
+// ---------------------------------------------------------------------------
+
+export interface PageReadingRequestMsg {
+  type: "PAGE_READING_REQUEST";
+  tabId: number;
+}
+
+export interface PageReadingResultMsg {
+  type: "PAGE_READING_RESULT";
+  surface: ReadingSurface;
+}
+
+export interface ReadingTargetRequestMsg {
+  type: "READING_TARGET_REQUEST";
+  tabId: number;
+  trigger: "selection" | "hotkey" | "context-menu" | "click-hold";
+}
+
+export interface ReadingTargetResultMsg {
+  type: "READING_TARGET_RESULT";
+  target: ReadingTarget;
 }
 
 // ---------------------------------------------------------------------------
@@ -416,6 +443,10 @@ export type TrulyMessage =
   | CurrentViewPostMsg
   | RequestCurrentViewPostMsg
   | ManualViewPostMsg
+  | PageReadingRequestMsg
+  | PageReadingResultMsg
+  | ReadingTargetRequestMsg
+  | ReadingTargetResultMsg
   | SelectorHealthUpdateMsg
   | OllamaClassifyMsg
   | OllamaResultMsg
