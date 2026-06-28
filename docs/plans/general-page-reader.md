@@ -133,6 +133,17 @@ Do not replace `PostData` and `DashboardPostEvent` in one large migration.
 
 ## Architecture
 
+### Research Prerequisite
+
+Before writing runtime code, review existing open-source reader and article
+extraction projects. The initial research is tracked in
+`docs/plans/general-page-reader-oss-research.md`.
+
+The main implementation consequence is that Truly should define its own
+`ReadingSurface` contract and fixture suite first, then evaluate
+`@mozilla/readability` against the same fixtures before deciding whether to
+vendor or depend on it.
+
 ### New Files
 
 Planned additions:
@@ -291,7 +302,10 @@ Public tests should assert:
 
 - Add `ReadingSurface` types.
 - Add fixture HTML files.
-- Add pure extractor tests.
+- Add pure extractor tests that are independent of any one parser library.
+- Implement a small heuristic extractor baseline.
+- Compare `@mozilla/readability` against the same fixtures in a follow-up
+  dependency spike before adopting it.
 - No extension runtime changes yet.
 
 ### Slice 2: Page Reader Content Script
