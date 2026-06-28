@@ -1,7 +1,7 @@
 # MV3 Remote-Code And CSP Compliance Note
 
 Status: Alpha readiness note
-Last updated: 2026-06-14
+Last updated: 2026-06-28
 
 This note records the current Chrome MV3 compliance boundary for Alpha review.
 It should stay aligned with `src/manifest.json`,
@@ -48,6 +48,20 @@ Truly does not request `downloads`, `history`, broad `tabs`, `webRequest`, or
 `declarativeNetRequest`. Optional host permissions are reserved for
 user-configured model endpoints and should be requested only when the user saves
 or tests an endpoint that needs that origin.
+
+## Security Follow-ups
+
+### Endpoint URL credentials and cleartext HTTP
+
+Current boundary: model endpoint URLs are user-configured settings. Users should
+not put API keys, bearer tokens, or other secrets in endpoint URLs. Extension
+storage is not a secret vault, and non-loopback `http://` endpoints can send
+traffic in cleartext.
+
+Follow-up: add stronger Options-page guidance and consider separating endpoint
+URLs from credentials with a dedicated masked credential field. Also prefer or
+warn toward `https://` for non-loopback endpoints while continuing to support
+local HTTP endpoints such as `localhost` and `127.0.0.1`.
 
 ## Page Bridge Boundary
 

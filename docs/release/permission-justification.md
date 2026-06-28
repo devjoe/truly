@@ -1,6 +1,6 @@
 # Permission And Host Permission Justification
 
-Last updated: 2026-06-22
+Last updated: 2026-06-28
 
 This document explains why Truly requests each Chrome permission and host
 permission. It should stay aligned with `src/manifest.json`.
@@ -39,8 +39,10 @@ permission unless the configured provider path needs it.
 |---|---|---|
 | `script-src 'self' 'wasm-unsafe-eval'` | Allows the bundled zhtw-mcp WASM language-convention checker to run locally in the extension. | Extension logic remains bundled; model output is data, not executable code. |
 
-If the zhtw-mcp WASM loader no longer requires `wasm-unsafe-eval`, remove it
-before release.
+For Preview 9, `wasm-unsafe-eval` is intentionally retained because the bundled
+zhtw-mcp WASM loader still requires it. Remove the directive only after the
+bundled WASM loader no longer needs it and `docs/release/mv3-compliance.md` has
+been updated to match.
 
 ## Permissions Intentionally Not Requested
 

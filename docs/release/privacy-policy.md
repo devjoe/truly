@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-06-22
+Last updated: 2026-06-28
 
 Canonical URL: https://trulyreader.org/privacy/
 
@@ -56,7 +56,8 @@ privacy policy.
 
 Truly stores extension settings and readiness state in Chrome extension storage.
 Depending on your settings, this can include model endpoint URLs and model
-names. Do not store secrets in model endpoint URLs.
+names. Chrome extension storage is not a secret vault. Do not store API keys,
+bearer tokens, or other secrets in model endpoint URLs.
 
 Markdown notes are saved only when you explicitly download them. Clipboard
 content is written only when you explicitly use a copy action.
