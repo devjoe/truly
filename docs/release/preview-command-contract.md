@@ -107,26 +107,41 @@ profiles, local screenshots, or live CDP access.
 
 `claude -p` can be used as an advisory release reviewer, but it is not part of
 the deterministic `check:public`, `release:preview`, or `cws:package` gates.
-Run these commands manually when a release needs an extra semantic review pass:
+Use it selectively during development and explicitly during release/CWS review.
+
+Local source mode is for pre-push review. It can inspect local-only commits,
+uncommitted diffs, and newly added public-safe text files, so it is the right
+tool when a problem should be caught before it becomes public. Do not run it for
+every small edit. Run it when requested by the maintainer, when a change is
+large enough to deserve semantic review, or when a change touches sensitive
+release/security surfaces:
+
+- manifest permissions, host permissions, CSP, or web-accessible resources;
+- storage, API keys, diagnostics, or privacy-sensitive data flow;
+- content scripts, message passing, postMessage, DOM injection, or external
+  endpoint behavior;
+- localhost/dev-reload logic, remote-provider handling, or optional host
+  permission flows;
+- release scripts, CWS package scripts, privacy policy, CWS declarations, or
+  reviewer notes.
 
 ```bash
 TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review
 TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review
 ```
 
-For already committed and pushed public-repo releases, prefer GitHub URL source
-mode so Claude reviews immutable public commit and compare URLs instead of
-receiving local file contents:
+GitHub source mode is for post-push release verification. Use it after the
+release candidate commit has been pushed and before creating the GitHub Release
+or uploading to Chrome Web Store. It reviews immutable public commit and
+compare URLs instead of receiving local file contents:
 
 ```bash
 TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review:github
 TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:github
 ```
 
-GitHub source mode requires a clean working tree. It is appropriate after the
-release candidate commit has been pushed and before creating the GitHub Release
-or uploading to Chrome Web Store. Use local source mode only when reviewing
-uncommitted local changes or local-only package reports.
+GitHub source mode requires a clean working tree and a commit that exists on
+GitHub. If the commit only exists locally, use local source mode instead.
 
 Use `-- --dry-run` to generate the exact prompt/context without sending it to
 Claude:
@@ -152,10 +167,13 @@ decision remains human-owned.
 
 Recommended release placement:
 
-1. Run `release:review` or `release:review:github` before
-   `release:preview` / GitHub Release creation.
-2. Run `cws:review` or `cws:review:github` after `cws:package` and before
-   Chrome Web Store dashboard upload.
+1. For large or sensitive changes, run local source review before commit/push,
+   then fix or explicitly disposition findings.
+2. Before GitHub Release creation, run `release:review:github` against the
+   pushed release candidate commit.
+3. After `cws:package` and before Chrome Web Store dashboard upload, run
+   `cws:review:github`. Use local source mode instead only when the CWS review
+   must include local-only package reports or unpushed changes.
 
 `check:ollama-cloud-capabilities` is a release-time freshness reminder for the
 small static Ollama Cloud model capability registry. It blocks a Preview build

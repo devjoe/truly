@@ -268,6 +268,9 @@ function runClaudeReview(reviewKind, prompt) {
   const disallowedTools = sourceArg === "github"
     ? "Bash,Edit,Write,Read,Grep,Glob,WebSearch"
     : "Bash,Edit,Write,Read,Grep,Glob,WebFetch,WebSearch";
+  const toolArgs = sourceArg === "github"
+    ? ["--tools=WebFetch", "--allowedTools=WebFetch"]
+    : ["--tools="];
   const result = spawnSync(
     "claude",
     [
@@ -281,8 +284,8 @@ function runClaudeReview(reviewKind, prompt) {
       schema,
       "--max-budget-usd",
       budgetUsd,
-      "--disallowedTools",
-      disallowedTools,
+      ...toolArgs,
+      `--disallowedTools=${disallowedTools}`,
     ],
     {
       cwd: root,
