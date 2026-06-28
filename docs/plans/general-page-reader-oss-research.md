@@ -14,13 +14,13 @@ fixture-first implementation slice.
 ## Short Recommendation
 
 Start with a small Truly-owned extraction contract and fixture suite, but design
-it so `@mozilla/readability` can be evaluated as the first serious extraction
-engine.
+it so `@mozilla/readability` and `defuddle` can be evaluated as the first serious
+extraction engine candidates.
 
 Do not start by importing a large parser directly into the extension runtime.
 First prove the required output shape, failure states, and side-panel behavior
 with synthetic fixtures. Then compare the hand-rolled extractor against
-Readability on the same fixtures.
+Readability and Defuddle on the same fixtures.
 
 For current-mouse-region actions, do not rely on article extraction alone.
 Reader and translation extensions that feel fast use live DOM observation,
@@ -32,6 +32,9 @@ as a second target type that can share context with the whole-page extractor.
 ### Mozilla Readability
 
 Repository: <https://github.com/mozilla/readability>
+Package: `@mozilla/readability`
+License: Apache-2.0
+Checked npm latest: 0.6.0 on 2026-06-28
 
 Readability is the strongest baseline for Truly because it is the standalone
 library used by Firefox Reader View and is available as `@mozilla/readability`.
@@ -64,6 +67,40 @@ Implementation implications for Truly:
   verify Truly's own warning/status behavior.
 - If the package is added, audit bundle size and MV3 CSP behavior before using
   it in the content script.
+- Preserve Apache-2.0 license and notice requirements in the release artifact
+  if the package is adopted.
+
+### Defuddle
+
+Repository: <https://github.com/kepano/defuddle>
+Package: `defuddle`
+License: MIT
+Checked npm latest: 0.19.1 on 2026-06-28
+
+Defuddle extracts article content and metadata from web pages. It is relevant
+because Read Frog uses `defuddle/full` as its page-context extraction layer for
+LLM prompts, separate from live DOM paragraph targeting.
+
+Important lessons:
+
+- Treat Defuddle as a context and article-extraction candidate, not as a
+  substitute for live DOM target detection.
+- Evaluate both default extraction and `defuddle/full` if the package exposes
+  materially different output or bundle behavior.
+- Measure whether the output shape maps cleanly to `ReadingSurface` and whether
+  Markdown/context output is useful for model prompts.
+- Check bundle size and MV3 CSP behavior before content-script use.
+- Treat extracted HTML or Markdown as page-owned input. Render text-first unless
+  sanitizer requirements are explicitly handled.
+
+Implementation implications for Truly:
+
+- Add a thin adapter later:
+  `DefuddleResult -> ReadingSurface`.
+- Compare Defuddle against Readability on the same fixtures before choosing a
+  default parser.
+- Preserve MIT copyright/license notice requirements in the release artifact if
+  the package is adopted.
 
 ### Postlight Parser / Mercury Parser
 
@@ -309,7 +346,8 @@ suite:
 | Candidate | Role | What To Measure |
 | --- | --- | --- |
 | Truly heuristic extractor | Baseline/fallback | Simplicity, warning quality, fixture stability |
-| Mozilla Readability | Main candidate | Text quality, metadata quality, false positives, bundle cost |
+| Mozilla Readability | Parser candidate | Text quality, metadata quality, false positives, bundle cost, Apache-2.0 notice |
+| Defuddle | Parser/context candidate | Text quality, metadata quality, Markdown/context quality, bundle cost, MIT notice |
 | Postlight Parser concepts | Design reference | Custom extractor pattern, output contract breadth |
 | Read Frog patterns | Interaction reference | Current-node targeting, selection snapshots, Defuddle context |
 | Kiss Translator patterns | Interaction reference | Observed nodes, lazy viewport processing, rule/heuristic split |
@@ -334,13 +372,13 @@ Update the first implementation slice:
 2. Build fixture corpus.
 3. Implement a small heuristic extractor.
 4. Add test expectations that are independent of any one parser library.
-5. Add a follow-up spike to run `@mozilla/readability` against the same
-   fixtures and compare outputs.
+5. Add a follow-up spike to run `@mozilla/readability` and `defuddle` against
+   the same fixtures and compare outputs.
 6. Add a later current-region spike for point/selection targeting and surface
    placement.
 
-Do not add `@mozilla/readability` in the first code commit unless the team
-explicitly accepts the dependency and bundle-size tradeoff.
+Do not add `@mozilla/readability` or `defuddle` in the first code commit unless
+the team explicitly accepts the dependency and bundle-size tradeoff.
 
 ## Sources
 
@@ -350,6 +388,12 @@ explicitly accepts the dependency and bundle-size tradeoff.
   <https://raw.githubusercontent.com/mozilla/readability/main/Readability.js>
 - Mozilla readerability gate:
   <https://raw.githubusercontent.com/mozilla/readability/main/Readability-readerable.js>
+- Mozilla Readability npm metadata:
+  `npm view @mozilla/readability version license repository.url`
+- Defuddle:
+  <https://github.com/kepano/defuddle>
+- Defuddle npm metadata:
+  `npm view defuddle version license repository.url`
 - Postlight Parser:
   <https://github.com/postlight/parser>
 - Omnivore:

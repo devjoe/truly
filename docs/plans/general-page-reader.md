@@ -178,8 +178,8 @@ extraction projects. The initial research is tracked in
 
 The main implementation consequence is that Truly should define its own
 `ReadingSurface` contract and fixture suite first, then evaluate
-`@mozilla/readability` against the same fixtures before deciding whether to
-vendor or depend on it.
+`@mozilla/readability` and `defuddle` against the same fixtures before deciding
+whether to vendor or depend on either package.
 
 The interaction-pattern consequence from Read Frog and Kiss Translator is that
 article extraction is not enough for one-key paragraph actions. Truly needs a
@@ -381,8 +381,8 @@ Public tests should assert:
 - Add fixture HTML files.
 - Add pure extractor tests that are independent of any one parser library.
 - Implement a small heuristic extractor baseline.
-- Compare `@mozilla/readability` against the same fixtures in a follow-up
-  dependency spike before adopting it.
+- Compare `@mozilla/readability` and `defuddle` against the same fixtures in a
+  follow-up dependency spike before adopting either package.
 - No extension runtime changes yet.
 
 ### Slice 2: Page Reader Content Script
