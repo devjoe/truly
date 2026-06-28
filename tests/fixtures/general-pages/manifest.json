@@ -206,6 +206,123 @@
       }
     },
     {
+      "id": "category-list-page",
+      "file": "category-list-page.html",
+      "url": "https://example.test/topics/research-index",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P05-list-or-index-page", "P03-navigation-sidebar-noise"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["directory page lists several synthetic articles", "list page rather than one complete article"],
+        "excludes": ["Sponsored link", "Account menu"]
+      }
+    },
+    {
+      "id": "search-results-index",
+      "file": "search-results-index.html",
+      "url": "https://example.test/search?q=synthetic-policy-notes",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P05-list-or-index-page", "P03-navigation-sidebar-noise"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["search results fixture is an index page", "result listing for a single article"],
+        "excludes": ["Filter by date", "Filter by region", "Filter by type"]
+      }
+    },
+    {
+      "id": "qa-accepted-answer",
+      "file": "qa-accepted-answer.html",
+      "url": "https://community.example.test/questions/accepted-answer",
+      "locale": "en",
+      "pageType": "q-and-a",
+      "patterns": ["P09-q-and-a-page", "P19-comments-heavy-page"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["accepted answer says the interface should describe uncertainty", "separating extraction status from model analysis"],
+        "excludes": ["Hot network questions", "Related tags"]
+      }
+    },
+    {
+      "id": "canonical-conflict-page",
+      "file": "canonical-conflict-page.html",
+      "url": "https://syndicated.example.test/copy/canonical-conflict",
+      "locale": "en",
+      "pageType": "article",
+      "patterns": ["P20-canonical-amp-syndication", "P15-rich-metadata"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["canonical conflict fixture models a syndicated page", "represent source identity"],
+        "excludes": ["Related syndicated copy"]
+      }
+    },
+    {
+      "id": "amp-syndicated-copy",
+      "file": "amp-syndicated-copy.html",
+      "url": "https://amp.example.test/features/amp-source",
+      "locale": "en",
+      "pageType": "article",
+      "patterns": ["P20-canonical-amp-syndication", "P15-rich-metadata"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["AMP syndicated copy fixture includes alternate mobile metadata", "release summary"],
+        "excludes": ["Share controls", "Open app", "Related source"]
+      }
+    },
+    {
+      "id": "media-first-card",
+      "file": "media-first-card.html",
+      "url": "https://example.test/media/synthetic-card",
+      "locale": "en",
+      "pageType": "media-article",
+      "patterns": ["P18-media-and-caption", "P01-semantic-article"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["synthetic media caption explains", "media first card has a short caption"],
+        "excludes": ["Open gallery", "Download image", "More cards"]
+      }
+    },
+    {
+      "id": "paid-teaser-long",
+      "file": "paid-teaser-long.html",
+      "url": "https://example.test/member/paid-teaser",
+      "locale": "en",
+      "pageType": "blocked",
+      "patterns": ["P11-paywall-or-membership", "P12-login-wall"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["paid teaser fixture presents a long preview", "Subscribe to continue reading"],
+        "excludes": ["hidden paid article body should never be extracted"]
+      }
+    },
+    {
+      "id": "newsletter-capture-blog",
+      "file": "newsletter-capture-blog.html",
+      "url": "https://personal.example.test/posts/newsletter-capture",
+      "locale": "en",
+      "pageType": "blog",
+      "patterns": ["P13-consent-and-overlay", "P03-navigation-sidebar-noise"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["newsletter capture blog fixture contains a synthetic essay", "separate structural observations from copied source content"],
+        "excludes": ["Join the newsletter", "Enter email", "Maybe later"]
+      }
+    },
+    {
+      "id": "api-reference-long",
+      "file": "api-reference-long.html",
+      "url": "https://docs.example.test/reference/observations",
+      "locale": "en",
+      "pageType": "documentation",
+      "patterns": ["P06-nested-documentation-layout", "P07-api-reference-multipanel"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["API reference long fixture describes a fictional endpoint", "fake request body includes a page category"],
+        "excludes": ["SDK status", "Copy curl"]
+      }
+    },
+    {
       "id": "js-shell-bad-page",
       "file": "js-shell-bad-page.html",
       "url": "https://app-shell.example.test/story/empty",

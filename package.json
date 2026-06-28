@@ -34,6 +34,7 @@
     "smoke:openai-api-key": "node scripts/smoke-openai-api-key.mjs",
     "smoke:ollama-vision": "node scripts/smoke-ollama-vision.mjs",
     "spike:general-page-parsers": "node scripts/spike-general-page-parsers.mjs",
+    "check:general-page-corpus": "node scripts/check-general-page-corpus.mjs",
     "check:type": "tsc --noEmit",
     "check:public-boundary": "node scripts/check-public-boundary.mjs",
     "check:release-metadata": "node scripts/check-release-metadata.mjs",

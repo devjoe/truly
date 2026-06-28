@@ -389,9 +389,9 @@ V2 run on 2026-06-29:
 
 | Candidate | Parsed fixtures | Contains score | Leaks | Average time | Threshold |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `@mozilla/readability` | 16/16 | 1.000 | 0 | 2.12 ms | 16/16 |
-| `defuddle` | 16/16 | 1.000 | 0 | 16.48 ms | 16/16 |
-| `defuddle` Markdown | 16/16 | 1.000 | 0 | 15.25 ms | 16/16 |
+| `@mozilla/readability` | 25/25 | 1.000 | 0 | 1.90 ms | 25/25 |
+| `defuddle` | 25/25 | 1.000 | 0 | 17.16 ms | 25/25 |
+| `defuddle` Markdown | 25/25 | 1.000 | 0 | 14.92 ms | 25/25 |
 
 Interpretation:
 
@@ -403,9 +403,10 @@ Interpretation:
 - Defuddle's Markdown mode is worth keeping in the spike because Truly may use
   Markdown/context output for model prompts rather than rendering third-party
   HTML.
-- The fixture corpus is still too small to choose a default parser. The next
-  evaluation should add more list/index, Q&A, canonical conflict, and paid
-  teaser fixtures before adopting either dependency in runtime code.
+- The fixture corpus now reaches the planned v2 lower bound, but it is still not
+  enough to choose a default parser. The next evaluation should use
+  observation-backed notes from real page structures before adopting either
+  dependency in runtime code.
 - Neither candidate removes the need for a separate live DOM `ReadingTarget`
   layer for selected/current-region actions.
 

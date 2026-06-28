@@ -38,11 +38,11 @@ Synthetic fixtures can combine multiple patterns.
 | P02-main-role-without-article | Official page uses `main` or `role=main` but no article | Heuristics that only trust `article` miss valid content | `government-no-article` |
 | P03-navigation-sidebar-noise | Header, nav, sidebar, footer surround content | Parser leaks menu or promo text into main body | `nav-sidebar-noise`, `news-related-sidebar`, `zhtw-news-layout` |
 | P04-related-content-recirc | Related stories and most-viewed modules near article | Parser chooses recirculation over the story | `news-related-sidebar` |
-| P05-list-or-index-page | Category page or search results masquerades as content | Parser extracts a feed/list as if it were one article | Not covered yet |
+| P05-list-or-index-page | Category page or search results masquerades as content | Parser extracts a feed/list as if it were one article | `category-list-page`, `search-results-index` |
 | P06-nested-documentation-layout | Docs content buried inside nested app layout | Parser chooses side rail or table of contents | `documentation-page`, `docs-nested-layout` |
 | P07-api-reference-multipanel | Docs include code panes, SDK status, copy buttons | Parser mixes chrome with explanatory content | `docs-nested-layout` |
 | P08-forum-thread | Multiple posts form a discussion | No single author/body; summarization target is ambiguous | `forum-thread` |
-| P09-q-and-a-page | Question, accepted answer, comments, votes | Parser may ignore the accepted answer or include chrome | Not covered yet |
+| P09-q-and-a-page | Question, accepted answer, comments, votes | Parser may ignore the accepted answer or include chrome | `qa-accepted-answer` |
 | P10-feed-like-social-page | Public social post with replies and app prompts | Needs post/context separation, not article-only extraction | `public-social-feed` |
 | P11-paywall-or-membership | Page has teaser or paywall copy | Parser treats blocked content as a complete article | `blocked-like` |
 | P12-login-wall | Login prompt replaces content | Parser extracts auth copy as source content | `blocked-like` |
@@ -157,7 +157,11 @@ observation only; do not archive or commit source content.
 
 ## Fixture Roadmap
 
-The first v2 fixture batch adds coverage for:
+The current v2 fixture corpus contains 25 public-safe synthetic HTML fixtures.
+It covers every pattern in this catalog at least once and stays within the
+planned 25-35 fixture range.
+
+The first v2 fixture batch added coverage for:
 
 - news article with heavy related/sidebar modules;
 - official announcement without `article`;
@@ -168,12 +172,18 @@ The first v2 fixture batch adds coverage for:
 - missing metadata;
 - Traditional Chinese news layout;
 - public social/feed-like page;
-- client-rendered empty shell.
+- client-rendered empty shell;
+- list/index pages;
+- Q&A pages;
+- AMP/canonical conflict pages;
+- media-first cards;
+- paid teaser pages;
+- newsletter capture overlays;
+- longer API reference pages.
 
 Remaining high-priority synthetic fixtures:
 
-- Q&A page with accepted answer and comments;
-- category/list page that should not be treated as one article;
-- AMP/canonical conflict page;
-- media-first page where caption is useful but insufficient;
-- paid teaser that looks longer than the real article body.
+- more Traditional Chinese official pages;
+- more mixed-language pages;
+- more malformed HTML pages;
+- more public social pages with reply chains.
