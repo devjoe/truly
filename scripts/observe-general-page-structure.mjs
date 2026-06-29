@@ -68,6 +68,7 @@ function normalizeTarget(target) {
     url: target.url,
     label: target.label,
     category: target.category,
+    focusPatterns: Array.isArray(target.focusPatterns) ? target.focusPatterns : [],
   };
 }
 
@@ -90,6 +91,7 @@ async function observeTarget(target) {
     finalUrl: response.url,
     label: target.label,
     category: target.category,
+    focusPatterns: target.focusPatterns,
     ok: response.ok,
     status: response.status,
     contentType: contentType.split(";")[0],
@@ -233,11 +235,15 @@ function aggregate(items) {
   const okItems = items.filter((item) => item.ok);
   const risks = countValues(okItems.flatMap((item) => item.risks ?? []));
   const patternHints = countValues(okItems.flatMap((item) => item.patternHints ?? []));
+  const focusPatterns = countValues(items.flatMap((item) => item.focusPatterns ?? []));
+  const observedFocusPatterns = countValues(okItems.flatMap((item) => item.focusPatterns ?? []));
   return {
     okCount: okItems.length,
     errorCount: items.length - okItems.length,
     risks,
     patternHints,
+    focusPatterns,
+    observedFocusPatterns,
   };
 }
 

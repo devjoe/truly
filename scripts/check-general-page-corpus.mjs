@@ -83,6 +83,15 @@ for (const patternId of patternIds) {
     failures.push(`Pattern evidence matrix is missing: ${patternId}`);
 }
 
+const evidenceStatuses = evidenceStatusesFromDoc(evidenceDoc);
+for (const patternId of patternIds) {
+  const status = evidenceStatuses.get(patternId);
+  if (!status)
+    failures.push(`Pattern evidence matrix has no status for: ${patternId}`);
+  if (status && status !== "observed-category")
+    failures.push(`Pattern evidence status must be observed-category for v2 completion: ${patternId} is ${status}.`);
+}
+
 const observationTargetCount = observationTargetsFromDoc(corpusDoc).length;
 if (observationTargetCount !== EXPECTED_OBSERVATION_TARGETS) {
   failures.push(
@@ -127,6 +136,13 @@ function observationTargetsFromDoc(doc) {
   ].map(escapeRegex).join("|");
   const pattern = new RegExp(`^\\| (${categoryPattern}) \\|`, "gm");
   return [...doc.matchAll(pattern)];
+}
+
+function evidenceStatusesFromDoc(doc) {
+  return new Map(
+    [...doc.matchAll(/^\| (P\d{2}-[a-z0-9-]+) \| ([^|]+) \|/gm)]
+      .map((match) => [match[1], match[2].trim()]),
+  );
 }
 
 function isAllowedExampleUrl(value) {

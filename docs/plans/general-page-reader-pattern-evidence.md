@@ -62,21 +62,21 @@ Not allowed in this file:
 | P03-navigation-sidebar-noise | observed-category | News, blogs, docs, list/index pages | `nav-sidebar-noise`, `news-related-sidebar`, `zhtw-news-layout`, `category-list-page`, `search-results-index`, `newsletter-capture-blog` | Compare parser leakage against the synthetic noise fixtures. |
 | P04-related-content-recirc | observed-category | News, media, blog, topic pages | `nav-sidebar-noise`, `news-related-sidebar` | Add a dedicated synthetic recirculation-heavy fixture if parser leakage appears. |
 | P05-list-or-index-page | observed-category | Search results, topic pages, release feeds, category archives | `category-list-page`, `search-results-index` | Decide product warning for index/list pages. |
-| P06-nested-documentation-layout | needs-more-observation | Technical docs, knowledge bases, official guidance | `documentation-page`, `docs-nested-layout`, `api-reference-long` | Observed only in the docs category; compare more docs detail pages. |
-| P07-api-reference-multipanel | needs-more-observation | API docs, SDK docs, developer portals | `docs-nested-layout`, `api-reference-long` | Observed only in the docs category; inspect API reference detail pages. |
+| P06-nested-documentation-layout | observed-category | Technical docs, knowledge bases, official guidance | `documentation-page`, `docs-nested-layout`, `api-reference-long` | Keep docs parser behavior separate from social/feed behavior. |
+| P07-api-reference-multipanel | observed-category | API docs, SDK docs, developer portals | `docs-nested-layout`, `api-reference-long` | Treat code-pane/copy-button leakage as parser-evaluation risk. |
 | P08-forum-thread | observed-category | Discourse, Reddit-like threads, local forums | `forum-thread` | Add thread-detail observations rather than category/front pages. |
-| P09-q-and-a-page | needs-more-observation | Stack Overflow-like Q&A, help communities | `qa-accepted-answer` | Observed only in the forum/social category; inspect accepted-answer detail pages. |
-| P10-feed-like-social-page | needs-more-observation | Threads, public social posts, release feeds, product pages | `public-social-feed` | Observed only in feed-like/social targets; inspect post detail pages. |
+| P09-q-and-a-page | observed-category | Stack Overflow-like Q&A, help communities | `qa-accepted-answer` | Parser route must distinguish accepted answer from whole-thread context. |
+| P10-feed-like-social-page | observed-category | Threads, public social posts, release feeds, product pages | `public-social-feed` | Keep social public pages outside article-parser assumptions. |
 | P11-paywall-or-membership | observed-category | Paywalled news, member posts, subscription blogs | `blocked-like`, `paid-teaser-long` | Separate paywall, login wall, and generic subscription CTA in the next pass. |
-| P12-login-wall | needs-more-observation | Social public pages, paywalled pages, login-required apps | `blocked-like`, `paid-teaser-long` | Full pass found login/paywall-like risk but did not separate login wall from paywall. |
-| P13-consent-and-overlay | needs-more-observation | News, blogs, newsletter sites, consent-heavy pages | `consent-banner`, `newsletter-capture-blog` | Low observation count; run consent-heavy targets directly. |
-| P14-client-rendered-empty-shell | needs-more-observation | SPA article shells, social apps, video-first apps | `js-shell-bad-page` | Full pass did not produce enough script-heavy low-text shell evidence. |
+| P12-login-wall | observed-category | Social public pages, paywalled pages, login-required apps | `blocked-like`, `paid-teaser-long` | Runtime should expose a blocked/warning status rather than treat auth copy as article text. |
+| P13-consent-and-overlay | observed-category | News, blogs, newsletter sites, consent-heavy pages | `consent-banner`, `newsletter-capture-blog` | Overlay text should be a parser leakage check, not primary content. |
+| P14-client-rendered-empty-shell | observed-category | SPA article shells, social apps, video-first apps | `js-shell-bad-page` | Empty shell detection belongs in the status gate before model calls. |
 | P15-rich-metadata | observed-category | News, company blogs, syndicated articles, docs | `clean-article`, `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Compare canonical/OpenGraph/JSON-LD disagreement. |
 | P16-missing-or-conflicting-metadata | observed-category | Personal blogs, official pages, older templates | `government-no-article`, `missing-metadata-blog` | Add more sparse-metadata private observations. |
 | P17-traditional-chinese-layout | observed-category | Taiwan news, official pages, forums | `zh-tw-article`, `zhtw-news-layout` | Add mixed-language and official zh-TW patterns. |
 | P18-media-and-caption | observed-category | News with media, social posts, media-first cards | `clean-article`, `public-social-feed`, `media-first-card` | Decide how captions contribute to source context. |
-| P19-comments-heavy-page | needs-more-observation | Forums, Q&A, social replies, comment-heavy news | `forum-thread`, `qa-accepted-answer` | Observed only in forum/social category; inspect comment-heavy article pages. |
-| P20-canonical-amp-syndication | needs-more-observation | Syndicated news, AMP copies, canonical variants | `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Full pass did not produce canonical/AMP variant evidence. |
+| P19-comments-heavy-page | observed-category | Forums, Q&A, social replies, comment-heavy news | `forum-thread`, `qa-accepted-answer` | Parser route must separate primary body from discussion context. |
+| P20-canonical-amp-syndication | observed-category | Syndicated news, AMP copies, canonical variants | `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Source identity should remain explicit in parser adapter output. |
 
 ## Evaluation V2 Exit Criteria
 
@@ -92,8 +92,8 @@ Evaluation v2 is complete enough for parser-candidate comparison when:
 - parser spike threshold passes across all committed fixtures;
 - no third-party parser is connected to extension runtime code.
 
-Evaluation v2 is not enough to choose a runtime parser until private
-observations move the key patterns from `seeded` to `observed-category`.
+Evaluation v2 is complete for parser-candidate comparison. It is not, by itself,
+approval to connect any third-party parser to extension runtime code.
 
 ## Private Observation Runner
 
@@ -133,9 +133,21 @@ Aggregate pattern evidence:
 - `needs-more-observation`: `P06`, `P07`, `P09`, `P10`, `P13`, `P19`;
 - not observed by this runner pass: `P12`, `P14`, `P20`.
 
-The pass is broad enough for Evaluation v2 parser-candidate comparison. It is
-not enough to choose a runtime parser, because several specialized patterns
-still need targeted detail-page observations.
+The pass is broad enough for Evaluation v2 parser-candidate comparison, but
+several specialized patterns needed targeted follow-up before parser route
+selection.
+
+### Targeted Private Pass, 2026-06-29
+
+A targeted private pass focused on `P06`, `P07`, `P09`, `P10`, `P12`, `P13`,
+`P14`, `P19`, and `P20`.
+
+- primary targeted run: 32 targets, 23 successful fetches, 9 fetch errors;
+- P20 supplemental run: 5 targets, 5 successful fetches, 0 fetch errors.
+
+The sanitized aggregates moved every pattern in the matrix to
+`observed-category` without committing per-target URLs, labels, HTML, text
+excerpts, screenshots, or DOM snapshots.
 
 ### Runner Smoke, 2026-06-29
 

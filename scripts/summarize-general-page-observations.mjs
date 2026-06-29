@@ -28,6 +28,7 @@ function summarize(report) {
   const okResults = results.filter((item) => item.ok);
   const categoryStats = new Map();
   const patternStats = new Map();
+  const focusPatternStats = new Map();
   const riskStats = new Map();
 
   for (const item of results) {
@@ -48,6 +49,15 @@ function summarize(report) {
       const patternEntry = getPatternStat(patternStats, pattern);
       patternEntry.total += 1;
       patternEntry.categories[category] = (patternEntry.categories[category] ?? 0) + 1;
+    }
+    for (const pattern of item.focusPatterns ?? []) {
+      const focusEntry = getPatternStat(focusPatternStats, pattern);
+      focusEntry.total += 1;
+      focusEntry.categories[category] = (focusEntry.categories[category] ?? 0) + 1;
+      if (item.ok)
+        focusEntry.ok = (focusEntry.ok ?? 0) + 1;
+      else
+        focusEntry.errors = (focusEntry.errors ?? 0) + 1;
     }
   }
 
@@ -73,6 +83,17 @@ function summarize(report) {
           total: value.total,
           categories: Object.fromEntries(Object.entries(value.categories).sort()),
           evidenceStatus: resolveEvidenceStatus(value),
+        }]),
+    ),
+    focusPatterns: Object.fromEntries(
+      [...focusPatternStats.entries()]
+        .sort()
+        .map(([pattern, value]) => [pattern, {
+          total: value.total,
+          ok: value.ok ?? 0,
+          errors: value.errors ?? 0,
+          categories: Object.fromEntries(Object.entries(value.categories).sort()),
+          evidenceStatus: resolveFocusEvidenceStatus(value),
         }]),
     ),
   };
@@ -104,6 +125,13 @@ function getPatternStat(map, key) {
 function resolveEvidenceStatus(value) {
   const categoryCount = Object.keys(value.categories).length;
   if (value.total >= OBSERVED_CATEGORY_MIN_TOTAL && categoryCount >= OBSERVED_CATEGORY_MIN_CATEGORIES)
+    return "observed-category";
+  return "needs-more-observation";
+}
+
+function resolveFocusEvidenceStatus(value) {
+  const ok = value.ok ?? 0;
+  if (ok >= OBSERVED_CATEGORY_MIN_TOTAL)
     return "observed-category";
   return "needs-more-observation";
 }
