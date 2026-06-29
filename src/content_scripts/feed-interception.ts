@@ -991,7 +991,7 @@ function findPhotoGridPostBoundary(action: HTMLElement, root: HTMLElement): HTML
     const rect = el.getBoundingClientRect();
     const w = Math.round(rect.width);
     const h = Math.round(rect.height);
-    if (w >= 350 && h >= 100 && h <= 3000 && isPhotoGridPostContainer(el)) {
+    if (w >= 350 && h >= 100 && h <= 3000 && !isPageSectionWrapper(el) && isPhotoGridPostContainer(el)) {
       matches.push(el);
     }
     el = el.parentElement;
@@ -1069,9 +1069,11 @@ function isRecoverablePostChild(el: HTMLElement): boolean {
 }
 
 function hasCommentOrShareAction(el: HTMLElement): boolean {
-  return !!el.querySelector(
-    '[aria-label="留言"],[aria-label="Comment"],[aria-label="分享"],[aria-label="Share"]'
-  );
+  for (const node of Array.from(el.querySelectorAll<HTMLElement>("[aria-label]"))) {
+    const label = (node.getAttribute("aria-label") || "").trim();
+    if (/^(留言|Comment|Leave a comment|分享|Share)$/i.test(label)) return true;
+  }
+  return false;
 }
 
 function hasInterestFeedbackAction(el: HTMLElement): boolean {
@@ -1083,6 +1085,20 @@ function hasInterestFeedbackAction(el: HTMLElement): boolean {
 
 function hasPostActionSignal(el: HTMLElement): boolean {
   return hasCommentOrShareAction(el) || hasInterestFeedbackAction(el);
+}
+
+function containsNestedFeedSurface(el: HTMLElement): boolean {
+  return el.getAttribute("role") !== "feed" && !!el.querySelector('[role="feed"]');
+}
+
+function containsComposerEntryPoint(el: HTMLElement): boolean {
+  return /Write something|What's on your mind|Anonymous post|Feeling\/activity|Poll|撰寫|匿名貼文|心情\/活動|投票/.test(
+    visibleText(el).slice(0, 500)
+  );
+}
+
+function isPageSectionWrapper(el: HTMLElement): boolean {
+  return containsNestedFeedSurface(el) || containsComposerEntryPoint(el);
 }
 
 export function shouldSuppressDomAttachmentFallbackForRecommendedPost(
@@ -1125,6 +1141,7 @@ export function isMixedFeedContainer(el: HTMLElement): boolean {
   // as if it were one post. It may contain a normal post, an ad, a Reel
   // tray, and several more posts; analyzing that wrapper pollutes Tier B
   // with unrelated text and image insights.
+  if (containsNestedFeedSurface(el) && (height > 900 || containsComposerEntryPoint(el))) return true;
   if (isGenericFeedWrapperAuthor(author) && actionBarCount >= 1) return true;
   if (height > 3000 && (reelTray || actionBarCount >= 2 || childPostCount >= 1)) return true;
   if (reelTray && actionBarCount >= 2) return true;
@@ -1172,7 +1189,7 @@ export function findPostBoundary(button: HTMLElement, root: HTMLElement): HTMLEl
     // FB's feed column width scales with viewport (680px at 1440, up to
     // 900+ on ultrawide). Height bounds reject button bars (< 100) and
     // the entire-feed container (> 3000).
-    if (w >= 350 && h >= 100 && h <= 3000 && el.contains(button)) {
+    if (w >= 350 && h >= 100 && h <= 3000 && el.contains(button) && !isPageSectionWrapper(el)) {
       matches.push(el);
     }
 
