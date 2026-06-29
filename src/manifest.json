@@ -3,7 +3,7 @@
   "default_locale": "en",
   "name": "Truly",
   "version": "0.1.1",
-  "version_name": "0.1.1 Preview 9",
+  "version_name": "0.1.1 Preview 10",
   "description": "Privacy-conscious reading assistance for social feeds and web pages.",
   "permissions": ["storage", "activeTab", "sidePanel"],
   "host_permissions": [
