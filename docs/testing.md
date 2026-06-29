@@ -49,3 +49,64 @@ before adding it to the public suite.
 Live Facebook checks, page-matrix audits, CDP screenshots, and private
 regression packs are release confidence passes. They are not required for public
 CI and must stay outside the public repository.
+
+### Current Facebook Page Audit
+
+Use this when a visible Facebook page may have layout drift, missing Heads-up
+rows, stale extension code, or locale-specific UI issues:
+
+```bash
+npm run dev:check
+npm run audit:facebook-current
+```
+
+For locale-specific passes:
+
+```bash
+npm run audit:facebook-current:zh
+npm run audit:facebook-current:en
+```
+
+For a small manual page matrix, open the Facebook scenarios you want to cover
+in the same debug Chrome session, then run:
+
+```bash
+npm run audit:facebook-open-tabs
+```
+
+Locale-specific open-tab matrix passes:
+
+```bash
+npm run audit:facebook-open-tabs:zh
+npm run audit:facebook-open-tabs:en
+```
+
+The audit attaches to the existing Chrome DevTools session on `127.0.0.1:9222`
+and checks the currently loaded Facebook tab. It verifies:
+
+- `dist/build-id.txt`, the service worker, and the Facebook content script are
+  aligned;
+- Heads-up hosts are mounted on real post containers, not page-level wrappers;
+- low-risk collapsed Heads-up rows may remain intentionally quiet;
+- the row can expand/collapse;
+- selector health is reported as healthy when available;
+- screenshots and a short report are saved under `tmp/facebook-current-audit-*`.
+
+`audit:facebook-open-tabs*` runs the same current-page audit once per open
+Facebook tab and writes a matrix summary under `tmp/facebook-open-tabs-audit-*`.
+This is the public-safe version of a page matrix: the repo stores the runner,
+not private target URLs.
+
+Public repository boundary:
+
+- Keep the script public and generic.
+- Keep all generated screenshots, JSON, summaries, and live-page text under
+  `tmp/`.
+- Do not commit audit artifacts, real post text, group names, profile URLs,
+  Facebook captures, private endpoints, or local browser state.
+- If a live issue needs a permanent regression test, convert it into a small
+  synthetic fixture first.
+
+The command intentionally gates only Truly-owned failures. It does not fail on
+Facebook's own offscreen DOM, hidden accessibility mirrors, or the deliberately
+minimal low-risk Heads-up collapsed state.
