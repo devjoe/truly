@@ -69,26 +69,25 @@ Completed in the dev/test spike layer:
   license fields.
 - Spike output now normalizes candidate result metadata and candidate-specific
   diagnostics before threshold evaluation.
+- The spike now maps Truly's actual runtime heuristic extractor as the
+  `truly-heuristic` `runtime-baseline` candidate through a dev-only TypeScript
+  transpile loader. This compares the real project baseline without importing
+  third-party parser dependencies into runtime code.
+- Evaluator output now records metadata completeness, extraction-status
+  suitability, warning-family suitability, and bad-page false-positive
+  suitability in addition to text hit score, leak count, duration, and parser
+  threshold status.
 - Parser dependencies remain dev-only and are still not imported by extension
   runtime code.
 
 Remaining adapter-boundary work:
 
-1. Map the actual Truly heuristic extraction baseline into the same result
-   shape without changing the runtime dependency boundary.
-2. Compare the heuristic baseline, Readability, Defuddle, and Defuddle Markdown
-   inside the spike/evaluation layer.
-3. Add evaluator output that compares:
-   - extraction status;
-   - expected text hit score;
-   - leak count;
-   - metadata fields;
-   - warning/status suitability;
-   - duration;
-   - candidate-specific diagnostics.
-4. Add bundle/CSP/offscreen TODO gates as explicit acceptance criteria before
+1. Harden Truly's heuristic status/warning classifier for non-article pages
+   that still contain substantial readable text, especially forum threads,
+   social public pages, and list/search indexes.
+2. Add bundle/CSP/offscreen TODO gates as explicit acceptance criteria before
    runtime adoption.
-5. Keep `src/lib/general-page-extraction.ts` as the runtime baseline until a
+3. Keep `src/lib/general-page-extraction.ts` as the runtime baseline until a
    separate runtime-integration decision accepts a parser dependency.
 
 ## Runtime Non-Goals For This Decision

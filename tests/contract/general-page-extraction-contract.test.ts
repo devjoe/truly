@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
 import { extractGeneralPageSurface } from "@src/lib/general-page-extraction";
@@ -18,6 +19,12 @@ class FixtureElement {
   get textContent(): string {
     return htmlToText(this.html);
   }
+
+  cloneNode(): FixtureElement {
+    return new FixtureElement(this.tagName, this.html, this.attributes);
+  }
+
+  remove(): void {}
 
   getAttribute(name: string): string | null {
     return this.attributes[name.toLowerCase()] ?? null;
@@ -146,6 +153,9 @@ function htmlToText(html: string): string {
     html
       .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
       .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<template\b[\s\S]*?<\/template>/gi, " ")
+      .replace(/<svg\b[\s\S]*?<\/svg>/gi, " ")
       .replace(/<[^>]+>/g, " ")
       .replace(/\s+/g, " ")
       .trim(),
@@ -255,6 +265,22 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.extraction.status).toBe("blocked");
     expect(surface.extraction.warnings).toContain("login-or-paywall-like");
     expect(surface.extraction.warnings).toContain("very-short-content");
+  });
+
+  it("excludes non-reading node text from fallback extraction", () => {
+    const html = fs.readFileSync(`${FIXTURE_DIR}/js-shell-bad-page.html`, "utf8");
+    const dom = new JSDOM(html, { url: "https://example.test/app/shell" });
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: "https://example.test/app/shell",
+    });
+
+    expect(surface.mainText).toContain("application shell has not rendered readable article content");
+    expect(surface.mainText).not.toContain("fictional article body should never appear");
+    expect(surface.extraction).toMatchObject({
+      method: "fallback",
+      status: "partial",
+    });
   });
 
   it("keeps Traditional Chinese page text intact", () => {

@@ -131,6 +131,153 @@ export function evaluateThresholds(engineResult, fixture) {
   };
 }
 
+export function evaluateSuitability(engineResult, fixture) {
+  const metadata = evaluateMetadata(engineResult);
+  const status = evaluateStatusSuitability(engineResult, fixture);
+  const warnings = evaluateWarningSuitability(engineResult, fixture);
+  const badPage = evaluateBadPageFalsePositive(engineResult, fixture);
+  return {
+    metadata,
+    status,
+    warnings,
+    badPage,
+  };
+}
+
+function evaluateMetadata(engineResult) {
+  const fields = {
+    title: Boolean(engineResult.title),
+    author: Boolean(engineResult.author),
+    siteName: Boolean(engineResult.siteName),
+    publishedAt: Boolean(engineResult.publishedAt),
+  };
+  const present = Object.values(fields).filter(Boolean).length;
+  const total = Object.keys(fields).length;
+  return {
+    fields,
+    present,
+    total,
+    completeness: Number((present / total).toFixed(3)),
+  };
+}
+
+function extractionStatus(engineResult) {
+  return engineResult.extractionStatus
+    ?? engineResult.diagnostics?.extraction?.status
+    ?? null;
+}
+
+function extractionWarnings(engineResult) {
+  const warnings = engineResult.extractionWarnings
+    ?? engineResult.diagnostics?.extraction?.warnings
+    ?? [];
+  return Array.isArray(warnings) ? warnings : [];
+}
+
+function expectedStatusPolicy(fixture) {
+  if (fixture.pageType === "blocked") {
+    return {
+      expected: ["blocked", "partial"],
+      reason: "blocked/login/paywall-like pages should not be treated as fully complete",
+    };
+  }
+  if (["forum-thread", "list-index", "social-public-page"].includes(fixture.pageType)) {
+    return {
+      expected: ["partial", "empty", "blocked"],
+      reason: "non-article/feed-like pages should avoid complete-article confidence",
+    };
+  }
+  return {
+    expected: ["complete", "partial"],
+    reason: "article-like pages should produce usable content",
+  };
+}
+
+function evaluateStatusSuitability(engineResult, fixture) {
+  const actual = extractionStatus(engineResult);
+  const policy = expectedStatusPolicy(fixture);
+  if (!actual) {
+    return {
+      applicable: false,
+      expected: policy.expected,
+      actual,
+      pass: null,
+      reason: "candidate does not report Truly extraction status",
+    };
+  }
+  return {
+    applicable: true,
+    expected: policy.expected,
+    actual,
+    pass: policy.expected.includes(actual),
+    reason: policy.reason,
+  };
+}
+
+function expectedWarnings(fixture) {
+  if (fixture.pageType === "blocked")
+    return ["login-or-paywall-like"];
+  if (["forum-thread", "list-index", "social-public-page"].includes(fixture.pageType))
+    return ["no-main-content", "large-navigation-noise", "very-short-content"];
+  return [];
+}
+
+function evaluateWarningSuitability(engineResult, fixture) {
+  const actual = extractionWarnings(engineResult);
+  const expectedAny = expectedWarnings(fixture);
+  if (!expectedAny.length) {
+    return {
+      applicable: false,
+      expectedAny,
+      actual,
+      pass: null,
+      reason: "fixture does not require a specific warning family",
+    };
+  }
+  if (!extractionStatus(engineResult)) {
+    return {
+      applicable: false,
+      expectedAny,
+      actual,
+      pass: null,
+      reason: "candidate does not report Truly extraction warnings",
+    };
+  }
+  return {
+    applicable: true,
+    expectedAny,
+    actual,
+    pass: expectedAny.some((warning) => actual.includes(warning)),
+    reason: "candidate should surface at least one warning suitable for this fixture family",
+  };
+}
+
+function evaluateBadPageFalsePositive(engineResult, fixture) {
+  if (!["blocked", "forum-thread", "list-index", "social-public-page"].includes(fixture.pageType)) {
+    return {
+      applicable: false,
+      actualStatus: extractionStatus(engineResult),
+      pass: null,
+      reason: "fixture is not treated as a bad/non-article page",
+    };
+  }
+  const actualStatus = extractionStatus(engineResult);
+  if (!actualStatus) {
+    return {
+      applicable: false,
+      actualStatus,
+      pass: null,
+      reason: "candidate does not report Truly extraction status",
+    };
+  }
+  return {
+    applicable: true,
+    actualStatus,
+    pass: actualStatus !== "complete",
+    reason: "bad/non-article pages should not be reported as complete articles",
+  };
+}
+
 export function summarizeParserResults(results) {
   const byEngine = new Map();
   for (const fixture of results) {
@@ -146,6 +293,13 @@ export function summarizeParserResults(results) {
         parsedFixtures: 0,
         errors: 0,
         thresholdPassCount: 0,
+        totalMetadataCompleteness: 0,
+        statusApplicableCount: 0,
+        statusPassCount: 0,
+        warningApplicableCount: 0,
+        warningPassCount: 0,
+        badPageApplicableCount: 0,
+        badPagePassCount: 0,
       };
       if (engine.ok)
         current.okCount += 1;
@@ -159,6 +313,24 @@ export function summarizeParserResults(results) {
         current.totalDurationMs += engine.durationMs;
       if (engine.threshold?.pass)
         current.thresholdPassCount += 1;
+      if (engine.suitability?.metadata) {
+        current.totalMetadataCompleteness += engine.suitability.metadata.completeness;
+      }
+      if (engine.suitability?.status?.applicable) {
+        current.statusApplicableCount += 1;
+        if (engine.suitability.status.pass)
+          current.statusPassCount += 1;
+      }
+      if (engine.suitability?.warnings?.applicable) {
+        current.warningApplicableCount += 1;
+        if (engine.suitability.warnings.pass)
+          current.warningPassCount += 1;
+      }
+      if (engine.suitability?.badPage?.applicable) {
+        current.badPageApplicableCount += 1;
+        if (engine.suitability.badPage.pass)
+          current.badPagePassCount += 1;
+      }
       current.parsedFixtures += 1;
       byEngine.set(engine.engine, current);
     }
@@ -174,6 +346,13 @@ export function summarizeParserResults(results) {
     averageDurationMs: Number((item.totalDurationMs / item.parsedFixtures).toFixed(2)),
     errors: item.errors,
     thresholdPassCount: item.thresholdPassCount,
+    averageMetadataCompleteness: Number((item.totalMetadataCompleteness / item.parsedFixtures).toFixed(3)),
+    statusPassCount: item.statusPassCount,
+    statusApplicableCount: item.statusApplicableCount,
+    warningPassCount: item.warningPassCount,
+    warningApplicableCount: item.warningApplicableCount,
+    badPagePassCount: item.badPagePassCount,
+    badPageApplicableCount: item.badPageApplicableCount,
   }));
 }
 

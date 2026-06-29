@@ -1,7 +1,7 @@
 # General Page Reader OSS Research
 
 Status: research draft
-Last updated: 2026-06-28
+Last updated: 2026-06-30
 
 ## Purpose
 
@@ -375,6 +375,7 @@ npm run spike:general-page-parsers
 It reads the public synthetic fixture manifest in
 `tests/fixtures/general-pages/manifest.json`, runs:
 
+- Truly's runtime heuristic extractor as `truly-heuristic`;
 - `@mozilla/readability`;
 - `defuddle`;
 - `defuddle` with Markdown output;
@@ -389,20 +390,33 @@ tmp/parser-spikes/general-page-parser-spike-YYYY-MM-DD.json
 
 The report records each candidate's stable id, label, role, package, version,
 license, normalized result metadata, threshold status, and candidate-specific
-diagnostics. The contract reserves a `runtime-baseline` role for Truly's
-heuristic extractor, but this spike does not import runtime TypeScript or move
-third-party parser dependencies into extension runtime code.
+diagnostics. It also records metadata completeness, extraction-status
+suitability, warning-family suitability, and bad-page false-positive
+suitability for candidates that expose Truly extraction status. The
+`truly-heuristic` candidate loads the actual runtime TypeScript extractor
+through a dev-only transpile loader; no third-party parser dependency moves into
+extension runtime code.
 
-V2 run on 2026-06-29:
+V2 comparison run on 2026-06-30:
 
-| Candidate | Parsed fixtures | Contains score | Leaks | Average time | Threshold |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| `@mozilla/readability` | 25/25 | 1.000 | 0 | 1.68 ms | 25/25 |
-| `defuddle` | 25/25 | 1.000 | 0 | 14.97 ms | 25/25 |
-| `defuddle` Markdown | 25/25 | 1.000 | 0 | 13.51 ms | 25/25 |
+| Candidate | Parsed fixtures | Contains score | Leaks | Metadata | Status suitability | Warning suitability | Bad-page suitability | Average time | Threshold |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `truly-heuristic` | 25/25 | 1.000 | 0 | 0.550 | 21/25 | 2/6 | 2/6 | 1.20 ms | 25/25 |
+| `@mozilla/readability` | 25/25 | 1.000 | 0 | 0.360 | 0/0 | 0/0 | 0/0 | 1.55 ms | 25/25 |
+| `defuddle` | 25/25 | 1.000 | 0 | 0.550 | 0/0 | 0/0 | 0/0 | 16.80 ms | 25/25 |
+| `defuddle` Markdown | 25/25 | 1.000 | 0 | 0.550 | 0/0 | 0/0 | 0/0 | 15.04 ms | 25/25 |
 
 Interpretation:
 
+- Truly's heuristic baseline now passes the same text threshold as the parser
+  candidates and is fast enough to remain the runtime fallback. The spike also
+  exposed a real cleanup bug: readable text extraction must exclude script,
+  style, noscript, template, and SVG nodes so client-state JSON is not treated
+  as article text.
+- The suitability columns reveal the next heuristic-hardening target:
+  non-article pages with substantial readable text can still look `complete`.
+  Forum threads, social public pages, and list/search indexes need stronger
+  status/warning classification before parser adoption changes runtime behavior.
 - Both packages remain viable parser-spike candidates on the expanded synthetic
   fixtures.
 - Readability is faster on this fixture corpus and maps directly to article

@@ -43,6 +43,14 @@ const PAYWALL_OR_LOGIN_PATTERNS = [
   /付費/,
 ] as const;
 
+const NON_READING_TEXT_SELECTORS = [
+  "script",
+  "style",
+  "noscript",
+  "template",
+  "svg",
+] as const;
+
 export function extractGeneralPageSurface(
   input: GeneralPageExtractionInput,
   options: GeneralPageExtractionOptions = {},
@@ -78,8 +86,8 @@ export function extractGeneralPageSurface(
   const selectedText = normalizeWhitespace(input.selectedText ?? "") ?? "";
   const selectedTextIsUseful = Boolean(selectedText && selectedText.length >= minSelectedTextLength);
   const extractionRoot = findBestMainRoot(input.document, minMainTextLength);
-  const rootText = normalizeWhitespace(extractionRoot?.textContent ?? "") ?? "";
-  const bodyText = normalizeWhitespace(input.document.body?.textContent ?? "") ?? "";
+  const rootText = extractionRoot ? readableText(extractionRoot) ?? "" : "";
+  const bodyText = input.document.body ? readableText(input.document.body) ?? "" : "";
 
   let method: ReadingSurfaceExtractionMethod = "fallback";
   let mainText = "";
@@ -152,7 +160,7 @@ function findBestMainRoot(documentRef: Document, minLength: number): Element | n
   const ranked = candidates
     .map((element) => ({
       element,
-      text: normalizeWhitespace(element.textContent ?? "") ?? "",
+      text: readableText(element) ?? "",
     }))
     .filter((candidate) => candidate.text.length > 0)
     .sort((a, b) => b.text.length - a.text.length);
@@ -160,6 +168,16 @@ function findBestMainRoot(documentRef: Document, minLength: number): Element | n
   return ranked.find((candidate) => candidate.text.length >= minLength)?.element
     ?? ranked[0]?.element
     ?? null;
+}
+
+function readableText(root: Element): string | undefined {
+  const clone = root.cloneNode(true) as Element;
+  for (const selector of NON_READING_TEXT_SELECTORS) {
+    for (const element of Array.from(clone.querySelectorAll(selector))) {
+      element.remove();
+    }
+  }
+  return normalizeWhitespace(clone.textContent ?? "");
 }
 
 function firstHeading(root: ParentNode): string | undefined {

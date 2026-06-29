@@ -10,12 +10,14 @@ import { Defuddle } from "defuddle/node";
 import {
   candidateManifest,
   defineParserCandidate,
+  evaluateSuitability,
   evaluateThresholds,
   normalizeParserError,
   normalizeParserResult,
   summarizeParserResults,
   summarizeThresholds,
 } from "./lib/general-page-parser-contract.mjs";
+import { loadRuntimeGeneralPageExtractor } from "./lib/load-runtime-general-page-extractor.mjs";
 
 const FIXTURE_DIR = "tests/fixtures/general-pages";
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "manifest.json");
@@ -26,6 +28,15 @@ const REPORT_PATH = path.join(OUTPUT_DIR, `general-page-parser-spike-${REPORT_DA
 const manifest = readManifest();
 const fixtures = manifest.fixtures.map(normalizeFixture);
 const candidates = [
+  defineParserCandidate({
+    id: "truly-heuristic",
+    label: "Truly Heuristic",
+    role: "runtime-baseline",
+    packageName: "truly/src/lib/general-page-extraction",
+    packageVersion: "runtime-source",
+    license: "project-internal",
+    parse: ({ html, fixture }) => parseTrulyHeuristic(html, fixture),
+  }),
   defineParserCandidate({
     id: "readability",
     label: "Mozilla Readability",
@@ -135,6 +146,39 @@ function resultSummary(raw) {
   };
 }
 
+async function parseTrulyHeuristic(html, fixture) {
+  const { extractGeneralPageSurface } = await loadRuntimeGeneralPageExtractor();
+  const dom = domFor(html, fixture.url);
+  const start = performance.now();
+  const surface = extractGeneralPageSurface({
+    document: dom.window.document,
+    url: fixture.url,
+  });
+  const durationMs = performance.now() - start;
+  const text = normalizeText(surface.mainText ?? "");
+  return {
+    durationMs: Number(durationMs.toFixed(2)),
+    ok: Boolean(text),
+    title: surface.title || undefined,
+    author: surface.authorName || undefined,
+    siteName: surface.sourceName || undefined,
+    publishedAt: surface.publishedAt || undefined,
+    canonicalUrl: surface.canonicalUrl || undefined,
+    extractionMethod: surface.extraction?.method,
+    extractionStatus: surface.extraction?.status,
+    extractionWarnings: surface.extraction?.warnings ?? [],
+    textLength: text.length,
+    excerpt: normalizeText(surface.excerpt ?? "").slice(0, 240) || undefined,
+    textPreview: text.slice(0, 320),
+    diagnostics: {
+      extraction: surface.extraction,
+      linkCount: surface.links?.length ?? 0,
+      imageCount: surface.images?.length ?? 0,
+    },
+    score: scoreText(text, fixture),
+  };
+}
+
 function parseReadability(html, fixture) {
   const dom = domFor(html, fixture.url);
   const clone = dom.window.document.cloneNode(true);
@@ -198,12 +242,14 @@ async function main() {
         );
         engineResults.push({
           ...result,
+          suitability: evaluateSuitability(result, fixture),
           threshold: evaluateThresholds(result, fixture),
         });
       } catch (error) {
         const result = normalizeParserError(candidate, error);
         engineResults.push({
           ...result,
+          suitability: evaluateSuitability(result, fixture),
           threshold: evaluateThresholds(result, fixture),
         });
       }
@@ -245,6 +291,10 @@ function printSummary(report) {
     console.log(
       `${item.engine}: ok ${item.okCount}/${item.fixtureCount}, ` +
       `contains ${item.averageContainsScore}, leaks ${item.totalLeaks}, ` +
+      `metadata ${item.averageMetadataCompleteness}, ` +
+      `status ${item.statusPassCount}/${item.statusApplicableCount}, ` +
+      `warnings ${item.warningPassCount}/${item.warningApplicableCount}, ` +
+      `bad-page ${item.badPagePassCount}/${item.badPageApplicableCount}, ` +
       `avg ${item.averageDurationMs}ms, errors ${item.errors}, ` +
       `threshold ${item.thresholdPassCount}/${item.fixtureCount}`,
     );
