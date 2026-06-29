@@ -10,8 +10,47 @@ const CDP_PORT = Number(process.env.CDP_PORT || 9222);
 const CDP_BASE = `http://127.0.0.1:${CDP_PORT}`;
 const EXPECT_LOCALE = (process.env.TRULY_AUDIT_EXPECT_LOCALE || "").trim();
 const REQUESTED_TARGET_ID = (process.env.TRULY_AUDIT_TARGET_ID || "").trim();
+const AUTO_RELOAD = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_AUTO_RELOAD || "");
+const ALLOW_FOCUS = /^(1|true|yes)$/i.test(process.env.CDP_ALLOW_FOCUS || "");
 const STAMP = new Date().toISOString().replace(/[:.]/g, "-");
 const OUT_DIR = resolve(ROOT, "tmp", `facebook-current-audit-${STAMP}`);
+const HEADSUP_HOST_SELECTOR = ".truly-headsup-host,.fc-headsup-host";
+const HEADSUP_PANEL_SELECTOR = ".truly-headsup,.fc-headsup";
+const HEADSUP_SUMMARY_SELECTOR = ".truly-headsup-summary,.fc-headsup-summary,[aria-expanded]";
+const HEADSUP_DETAIL_SELECTOR = ".truly-headsup-detail,.fc-headsup-detail";
+const TAGGED_POST_SELECTOR = "[data-truly-id]";
+const SKIPPED_POST_SELECTOR = "[data-truly-skip-reason]";
+const SIDEPANEL_PATH = "/sidepanel/sidepanel.html";
+const CHINESE_CHROME_TOKENS = [
+  "首頁",
+  "留言",
+  "分享",
+  "讚",
+  "通知",
+  "你在想什麼",
+  "查看更多",
+  "收合",
+  "展開",
+];
+const ENGLISH_CHROME_TOKENS = [
+  "Home",
+  "Comment",
+  "Share",
+  "Like",
+  "Notifications",
+  "Write something",
+  "See more",
+];
+const CHINESE_TRULY_TOKENS = [
+  "分析完成",
+  "深入閱讀",
+  "詳細",
+  "收合",
+  "展開",
+  "建議查核",
+];
+const PANEL_ACTION_PATTERN = "^(深入閱讀|建議查核|Deep reading|Deep read|Read deeper|Suggested fact-check|Fact-check suggested)$";
+const SIDEPANEL_RENDER_WAIT_MS = 1600;
 
 function usage() {
   console.log(`Usage: node scripts/audit-facebook-current.mjs
@@ -23,6 +62,8 @@ Environment:
   CDP_PORT=9222
   TRULY_AUDIT_EXPECT_LOCALE=zh|en|zh-Hant|zh-TW
   TRULY_AUDIT_TARGET_ID=<Chrome-CDP-target-id>
+  TRULY_AUDIT_AUTO_RELOAD=1   reload stale Truly extension + Facebook tab, then audit
+  CDP_ALLOW_FOCUS=1            allow focus-required side-panel click fallback
 `);
 }
 
@@ -82,6 +123,7 @@ function connectCdp(webSocketDebuggerUrl) {
   }
 
   return {
+    send,
     async evaluate(expression) {
       const result = await send("Runtime.evaluate", {
         expression,
@@ -93,6 +135,39 @@ function connectCdp(webSocketDebuggerUrl) {
         throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || "Runtime.evaluate failed");
       }
       return result.result?.value ?? null;
+    },
+    async evaluateJson(expression) {
+      const raw = await this.evaluate(`JSON.stringify((${expression}))`);
+      return raw ? JSON.parse(raw) : null;
+    },
+    async clickAt(x, y) {
+      await send("Input.dispatchMouseEvent", {
+        type: "mouseMoved",
+        x,
+        y,
+        button: "none",
+      });
+      await send("Input.dispatchMouseEvent", {
+        type: "mousePressed",
+        x,
+        y,
+        button: "left",
+        clickCount: 1,
+      });
+      await send("Input.dispatchMouseEvent", {
+        type: "mouseReleased",
+        x,
+        y,
+        button: "left",
+        clickCount: 1,
+      });
+    },
+    async reload() {
+      await send("Page.enable").catch(() => {});
+      await send("Page.reload", { ignoreCache: true });
+    },
+    async bringToFront() {
+      await send("Page.bringToFront");
     },
     async screenshot(path) {
       await send("Page.enable").catch(() => {});
@@ -114,6 +189,17 @@ function isFacebookTarget(target) {
     typeof target.url === "string" &&
     /^https?:\/\/([^/]+\.)?facebook\.com\//.test(target.url) &&
     target.webSocketDebuggerUrl;
+}
+
+function isSidePanelTarget(target) {
+  return target.type === "page" &&
+    typeof target.url === "string" &&
+    target.url.includes(SIDEPANEL_PATH) &&
+    target.webSocketDebuggerUrl;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function evaluateTarget(target, expression) {
@@ -203,6 +289,70 @@ async function findTrulyServiceWorker(targets, expectedBuildId) {
   return { found: found.map((entry) => entry.meta), selected: truly };
 }
 
+function buildFreshnessState(expectedBuildId, serviceWorker, pageStates, selectedTargetId) {
+  const selectedPage = pageStates.find((state) => state.id === selectedTargetId) ?? pageStates[0] ?? null;
+  const serviceWorkerBuildId = serviceWorker.selected?.meta?.buildId ?? null;
+  const pageBuildId = selectedPage?.buildId ?? null;
+  const serviceWorkerFresh = serviceWorkerBuildId === expectedBuildId;
+  const pageFresh = pageBuildId === expectedBuildId;
+  const stale = !serviceWorkerFresh || !pageFresh;
+  const hints = [];
+  if (!serviceWorkerFresh) {
+    hints.push(`service worker build is stale: ${serviceWorkerBuildId || "(missing)"} != ${expectedBuildId}`);
+  }
+  if (!pageFresh) {
+    hints.push(`Facebook content script build is stale: ${pageBuildId || "(missing)"} != ${expectedBuildId}`);
+  }
+  if (stale && !AUTO_RELOAD) {
+    hints.push("rerun with TRULY_AUDIT_AUTO_RELOAD=1 to reload the extension and Facebook tab automatically");
+  }
+  return {
+    expectedBuildId,
+    selectedPageBuildId: pageBuildId,
+    serviceWorkerBuildId,
+    serviceWorkerFresh,
+    pageFresh,
+    stale,
+    autoReloadRequested: AUTO_RELOAD,
+    hints,
+  };
+}
+
+async function reloadStaleRuntime(serviceWorkerEntry) {
+  const result = {
+    attempted: false,
+    extensionReloaded: false,
+    facebookTabsReloaded: 0,
+    error: null,
+  };
+  if (!serviceWorkerEntry?.target?.webSocketDebuggerUrl) {
+    result.error = "Truly service worker target unavailable";
+    return result;
+  }
+
+  result.attempted = true;
+  try {
+    await evaluateTarget(serviceWorkerEntry.target, "chrome.runtime.reload(); undefined")
+      .catch(() => undefined);
+    result.extensionReloaded = true;
+    await sleep(2500);
+    const targets = await fetchJson(`${CDP_BASE}/json/list`);
+    for (const target of targets.filter(isFacebookTarget)) {
+      const cdp = connectCdp(target.webSocketDebuggerUrl);
+      try {
+        await cdp.reload();
+        result.facebookTabsReloaded += 1;
+      } finally {
+        cdp.close();
+      }
+    }
+    await sleep(3500);
+  } catch (error) {
+    result.error = error instanceof Error ? error.message : String(error);
+  }
+  return result;
+}
+
 async function getContentScriptStats(serviceWorkerEntry, pageUrl) {
   if (!serviceWorkerEntry) return { error: "Truly service worker not found" };
   const cdp = connectCdp(serviceWorkerEntry.target.webSocketDebuggerUrl);
@@ -238,15 +388,25 @@ function localeExpectationMatches(signals) {
   if (!EXPECT_LOCALE) return { ok: true, detail: "not requested" };
   const expected = EXPECT_LOCALE.toLowerCase();
   if (expected === "zh" || expected === "zh-tw" || expected === "zh-hant") {
+    const htmlLangOk = signals.htmlLang?.toLowerCase().startsWith("zh");
+    const chromeTokenCount = signals.chineseChromeMatches?.length ?? 0;
+    const trulyTokenCount = signals.chineseTrulyMatches?.length ?? 0;
     return {
-      ok: signals.htmlLang?.toLowerCase().startsWith("zh") || signals.hasChineseChrome,
-      detail: `htmlLang=${signals.htmlLang || "(none)"} chineseChrome=${signals.hasChineseChrome}`,
+      ok: Boolean(htmlLangOk && chromeTokenCount >= 2 && trulyTokenCount >= 1),
+      detail:
+        `htmlLang=${signals.htmlLang || "(none)"} ` +
+        `fbZh=${(signals.chineseChromeMatches ?? []).join(",") || "(none)"} ` +
+        `trulyZh=${(signals.chineseTrulyMatches ?? []).join(",") || "(none)"}`,
     };
   }
   if (expected === "en") {
+    const englishTokenCount = signals.englishChromeMatches?.length ?? 0;
     return {
-      ok: !signals.hasChineseChrome && signals.hasEnglishChrome,
-      detail: `htmlLang=${signals.htmlLang || "(none)"} englishChrome=${signals.hasEnglishChrome} chineseChrome=${signals.hasChineseChrome}`,
+      ok: englishTokenCount >= 2 && (signals.chineseChromeMatches?.length ?? 0) === 0,
+      detail:
+        `htmlLang=${signals.htmlLang || "(none)"} ` +
+        `fbEn=${(signals.englishChromeMatches ?? []).join(",") || "(none)"} ` +
+        `fbZh=${(signals.chineseChromeMatches ?? []).join(",") || "(none)"}`,
     };
   }
   return { ok: false, detail: `unsupported TRULY_AUDIT_EXPECT_LOCALE=${EXPECT_LOCALE}` };
@@ -263,11 +423,223 @@ function summarizeLogWarnings(logPayload) {
     }));
 }
 
+async function captureSidePanelTarget(target, index) {
+  const cdp = connectCdp(target.webSocketDebuggerUrl);
+  try {
+    await sleep(SIDEPANEL_RENDER_WAIT_MS);
+    const data = await cdp.evaluateJson(`(() => {
+      const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+      const rectOf = (el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return {
+          x: Math.round(r.x * 10) / 10,
+          y: Math.round(r.y * 10) / 10,
+          w: Math.round(r.width * 10) / 10,
+          h: Math.round(r.height * 10) / 10,
+          left: Math.round(r.left * 10) / 10,
+          right: Math.round(r.right * 10) / 10,
+          top: Math.round(r.top * 10) / 10,
+          bottom: Math.round(r.bottom * 10) / 10
+        };
+      };
+      const analysis = document.querySelector("[role='tabpanel'][data-tab='analysis'], #analysis-pane");
+      const bodyText = norm(document.body?.innerText || document.documentElement?.innerText || document.body?.textContent || "");
+      const inspected = Array.from(document.querySelectorAll(
+        "button,a,.post-card,.analysis-overview,.details-row,.details-label,.chip,.necessity-pill,.source-badge,.deep-ai-chip,.iq-chip,.analysis-context-tag,.placeholder"
+      )).slice(0, 120).map((el) => {
+        const rect = rectOf(el);
+        return {
+          text: norm(el.innerText || el.textContent || el.getAttribute("aria-label") || "").slice(0, 120),
+          className: String(el.className || ""),
+          rect,
+          overflow: rect ? rect.left < -1 || rect.right > window.innerWidth + 1 : false
+        };
+      });
+      return {
+        url: location.href,
+        title: document.title,
+        lang: document.documentElement.lang || null,
+        readyState: document.readyState,
+        activeTab: norm(document.querySelector(".tab[aria-selected=true], [aria-selected=true]")?.textContent),
+        placeholder: norm(document.querySelector("#analysisPlaceholder,.placeholder")?.textContent),
+        text: bodyText.slice(0, 5000),
+        analysisText: norm(analysis?.innerText || analysis?.textContent || "").slice(0, 5000),
+        buttonTexts: Array.from(document.querySelectorAll("button"))
+          .map((button) => norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))
+          .filter(Boolean)
+          .slice(0, 60),
+        rawDebugVisible: /Raw decision|GraphQL 查詢|原始回應 JSON|送出的文字/.test(bodyText),
+        overflow: inspected.filter((item) => item.overflow),
+        inspectedCount: inspected.length
+      };
+    })()`);
+    const screenshot = resolve(OUT_DIR, `sidepanel-${index}.png`);
+    await cdp.screenshot(screenshot).catch(() => {});
+    return {
+      target: {
+        id: target.id,
+        type: target.type,
+        title: target.title || "",
+        url: target.url,
+      },
+      data,
+      screenshot,
+    };
+  } finally {
+    cdp.close();
+  }
+}
+
+async function auditSidePanelWorkflow(page) {
+  const beforeTargets = await fetchJson(`${CDP_BASE}/json/list`)
+    .then((targets) => targets.filter(isSidePanelTarget).map((target) => target.id))
+    .catch(() => []);
+  const findButton = () => page.evaluate(`(() => {
+    const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+    const actionPattern = new RegExp(${JSON.stringify(PANEL_ACTION_PATTERN)});
+    const hosts = Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}));
+    const snapshots = hosts.map((host, index) => {
+      const root = host.shadowRoot || host;
+      return {
+        index,
+        buttons: Array.from(root.querySelectorAll("button, [role='button']"))
+          .map((button) => norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))
+          .filter(Boolean)
+      };
+    });
+    for (const host of hosts) {
+      host.scrollIntoView({ block: "center", inline: "nearest", behavior: "instant" });
+      const root = host.shadowRoot || host;
+      const buttons = Array.from(root.querySelectorAll("button, [role='button']"));
+      const target = buttons.find((button) =>
+        actionPattern.test(norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))
+      );
+      if (!target) continue;
+      const rect = target.getBoundingClientRect();
+      return {
+        found: true,
+        text: norm(target.innerText || target.textContent || target.getAttribute("aria-label") || ""),
+        x: rect.x + rect.width / 2,
+        y: rect.y + rect.height / 2,
+        rect: {
+          x: Math.round(rect.x * 10) / 10,
+          y: Math.round(rect.y * 10) / 10,
+          w: Math.round(rect.width * 10) / 10,
+          h: Math.round(rect.height * 10) / 10
+        },
+        snapshots
+      };
+    }
+    return { found: false, hostCount: hosts.length, snapshots };
+  })()`).catch((error) => ({ found: false, error: error.message }));
+
+  const clickAttempts = [];
+  let button = await findButton();
+
+  async function readSidePanelTargets() {
+    const targets = await fetchJson(`${CDP_BASE}/json/list`).catch(() => []);
+    return Array.isArray(targets) ? targets.filter(isSidePanelTarget) : [];
+  }
+
+  async function recordTargets(method) {
+    await sleep(2200);
+    const targets = await readSidePanelTargets();
+    clickAttempts.push({
+      method,
+      targetCount: targets.length,
+      targetIds: targets.map((target) => target.id),
+    });
+    return targets;
+  }
+
+  let sidePanelTargetsAfterClick = [];
+  if (button.found) {
+    await page.clickAt(button.x, button.y);
+    sidePanelTargetsAfterClick = await recordTargets("cdp-mouse");
+
+    if (sidePanelTargetsAfterClick.length === 0) {
+      await page.evaluate(`(() => {
+        const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+        const actionPattern = new RegExp(${JSON.stringify(PANEL_ACTION_PATTERN)});
+        for (const host of Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}))) {
+          const root = host.shadowRoot || host;
+          const target = Array.from(root.querySelectorAll("button, [role='button']")).find((button) =>
+            actionPattern.test(norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))
+          );
+          if (!target) continue;
+          target.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+          return true;
+        }
+        return false;
+      })()`).catch(() => false);
+      sidePanelTargetsAfterClick = await recordTargets("dom-click");
+    }
+
+    if (sidePanelTargetsAfterClick.length === 0 && ALLOW_FOCUS) {
+      await page.bringToFront().catch(() => {});
+      button = await findButton();
+      if (button.found) {
+        await page.clickAt(button.x, button.y);
+        sidePanelTargetsAfterClick = await recordTargets("focused-cdp-mouse");
+      }
+    }
+  }
+
+  const sidePanelTargets = sidePanelTargetsAfterClick.length > 0
+    ? sidePanelTargetsAfterClick
+    : await readSidePanelTargets();
+  const captures = [];
+  for (const [index, target] of sidePanelTargets.entries()) {
+    captures.push(await captureSidePanelTarget(target, index).catch((error) => ({
+      target: {
+        id: target.id,
+        type: target.type,
+        title: target.title || "",
+        url: target.url,
+      },
+      error: error instanceof Error ? error.message : String(error),
+    })));
+  }
+
+  const problems = [];
+  if (!button.found) {
+    problems.push(button.error || `panel-action-not-found hosts=${button.hostCount ?? 0}`);
+  }
+  if (sidePanelTargets.length === 0)
+    problems.push("sidepanel-target-not-found");
+  for (const capture of captures) {
+    if (capture.error) problems.push(`sidepanel-capture-error:${capture.error}`);
+    if (capture.data?.rawDebugVisible) problems.push("sidepanel-raw-debug-visible");
+    if ((capture.data?.overflow?.length ?? 0) > 0) {
+      problems.push(`sidepanel-horizontal-overflow:${capture.data.overflow.length}`);
+    }
+    if (!capture.data?.text)
+      problems.push("sidepanel-dom-text-empty");
+  }
+
+  const openedNewTarget = sidePanelTargets.some((target) => !beforeTargets.includes(target.id));
+  return {
+    ok: button.found && sidePanelTargets.length > 0 && problems.length === 0,
+    button,
+    clickAttempts,
+    focusAllowed: ALLOW_FOCUS,
+    beforeTargetCount: beforeTargets.length,
+    targetCount: sidePanelTargets.length,
+    openedNewTarget,
+    captures,
+    problems,
+  };
+}
+
 function formatStep(ok, label, detail = "") {
   return `- ${ok ? "[OK]" : "[FAIL]"} ${label}${detail ? `: ${detail}` : ""}`;
 }
 
 function writeSummary(report, failures) {
+  const sidePanel = report.sidePanel;
+  const remediation = report.remediation;
+  const localeSignals = report.audit.localeSignals;
   const lines = [
     "# Facebook Current Page Audit",
     "",
@@ -280,10 +652,40 @@ function writeSummary(report, failures) {
     `- Heads-up hosts: ${report.audit.counts.hosts}`,
     `- Tagged posts: ${report.audit.counts.taggedPosts}`,
     `- Selector health: ${report.runtime.stats?.selectorHealth || "(unavailable)"}`,
+    `- Side Panel targets: ${sidePanel?.targetCount ?? 0}`,
     "",
     "## Verdict",
     "",
     failures.length === 0 ? "PASS" : "FAIL",
+    "",
+    "## Human Summary",
+    "",
+    failures.length === 0
+      ? "- Current Facebook page, build freshness, locale, heads-up overlay, expand toggle, and side-panel workflow passed."
+      : `- Audit found ${failures.length} failing check(s). Review the checks and remediation sections before trusting this browser state.`,
+    "",
+    "## Build Freshness Remediation",
+    "",
+    `- Auto reload requested: ${remediation.autoReloadRequested ? "yes" : "no"}`,
+    `- Stale before audit: ${remediation.before?.stale ? "yes" : "no"}`,
+    ...(remediation.before?.hints?.length ? remediation.before.hints.map((hint) => `- Before: ${hint}`) : ["- Before: no stale-build remediation needed"]),
+    ...(remediation.reload?.attempted
+      ? [
+          `- Reload attempted: yes`,
+          `- Extension reload requested: ${remediation.reload.extensionReloaded ? "yes" : "no"}`,
+          `- Facebook tabs reloaded: ${remediation.reload.facebookTabsReloaded}`,
+          ...(remediation.reload.error ? [`- Reload error: ${remediation.reload.error}`] : []),
+        ]
+      : ["- Reload attempted: no"]),
+    `- Stale after reload/audit: ${remediation.after?.stale ? "yes" : "no"}`,
+    ...(remediation.after?.hints?.length ? remediation.after.hints.map((hint) => `- After: ${hint}`) : []),
+    "",
+    "## Locale Signals",
+    "",
+    `- html lang: ${localeSignals.htmlLang || "(none)"}`,
+    `- Facebook zh tokens: ${(localeSignals.chineseChromeMatches ?? []).join(", ") || "(none)"}`,
+    `- Facebook en tokens: ${(localeSignals.englishChromeMatches ?? []).join(", ") || "(none)"}`,
+    `- Truly zh tokens: ${(localeSignals.chineseTrulyMatches ?? []).join(", ") || "(none)"}`,
     "",
     "## Checks",
     "",
@@ -294,6 +696,25 @@ function writeSummary(report, failures) {
     ...report.audit.hostDetails.slice(0, 8).map((host) =>
       `- #${host.index}: host=${host.hostRect?.w || 0}x${host.hostRect?.h || 0} article=${host.articleRect?.w || 0}x${host.articleRect?.h || 0} problems=${host.problems.length ? host.problems.join(", ") : "none"}`
     ),
+    "",
+    "## Side Panel Workflow",
+    "",
+    `- Action button: ${sidePanel?.button?.found ? sidePanel.button.text : "(not found)"}`,
+    `- Targets: ${sidePanel?.targetCount ?? 0}`,
+    `- Opened new target: ${sidePanel?.openedNewTarget ? "yes" : "no"}`,
+    `- Focus fallback allowed: ${sidePanel?.focusAllowed ? "yes" : "no"}`,
+    `- Click attempts: ${sidePanel?.clickAttempts?.length
+      ? sidePanel.clickAttempts.map((attempt) => `${attempt.method}:${attempt.targetCount}`).join(", ")
+      : "none"}`,
+    `- Problems: ${sidePanel?.problems?.length ? sidePanel.problems.join("; ") : "none"}`,
+    ...(sidePanel?.captures?.length
+      ? sidePanel.captures.map((capture, index) =>
+          `- #${index}: title=${capture.data?.title || capture.target?.title || "(unknown)"} ` +
+          `text=${capture.data?.text ? "present" : "empty"} ` +
+          `overflow=${capture.data?.overflow?.length ?? 0} ` +
+          `rawDebug=${capture.data?.rawDebugVisible ? "yes" : "no"}`
+        )
+      : ["- no side-panel capture"]),
     "",
     "## Screenshots",
     "",
@@ -316,12 +737,32 @@ function writeSummary(report, failures) {
 const expectedBuildId = readExpectedBuildId();
 mkdirSync(OUT_DIR, { recursive: true });
 
-const targets = await fetchJson(`${CDP_BASE}/json/list`).catch((error) => {
+let targets = await fetchJson(`${CDP_BASE}/json/list`).catch((error) => {
   throw new Error(`Unable to reach Chrome CDP at ${CDP_BASE}. Start Chrome with remote debugging. ${error.message}`);
 });
 
-const { target: pageTarget, states: pageStates } = await selectFacebookTarget(targets);
-const serviceWorker = await findTrulyServiceWorker(targets, expectedBuildId);
+let { target: pageTarget, states: pageStates } = await selectFacebookTarget(targets);
+let serviceWorker = await findTrulyServiceWorker(targets, expectedBuildId);
+const remediation = {
+  before: buildFreshnessState(expectedBuildId, serviceWorker, pageStates, pageTarget.id),
+  reload: {
+    attempted: false,
+    extensionReloaded: false,
+    facebookTabsReloaded: 0,
+    error: null,
+  },
+  after: null,
+  autoReloadRequested: AUTO_RELOAD,
+};
+
+if (remediation.before.stale && AUTO_RELOAD) {
+  remediation.reload = await reloadStaleRuntime(serviceWorker.selected);
+  targets = await fetchJson(`${CDP_BASE}/json/list`);
+  ({ target: pageTarget, states: pageStates } = await selectFacebookTarget(targets));
+  serviceWorker = await findTrulyServiceWorker(targets, expectedBuildId);
+}
+remediation.after = buildFreshnessState(expectedBuildId, serviceWorker, pageStates, pageTarget.id);
+
 const page = connectCdp(pageTarget.webSocketDebuggerUrl);
 const screenshots = [];
 
@@ -334,6 +775,7 @@ try {
 
   const audit = await page.evaluate(`(() => {
     const norm = (s) => (s || "").replace(/\\s+/g, " ").trim();
+    const matchTokens = (text, tokens) => tokens.filter((token) => text.includes(token));
     const rectOf = (el) => {
       if (!el) return null;
       const r = el.getBoundingClientRect();
@@ -349,15 +791,15 @@ try {
       };
     };
     const visibleText = (el) => norm(el?.innerText || el?.textContent || "");
-    const hosts = Array.from(document.querySelectorAll(".truly-headsup-host,.fc-headsup-host"));
-    const taggedPosts = Array.from(document.querySelectorAll("[data-truly-id]"));
+    const hosts = Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}));
+    const taggedPosts = Array.from(document.querySelectorAll(${JSON.stringify(TAGGED_POST_SELECTOR)}));
     const articles = Array.from(document.querySelectorAll('[role="article"], article'));
     const viewport = { w: window.innerWidth, h: window.innerHeight, scrollY: window.scrollY };
     const hostDetails = hosts.map((host, index) => {
       const root = host.shadowRoot || host;
-      const headsUp = root.querySelector(".truly-headsup,.fc-headsup");
-      const summary = root.querySelector(".truly-headsup-summary,.fc-headsup-summary,[aria-expanded]") || root.querySelector("button");
-      const detail = root.querySelector(".truly-headsup-detail,.fc-headsup-detail");
+      const headsUp = root.querySelector(${JSON.stringify(HEADSUP_PANEL_SELECTOR)});
+      const summary = root.querySelector(${JSON.stringify(HEADSUP_SUMMARY_SELECTOR)}) || root.querySelector("button");
+      const detail = root.querySelector(${JSON.stringify(HEADSUP_DETAIL_SELECTOR)});
       const article = host.closest("[data-truly-id],[role='article'],article");
       const hostRect = rectOf(host);
       const articleRect = rectOf(article);
@@ -388,6 +830,10 @@ try {
       };
     });
     const bodyText = visibleText(document.body).slice(0, 2500);
+    const headsUpText = hosts.map((host) => {
+      const root = host.shadowRoot || host;
+      return visibleText(root);
+    }).join(" ");
     return {
       url: location.href,
       title: document.title,
@@ -395,14 +841,15 @@ try {
       viewport,
       localeSignals: {
         htmlLang: document.documentElement.lang || null,
-        hasChineseChrome: /留言|分享|讚|回覆|首頁|社團|通知|你在想什麼|留個言|撰寫|不具名貼文|感受\\/活動|票選活動/.test(bodyText),
-        hasEnglishChrome: /\\b(Comment|Share|Like|Home|Groups|Notifications|Write something)\\b/.test(bodyText)
+        chineseChromeMatches: matchTokens(bodyText, ${JSON.stringify(CHINESE_CHROME_TOKENS)}),
+        englishChromeMatches: matchTokens(bodyText, ${JSON.stringify(ENGLISH_CHROME_TOKENS)}),
+        chineseTrulyMatches: matchTokens(headsUpText, ${JSON.stringify(CHINESE_TRULY_TOKENS)})
       },
       counts: {
         hosts: hosts.length,
         taggedPosts: taggedPosts.length,
         articles: articles.length,
-        skipped: document.querySelectorAll("[data-truly-skip-reason]").length
+        skipped: document.querySelectorAll(${JSON.stringify(SKIPPED_POST_SELECTOR)}).length
       },
       hostDetails
     };
@@ -412,7 +859,7 @@ try {
   for (let i = 0; i < screenshotCount; i++) {
     const path = resolve(OUT_DIR, `host-${i}-viewport.png`);
     await page.evaluate(`(() => {
-      const host = Array.from(document.querySelectorAll(".truly-headsup-host,.fc-headsup-host"))[${i}];
+      const host = Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}))[${i}];
       host?.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
     })()`).catch(() => {});
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
@@ -422,12 +869,12 @@ try {
 
   const firstInteraction = await page.evaluate(`(() => {
     const norm = (s) => (s || "").replace(/\\s+/g, " ").trim();
-    const host = document.querySelector(".truly-headsup-host,.fc-headsup-host");
+    const host = document.querySelector(${JSON.stringify(HEADSUP_HOST_SELECTOR)});
     if (!host) return { ok: false, error: "host not found" };
     host.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
     const root = host.shadowRoot || host;
-    const headsUp = root.querySelector(".truly-headsup,.fc-headsup");
-    const summary = root.querySelector(".truly-headsup-summary,.fc-headsup-summary,[aria-expanded]") || root.querySelector("button");
+    const headsUp = root.querySelector(${JSON.stringify(HEADSUP_PANEL_SELECTOR)});
+    const summary = root.querySelector(${JSON.stringify(HEADSUP_SUMMARY_SELECTOR)}) || root.querySelector("button");
     const before = summary?.getAttribute("aria-expanded") || null;
     summary?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     return new Promise((resolve) => setTimeout(() => {
@@ -439,6 +886,11 @@ try {
       });
     }, 350));
   })()`).catch((error) => ({ ok: false, error: error.message }));
+
+  const sidePanel = await auditSidePanelWorkflow(page);
+  for (const capture of sidePanel.captures) {
+    if (capture.screenshot) screenshots.push(capture.screenshot);
+  }
 
   const runtime = await getContentScriptStats(serviceWorker.selected, audit.url);
   const warnings = summarizeLogWarnings(runtime.logs);
@@ -468,6 +920,18 @@ try {
       ok: firstInteraction.ok && firstInteraction.before !== firstInteraction.after,
       detail: firstInteraction.ok ? `${firstInteraction.before} -> ${firstInteraction.after}` : firstInteraction.error,
     },
+    {
+      label: "sidepanel opens from heads-up action",
+      ok: sidePanel.button.found && sidePanel.targetCount > 0,
+      detail: sidePanel.button.found
+        ? `${sidePanel.button.text}; targets=${sidePanel.targetCount}; new=${sidePanel.openedNewTarget ? "yes" : "no"}`
+        : sidePanel.button.error || `hosts=${sidePanel.button.hostCount ?? 0}`,
+    },
+    {
+      label: "sidepanel visual health",
+      ok: sidePanel.problems.length === 0,
+      detail: sidePanel.problems.join("; ") || "none",
+    },
   ];
 
   await page.evaluate(`window.scrollTo(0, ${Number(initialScroll) || 0})`).catch(() => {});
@@ -478,8 +942,10 @@ try {
     pageStates,
     page: { url: audit.url, title: audit.title, selectedTargetId: pageTarget.id },
     serviceWorker,
+    remediation,
     audit,
     interaction: firstInteraction,
+    sidePanel,
     runtime: {
       stats: runtime.stats || null,
       warnings,
