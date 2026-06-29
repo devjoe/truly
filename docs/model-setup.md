@@ -39,7 +39,7 @@ Ask me for or help me check:
 
 Then recommend one setup:
 1. Chrome built-in Gemini Nano for the lowest setup effort
-2. Ollama with `gemma4:e4b-it-qat` for lightweight local use
+2. Ollama with `gemma4:e4b` for lightweight local use
 3. Ollama with `gemma4:12b`, or an OpenAI-compatible endpoint with a stronger 12B-class model, for higher quality
 4. Reading hints only if this machine is too small for model-backed summaries
 
@@ -53,7 +53,7 @@ quality. Do not recommend paid cloud APIs unless I explicitly ask for them.
 | --- | --- | --- | --- |
 | Chrome already supports Gemini Nano on your machine | **Chrome built-in Gemini Nano** | Yes, zero config | Experimental; enable in settings |
 | Chrome does not have Gemini Nano and the machine is small | Reading hints only | Basic rules only | Off |
-| 24 GB unified memory, or 10 GB+ VRAM | Ollama with **`gemma4:e4b-it-qat`** | Yes | Yes, including image-aware checks |
+| 24 GB unified memory, or 10 GB+ VRAM | Ollama with **`gemma4:e4b`** | Yes | Yes, including image-aware checks |
 | 32 GB+ unified memory, or 16 GB+ VRAM | Ollama with **`gemma4:12b`**, or a private endpoint with a **12B-class model** | Yes | Better quality, slower |
 | You already operate a private model server | OpenAI-compatible endpoint with a **12B-class model** or equivalent | Yes | Best if the endpoint supports structured output and images |
 
@@ -123,7 +123,7 @@ own machine.
 2. Pull a model. For a lightweight first pass:
 
    ```bash
-   ollama pull gemma4:e4b-it-qat
+   ollama pull gemma4:e4b
    ```
 
    For higher quality on Ollama:
@@ -314,9 +314,9 @@ For the underlying Ollama environment-variable behavior, see Ollama's
 [Linux](https://docs.ollama.com/linux), and
 [Windows](https://docs.ollama.com/windows) docs.
 
-### Why `gemma4:e4b-it-qat` And `gemma4:12b`
+### Why `gemma4:e4b` And `gemma4:12b`
 
-`gemma4:e4b-it-qat` is the lightweight local option: it is suitable for quick
+`gemma4:e4b` is the lightweight local option: it is suitable for quick
 reading hints, summaries, and basic image-aware checks on smaller machines.
 
 `gemma4:12b` is the recommended higher-quality local target when your hardware
@@ -499,7 +499,7 @@ take noticeably longer.
 For a first preview setup:
 
 1. Try Gemini Nano if Chrome reports it is available.
-2. Use `gemma4:e4b-it-qat` when you need local Ollama support on a smaller
+2. Use `gemma4:e4b` when you need local Ollama support on a smaller
    machine.
 3. Move to `gemma4:12b` or another 12B-class model when you want better quality
    and can tolerate slower responses.

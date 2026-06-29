@@ -18,12 +18,12 @@ describe("model source config", () => {
     expect(defaultEndpointForProvider("openai-compatible")).toBe("http://localhost:8000/v1");
     expect(defaultEndpointForProvider("chrome-gemini-nano")).toBe("");
 
-    expect(defaultModelForProvider("ollama", "reading-prompt")).toBe("gemma4:e4b-it-qat");
+    expect(defaultModelForProvider("ollama", "reading-prompt")).toBe("gemma4:e4b");
     expect(defaultModelForProvider("openai-compatible", "reading-prompt")).toBe(
-      "gemma-4-e4b-it-4bit",
+      "gemma4:e4b",
     );
     expect(defaultModelForProvider("openai-compatible", "summary-reading")).toBe(
-      "gemma-4-e4b-it-4bit",
+      "gemma4:e4b",
     );
   });
 
@@ -40,21 +40,21 @@ describe("model source config", () => {
     let configs = normalizeProviderModelConfigMap({
       ollama: {
         endpoint: " http://localhost:11434/ ",
-        model: " gemma4:e4b-it-qat ",
+        model: " gemma4:e4b ",
       },
     });
     configs = withProviderModelConfig(configs, "openai-compatible", {
       endpoint: "https://models.example.test/v1",
-      model: "gemma-4-e4b-it-4bit",
+      model: "gemma4:e4b",
     });
 
     expect(providerModelConfigOrDefault(configs, "ollama", "reading-prompt")).toEqual({
       endpoint: "http://localhost:11434/",
-      model: "gemma4:e4b-it-qat",
+      model: "gemma4:e4b",
     });
     expect(providerModelConfigOrDefault(configs, "openai-compatible", "reading-prompt")).toEqual({
       endpoint: "https://models.example.test/v1",
-      model: "gemma-4-e4b-it-4bit",
+      model: "gemma4:e4b",
     });
   });
 

@@ -19,8 +19,8 @@ export function defaultEndpointForProvider(provider: ModelProvider): string {
 
 export function defaultModelForProvider(provider: ModelProvider, role: ModelSetupRole): string {
   void role;
-  if (provider === "ollama") return "gemma4:e4b-it-qat";
-  if (provider === "openai-compatible") return "gemma-4-e4b-it-4bit";
+  if (provider === "ollama") return "gemma4:e4b";
+  if (provider === "openai-compatible") return "gemma4:e4b";
   return DEFAULT_SETTINGS.tierBModel;
 }
 
