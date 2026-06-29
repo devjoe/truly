@@ -415,6 +415,12 @@ The public v2 evidence boundary is documented in
 observations stay private, while the repository commits only pattern-level
 evidence, synthetic fixtures, and automated corpus checks.
 
+The post-v2 parser route decision is documented in
+`docs/plans/general-page-reader-parser-route.md`: keep Readability and Defuddle
+as dev-only benchmark engines, harden the parser-neutral adapter contract first,
+and do not move third-party parser code into runtime until a separate
+offscreen/bundle/CSP adoption decision passes.
+
 ## Changes To The Implementation Plan
 
 Update the first implementation slice:
