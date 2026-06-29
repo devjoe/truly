@@ -59,9 +59,14 @@ async function readReloadServerBuildId() {
 }
 
 function checkReloadPortOwner() {
-  const pids = spawnSync("lsof", ["-nP", `-iTCP:${RELOAD_PORT}`, "-sTCP:LISTEN", "-t"], {
+  const lsof = spawnSync("lsof", ["-nP", `-iTCP:${RELOAD_PORT}`, "-sTCP:LISTEN", "-t"], {
     encoding: "utf8",
-  }).stdout
+  });
+  if (lsof.error) {
+    warn("reload port owner", `lsof unavailable: ${lsof.error.message}`);
+    return;
+  }
+  const pids = (lsof.stdout ?? "")
     .split(/\s+/)
     .filter(Boolean);
   if (pids.length === 0) {
@@ -70,9 +75,10 @@ function checkReloadPortOwner() {
   }
 
   const commands = pids.map((pid) => {
-    const command = spawnSync("ps", ["-p", pid, "-ww", "-o", "command="], {
+    const ps = spawnSync("ps", ["-p", pid, "-ww", "-o", "command="], {
       encoding: "utf8",
-    }).stdout.trim();
+    });
+    const command = (ps.stdout ?? "").trim();
     return { pid, command };
   });
   const owned = commands.some(({ command }) => command.includes("scripts/dev-reload-server.mjs"));

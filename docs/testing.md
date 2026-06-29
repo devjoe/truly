@@ -97,6 +97,20 @@ Facebook tab and writes a matrix summary under `tmp/facebook-open-tabs-audit-*`.
 This is the public-safe version of a page matrix: the repo stores the runner,
 not private target URLs.
 
+Recommended manual matrix:
+
+- home feed or chronological feed;
+- a group discussion page;
+- a group discussion page with an expanded or long thread, when available;
+- a profile, page, or single-post view when the touched code affects those
+  surfaces.
+
+The group discussion page is especially important for Heads-up placement. It
+catches cases where Facebook exposes a page-level wrapper, composer area, or
+nested feed surface that is large enough to look like a post container. The
+expected result is that Heads-up rows attach to actual post containers, not the
+outer group page or feed wrapper.
+
 Public repository boundary:
 
 - Keep the script public and generic.

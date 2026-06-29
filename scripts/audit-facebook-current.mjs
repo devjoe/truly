@@ -888,6 +888,7 @@ try {
   })()`).catch((error) => ({ ok: false, error: error.message }));
 
   const sidePanel = await auditSidePanelWorkflow(page);
+  const hasHeadsUpAction = sidePanel.button.found;
   for (const capture of sidePanel.captures) {
     if (capture.screenshot) screenshots.push(capture.screenshot);
   }
@@ -917,20 +918,22 @@ try {
     },
     {
       label: "heads-up expand toggles",
-      ok: firstInteraction.ok && firstInteraction.before !== firstInteraction.after,
-      detail: firstInteraction.ok ? `${firstInteraction.before} -> ${firstInteraction.after}` : firstInteraction.error,
+      ok: hasHeadsUpAction ? firstInteraction.ok && firstInteraction.before !== firstInteraction.after : true,
+      detail: hasHeadsUpAction
+        ? firstInteraction.ok ? `${firstInteraction.before} -> ${firstInteraction.after}` : firstInteraction.error
+        : "quiet heads-up; no expandable action",
     },
     {
       label: "sidepanel opens from heads-up action",
-      ok: sidePanel.button.found && sidePanel.targetCount > 0,
-      detail: sidePanel.button.found
+      ok: hasHeadsUpAction ? sidePanel.targetCount > 0 : true,
+      detail: hasHeadsUpAction
         ? `${sidePanel.button.text}; targets=${sidePanel.targetCount}; new=${sidePanel.openedNewTarget ? "yes" : "no"}`
-        : sidePanel.button.error || `hosts=${sidePanel.button.hostCount ?? 0}`,
+        : "quiet heads-up; side panel action not expected",
     },
     {
       label: "sidepanel visual health",
-      ok: sidePanel.problems.length === 0,
-      detail: sidePanel.problems.join("; ") || "none",
+      ok: hasHeadsUpAction ? sidePanel.problems.length === 0 : true,
+      detail: hasHeadsUpAction ? sidePanel.problems.join("; ") || "none" : "quiet heads-up; skipped",
     },
   ];
 

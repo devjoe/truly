@@ -1859,12 +1859,18 @@ export function cleanText(raw: string): string {
 // flip it visually. Both orders must be matched.
 const SPONSORED_LABELS = ["贊助", "助贊", "Sponsored", "广告", "廣告", "スポンサー"];
 
+export function isShortEnglishAdLabelText(t: string): boolean {
+  const normalized = t.replace(/\s+/g, " ").trim();
+  return normalized === "Ad" || /^Ad\s*[·•]\s*(?:🌐)?$/.test(normalized);
+}
+
 export function isShortSponsoredLabelText(t: string): boolean {
   // Sponsored labels are short ("贊助", "贊助 · 🌐", "Sponsored", "Sponsored · ").
   // We require the character following the label to be a separator
   // (space / dot / bullet / end-of-string) so we don't false-positive on
   // body text like "贊助商提供" or "贊助廠商".
   if (t.length > 30) return false;
+  if (isShortEnglishAdLabelText(t)) return true;
   for (const label of SPONSORED_LABELS) {
     if (t === label) return true;
     if (t.startsWith(label)) {
@@ -1893,6 +1899,17 @@ export function isLikelySponsoredLabelInText(t: string): boolean {
     if (prevOk && nextOk) return true;
   }
   return false;
+}
+
+// Facebook's English UI can render the visible "Ad" metadata label as a
+// spaced anti-scrape sequence in the post header. Do not use the compact
+// textContent form here: normal public metadata can contain similar decoys.
+export function isSpacedEnglishAdHeaderText(t: string): boolean {
+  const normalized = t.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0 || normalized.length > 180) return false;
+  return /(^|[^A-Za-z])S\s+s\s+o\s+p\s+r\s+n\s+e\s+o\s+t\s+d\s+g(?=[^A-Za-z]|$)/i.test(
+    normalized,
+  );
 }
 
 // Labels that identify a standalone "Follow this author" button rendered
@@ -1996,11 +2013,21 @@ export function markSponsoredInFeed() {
   );
   const targets: HTMLElement[] = [];
   for (const el of candidates) {
+    const rawText = (el.textContent || "").replace(/\s+/g, " ").trim();
+    if (isSpacedEnglishAdHeaderText(rawText)) {
+      targets.push(el);
+      continue;
+    }
+
     // Use visibleText (not textContent) so per-char CSS obfuscation
     // in chronological feed doesn't inflate the length past the
     // 60-char cutoff.
-    const tc = visibleText(el);
+    const tc = visibleText(el).trim();
     if (tc.length === 0 || tc.length > 60) continue;
+    if (isShortSponsoredLabelText(tc)) {
+      targets.push(el);
+      continue;
+    }
     let hasLabel = false;
     for (const lab of labels) {
       if (tc.indexOf(lab) >= 0) {
