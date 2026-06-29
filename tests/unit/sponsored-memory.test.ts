@@ -60,4 +60,31 @@ describe("sponsored session memory", () => {
       ),
     ).toBe(true);
   });
+
+  it("recognizes only the spaced English ad header sequence", () => {
+    expect(
+      feed.isSpacedEnglishAdHeaderText(
+        "營養師輕食 S s o p r n e o t d g 0 t f f h 2 c 9 7 t f h m 4 h h f A 4 t t d g ·",
+      ),
+    ).toBe(true);
+    expect(
+      feed.isSpacedEnglishAdHeaderText(
+        "營養師輕食Ssoprneotdg0tffh2c97tfhm4hhfA4ttdg32t4c67096l3u691i1252i1u03 · Shared with Public",
+      ),
+    ).toBe(false);
+    expect(feed.isSpacedEnglishAdHeaderText("This post mentions sponsored content")).toBe(false);
+  });
+
+  it("recognizes only a short English Ad metadata label", () => {
+    expect(feed.isShortEnglishAdLabelText("Ad")).toBe(true);
+    expect(feed.isShortEnglishAdLabelText("Ad ·")).toBe(true);
+    expect(feed.isShortEnglishAdLabelText("Ad · 🌐")).toBe(true);
+    expect(feed.isShortEnglishAdLabelText("Ad • 🌐")).toBe(true);
+    expect(feed.isShortSponsoredLabelText("Ad")).toBe(true);
+    expect(feed.isShortSponsoredLabelText("Ad · 🌐")).toBe(true);
+    expect(feed.isShortEnglishAdLabelText("Ad hoc")).toBe(false);
+    expect(feed.isShortSponsoredLabelText("Ad hoc")).toBe(false);
+    expect(feed.isShortSponsoredLabelText("AuthorAdShared with Public")).toBe(false);
+  });
+
 });

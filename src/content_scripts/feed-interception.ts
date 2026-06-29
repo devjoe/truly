@@ -991,7 +991,7 @@ function findPhotoGridPostBoundary(action: HTMLElement, root: HTMLElement): HTML
     const rect = el.getBoundingClientRect();
     const w = Math.round(rect.width);
     const h = Math.round(rect.height);
-    if (w >= 350 && h >= 100 && h <= 3000 && isPhotoGridPostContainer(el)) {
+    if (w >= 350 && h >= 100 && h <= 3000 && !isPageSectionWrapper(el) && isPhotoGridPostContainer(el)) {
       matches.push(el);
     }
     el = el.parentElement;
@@ -1069,9 +1069,11 @@ function isRecoverablePostChild(el: HTMLElement): boolean {
 }
 
 function hasCommentOrShareAction(el: HTMLElement): boolean {
-  return !!el.querySelector(
-    '[aria-label="留言"],[aria-label="Comment"],[aria-label="分享"],[aria-label="Share"]'
-  );
+  for (const node of Array.from(el.querySelectorAll<HTMLElement>("[aria-label]"))) {
+    const label = (node.getAttribute("aria-label") || "").trim();
+    if (/^(留言|Comment|Leave a comment|分享|Share)$/i.test(label)) return true;
+  }
+  return false;
 }
 
 function hasInterestFeedbackAction(el: HTMLElement): boolean {
@@ -1083,6 +1085,20 @@ function hasInterestFeedbackAction(el: HTMLElement): boolean {
 
 function hasPostActionSignal(el: HTMLElement): boolean {
   return hasCommentOrShareAction(el) || hasInterestFeedbackAction(el);
+}
+
+function containsNestedFeedSurface(el: HTMLElement): boolean {
+  return el.getAttribute("role") !== "feed" && !!el.querySelector('[role="feed"]');
+}
+
+function containsComposerEntryPoint(el: HTMLElement): boolean {
+  return /Write something|What's on your mind|Anonymous post|Feeling\/activity|Poll|撰寫|匿名貼文|心情\/活動|投票/.test(
+    visibleText(el).slice(0, 500)
+  );
+}
+
+function isPageSectionWrapper(el: HTMLElement): boolean {
+  return containsNestedFeedSurface(el) || containsComposerEntryPoint(el);
 }
 
 export function shouldSuppressDomAttachmentFallbackForRecommendedPost(
@@ -1125,6 +1141,7 @@ export function isMixedFeedContainer(el: HTMLElement): boolean {
   // as if it were one post. It may contain a normal post, an ad, a Reel
   // tray, and several more posts; analyzing that wrapper pollutes Tier B
   // with unrelated text and image insights.
+  if (containsNestedFeedSurface(el) && (height > 900 || containsComposerEntryPoint(el))) return true;
   if (isGenericFeedWrapperAuthor(author) && actionBarCount >= 1) return true;
   if (height > 3000 && (reelTray || actionBarCount >= 2 || childPostCount >= 1)) return true;
   if (reelTray && actionBarCount >= 2) return true;
@@ -1172,7 +1189,7 @@ export function findPostBoundary(button: HTMLElement, root: HTMLElement): HTMLEl
     // FB's feed column width scales with viewport (680px at 1440, up to
     // 900+ on ultrawide). Height bounds reject button bars (< 100) and
     // the entire-feed container (> 3000).
-    if (w >= 350 && h >= 100 && h <= 3000 && el.contains(button)) {
+    if (w >= 350 && h >= 100 && h <= 3000 && el.contains(button) && !isPageSectionWrapper(el)) {
       matches.push(el);
     }
 
@@ -1842,12 +1859,18 @@ export function cleanText(raw: string): string {
 // flip it visually. Both orders must be matched.
 const SPONSORED_LABELS = ["贊助", "助贊", "Sponsored", "广告", "廣告", "スポンサー"];
 
+export function isShortEnglishAdLabelText(t: string): boolean {
+  const normalized = t.replace(/\s+/g, " ").trim();
+  return normalized === "Ad" || /^Ad\s*[·•]\s*(?:🌐)?$/.test(normalized);
+}
+
 export function isShortSponsoredLabelText(t: string): boolean {
   // Sponsored labels are short ("贊助", "贊助 · 🌐", "Sponsored", "Sponsored · ").
   // We require the character following the label to be a separator
   // (space / dot / bullet / end-of-string) so we don't false-positive on
   // body text like "贊助商提供" or "贊助廠商".
   if (t.length > 30) return false;
+  if (isShortEnglishAdLabelText(t)) return true;
   for (const label of SPONSORED_LABELS) {
     if (t === label) return true;
     if (t.startsWith(label)) {
@@ -1876,6 +1899,17 @@ export function isLikelySponsoredLabelInText(t: string): boolean {
     if (prevOk && nextOk) return true;
   }
   return false;
+}
+
+// Facebook's English UI can render the visible "Ad" metadata label as a
+// spaced anti-scrape sequence in the post header. Do not use the compact
+// textContent form here: normal public metadata can contain similar decoys.
+export function isSpacedEnglishAdHeaderText(t: string): boolean {
+  const normalized = t.replace(/\s+/g, " ").trim();
+  if (normalized.length === 0 || normalized.length > 180) return false;
+  return /(^|[^A-Za-z])S\s+s\s+o\s+p\s+r\s+n\s+e\s+o\s+t\s+d\s+g(?=[^A-Za-z]|$)/i.test(
+    normalized,
+  );
 }
 
 // Labels that identify a standalone "Follow this author" button rendered
@@ -1979,11 +2013,21 @@ export function markSponsoredInFeed() {
   );
   const targets: HTMLElement[] = [];
   for (const el of candidates) {
+    const rawText = (el.textContent || "").replace(/\s+/g, " ").trim();
+    if (isSpacedEnglishAdHeaderText(rawText)) {
+      targets.push(el);
+      continue;
+    }
+
     // Use visibleText (not textContent) so per-char CSS obfuscation
     // in chronological feed doesn't inflate the length past the
     // 60-char cutoff.
-    const tc = visibleText(el);
+    const tc = visibleText(el).trim();
     if (tc.length === 0 || tc.length > 60) continue;
+    if (isShortSponsoredLabelText(tc)) {
+      targets.push(el);
+      continue;
+    }
     let hasLabel = false;
     for (const lab of labels) {
       if (tc.indexOf(lab) >= 0) {

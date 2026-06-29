@@ -22,6 +22,7 @@ import { normalizeThemeMode } from "../lib/theme-mode";
 import { dedupeModelDisplayNames, modelDisplayIdentity } from "../lib/model-display";
 import { defaultModelForProvider } from "../lib/model-source-config";
 import { shouldRenderPersonalContextChip } from "../lib/heads-up-chip-policy";
+import { sendRuntimeMessageSafely } from "../lib/runtime-message";
 import { HEADS_UP_CSS } from "./heads-up-styles";
 import {
   formatZhtwTermExplanation,
@@ -638,9 +639,7 @@ function buildPanel(
     // is the ONLY trigger that updates the pane.
     const id = article.dataset.trulyStableId || article.dataset.trulyId;
     if (id) {
-      try {
-        chrome.runtime.sendMessage({ type: "MANUAL_VIEW_POST", id }).catch(() => {});
-      } catch { /* no-op when chrome.runtime is unavailable (tests) */ }
+      sendChromeRuntimeMessage({ type: "MANUAL_VIEW_POST", id });
     }
   };
 
@@ -932,24 +931,17 @@ function shouldPrioritizeRetry(raw: string): boolean {
 }
 
 function openOptionsPage(): void {
-  try {
-    const maybePromise = chrome.runtime.sendMessage({ type: "OPEN_OPTIONS_PAGE" });
-    if (maybePromise && typeof maybePromise.catch === "function") {
-      maybePromise.catch(() => {});
-    }
-  } catch {
-    /* no-op in tests/non-extension contexts */
-  }
+  sendChromeRuntimeMessage({ type: "OPEN_OPTIONS_PAGE" });
 }
 
 function toggleDashboardForPost(id: string | undefined): void {
   if (!id) return;
-  try {
-    chrome.runtime.sendMessage({ type: "MANUAL_VIEW_POST", id }).catch(() => {});
-    chrome.runtime.sendMessage({ type: "TOGGLE_DASHBOARD_FOR_POST", id }).catch(() => {});
-  } catch {
-    /* no-op in tests/non-extension contexts */
-  }
+  sendChromeRuntimeMessage({ type: "MANUAL_VIEW_POST", id });
+  sendChromeRuntimeMessage({ type: "TOGGLE_DASHBOARD_FOR_POST", id });
+}
+
+function sendChromeRuntimeMessage(message: unknown): void {
+  sendRuntimeMessageSafely((payload) => chrome.runtime.sendMessage(payload), message);
 }
 
 function retryPipeline(kind: "classification" | "analysis", article: HTMLElement): void {

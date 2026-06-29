@@ -14,7 +14,7 @@ describe("Tier B vision probe", () => {
   it("sends an image_url part through the same OpenAI-compatible route", () => {
     const body = buildTierBVisionProbeChatBody({
       endpoint: "http://localhost:11434",
-      model: "gemma4:e4b-it-qat",
+      model: "gemma4:e4b",
     });
 
     const content = body.messages[1].content;
@@ -31,7 +31,7 @@ describe("Tier B vision probe", () => {
 
     const result = await callTierBVisionProbe({
       endpoint: "http://localhost:11434",
-      model: "gemma4:e4b-it-qat",
+      model: "gemma4:e4b",
     });
 
     expect(result.ok).toBe(true);

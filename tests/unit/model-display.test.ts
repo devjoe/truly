@@ -8,9 +8,9 @@ describe("model display names", () => {
       key: "gemini-nano",
       label: "Gemini Nano",
     });
-    expect(modelDisplayIdentity("gemma4:e4b-it-qat:latest")).toEqual({
-      key: "gemma4:e4b-it-qat",
-      label: "Gemma 4 E4B (QAT)",
+    expect(modelDisplayIdentity("gemma4:e4b:latest")).toEqual({
+      key: "gemma4:e4b",
+      label: "Gemma 4 E4B",
     });
   });
 
@@ -18,8 +18,8 @@ describe("model display names", () => {
     expect(dedupeModelDisplayNames([
       "chrome-gemini-nano",
       "Gemini Nano",
-      "gemma4:e4b-it-qat",
-      "gemma4:e4b-it-qat:latest",
-    ])).toEqual(["Gemini Nano", "Gemma 4 E4B (QAT)"]);
+      "gemma4:e4b",
+      "gemma4:e4b:latest",
+    ])).toEqual(["Gemini Nano", "Gemma 4 E4B"]);
   });
 });

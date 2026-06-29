@@ -19,8 +19,8 @@ export function defaultEndpointForProvider(provider: ModelProvider): string {
 
 export function defaultModelForProvider(provider: ModelProvider, role: ModelSetupRole): string {
   void role;
-  if (provider === "ollama") return "gemma4:e4b-it-qat";
-  if (provider === "openai-compatible") return "gemma-4-e4b-it-4bit";
+  if (provider === "ollama") return "gemma4:e4b";
+  if (provider === "openai-compatible") return "gemma4:e4b";
   return DEFAULT_SETTINGS.tierBModel;
 }
 
@@ -75,16 +75,47 @@ export function normalizeEndpointInput(input: string, fallback = ""): string {
   return (input.trim() || fallback).replace(/\/+$/, "");
 }
 
-export function validateEndpointUrl(url: string): string | null {
+export type EndpointValidationError = "unsupported-scheme" | "invalid-url";
+
+export function validateEndpointUrl(url: string): EndpointValidationError | null {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
-      return "端點網址請使用 http:// 或 https://";
+      return "unsupported-scheme";
     }
     return null;
   } catch {
-    return "端點網址格式無法辨識";
+    return "invalid-url";
   }
+}
+
+export type EndpointSecurityWarning = "secret-in-url" | "non-local-http";
+
+export function endpointSecurityWarnings(rawEndpoint: string): EndpointSecurityWarning[] {
+  const endpoint = rawEndpoint.trim();
+  if (!endpoint) return [];
+  let parsed: URL;
+  try {
+    parsed = new URL(endpoint);
+  } catch {
+    return [];
+  }
+
+  const warnings: EndpointSecurityWarning[] = [];
+  const sensitiveQuery = Array.from(parsed.searchParams.keys()).some((key) =>
+    /(^|[_-])(api[_-]?key|access[_-]?token|auth|authorization|bearer|secret|token)([_-]|$)/i.test(key),
+  );
+  if (parsed.username || parsed.password || sensitiveQuery) {
+    warnings.push("secret-in-url");
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const isLoopback = host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  if (parsed.protocol === "http:" && !isLoopback) {
+    warnings.push("non-local-http");
+  }
+
+  return warnings;
 }
 
 /**

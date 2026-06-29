@@ -16,6 +16,7 @@ import { applyUserSettingsPatch, getTierAProvider, getTierBProvider, normalizeUs
 import {
   defaultEndpointForProvider,
   defaultModelForProvider,
+  endpointSecurityWarnings,
   isEndpointBackedModelProvider,
   normalizeEndpointInput,
   normalizeProviderModelConfigMap,
@@ -24,7 +25,7 @@ import {
   validateEndpointUrl,
   withProviderModelConfig,
 } from "../lib/model-source-config";
-import type { ProviderModelConfigMap } from "../lib/model-source-config";
+import type { EndpointValidationError, ProviderModelConfigMap } from "../lib/model-source-config";
 import {
   providerCapabilities,
   providerEndpointKind,
@@ -1248,6 +1249,7 @@ async function init() {
     "tierAOutputMode"
   ) as HTMLInputElement;
   const ollamaEndpointError = document.getElementById("ollamaEndpointError")!;
+  const ollamaEndpointWarning = document.getElementById("ollamaEndpointWarning")!;
   const ollamaStatus = document.getElementById("ollamaStatus")!;
   const copyTierADiagnosticsButton = document.getElementById("copyTierADiagnostics") as HTMLButtonElement;
   const tierAProviderHelp = document.getElementById("tierAProviderHelp")!;
@@ -1284,6 +1286,22 @@ async function init() {
     tierAInlineStatus.className = className.includes("model-inline-status")
       ? className
       : `${className} model-inline-status`;
+  }
+
+  function endpointWarningText(rawEndpoint: string): string {
+    return endpointSecurityWarnings(rawEndpoint)
+      .map((warning) =>
+        warning === "secret-in-url"
+          ? optT("common.endpointWarnSecret")
+          : optT("common.endpointWarnHttp")
+      )
+      .join("\n");
+  }
+
+  function renderEndpointWarning(input: HTMLInputElement, warningEl: HTMLElement): void {
+    const text = endpointWarningText(input.value || input.placeholder);
+    warningEl.textContent = text;
+    warningEl.style.display = text ? "" : "none";
   }
 
   let tierADiagnosticsText = "";
@@ -1445,6 +1463,7 @@ async function init() {
     llmEndpointLabel.textContent = optT("common.endpoint");
     ollamaEndpoint.placeholder = defaultEndpointForProvider(provider);
     ollamaModel.placeholder = defaultModelForProvider(provider, "reading-prompt");
+    renderEndpointWarning(ollamaEndpoint, ollamaEndpointWarning);
     ollamaStatus.textContent = "";
     clearTierADiagnostics();
     if (provider === "none") {
@@ -1549,6 +1568,12 @@ async function init() {
       : optT("options.modelTest.connectionFailed");
   }
 
+  function endpointValidationErrorText(error: EndpointValidationError): string {
+    return error === "unsupported-scheme"
+      ? optT("options.modelTest.endpointUnsupportedScheme")
+      : optT("options.modelTest.endpointInvalidUrl");
+  }
+
   function modelListStatusClass(statusEl: HTMLElement, kind: "ok" | "error"): string {
     const base = kind === "ok" ? "status-text status-ok" : "status-text status-error";
     return statusEl.className.includes("model-inline-status")
@@ -1571,7 +1596,7 @@ async function init() {
 
     const validationError = validateEndpointUrl(endpoint);
     if (validationError) {
-      endpointErrorEl.textContent = validationError;
+      endpointErrorEl.textContent = endpointValidationErrorText(validationError);
       endpointErrorEl.className = "status-text status-error";
       endpointErrorEl.style.display = "";
       statusEl.textContent = optT("options.modelTest.endpointNeedsWork");
@@ -1770,6 +1795,7 @@ async function init() {
   ollamaEndpoint.addEventListener("input", () => {
     showModelFallback();
     rememberTierAProviderDraft(providerSelect.value as TierAProvider);
+    renderEndpointWarning(ollamaEndpoint, ollamaEndpointWarning);
     refreshTierALaneSummary();
   });
   ollamaModel.addEventListener("input", () => {
@@ -1823,11 +1849,12 @@ async function init() {
         const tierAApiKey = apiKeyForProvider(provider, apiKeyInput);
         const endpoint = normalizeEndpointInput(ollamaEndpoint.value, defaultEndpoint);
         ollamaEndpoint.value = endpoint;
+        renderEndpointWarning(ollamaEndpoint, ollamaEndpointWarning);
 
         // Validate URL
         const validationError = validateEndpointUrl(endpoint);
         if (validationError) {
-          ollamaEndpointError.textContent = validationError;
+          ollamaEndpointError.textContent = endpointValidationErrorText(validationError);
           ollamaEndpointError.className = "status-text status-error";
           ollamaEndpointError.style.display = "";
           setTierAInlineStatus(optT("options.modelTest.endpointNeedsWork"), modelTestErrorClass);
@@ -1986,6 +2013,7 @@ async function init() {
   const tierBModel = document.getElementById("tierBModel") as HTMLInputElement;
   const refreshTierBModelsButton = document.getElementById("refreshTierBModels") as HTMLButtonElement;
   const tierBEndpointError = document.getElementById("tierBEndpointError")!;
+  const tierBEndpointWarning = document.getElementById("tierBEndpointWarning")!;
   const tierBSetupError = document.getElementById("tierBSetupError")!;
   const tierBStatus = document.getElementById("tierBStatus")!;
   const tierBProviderHelp = document.getElementById("tierBProviderHelp")!;
@@ -2173,6 +2201,7 @@ async function init() {
     if (!needsEndpoint) showTierBModelFallback();
     tierBEndpoint.placeholder = defaultEndpointForProvider(provider);
     tierBModel.placeholder = defaultModelForProvider(provider, "summary-reading");
+    renderEndpointWarning(tierBEndpoint, tierBEndpointWarning);
     if (provider === "none") {
       tierBLaneSource.textContent = optT("options.tierB.disabledSource");
       tierBLaneMeta.textContent = optT("options.tierB.disabledMeta");
@@ -2254,6 +2283,7 @@ async function init() {
   tierBEndpoint.addEventListener("input", () => {
     showTierBModelFallback();
     rememberTierBProviderDraft(tierBProviderSelect.value as TierBProvider);
+    renderEndpointWarning(tierBEndpoint, tierBEndpointWarning);
     refreshTierBManualInputs();
   });
   tierBModel.addEventListener("input", () => {
@@ -2272,6 +2302,7 @@ async function init() {
       optT("options.modelTest.fetchingModels"),
     );
   });
+  i18nDynamicRenderers.push(refreshTierBManualInputs);
   refreshTierBManualInputs();
 
   const saveDeepAnalysisButton = document.getElementById("saveDeepAnalysis") as HTMLButtonElement;
@@ -2288,6 +2319,10 @@ async function init() {
       const endpoint = providerNeedsEndpoint(provider)
         ? manualEndpoint
         : "";
+      if (providerNeedsEndpoint(provider)) {
+        tierBEndpoint.value = manualEndpoint;
+        renderEndpointWarning(tierBEndpoint, tierBEndpointWarning);
+      }
       const enabled = deepClassifyEnabled.checked;
       let manualModel = currentTierBModelInput() || defaultModel;
       const aiGate = resolveTierBFeatureGate("ai_analysis", draftTierBSettings());
@@ -2327,7 +2362,7 @@ async function init() {
       if (endpoint) {
         const validationError = validateEndpointUrl(endpoint);
         if (validationError) {
-          tierBEndpointError.textContent = validationError;
+          tierBEndpointError.textContent = endpointValidationErrorText(validationError);
           tierBEndpointError.className = "status-text status-error";
           tierBEndpointError.style.display = "";
           setTierBStatus(optT("options.modelTest.endpointNeedsWork"), modelTestErrorClass);
