@@ -57,12 +57,27 @@ browser extension:
 ## Next Implementation Slice
 
 The next code slice should not import parser libraries into runtime. It should
-add a testable adapter boundary:
+continue hardening the testable adapter boundary started in
+`scripts/lib/general-page-parser-contract.mjs`.
 
-1. Define `GeneralPageParserCandidate` and `GeneralPageParserResult` in a
-   dev/test-oriented module.
-2. Map heuristic extraction, Readability, Defuddle, and Defuddle Markdown into
-   the same result shape inside the spike/evaluation layer.
+Completed in the dev/test spike layer:
+
+- `GeneralPageParserCandidate` and `GeneralPageParserResult` are documented as
+  JSDoc contracts in `scripts/lib/general-page-parser-contract.mjs`.
+- Readability, Defuddle, and Defuddle Markdown are now registered as parser
+  candidates with stable ids, labels, roles, package metadata, version, and
+  license fields.
+- Spike output now normalizes candidate result metadata and candidate-specific
+  diagnostics before threshold evaluation.
+- Parser dependencies remain dev-only and are still not imported by extension
+  runtime code.
+
+Remaining adapter-boundary work:
+
+1. Map the actual Truly heuristic extraction baseline into the same result
+   shape without changing the runtime dependency boundary.
+2. Compare the heuristic baseline, Readability, Defuddle, and Defuddle Markdown
+   inside the spike/evaluation layer.
 3. Add evaluator output that compares:
    - extraction status;
    - expected text hit score;

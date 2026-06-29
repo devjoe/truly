@@ -7,6 +7,15 @@ import { performance } from "node:perf_hooks";
 import { Readability, isProbablyReaderable } from "@mozilla/readability";
 import { JSDOM } from "jsdom";
 import { Defuddle } from "defuddle/node";
+import {
+  candidateManifest,
+  defineParserCandidate,
+  evaluateThresholds,
+  normalizeParserError,
+  normalizeParserResult,
+  summarizeParserResults,
+  summarizeThresholds,
+} from "./lib/general-page-parser-contract.mjs";
 
 const FIXTURE_DIR = "tests/fixtures/general-pages";
 const MANIFEST_PATH = path.join(FIXTURE_DIR, "manifest.json");
@@ -16,6 +25,35 @@ const REPORT_PATH = path.join(OUTPUT_DIR, `general-page-parser-spike-${REPORT_DA
 
 const manifest = readManifest();
 const fixtures = manifest.fixtures.map(normalizeFixture);
+const candidates = [
+  defineParserCandidate({
+    id: "readability",
+    label: "Mozilla Readability",
+    role: "article-extraction",
+    packageName: "@mozilla/readability",
+    packageVersion: "0.6.0",
+    license: "Apache-2.0",
+    parse: ({ html, fixture }) => parseReadability(html, fixture),
+  }),
+  defineParserCandidate({
+    id: "defuddle",
+    label: "Defuddle",
+    role: "article-extraction",
+    packageName: "defuddle",
+    packageVersion: "0.19.1",
+    license: "MIT",
+    parse: ({ html, fixture }) => parseDefuddle(html, fixture),
+  }),
+  defineParserCandidate({
+    id: "defuddle-markdown",
+    label: "Defuddle Markdown",
+    role: "context-extraction",
+    packageName: "defuddle",
+    packageVersion: "0.19.1",
+    license: "MIT",
+    parse: ({ html, fixture }) => parseDefuddle(html, fixture, { markdown: true }),
+  }),
+];
 
 function readFixture(file) {
   return fs.readFileSync(path.join(FIXTURE_DIR, file), "utf8");
@@ -82,42 +120,6 @@ function scoreText(text, fixture) {
   };
 }
 
-function evaluateThresholds(engineResult, fixture) {
-  const failures = [];
-  const score = engineResult.score ?? {
-    containsScore: 0,
-    leakCount: Number.POSITIVE_INFINITY,
-  };
-
-  if (!engineResult.ok)
-    failures.push("empty-result");
-  if (engineResult.error)
-    failures.push("parser-error");
-  if (score.containsScore < fixture.thresholds.minContainsScore) {
-    failures.push(
-      `contains-score ${score.containsScore} < ${fixture.thresholds.minContainsScore}`,
-    );
-  }
-  if (score.leakCount > fixture.thresholds.maxLeakCount) {
-    failures.push(
-      `leak-count ${score.leakCount} > ${fixture.thresholds.maxLeakCount}`,
-    );
-  }
-  if (
-    typeof engineResult.durationMs === "number" &&
-    engineResult.durationMs > fixture.thresholds.maxDurationMs
-  ) {
-    failures.push(
-      `duration-ms ${engineResult.durationMs} > ${fixture.thresholds.maxDurationMs}`,
-    );
-  }
-
-  return {
-    pass: failures.length === 0,
-    failures,
-  };
-}
-
 function resultSummary(raw) {
   const text = normalizeText(raw.textContent ?? raw.contentMarkdown ?? raw.content ?? "");
   return {
@@ -149,9 +151,9 @@ function parseReadability(html, fixture) {
     ? resultSummary(article)
     : { ok: false, textLength: 0, textPreview: "", text: "" };
   return {
-    engine: "readability",
     durationMs: Number(durationMs.toFixed(2)),
     readerable,
+    diagnostics: { readerable },
     ...withoutRawText(summary),
     score: scoreText(summary.text, fixture),
   };
@@ -167,10 +169,13 @@ async function parseDefuddle(html, fixture, options = {}) {
   const durationMs = performance.now() - start;
   const summary = resultSummary(result ?? {});
   return {
-    engine: options.markdown ? "defuddle-markdown" : "defuddle",
     durationMs: Number(durationMs.toFixed(2)),
     ...withoutRawText(summary),
     wordCount: result?.wordCount,
+    diagnostics: {
+      markdown: Boolean(options.markdown),
+      wordCount: result?.wordCount,
+    },
     score: scoreText(summary.text, fixture),
   };
 }
@@ -185,23 +190,18 @@ async function main() {
   for (const fixture of fixtures) {
     const html = readFixture(fixture.file);
     const engineResults = [];
-    for (const candidate of [
-      { engine: "readability", parse: () => parseReadability(html, fixture) },
-      { engine: "defuddle", parse: () => parseDefuddle(html, fixture) },
-      { engine: "defuddle-markdown", parse: () => parseDefuddle(html, fixture, { markdown: true }) },
-    ]) {
+    for (const candidate of candidates) {
       try {
-        const result = await candidate.parse();
+        const result = normalizeParserResult(
+          candidate,
+          await candidate.parse({ html, fixture }),
+        );
         engineResults.push({
           ...result,
           threshold: evaluateThresholds(result, fixture),
         });
       } catch (error) {
-        const result = {
-          engine: candidate.engine,
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        };
+        const result = normalizeParserError(candidate, error);
         engineResults.push({
           ...result,
           threshold: evaluateThresholds(result, fixture),
@@ -225,21 +225,10 @@ async function main() {
 
   const report = {
     generatedAt: new Date().toISOString(),
-    candidates: {
-      readability: {
-        package: "@mozilla/readability",
-        version: "0.6.0",
-        license: "Apache-2.0",
-      },
-      defuddle: {
-        package: "defuddle",
-        version: "0.19.1",
-        license: "MIT",
-      },
-    },
+    candidates: candidateManifest(candidates),
     fixtureCount: fixtures.length,
     results,
-    summary: summarize(results),
+    summary: summarizeParserResults(results),
     threshold: summarizeThresholds(results),
   };
 
@@ -248,68 +237,6 @@ async function main() {
   printSummary(report);
   if (!report.threshold.pass)
     process.exitCode = 1;
-}
-
-function summarize(results) {
-  const byEngine = new Map();
-  for (const fixture of results) {
-    for (const engine of fixture.engines) {
-      const current = byEngine.get(engine.engine) ?? {
-        engine: engine.engine,
-        okCount: 0,
-        totalContainsScore: 0,
-        totalLeaks: 0,
-        totalDurationMs: 0,
-        parsedFixtures: 0,
-        errors: 0,
-        thresholdPassCount: 0,
-      };
-      if (engine.ok)
-        current.okCount += 1;
-      if (engine.error)
-        current.errors += 1;
-      if (engine.score) {
-        current.totalContainsScore += engine.score.containsScore;
-        current.totalLeaks += engine.score.leakCount;
-      }
-      if (typeof engine.durationMs === "number")
-        current.totalDurationMs += engine.durationMs;
-      if (engine.threshold?.pass)
-        current.thresholdPassCount += 1;
-      current.parsedFixtures += 1;
-      byEngine.set(engine.engine, current);
-    }
-  }
-  return [...byEngine.values()].map((item) => ({
-    engine: item.engine,
-    okCount: item.okCount,
-    fixtureCount: item.parsedFixtures,
-    averageContainsScore: Number((item.totalContainsScore / item.parsedFixtures).toFixed(3)),
-    totalLeaks: item.totalLeaks,
-    averageDurationMs: Number((item.totalDurationMs / item.parsedFixtures).toFixed(2)),
-    errors: item.errors,
-    thresholdPassCount: item.thresholdPassCount,
-  }));
-}
-
-function summarizeThresholds(results) {
-  const failures = [];
-  for (const fixture of results) {
-    for (const engine of fixture.engines) {
-      if (engine.threshold?.pass)
-        continue;
-      failures.push({
-        fixtureId: fixture.id,
-        engine: engine.engine,
-        failures: engine.threshold?.failures ?? ["missing-threshold-result"],
-      });
-    }
-  }
-  return {
-    pass: failures.length === 0,
-    failureCount: failures.length,
-    failures,
-  };
 }
 
 function printSummary(report) {

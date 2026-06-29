@@ -379,19 +379,27 @@ It reads the public synthetic fixture manifest in
 - `defuddle`;
 - `defuddle` with Markdown output;
 
-and writes a JSON report with per-fixture threshold results to:
+through the dev-only parser-neutral candidate contract in
+`scripts/lib/general-page-parser-contract.mjs`, then writes a JSON report with
+per-fixture threshold results to:
 
 ```text
 tmp/parser-spikes/general-page-parser-spike-YYYY-MM-DD.json
 ```
 
+The report records each candidate's stable id, label, role, package, version,
+license, normalized result metadata, threshold status, and candidate-specific
+diagnostics. The contract reserves a `runtime-baseline` role for Truly's
+heuristic extractor, but this spike does not import runtime TypeScript or move
+third-party parser dependencies into extension runtime code.
+
 V2 run on 2026-06-29:
 
 | Candidate | Parsed fixtures | Contains score | Leaks | Average time | Threshold |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| `@mozilla/readability` | 25/25 | 1.000 | 0 | 1.90 ms | 25/25 |
-| `defuddle` | 25/25 | 1.000 | 0 | 17.16 ms | 25/25 |
-| `defuddle` Markdown | 25/25 | 1.000 | 0 | 14.92 ms | 25/25 |
+| `@mozilla/readability` | 25/25 | 1.000 | 0 | 1.68 ms | 25/25 |
+| `defuddle` | 25/25 | 1.000 | 0 | 14.97 ms | 25/25 |
+| `defuddle` Markdown | 25/25 | 1.000 | 0 | 13.51 ms | 25/25 |
 
 Interpretation:
 
