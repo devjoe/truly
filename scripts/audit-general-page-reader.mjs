@@ -231,7 +231,18 @@ async function extensionPageEval(extensionId, expression) {
 }
 
 async function reloadExtension(extensionId) {
-  await extensionPageEval(extensionId, "chrome.runtime.reload(); undefined").catch(() => undefined);
+  const helperUrl = `chrome-extension://${extensionId}/options/options.html?generalPageReaderAuditReload=${STAMP}`;
+  const helperTarget = await createTarget(helperUrl);
+  const helper = connectCdp(helperTarget.webSocketDebuggerUrl);
+  try {
+    await sleep(300);
+    await Promise.race([
+      helper.evaluate("setTimeout(() => chrome.runtime.reload(), 0); undefined", 1000).catch(() => undefined),
+      sleep(1000),
+    ]);
+  } finally {
+    helper.close();
+  }
   await sleep(1500);
 }
 

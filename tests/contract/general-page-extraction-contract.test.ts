@@ -241,6 +241,27 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.id).toBe("general:https://example.test/articles/relative-canonical");
   });
 
+  it("preserves readable spacing between adjacent block elements", () => {
+    const document = new JSDOM(`
+      <!doctype html>
+      <html>
+        <head><title>Spacing Fixture</title></head>
+        <body>
+          <article><h1>Spacing Fixture</h1><p>By Synthetic Author</p><p>This synthetic paragraph should not be glued to the byline when textContent is normalized.</p><p>The second paragraph keeps the article long enough for semantic extraction.</p></article>
+        </body>
+      </html>
+    `, { url: "https://example.test/articles/spacing" }).window.document;
+
+    const surface = extractGeneralPageSurface({
+      document,
+      url: "https://example.test/articles/spacing",
+    });
+
+    expect(surface.mainText).toContain("Spacing Fixture By Synthetic Author This synthetic paragraph");
+    expect(surface.mainText).not.toContain("FixtureBy");
+    expect(surface.mainText).not.toContain("AuthorThis");
+  });
+
   it("prefers semantic main content over navigation and sidebar noise", () => {
     const surface = extractGeneralPageSurface({
       document: fixtureDocument("nav-sidebar-noise.html"),

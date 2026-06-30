@@ -198,7 +198,44 @@ function readableText(root: Element): string | undefined {
       element.remove();
     }
   }
+  addBlockBoundaries(clone);
   return normalizeWhitespace(clone.textContent ?? "");
+}
+
+function addBlockBoundaries(root: Element): void {
+  const blockSelectors = [
+    "article",
+    "section",
+    "main",
+    "header",
+    "footer",
+    "aside",
+    "nav",
+    "div",
+    "p",
+    "li",
+    "blockquote",
+    "figcaption",
+    "pre",
+    "td",
+    "th",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+  ].join(",");
+  for (const element of Array.from(root.querySelectorAll(blockSelectors))) {
+    if (typeof element.insertAdjacentText !== "function")
+      continue;
+    element.insertAdjacentText("beforebegin", " ");
+    element.insertAdjacentText("afterend", " ");
+  }
+  for (const element of Array.from(root.querySelectorAll("br"))) {
+    if (typeof element.replaceWith === "function")
+      element.replaceWith(" ");
+  }
 }
 
 function nonArticlePageWarnings(
