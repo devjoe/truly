@@ -14,7 +14,9 @@ import { loadRuntimeGeneralPageExtractor } from "./lib/load-runtime-general-page
 const OUTPUT_DIR = "tmp/general-page-real-world-evals";
 const REPORT_DATE = process.env.TRULY_REAL_WORLD_EVAL_DATE ?? new Date().toISOString().slice(0, 10);
 const REPORT_PATH = path.join(OUTPUT_DIR, `real-world-eval-${REPORT_DATE}.json`);
-const FETCH_TIMEOUT_MS = 15_000;
+const DEFAULT_FETCH_TIMEOUT_MS = 15_000;
+const MIN_FETCH_TIMEOUT_MS = 1_000;
+const MAX_FETCH_TIMEOUT_MS = 60_000;
 const USER_AGENT = "TrulyGeneralPageReaderEvaluation/0.1 (+https://example.test/truly)";
 
 const args = parseArgs(process.argv.slice(2));
@@ -46,6 +48,7 @@ const report = {
   input: {
     targetCount: targets.length,
     networkAllowed: args.allowNetwork,
+    timeoutMs: args.timeoutMs,
   },
   results,
   aggregate: aggregate(results),
@@ -59,13 +62,29 @@ function parseArgs(argv) {
   const inputIndex = argv.indexOf("--input");
   const input = inputIndex >= 0 ? argv[inputIndex + 1] : undefined;
   if (!input) {
-    console.error("Usage: npm run eval:general-page-real-world -- --input tmp/private-targets.json [--allow-network]");
+    console.error("Usage: npm run eval:general-page-real-world -- --input tmp/private-targets.json [--allow-network] [--timeout-ms 15000]");
     process.exit(2);
   }
   return {
     input,
     allowNetwork: argv.includes("--allow-network"),
+    timeoutMs: numericArg(argv, "--timeout-ms", DEFAULT_FETCH_TIMEOUT_MS, {
+      min: MIN_FETCH_TIMEOUT_MS,
+      max: MAX_FETCH_TIMEOUT_MS,
+    }),
   };
+}
+
+function numericArg(argv, name, fallback, { min, max }) {
+  const index = argv.indexOf(name);
+  if (index < 0)
+    return fallback;
+  const raw = argv[index + 1];
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max) {
+    throw new Error(`${name} must be an integer between ${min} and ${max}.`);
+  }
+  return value;
 }
 
 function readTargets(inputPath) {
@@ -129,14 +148,17 @@ async function evaluateTarget(target, args) {
     }
   }
 
+  const document = documentSignals(html, target.url);
+  const ok = engines.some((engine) => engine.ok);
   return {
     targetId: target.id,
     targetHash: hashTarget(target),
     category: target.category,
     pageType: target.pageType,
     sourceKind: target.htmlPath ? "local-private-html" : "live-fetch",
-    ok: engines.some((engine) => engine.ok),
-    document: documentSignals(html, target.url),
+    ok,
+    failureKind: ok ? undefined : classifyTargetFailure(document, engines),
+    document,
     engines,
   };
 }
@@ -149,7 +171,7 @@ async function loadHtml(target, args) {
 
   const response = await fetch(target.url, {
     redirect: "follow",
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    signal: AbortSignal.timeout(args.timeoutMs),
     headers: {
       "user-agent": USER_AGENT,
       "accept": "text/html,application/xhtml+xml",
@@ -367,6 +389,7 @@ function aggregate(items) {
   return {
     okCount: okItems.length,
     errorCount: items.length - okItems.length,
+    failureBuckets: failureBuckets(items),
     engines: [...byEngine.values()].map((item) => ({
       engine: item.engine,
       okCount: item.okCount,
@@ -377,6 +400,45 @@ function aggregate(items) {
       suitability: item.suitability,
     })),
   };
+}
+
+function failureBuckets(items) {
+  return {
+    targetFailures: countValues(
+      items
+        .filter((item) => !item.ok)
+        .map((item) => item.failureKind ?? item.errorKind ?? "target-failed"),
+    ),
+    engineFailures: countValues(
+      items.flatMap((item) => (item.engines ?? [])
+        .filter((engine) => !engine.ok)
+        .map((engine) => `${engine.engine}:${engine.errorKind ?? "empty-result"}`)),
+    ),
+    runtimeSuitabilityFailures: countValues(
+      items.flatMap((item) => {
+        const engine = (item.engines ?? []).find((candidate) => candidate.engine === "truly-heuristic");
+        if (!engine?.suitability)
+          return [];
+        const failures = [];
+        if (engine.suitability.status === false)
+          failures.push(`status:${item.pageType ?? "unknown"}`);
+        if (engine.suitability.warnings === false)
+          failures.push(`warnings:${item.pageType ?? "unknown"}`);
+        if (engine.suitability.badPage === false)
+          failures.push(`badPage:${item.pageType ?? "unknown"}`);
+        return failures;
+      }),
+    ),
+  };
+}
+
+function classifyTargetFailure(document, engines) {
+  const allEnginesErrored = engines.length > 0 && engines.every((engine) => engine.errorKind);
+  if (allEnginesErrored)
+    return "all-engines-error";
+  if (document.bodyTextLength < 500)
+    return "low-text-or-empty-shell";
+  return "all-engines-empty";
 }
 
 function domFor(html, url) {
@@ -409,16 +471,21 @@ function hashTarget(target) {
 function errorKind(error) {
   if (error instanceof SyntaxError)
     return "invalid-json-or-html";
+  if (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name))
+    return "fetch-timeout";
   if (error instanceof Error && error.message.includes("--allow-network"))
     return "network-not-allowed";
   if (error instanceof Error && error.message.includes("htmlPath"))
     return "invalid-private-html-path";
+  if (error instanceof TypeError)
+    return "fetch-error";
   return "target-evaluation-error";
 }
 
 function printSummary(report) {
   console.log(`Wrote ${REPORT_PATH}`);
   console.log(`evaluated ${report.aggregate.okCount}/${report.input.targetCount}; errors ${report.aggregate.errorCount}`);
+  console.log(`failureBuckets ${JSON.stringify(report.aggregate.failureBuckets)}`);
   for (const item of report.aggregate.engines) {
     console.log(
       `${item.engine}: ok ${item.okCount}/${report.input.targetCount}, ` +
@@ -426,4 +493,11 @@ function printSummary(report) {
       `status ${JSON.stringify(item.status)}, warnings ${JSON.stringify(item.warnings)}`,
     );
   }
+}
+
+function countValues(values) {
+  return values.reduce((counts, value) => {
+    counts[value] = (counts[value] ?? 0) + 1;
+    return counts;
+  }, {});
 }

@@ -216,12 +216,14 @@ npm run eval:general-page-real-world -- --input tmp/private-general-page-targets
 ```
 
 By default the runner only reads private local HTML paths under `tmp/` or the
-system temp directory. Live fetches require an explicit `--allow-network` flag:
+system temp directory. Live fetches require an explicit `--allow-network` flag.
+Use `--timeout-ms` to tune live-fetch timeout for a batch:
 
 ```bash
 npm run eval:general-page-real-world -- \
   --input tmp/private-general-page-targets.json \
-  --allow-network
+  --allow-network \
+  --timeout-ms 10000
 ```
 
 Input targets may include `url`, `htmlPath`, `category`, `pageType`, and private
@@ -232,7 +234,15 @@ Input targets may include `url`, `htmlPath`, `category`, `pageType`, and private
 - document structure counts;
 - per-engine text length, metadata presence, duration, status, and warnings;
 - private expected hit/leak counts without copying the snippets;
-- suitability pass/fail booleans.
+- suitability pass/fail booleans;
+- aggregate failure buckets for target failures, engine failures, and
+  runtime-baseline suitability failures.
 
 The output must not contain target URLs, raw HTML, extracted text, text previews,
 excerpts, screenshots, DOM snapshots, or copied source content.
+
+Private repo trigger: do not create a separate private repository only to run
+one-off batches. Create a data-and-results-only private repository when private
+target manifests, manual labels, or longitudinal reports need durable
+cross-session history or multi-person collaboration. Keep reusable runner code
+in this public repo so public/private tooling does not fork.

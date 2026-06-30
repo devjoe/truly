@@ -140,6 +140,12 @@ duration, private expected hit/leak counts, and suitability booleans. It must
 not include target URLs, raw HTML, extracted text, text previews, excerpts,
 screenshots, DOM snapshots, or copied source content.
 
+Evaluation v3 decision follow-up: keep private manifests and reports in ignored
+`tmp/` while the schema is still changing. Create a separate private repository
+only when those private manifests, labels, or reports need durable cross-session
+history or multi-person collaboration. If created, the private repository should
+be a data-and-results workspace; reusable runner code stays in the public repo.
+
 ### Full Private Pass, 2026-06-29
 
 A private 72-target pass completed with 63 successful fetches and 9 fetch
