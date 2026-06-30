@@ -170,6 +170,13 @@ export function createSidepanelPageReadingRuntime({
     return typeof activeTabId === "number" ? sessions.get(activeTabId) : undefined;
   }
 
+  function friendlyPageReadingError(error: string): string {
+    if (error.includes("Cannot access contents of the page")) {
+      return tr("sidepanel.page.error.needsToolbarActivation");
+    }
+    return error;
+  }
+
   function setActiveTab(tab: BrowserTab | undefined, activate = true): void {
     if (typeof tab?.id === "number") activeTabId = tab.id;
     activeUrl = tab?.url ?? activeUrl;
@@ -273,12 +280,12 @@ export function createSidepanelPageReadingRuntime({
   }
 
   function statusDetail(platform: PagePlatform, session: PageReadingSession | undefined): string {
+    if (session?.status === "error") return tr("sidepanel.page.detail.error");
     if (platform === "facebook") return tr("sidepanel.page.detail.facebook");
     if (platform === "unsupported") return tr("sidepanel.page.detail.unsupported");
     if (!session) return tr("sidepanel.page.detail.empty");
     if (session.status === "loading") return tr("sidepanel.page.detail.loading");
     if (session.status === "stale") return tr("sidepanel.page.detail.stale");
-    if (session.status === "error") return tr("sidepanel.page.detail.error");
     return tr("sidepanel.page.detail.ready");
   }
 
@@ -293,13 +300,34 @@ export function createSidepanelPageReadingRuntime({
   async function requestReadCurrentPage(source: PageActivationSource = "sidepanel"): Promise<void> {
     try {
       const tab = await refreshActiveTab(false);
-      if (typeof tab?.id !== "number" || !isHttpLikeUrl(tab.url) || platformForUrl(tab.url) !== "general") {
+      if (typeof tab?.id !== "number") {
+        render();
+        return;
+      }
+      const tabUrl = tab.url ?? activeUrl;
+      if (!tab.url && !activeUrl) {
+        activeTabId = tab.id;
+        sessions.set(tab.id, {
+          tabId: tab.id,
+          url: "",
+          identity: pageUrlIdentity(""),
+          title: activeTitle,
+          status: "error",
+          error: tr("sidepanel.page.error.needsToolbarActivation"),
+          updatedAt: now(),
+          activationSource: source,
+        });
+        activateTab("page");
+        render();
+        return;
+      }
+      if (!isHttpLikeUrl(tabUrl) || platformForUrl(tabUrl) !== "general") {
         render();
         return;
       }
       copyState = "idle";
       activeTabId = tab.id;
-      activeUrl = tab.url ?? "";
+      activeUrl = tabUrl;
       activeTitle = tab.title ?? "";
       sessions.set(tab.id, {
         tabId: tab.id,
@@ -368,7 +396,7 @@ export function createSidepanelPageReadingRuntime({
       title: existing?.title || activeTitle,
       surface: existing?.surface,
       status: "error",
-      error: message.error,
+      error: friendlyPageReadingError(message.error),
       updatedAt: now(),
       activationSource: existing?.activationSource || "sidepanel",
     });

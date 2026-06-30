@@ -322,14 +322,8 @@ async function init() {
     if (dashboardLink.disabled) return;
     const win = await chrome.windows.getCurrent();
     if (win.id != null) {
-      if (pageSupport.supported && sidePanelOpen && sidePanelCanClose) {
-        await chrome.sidePanel.close({ windowId: win.id }).catch(() => {});
-        sidePanelOpen = false;
-      } else {
-        await chrome.sidePanel.open({ windowId: win.id }).catch(() => {});
-        sidePanelOpen = true;
-        if (generalPageSupported && typeof activeTab.id === "number") {
-          await browser.runtime.sendMessage({
+      const pageReadRequest = generalPageSupported && typeof activeTab.id === "number"
+        ? browser.runtime.sendMessage({
             type: "PAGE_READING_REQUEST",
             tabId: activeTab.id,
             inject: true,
@@ -338,8 +332,15 @@ async function init() {
               targetKind: "page",
               action: "read",
             },
-          }).catch(() => {});
-        }
+          }).catch(() => {})
+        : null;
+      if (pageSupport.supported && sidePanelOpen && sidePanelCanClose) {
+        await chrome.sidePanel.close({ windowId: win.id }).catch(() => {});
+        sidePanelOpen = false;
+      } else {
+        await chrome.sidePanel.open({ windowId: win.id }).catch(() => {});
+        sidePanelOpen = true;
+        await pageReadRequest;
       }
     }
     window.close();
