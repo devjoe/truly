@@ -406,10 +406,10 @@ V3 comparison run on 2026-06-30:
 
 | Candidate | Parsed fixtures | Contains score | Leaks | Metadata | Status suitability | Warning suitability | Bad-page suitability | Average time | Threshold |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `truly-heuristic` | 31/31 | 1.000 | 0 | 0.540 | 31/31 | 13/13 | 13/13 | 1.20 ms | 31/31 |
-| `@mozilla/readability` | 31/31 | 1.000 | 0 | 0.347 | 0/0 | 0/0 | 0/0 | 1.47 ms | 31/31 |
-| `defuddle` | 31/31 | 1.000 | 0 | 0.540 | 0/0 | 0/0 | 0/0 | 17.61 ms | 31/31 |
-| `defuddle` Markdown | 31/31 | 1.000 | 0 | 0.540 | 0/0 | 0/0 | 0/0 | 16.83 ms | 31/31 |
+| `truly-heuristic` | 35/35 | 1.000 | 0 | 0.543 | 35/35 | 16/16 | 16/16 | 1.32 ms | 35/35 |
+| `@mozilla/readability` | 35/35 | 1.000 | 0 | 0.357 | 0/0 | 0/0 | 0/0 | 1.62 ms | 35/35 |
+| `defuddle` | 35/35 | 1.000 | 0 | 0.543 | 0/0 | 0/0 | 0/0 | 18.36 ms | 35/35 |
+| `defuddle` Markdown | 35/35 | 1.000 | 0 | 0.543 | 0/0 | 0/0 | 0/0 | 17.01 ms | 35/35 |
 
 Interpretation:
 
@@ -429,7 +429,7 @@ Interpretation:
 - Defuddle's Markdown mode is worth keeping in the spike because Truly may use
   Markdown/context output for model prompts rather than rendering third-party
   HTML.
-- The fixture corpus now has 31 public-safe synthetic fixtures. This is enough
+- The fixture corpus now has 35 public-safe synthetic fixtures. This is enough
   to keep parser-candidate regression pressure high, but it is still not enough
   to choose a default runtime parser. Private real-world eval reports should
   guide the next synthetic fixture additions before adopting either dependency

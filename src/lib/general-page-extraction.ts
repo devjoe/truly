@@ -220,7 +220,14 @@ function nonArticlePageWarnings(
 
   if (
     articleCount >= 3 &&
-    /\b(index|directory|latest entries|archive|topics|list page|cards?)\b/.test(lowerSignals)
+    /\b(index|directory|latest entries|latest news|top stories|home ?page|front page|archive|topics|list page|cards?)\b/.test(lowerSignals)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  if (
+    articleCount >= 3 &&
+    /(最新消息|公告列表|公告卡片|索引頁|不要把.+完整文章)/.test(lowerSignals)
   ) {
     return ["large-navigation-noise"];
   }

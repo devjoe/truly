@@ -1,6 +1,6 @@
 # General Page Reader Fixture V4 Plan
 
-Status: planning from private eval batch 1
+Status: implemented
 Date: 2026-06-30
 
 ## Boundary
@@ -66,14 +66,22 @@ Keep the committed corpus inside the current 25-35 fixture range unless the
 corpus checker is deliberately updated. With 31 committed fixtures, v4 has room
 for four new public-safe fixtures before reaching the current upper bound.
 
-Recommended next four:
+Implemented v4 fixtures:
 
-| Candidate ID | Page Type | Primary Patterns | Purpose |
+| Fixture ID | Page Type | Primary Patterns | Purpose |
 | --- | --- | --- | --- |
 | `news-homepage-card-grid` | `list-index` | `P05`, `P03`, `P04`, `P18` | Models a news/index page with one large lead story, many cards, and enough readable text to tempt `complete`. |
 | `zh-tw-official-index` | `list-index` | `P02`, `P03`, `P17` | Models a Traditional Chinese official/news index with a `main` container but no single article. |
 | `empty-social-shell` | `bad-page` | `P10`, `P12`, `P14` | Models a public social shell with app prompts, low text, and no readable post body. |
-| `malformed-mixed-language-page` | `article` or `blog` | `P16`, `P17` | Models malformed/nested markup with mixed English and Traditional Chinese content to test text normalization without real copied text. |
+| `malformed-mixed-language-page` | `blog` | `P16`, `P17` | Models malformed/nested markup with mixed English and Traditional Chinese content to test text normalization without real copied text. |
+
+Implementation result:
+
+- committed fixture count: 35
+- `npm run check:general-page-corpus`: pass
+- `npm run spike:general-page-parsers`: threshold pass and suitability pass
+- `truly-heuristic`: 35/35 threshold, 35/35 status suitability, 16/16 warning
+  suitability, 16/16 bad-page suitability
 
 ## Acceptance Criteria For V4
 

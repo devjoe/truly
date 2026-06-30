@@ -417,6 +417,58 @@
         "contains": ["newsletter paywall hybrid fixture explains", "subscribe to continue reading"],
         "excludes": ["full member section should never appear"]
       }
+    },
+    {
+      "id": "news-homepage-card-grid",
+      "file": "news-homepage-card-grid.html",
+      "url": "https://news.example.test/",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P05-list-or-index-page", "P03-navigation-sidebar-noise", "P04-related-content-recirc", "P18-media-and-caption"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["news homepage card grid fixture", "front page, not a single complete article"],
+        "excludes": ["Most read", "Sponsored link", "Newsletter signup"]
+      }
+    },
+    {
+      "id": "zh-tw-official-index",
+      "file": "zh-tw-official-index.html",
+      "url": "https://official.example.test/zh-tw/news",
+      "locale": "zh-TW",
+      "pageType": "list-index",
+      "patterns": ["P02-main-role-without-article", "P03-navigation-sidebar-noise", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["繁體中文官方索引頁列出多則合成公告", "不要把公告列表當成單篇完整文章"],
+        "excludes": ["熱門服務", "相關連結", "訂閱電子報"]
+      }
+    },
+    {
+      "id": "empty-social-shell",
+      "file": "empty-social-shell.html",
+      "url": "https://social.example.test/public/post/unavailable",
+      "locale": "en",
+      "pageType": "bad-page",
+      "patterns": ["P10-feed-like-social-page", "P12-login-wall", "P14-client-rendered-empty-shell"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["Open the app to view this public conversation"],
+        "excludes": ["private social post body should never appear"]
+      }
+    },
+    {
+      "id": "malformed-mixed-language-page",
+      "file": "malformed-mixed-language-page.html",
+      "url": "https://personal.example.test/zh-tw/mixed-language-notes",
+      "locale": "zh-TW",
+      "pageType": "blog",
+      "patterns": ["P16-missing-or-conflicting-metadata", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["mixed language fixture 使用繁體中文", "parser should keep the main note intact"],
+        "excludes": ["Archive", "Previous posts"]
+      }
     }
   ]
 }
