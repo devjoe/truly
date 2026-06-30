@@ -121,6 +121,10 @@ export function extractGeneralPageSurface(
     warnings.push("login-or-paywall-like");
   }
 
+  if (!selectedTextIsUseful && mainText) {
+    warnings.push(...nonArticlePageWarnings(input.document, extractionRoot, mainText, currentUrl, title));
+  }
+
   const status = resolveExtractionStatus(mainText, warnings, minMainTextLength);
   const linkRoot = extractionRoot ?? input.document.body ?? input.document.documentElement;
   const links = collectLinks(linkRoot, sourceUrl, maxLinks);
@@ -178,6 +182,50 @@ function readableText(root: Element): string | undefined {
     }
   }
   return normalizeWhitespace(clone.textContent ?? "");
+}
+
+function nonArticlePageWarnings(
+  documentRef: Document,
+  extractionRoot: Element | null,
+  text: string,
+  url: string,
+  title?: string,
+): ReadingExtractionWarning[] {
+  const root = extractionRoot ?? documentRef.body ?? documentRef.documentElement;
+  const articleCount = root.querySelectorAll("article").length;
+  const listItemCount = root.querySelectorAll("li").length;
+  const linkCount = root.querySelectorAll("a[href]").length;
+  const lowerSignals = `${url} ${title ?? ""} ${text}`.toLowerCase();
+
+  if (
+    articleCount >= 3 &&
+    /\b(thread|discussion|reply|replies|forum|community|comment|comments)\b/.test(lowerSignals)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  if (
+    articleCount >= 2 &&
+    /\b(social|post|reply|repost|share|timeline|feed|suggested accounts|install app|trending)\b/.test(lowerSignals)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  if (
+    /\b(search results?|results for|filter by|query=|[?&]q=)\b/.test(lowerSignals) &&
+    (listItemCount >= 3 || linkCount >= 3)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  if (
+    articleCount >= 3 &&
+    /\b(index|directory|latest entries|archive|topics|list page|cards?)\b/.test(lowerSignals)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  return [];
 }
 
 function firstHeading(root: ParentNode): string | undefined {

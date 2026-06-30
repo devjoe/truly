@@ -1,4 +1,4 @@
-# General Page Reader Corpus V2
+# General Page Reader Corpus V2/V3
 
 This plan keeps the parser evaluation useful without committing real website
 HTML, copyrighted article text, private snapshots, screenshots, or account-only
@@ -40,23 +40,23 @@ Synthetic fixtures can combine multiple patterns.
 | --- | --- | --- | --- |
 | P01-semantic-article | Clean article with useful `article` markup | Baseline parser behavior may hide metadata regressions | `clean-article`, `news-related-sidebar` |
 | P02-main-role-without-article | Official page uses `main` or `role=main` but no article | Heuristics that only trust `article` miss valid content | `government-no-article` |
-| P03-navigation-sidebar-noise | Header, nav, sidebar, footer surround content | Parser leaks menu or promo text into main body | `nav-sidebar-noise`, `news-related-sidebar`, `zhtw-news-layout` |
-| P04-related-content-recirc | Related stories and most-viewed modules near article | Parser chooses recirculation over the story | `news-related-sidebar` |
-| P05-list-or-index-page | Category page or search results masquerades as content | Parser extracts a feed/list as if it were one article | `category-list-page`, `search-results-index` |
+| P03-navigation-sidebar-noise | Header, nav, sidebar, footer surround content | Parser leaks menu or promo text into main body | `nav-sidebar-noise`, `news-related-sidebar`, `zhtw-news-layout`, `search-results-with-answer-box`, `category-hub-mixed-cards` |
+| P04-related-content-recirc | Related stories and most-viewed modules near article | Parser chooses recirculation over the story | `news-related-sidebar`, `category-hub-mixed-cards` |
+| P05-list-or-index-page | Category page or search results masquerades as content | Parser extracts a feed/list as if it were one article | `category-list-page`, `search-results-index`, `search-results-with-answer-box`, `category-hub-mixed-cards` |
 | P06-nested-documentation-layout | Docs content buried inside nested app layout | Parser chooses side rail or table of contents | `documentation-page`, `docs-nested-layout` |
 | P07-api-reference-multipanel | Docs include code panes, SDK status, copy buttons | Parser mixes chrome with explanatory content | `docs-nested-layout` |
-| P08-forum-thread | Multiple posts form a discussion | No single author/body; summarization target is ambiguous | `forum-thread` |
+| P08-forum-thread | Multiple posts form a discussion | No single author/body; summarization target is ambiguous | `forum-thread`, `dense-forum-thread` |
 | P09-q-and-a-page | Question, accepted answer, comments, votes | Parser may ignore the accepted answer or include chrome | `qa-accepted-answer` |
-| P10-feed-like-social-page | Public social post with replies and app prompts | Needs post/context separation, not article-only extraction | `public-social-feed` |
-| P11-paywall-or-membership | Page has teaser or paywall copy | Parser treats blocked content as a complete article | `blocked-like` |
-| P12-login-wall | Login prompt replaces content | Parser extracts auth copy as source content | `blocked-like` |
-| P13-consent-and-overlay | Consent banner appears before content | Parser leaks banner controls | `consent-banner` |
-| P14-client-rendered-empty-shell | Static HTML has app shell or noscript text only | Parser returns a false article from empty shell copy | `js-shell-bad-page` |
+| P10-feed-like-social-page | Public social post with replies and app prompts | Needs post/context separation, not article-only extraction | `public-social-feed`, `multi-post-social-feed` |
+| P11-paywall-or-membership | Page has teaser or paywall copy | Parser treats blocked content as a complete article | `blocked-like`, `newsletter-paywall-hybrid` |
+| P12-login-wall | Login prompt replaces content | Parser extracts auth copy as source content | `blocked-like`, `newsletter-paywall-hybrid` |
+| P13-consent-and-overlay | Consent banner appears before content | Parser leaks banner controls | `consent-banner`, `newsletter-paywall-hybrid` |
+| P14-client-rendered-empty-shell | Static HTML has app shell or noscript text only | Parser returns a false article from empty shell copy | `js-shell-bad-page`, `js-app-shell-with-json-state` |
 | P15-rich-metadata | Canonical, OpenGraph, JSON-LD, author/date exist | Parser fields may disagree or mutate metadata | `clean-article`, `jsonld-og-metadata` |
 | P16-missing-or-conflicting-metadata | Sparse or conflicting metadata | Product must fall back without overclaiming | `government-no-article`, `missing-metadata-blog` |
 | P17-traditional-chinese-layout | Traditional Chinese typography and site chrome | Text normalization or segmentation damages content | `zh-tw-article`, `zhtw-news-layout` |
-| P18-media-and-caption | Images, figures, captions, cards | Caption/media text may dominate or disappear | `clean-article`, `public-social-feed` |
-| P19-comments-heavy-page | Comments or replies are meaningful but noisy | Parser must distinguish body from discussion context | `forum-thread` |
+| P18-media-and-caption | Images, figures, captions, cards | Caption/media text may dominate or disappear | `clean-article`, `public-social-feed`, `multi-post-social-feed` |
+| P19-comments-heavy-page | Comments or replies are meaningful but noisy | Parser must distinguish body from discussion context | `forum-thread`, `dense-forum-thread` |
 | P20-canonical-amp-syndication | Canonical/AMP/syndicated variants exist | URL identity and source attribution can drift | `jsonld-og-metadata` |
 
 ### 3. Synthetic Fixtures
@@ -78,6 +78,12 @@ Thresholds are baseline gates for the pattern each fixture is meant to isolate.
 They should fail on the fixture's primary extraction risk, but they should not
 turn every fixture into a test for every possible page problem. Secondary issues
 remain visible in the JSON report and can become dedicated fixtures later.
+
+Evaluation v3 keeps this public synthetic fixture layer as the committed
+regression corpus, and adds a separate private real-world evaluation runner for
+local HTML or explicitly approved live fetches. The private runner produces only
+sanitized metrics under `tmp/`; it is not a source fixture layer and must not be
+committed.
 
 ## Observation Target List V1
 
@@ -161,7 +167,7 @@ observation only; do not archive or commit source content.
 
 ## Fixture Roadmap
 
-The current v2 fixture corpus contains 25 public-safe synthetic HTML fixtures.
+The current v3 fixture corpus contains 31 public-safe synthetic HTML fixtures.
 It covers every pattern in this catalog at least once and stays within the
 planned 25-35 fixture range.
 
@@ -185,9 +191,48 @@ The first v2 fixture batch added coverage for:
 - newsletter capture overlays;
 - longer API reference pages.
 
+The v3 fixture batch added focused regression pressure for:
+
+- dense forum threads with several post cards;
+- multi-post social pages with quoted context and reply cards;
+- search results with an answer box;
+- category hubs with mixed article cards;
+- client app shells with JSON/template state;
+- newsletter/paywall hybrid teaser pages.
+
 Remaining high-priority synthetic fixtures:
 
 - more Traditional Chinese official pages;
 - more mixed-language pages;
 - more malformed HTML pages;
 - more public social pages with reply chains.
+
+## Private Real-World Evaluation Runner
+
+Use this dev-only command for private real-world evaluation:
+
+```bash
+npm run eval:general-page-real-world -- --input tmp/private-general-page-targets.json
+```
+
+By default the runner only reads private local HTML paths under `tmp/` or the
+system temp directory. Live fetches require an explicit `--allow-network` flag:
+
+```bash
+npm run eval:general-page-real-world -- \
+  --input tmp/private-general-page-targets.json \
+  --allow-network
+```
+
+Input targets may include `url`, `htmlPath`, `category`, `pageType`, and private
+`expected.contains` / `expected.excludes` snippets. The output is written under
+`tmp/general-page-real-world-evals/` and records only sanitized metrics:
+
+- anonymous target id/hash, category, and page type;
+- document structure counts;
+- per-engine text length, metadata presence, duration, status, and warnings;
+- private expected hit/leak counts without copying the snippets;
+- suitability pass/fail booleans.
+
+The output must not contain target URLs, raw HTML, extracted text, text previews,
+excerpts, screenshots, DOM snapshots, or copied source content.

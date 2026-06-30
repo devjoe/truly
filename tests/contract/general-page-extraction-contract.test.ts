@@ -57,6 +57,11 @@ function fixtureDocument(name: string): Document {
   return new FixtureDocument(html) as unknown as Document;
 }
 
+function jsdomFixtureDocument(name: string, url: string): Document {
+  const html = fs.readFileSync(`${FIXTURE_DIR}/${name}`, "utf8");
+  return new JSDOM(html, { url }).window.document;
+}
+
 function firstBlock(html: string, tagName: string): FixtureElement | null {
   return querySelectorAll(html, tagName)[0] ?? null;
 }
@@ -265,6 +270,38 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.extraction.status).toBe("blocked");
     expect(surface.extraction.warnings).toContain("login-or-paywall-like");
     expect(surface.extraction.warnings).toContain("very-short-content");
+  });
+
+  it("marks discussion, social, and index pages as partial even when text is readable", () => {
+    const cases = [
+      {
+        file: "forum-thread.html",
+        url: "https://community.example.test/t/release-checklist",
+      },
+      {
+        file: "public-social-feed.html",
+        url: "https://social.example.test/@fixture/post/123",
+      },
+      {
+        file: "category-list-page.html",
+        url: "https://example.test/topics/research-index",
+      },
+      {
+        file: "search-results-index.html",
+        url: "https://example.test/search?q=synthetic-policy-notes",
+      },
+    ];
+
+    for (const item of cases) {
+      const surface = extractGeneralPageSurface({
+        document: jsdomFixtureDocument(item.file, item.url),
+        url: item.url,
+      });
+
+      expect(surface.mainText.length, item.file).toBeGreaterThan(0);
+      expect(surface.extraction.status, item.file).toBe("partial");
+      expect(surface.extraction.warnings, item.file).toContain("large-navigation-noise");
+    }
   });
 
   it("excludes non-reading node text from fallback extraction", () => {

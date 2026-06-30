@@ -40,6 +40,7 @@
     "smoke:openai-api-key": "node scripts/smoke-openai-api-key.mjs",
     "smoke:ollama-vision": "node scripts/smoke-ollama-vision.mjs",
     "spike:general-page-parsers": "node scripts/spike-general-page-parsers.mjs",
+    "eval:general-page-real-world": "node scripts/evaluate-general-page-real-world.mjs",
     "observe:general-page-structure": "node scripts/observe-general-page-structure.mjs",
     "summarize:general-page-observations": "node scripts/summarize-general-page-observations.mjs",
     "check:general-page-corpus": "node scripts/check-general-page-corpus.mjs",

@@ -77,17 +77,23 @@ Completed in the dev/test spike layer:
   suitability, warning-family suitability, and bad-page false-positive
   suitability in addition to text hit score, leak count, duration, and parser
   threshold status.
+- Parser spike exit status now requires both text thresholds and
+  `runtime-baseline` suitability gates to pass.
+- Evaluation v3 hardens Truly's heuristic status/warning classifier for
+  readable non-article pages, including forum threads, social public pages,
+  list/search indexes, blocked pages, and client-shell bad pages.
+- The public synthetic fixture corpus now has 31 fixtures, and the private
+  real-world evaluation runner scaffold writes sanitized parser/runtime metrics
+  under `tmp/` without committing target URLs, HTML, text, excerpts, screenshots,
+  or DOM snapshots.
 - Parser dependencies remain dev-only and are still not imported by extension
   runtime code.
 
 Remaining adapter-boundary work:
 
-1. Harden Truly's heuristic status/warning classifier for non-article pages
-   that still contain substantial readable text, especially forum threads,
-   social public pages, and list/search indexes.
-2. Add bundle/CSP/offscreen TODO gates as explicit acceptance criteria before
+1. Add bundle/CSP/offscreen TODO gates as explicit acceptance criteria before
    runtime adoption.
-3. Keep `src/lib/general-page-extraction.ts` as the runtime baseline until a
+2. Keep `src/lib/general-page-extraction.ts` as the runtime baseline until a
    separate runtime-integration decision accepts a parser dependency.
 
 ## Runtime Non-Goals For This Decision

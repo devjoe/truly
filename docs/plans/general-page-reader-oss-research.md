@@ -397,26 +397,30 @@ suitability for candidates that expose Truly extraction status. The
 through a dev-only transpile loader; no third-party parser dependency moves into
 extension runtime code.
 
-V2 comparison run on 2026-06-30:
+The spike exits non-zero if either the parser text threshold fails or the
+runtime-baseline suitability gate fails. Suitability gating is intentionally
+limited to `runtime-baseline` candidates because third-party parsers do not own
+Truly's extraction status/warning contract.
+
+V3 comparison run on 2026-06-30:
 
 | Candidate | Parsed fixtures | Contains score | Leaks | Metadata | Status suitability | Warning suitability | Bad-page suitability | Average time | Threshold |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| `truly-heuristic` | 25/25 | 1.000 | 0 | 0.550 | 21/25 | 2/6 | 2/6 | 1.20 ms | 25/25 |
-| `@mozilla/readability` | 25/25 | 1.000 | 0 | 0.360 | 0/0 | 0/0 | 0/0 | 1.55 ms | 25/25 |
-| `defuddle` | 25/25 | 1.000 | 0 | 0.550 | 0/0 | 0/0 | 0/0 | 16.80 ms | 25/25 |
-| `defuddle` Markdown | 25/25 | 1.000 | 0 | 0.550 | 0/0 | 0/0 | 0/0 | 15.04 ms | 25/25 |
+| `truly-heuristic` | 31/31 | 1.000 | 0 | 0.540 | 31/31 | 13/13 | 13/13 | 1.20 ms | 31/31 |
+| `@mozilla/readability` | 31/31 | 1.000 | 0 | 0.347 | 0/0 | 0/0 | 0/0 | 1.47 ms | 31/31 |
+| `defuddle` | 31/31 | 1.000 | 0 | 0.540 | 0/0 | 0/0 | 0/0 | 17.61 ms | 31/31 |
+| `defuddle` Markdown | 31/31 | 1.000 | 0 | 0.540 | 0/0 | 0/0 | 0/0 | 16.83 ms | 31/31 |
 
 Interpretation:
 
 - Truly's heuristic baseline now passes the same text threshold as the parser
-  candidates and is fast enough to remain the runtime fallback. The spike also
-  exposed a real cleanup bug: readable text extraction must exclude script,
-  style, noscript, template, and SVG nodes so client-state JSON is not treated
-  as article text.
-- The suitability columns reveal the next heuristic-hardening target:
-  non-article pages with substantial readable text can still look `complete`.
-  Forum threads, social public pages, and list/search indexes need stronger
-  status/warning classification before parser adoption changes runtime behavior.
+  candidates and is fast enough to remain the runtime fallback. Evaluation v3
+  also hardens readable text extraction so script, style, noscript, template,
+  and SVG nodes do not become article text.
+- The v2 suitability gap for forum threads, social public pages, list/search
+  indexes, blocked pages, and client-shell bad pages is now represented as an
+  explicit classifier gate. The heuristic keeps useful text but marks those
+  surfaces `partial` or `blocked` instead of `complete`.
 - Both packages remain viable parser-spike candidates on the expanded synthetic
   fixtures.
 - Readability is faster on this fixture corpus and maps directly to article
@@ -425,10 +429,11 @@ Interpretation:
 - Defuddle's Markdown mode is worth keeping in the spike because Truly may use
   Markdown/context output for model prompts rather than rendering third-party
   HTML.
-- The fixture corpus now reaches the planned v2 lower bound, but it is still not
-  enough to choose a default parser. The next evaluation should use
-  observation-backed notes from real page structures before adopting either
-  dependency in runtime code.
+- The fixture corpus now has 31 public-safe synthetic fixtures. This is enough
+  to keep parser-candidate regression pressure high, but it is still not enough
+  to choose a default runtime parser. Private real-world eval reports should
+  guide the next synthetic fixture additions before adopting either dependency
+  in runtime code.
 - Neither candidate removes the need for a separate live DOM `ReadingTarget`
   layer for selected/current-region actions.
 

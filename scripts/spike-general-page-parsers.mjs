@@ -15,6 +15,7 @@ import {
   normalizeParserError,
   normalizeParserResult,
   summarizeParserResults,
+  summarizeSuitability,
   summarizeThresholds,
 } from "./lib/general-page-parser-contract.mjs";
 import { loadRuntimeGeneralPageExtractor } from "./lib/load-runtime-general-page-extractor.mjs";
@@ -276,12 +277,13 @@ async function main() {
     results,
     summary: summarizeParserResults(results),
     threshold: summarizeThresholds(results),
+    suitability: summarizeSuitability(results),
   };
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
   fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`);
   printSummary(report);
-  if (!report.threshold.pass)
+  if (!report.threshold.pass || !report.suitability.pass)
     process.exitCode = 1;
 }
 
@@ -306,6 +308,17 @@ function printSummary(report) {
     for (const failure of report.threshold.failures) {
       console.error(
         `${failure.engine}/${failure.fixtureId}: ${failure.failures.join("; ")}`,
+      );
+    }
+  }
+  if (report.suitability.pass) {
+    console.log("suitability: pass");
+  } else {
+    console.error(`suitability: fail (${report.suitability.failureCount})`);
+    for (const failure of report.suitability.failures) {
+      console.error(
+        `${failure.engine}/${failure.fixtureId}/${failure.check}: ` +
+        `actual ${JSON.stringify(failure.actual)} expected ${JSON.stringify(failure.expected)}`,
       );
     }
   }

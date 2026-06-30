@@ -120,6 +120,26 @@ Only the aggregate conclusions should be folded back into this document. The
 aggregate omits target URLs, labels, HTML, text excerpts, screenshots, and DOM
 snapshots.
 
+## Private Real-World Evaluation Runner
+
+Evaluation v3 adds a second private runner for parser/runtime comparison against
+private local HTML or explicitly approved live fetches:
+
+```bash
+npm run eval:general-page-real-world -- --input tmp/private-general-page-targets.json
+```
+
+The default mode is offline: targets must point at private local HTML under
+`tmp/` or the system temp directory. Live fetches require `--allow-network`.
+The report is written under `tmp/general-page-real-world-evals/` and must not be
+committed.
+
+The report is intentionally sanitized. It records anonymous target ids/hashes,
+document counts, metadata presence, per-engine text lengths, status/warnings,
+duration, private expected hit/leak counts, and suitability booleans. It must
+not include target URLs, raw HTML, extracted text, text previews, excerpts,
+screenshots, DOM snapshots, or copied source content.
+
 ### Full Private Pass, 2026-06-29
 
 A private 72-target pass completed with 63 successful fetches and 9 fetch

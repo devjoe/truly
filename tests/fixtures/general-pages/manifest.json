@@ -339,6 +339,84 @@
         "maxLeakCount": 0,
         "maxDurationMs": 750
       }
+    },
+    {
+      "id": "dense-forum-thread",
+      "file": "dense-forum-thread.html",
+      "url": "https://community.example.test/t/dense-review-thread",
+      "locale": "en",
+      "pageType": "forum-thread",
+      "patterns": ["P08-forum-thread", "P19-comments-heavy-page"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["warning for comment-heavy pages"],
+        "excludes": ["Unread Badges", "Suggested topics"]
+      }
+    },
+    {
+      "id": "multi-post-social-feed",
+      "file": "multi-post-social-feed.html",
+      "url": "https://social.example.test/public/thread/456",
+      "locale": "en",
+      "pageType": "social-public-page",
+      "patterns": ["P10-feed-like-social-page", "P18-media-and-caption"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["separate social card"],
+        "excludes": ["Trending", "Suggested accounts", "Install app"]
+      }
+    },
+    {
+      "id": "search-results-with-answer-box",
+      "file": "search-results-with-answer-box.html",
+      "url": "https://example.test/search?q=synthetic-archive-notes",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P05-list-or-index-page", "P03-navigation-sidebar-noise"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["search results with answer box fixture includes", "treated as an index page"],
+        "excludes": ["Filter by date", "Filter by topic", "Filter by source"]
+      }
+    },
+    {
+      "id": "category-hub-mixed-cards",
+      "file": "category-hub-mixed-cards.html",
+      "url": "https://example.test/hubs/reader-research",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P05-list-or-index-page", "P04-related-content-recirc", "P03-navigation-sidebar-noise"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["category hub mixed cards fixture explains", "groups several synthetic notes"],
+        "excludes": ["Sponsored link", "Popular hubs", "Account menu"]
+      }
+    },
+    {
+      "id": "js-app-shell-with-json-state",
+      "file": "js-app-shell-with-json-state.html",
+      "url": "https://app-shell.example.test/workspace/loading",
+      "locale": "en",
+      "pageType": "bad-page",
+      "patterns": ["P14-client-rendered-empty-shell"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["Loading story workspace"],
+        "excludes": ["private draft investigation should never appear", "member only full story should never appear"]
+      }
+    },
+    {
+      "id": "newsletter-paywall-hybrid",
+      "file": "newsletter-paywall-hybrid.html",
+      "url": "https://letters.example.test/member/hybrid-teaser",
+      "locale": "en",
+      "pageType": "blocked",
+      "patterns": ["P11-paywall-or-membership", "P12-login-wall", "P13-consent-and-overlay"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["newsletter paywall hybrid fixture explains", "subscribe to continue reading"],
+        "excludes": ["full member section should never appear"]
+      }
     }
   ]
 }

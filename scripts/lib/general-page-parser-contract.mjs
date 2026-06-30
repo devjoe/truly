@@ -4,6 +4,14 @@ const VALID_ROLES = new Set([
   "context-extraction",
 ]);
 
+const NON_ARTICLE_PAGE_TYPES = new Set([
+  "bad-page",
+  "blocked",
+  "forum-thread",
+  "list-index",
+  "social-public-page",
+]);
+
 /**
  * @typedef {Object} GeneralPageParserCandidate
  * @property {string} id Stable candidate id used in reports.
@@ -181,6 +189,12 @@ function expectedStatusPolicy(fixture) {
       reason: "blocked/login/paywall-like pages should not be treated as fully complete",
     };
   }
+  if (fixture.pageType === "bad-page") {
+    return {
+      expected: ["empty", "partial", "blocked"],
+      reason: "bad or client-shell pages should avoid complete-article confidence",
+    };
+  }
   if (["forum-thread", "list-index", "social-public-page"].includes(fixture.pageType)) {
     return {
       expected: ["partial", "empty", "blocked"],
@@ -217,6 +231,8 @@ function evaluateStatusSuitability(engineResult, fixture) {
 function expectedWarnings(fixture) {
   if (fixture.pageType === "blocked")
     return ["login-or-paywall-like"];
+  if (fixture.pageType === "bad-page")
+    return ["no-main-content", "dynamic-content-partial", "very-short-content"];
   if (["forum-thread", "list-index", "social-public-page"].includes(fixture.pageType))
     return ["no-main-content", "large-navigation-noise", "very-short-content"];
   return [];
@@ -253,7 +269,7 @@ function evaluateWarningSuitability(engineResult, fixture) {
 }
 
 function evaluateBadPageFalsePositive(engineResult, fixture) {
-  if (!["blocked", "forum-thread", "list-index", "social-public-page"].includes(fixture.pageType)) {
+  if (!NON_ARTICLE_PAGE_TYPES.has(fixture.pageType)) {
     return {
       applicable: false,
       actualStatus: extractionStatus(engineResult),
@@ -367,6 +383,35 @@ export function summarizeThresholds(results) {
         engine: engine.engine,
         failures: engine.threshold?.failures ?? ["missing-threshold-result"],
       });
+    }
+  }
+  return {
+    pass: failures.length === 0,
+    failureCount: failures.length,
+    failures,
+  };
+}
+
+export function summarizeSuitability(results) {
+  const failures = [];
+  for (const fixture of results) {
+    for (const engine of fixture.engines) {
+      if (engine.role !== "runtime-baseline")
+        continue;
+      for (const key of ["status", "warnings", "badPage"]) {
+        const item = engine.suitability?.[key];
+        if (!item?.applicable || item.pass)
+          continue;
+        failures.push({
+          fixtureId: fixture.id,
+          pageType: fixture.pageType,
+          engine: engine.engine,
+          check: key,
+          actual: item.actual ?? item.actualStatus ?? null,
+          expected: item.expected ?? item.expectedAny ?? "not complete",
+          reason: item.reason,
+        });
+      }
     }
   }
   return {
