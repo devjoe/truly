@@ -75,10 +75,13 @@ export function extractGeneralPageSurface(
   const maxImages = options.maxImages ?? DEFAULT_MAX_IMAGES;
 
   const currentUrl = normalizeUrl(input.url) ?? input.url;
-  const canonicalUrl = firstAttribute(input.document, [
+  const rawCanonicalUrl = firstAttribute(input.document, [
     "link[rel=\"canonical\"]",
     "link[rel=\"Canonical\"]",
   ], "href");
+  const canonicalUrl = rawCanonicalUrl
+    ? normalizeHref(rawCanonicalUrl, currentUrl) ?? rawCanonicalUrl
+    : undefined;
   const sourceUrl = canonicalUrl ?? currentUrl;
   const sourceName = firstMetaContent(input.document, [
     "meta[property=\"og:site_name\"]",

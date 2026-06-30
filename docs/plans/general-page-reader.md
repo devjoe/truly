@@ -1,7 +1,7 @@
 # General Page Reader Plan
 
-Status: planning draft
-Last updated: 2026-06-28
+Status: implementation in progress
+Last updated: 2026-07-01
 
 ## Decision
 
@@ -108,6 +108,23 @@ separate permission decision with updated reviewer notes and privacy docs.
 
 Optional endpoint host permissions remain only for user-configured model
 endpoints.
+
+### Activation Semantics
+
+Toolbar popup activation is the primary MVP entry point for reading a new
+general web page. Clicking the extension action gives Truly the temporary
+`activeTab` grant that allows one-shot `scripting.executeScript()` on the
+current page.
+
+The Side Panel `讀取此頁` / `Read this page` button should remain long term, but
+its product meaning is re-read / retry, not first-time permission grant. It can
+re-read when the content script or page access is already available. If Chrome
+does not grant access, the panel must show a clear toolbar-activation guidance
+message instead of failing silently.
+
+Do not add broad static host permissions to make the Side Panel button work as
+a first-time activation path. If a future version wants direct Side Panel reads
+without toolbar activation, that should be a separate permission decision.
 
 ## Information Architecture
 
@@ -301,7 +318,7 @@ Header:
 - domain;
 - URL/canonical URL;
 - extraction status chip;
-- refresh button.
+- refresh / retry button.
 
 Primary sections:
 
@@ -374,6 +391,17 @@ Public tests should assert:
 - no private URLs or local paths enter fixtures;
 - reading-surface conversion is stable.
 
+Runtime browser audit should use only synthetic local pages and private `tmp/`
+artifacts. It should cover:
+
+- live service-worker build id matches `dist/build-id.txt`;
+- popup general-page and unsupported-page states;
+- successful Page/Web read on a synthetic local page;
+- hash-only and tracking-query URL changes do not mark stale;
+- meaningful URL changes do mark stale;
+- copy metadata includes title, URL, and excerpt but not full body text;
+- Side Panel retry without page access shows toolbar activation guidance.
+
 ## Implementation Slices
 
 ### Slice 1: Contracts And Fixtures
@@ -398,6 +426,8 @@ Public tests should assert:
 - Add page-reading runtime state.
 - Render extracted title, domain, status, and text preview.
 - Reuse summary/brief/handoff UI where possible.
+- Keep Side Panel `Read this page` as a re-read / retry action. It must not be
+  presented as the first-time permission grant path.
 
 ### Slice 4: Model Integration
 
@@ -443,16 +473,22 @@ If runtime behavior changes, also verify in Chrome with a real browser session.
 For local development, compare the dev reload build id with the active extension
 runtime before declaring reload healthy.
 
+General Page Reader runtime changes should additionally pass:
+
+```bash
+npm run audit:general-page-reader
+```
+
+This audit attaches to the existing Chrome CDP session, uses synthetic local
+HTML only, and writes screenshots/JSON under `tmp/`. Do not commit those
+artifacts.
+
 ## Open Questions
 
-- Should General Page Reader appear as a new side-panel tab or replace the
-  empty state when the active tab is not a supported feed?
 - Should selected text become the default input when selected text exists, or
   should the user choose "Analyze selection" explicitly?
 - How much of source-link extraction should be shown to users versus kept only
   as model context?
-- Should page-reading history persist, or should it remain current-tab only for
-  the first version?
 - What minimum content length should be required before model calls are allowed?
 
 ## Success Criteria

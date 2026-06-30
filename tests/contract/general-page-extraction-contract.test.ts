@@ -213,6 +213,34 @@ describe("General Page Reader extraction contract", () => {
     ]);
   });
 
+  it("resolves relative canonical URLs against the current page URL", () => {
+    const document = new JSDOM(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Relative Canonical Fixture</title>
+          <link rel="canonical" href="/articles/relative-canonical">
+        </head>
+        <body>
+          <article>
+            <h1>Relative Canonical Fixture</h1>
+            <p>This synthetic article has enough text to exercise URL normalization while avoiding any real source content or private data.</p>
+            <p>It confirms that copied metadata and stale page identity use an absolute canonical URL instead of a relative path.</p>
+          </article>
+        </body>
+      </html>
+    `, { url: "https://example.test/articles/relative-canonical?utm_source=fixture" }).window.document;
+
+    const surface = extractGeneralPageSurface({
+      document,
+      url: "https://example.test/articles/relative-canonical?utm_source=fixture",
+      selectedText: "This selected paragraph is intentionally long enough to force a stable surface while the assertion focuses on canonical URL resolution and copied metadata identity.",
+    });
+
+    expect(surface.canonicalUrl).toBe("https://example.test/articles/relative-canonical");
+    expect(surface.id).toBe("general:https://example.test/articles/relative-canonical");
+  });
+
   it("prefers semantic main content over navigation and sidebar noise", () => {
     const surface = extractGeneralPageSurface({
       document: fixtureDocument("nav-sidebar-noise.html"),
