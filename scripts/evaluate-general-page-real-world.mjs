@@ -94,11 +94,8 @@ function normalizeTarget(target, index) {
   };
 }
 
-function safeTargetId(value, index) {
-  if (typeof value !== "string" || !value.trim() || value.includes("://")) {
-    return `target-${String(index + 1).padStart(3, "0")}`;
-  }
-  return value.replace(/[^a-zA-Z0-9_.:-]/g, "-").slice(0, 80);
+function safeTargetId(_value, index) {
+  return `target-${String(index + 1).padStart(3, "0")}`;
 }
 
 function isPrivateHtmlPath(value) {
