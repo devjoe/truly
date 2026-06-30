@@ -35,7 +35,7 @@ for (const target of targets) {
 
 const report = {
   generatedAt: new Date().toISOString(),
-  privacyBoundary: "Private tmp report. Do not commit. Contains structure-only summaries; no HTML, text excerpts, screenshots, or DOM snapshots.",
+  privacyBoundary: "Private tmp report. Do not commit. Contains target URLs, final URLs, and labels plus structure-only summaries; no HTML, text excerpts, screenshots, or DOM snapshots.",
   targetCount: targets.length,
   results,
   aggregate: aggregate(results),

@@ -279,6 +279,7 @@
       "patterns": ["P18-media-and-caption", "P01-semantic-article"],
       "synthetic": true,
       "expected": {
+        "status": "complete",
         "contains": ["synthetic media caption explains", "media first card has a short caption"],
         "excludes": ["Open gallery", "Download image", "More cards"]
       }

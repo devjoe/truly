@@ -32,7 +32,7 @@ const MAIN_ROOT_SELECTORS = [
   "[role=\"main\"]",
 ] as const;
 
-const PAYWALL_OR_LOGIN_PATTERNS = [
+const WEAK_PAYWALL_OR_LOGIN_PATTERNS = [
   /\bsign in\b/i,
   /\blog in\b/i,
   /\bsubscribe\b/i,
@@ -41,6 +41,20 @@ const PAYWALL_OR_LOGIN_PATTERNS = [
   /訂閱/,
   /會員/,
   /付費/,
+] as const;
+
+const STRONG_PAYWALL_OR_LOGIN_PATTERNS = [
+  /\bsign in required\b/i,
+  /\blog in or subscribe\b/i,
+  /\bsubscribe to continue reading\b/i,
+  /\bsubscription required\b/i,
+  /\bmembers? only\b/i,
+  /\bunlock (?:the )?(?:rest|full|complete)\b/i,
+  /\b(?:sign in|log in).{0,48}\b(?:continue|view|read)\b/i,
+  /登入.{0,24}(繼續|閱讀|查看|會員|訂閱)/,
+  /訂閱.{0,24}(繼續閱讀|解鎖|全文|完整)/,
+  /會員.{0,24}(全文|完整|繼續閱讀)/,
+  /付費.{0,24}(全文|完整|閱讀)/,
 ] as const;
 
 const NON_READING_TEXT_SELECTORS = [
@@ -117,7 +131,7 @@ export function extractGeneralPageSurface(
     warnings.push("no-main-content");
   }
 
-  if (looksBlockedOrPaywalled(`${title ?? ""} ${mainText}`)) {
+  if (looksBlockedOrPaywalled(input.document, extractionRoot, title, mainText, minMainTextLength)) {
     warnings.push("login-or-paywall-like");
   }
 
@@ -192,6 +206,7 @@ function nonArticlePageWarnings(
   title?: string,
 ): ReadingExtractionWarning[] {
   const root = extractionRoot ?? documentRef.body ?? documentRef.documentElement;
+  const rootIsArticle = root.tagName.toLowerCase() === "article";
   const articleCount = root.querySelectorAll("article").length;
   const listItemCount = root.querySelectorAll("li").length;
   const linkCount = root.querySelectorAll("a[href]").length;
@@ -242,6 +257,7 @@ function nonArticlePageWarnings(
   }
 
   if (
+    !rootIsArticle &&
     !hasArticleMeta &&
     documentLinkCount >= 100 &&
     documentImageCount >= 24 &&
@@ -251,9 +267,31 @@ function nonArticlePageWarnings(
   }
 
   if (
+    !rootIsArticle &&
     documentArticleCount >= 3 &&
     documentLinkCount >= 80 &&
     (documentParagraphCount <= 12 || linkCount >= 12 || documentImageCount >= 20)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  if (
+    rootIsArticle &&
+    !hasArticleMeta &&
+    documentLinkCount >= 100 &&
+    documentImageCount >= 24 &&
+    documentParagraphCount >= 20 &&
+    (linkCount >= 12 || imageCount >= 8)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  if (
+    rootIsArticle &&
+    text.length < 1500 &&
+    documentArticleCount >= 6 &&
+    documentLinkCount >= 80 &&
+    documentParagraphCount <= 12
   ) {
     return ["large-navigation-noise"];
   }
@@ -333,8 +371,25 @@ function resolveExtractionStatus(
   return "complete";
 }
 
-function looksBlockedOrPaywalled(text: string): boolean {
-  return PAYWALL_OR_LOGIN_PATTERNS.some((pattern) => pattern.test(text));
+function looksBlockedOrPaywalled(
+  documentRef: Document,
+  extractionRoot: Element | null,
+  title: string | undefined,
+  text: string,
+  minMainTextLength: number,
+): boolean {
+  const root = extractionRoot ?? documentRef.body ?? documentRef.documentElement;
+  const signals = `${title ?? ""} ${text}`;
+  const weakMatch = WEAK_PAYWALL_OR_LOGIN_PATTERNS.some((pattern) => pattern.test(signals));
+  if (!weakMatch)
+    return false;
+  if (STRONG_PAYWALL_OR_LOGIN_PATTERNS.some((pattern) => pattern.test(signals)))
+    return true;
+  if (text.length < minMainTextLength)
+    return true;
+  if (root.querySelector("input[type=\"password\"], input[type=\"email\"], form"))
+    return true;
+  return false;
 }
 
 function buildExcerpt(text: string): string | undefined {

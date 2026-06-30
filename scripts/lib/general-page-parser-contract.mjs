@@ -183,6 +183,13 @@ function extractionWarnings(engineResult) {
 }
 
 function expectedStatusPolicy(fixture) {
+  const explicitExpected = normalizeExpectedStatus(fixture.expectedStatus);
+  if (explicitExpected.length > 0) {
+    return {
+      expected: explicitExpected,
+      reason: "fixture declares an explicit expected extraction status",
+    };
+  }
   if (fixture.pageType === "blocked") {
     return {
       expected: ["blocked", "partial"],
@@ -205,6 +212,14 @@ function expectedStatusPolicy(fixture) {
     expected: ["complete", "partial"],
     reason: "article-like pages should produce usable content",
   };
+}
+
+function normalizeExpectedStatus(value) {
+  if (typeof value === "string")
+    return [value];
+  if (Array.isArray(value))
+    return value.filter((item) => typeof item === "string");
+  return [];
 }
 
 function evaluateStatusSuitability(engineResult, fixture) {

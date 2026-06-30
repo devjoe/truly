@@ -98,6 +98,7 @@ function normalizeFixture(fixture) {
     ...fixture,
     expectedContains: expected.contains ?? [],
     expectedExcludes: expected.excludes ?? [],
+    expectedStatus: expected.status,
     thresholds: {
       minContainsScore: thresholds.minContainsScore ?? 1,
       maxLeakCount: thresholds.maxLeakCount ?? 0,

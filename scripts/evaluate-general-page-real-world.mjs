@@ -19,44 +19,57 @@ const MIN_FETCH_TIMEOUT_MS = 1_000;
 const MAX_FETCH_TIMEOUT_MS = 60_000;
 const USER_AGENT = "TrulyGeneralPageReaderEvaluation/0.1 (+https://example.test/truly)";
 
-const args = parseArgs(process.argv.slice(2));
-const targets = readTargets(args.input);
-
-if (targets.length === 0) {
-  console.error("Real-world eval input must include at least one target.");
-  process.exit(2);
+if (isDirectRun()) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }
 
-const results = [];
-for (const [index, target] of targets.entries()) {
-  try {
-    results.push(await evaluateTarget(normalizeTarget(target, index), args));
-  } catch (error) {
-    results.push({
-      targetId: safeTargetId(target.id, index),
-      category: target.category,
-      pageType: target.pageType,
-      ok: false,
-      errorKind: errorKind(error),
-    });
+async function main() {
+  const args = parseArgs(process.argv.slice(2));
+  const targets = readTargets(args.input);
+
+  if (targets.length === 0) {
+    console.error("Real-world eval input must include at least one target.");
+    process.exit(2);
   }
+
+  const results = [];
+  for (const [index, target] of targets.entries()) {
+    try {
+      results.push(await evaluateTarget(normalizeTarget(target, index), args));
+    } catch (error) {
+      results.push({
+        targetId: safeTargetId(target.id, index),
+        category: target.category,
+        pageType: target.pageType,
+        ok: false,
+        errorKind: errorKind(error),
+      });
+    }
+  }
+
+  const report = {
+    generatedAt: new Date().toISOString(),
+    privacyBoundary: "Private tmp report. Do not commit. Contains no target URLs, raw HTML, extracted text, text previews, excerpts, screenshots, or DOM snapshots.",
+    input: {
+      targetCount: targets.length,
+      networkAllowed: args.allowNetwork,
+      timeoutMs: args.timeoutMs,
+    },
+    results,
+    aggregate: aggregate(results),
+  };
+
+  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
+  fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`);
+  printSummary(report);
 }
 
-const report = {
-  generatedAt: new Date().toISOString(),
-  privacyBoundary: "Private tmp report. Do not commit. Contains no target URLs, raw HTML, extracted text, text previews, excerpts, screenshots, or DOM snapshots.",
-  input: {
-    targetCount: targets.length,
-    networkAllowed: args.allowNetwork,
-    timeoutMs: args.timeoutMs,
-  },
-  results,
-  aggregate: aggregate(results),
-};
-
-fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-fs.writeFileSync(REPORT_PATH, `${JSON.stringify(report, null, 2)}\n`);
-printSummary(report);
+function isDirectRun() {
+  return process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href;
+}
 
 function parseArgs(argv) {
   const inputIndex = argv.indexOf("--input");
@@ -256,7 +269,7 @@ async function parseDefuddle({ html, url }, options = {}) {
   };
 }
 
-function sanitizeEngineResult(engineId, result, target) {
+export function sanitizeEngineResult(engineId, result, target) {
   const text = normalizeText(result.text ?? "");
   const containsHits = target.expectedContains.filter((item) => text.includes(item)).length;
   const excludeLeaks = target.expectedExcludes.filter((item) => text.includes(item)).length;
@@ -462,6 +475,7 @@ function normalizeText(value) {
 }
 
 function hashTarget(target) {
+  // Stable URL fingerprints are for private diffing only; do not publish them.
   return createHash("sha256")
     .update(`${target.url}\n${target.htmlPath ?? ""}\n${target.id}`)
     .digest("hex")

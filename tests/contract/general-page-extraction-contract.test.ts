@@ -68,7 +68,7 @@ function firstBlock(html: string, tagName: string): FixtureElement | null {
 
 function querySelectorAll(html: string, selector: string): FixtureElement[] {
   if (selector.includes(",")) {
-    return selector.flatMap((part) => querySelectorAll(html, part.trim()));
+    return selector.split(",").flatMap((part) => querySelectorAll(html, part.trim()));
   }
 
   if (
@@ -270,6 +270,34 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.extraction.status).toBe("blocked");
     expect(surface.extraction.warnings).toContain("login-or-paywall-like");
     expect(surface.extraction.warnings).toContain("very-short-content");
+  });
+
+  it("does not treat a normal newsletter CTA as a paywall", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "newsletter-capture-blog.html",
+        "https://personal.example.test/posts/newsletter-capture",
+      ),
+      url: "https://personal.example.test/posts/newsletter-capture",
+    });
+
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).not.toContain("login-or-paywall-like");
+    expect(surface.mainText).toContain("newsletter capture blog fixture contains a synthetic essay");
+  });
+
+  it("keeps rich media articles complete despite dense links and images", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "media-first-card.html",
+        "https://example.test/media/synthetic-card",
+      ),
+      url: "https://example.test/media/synthetic-card",
+    });
+
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).not.toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("synthetic gallery belongs to the article body");
   });
 
   it("marks discussion, social, and index pages as partial even when text is readable", () => {
