@@ -304,6 +304,78 @@ describe("General Page Reader extraction contract", () => {
     }
   });
 
+  it("marks dense homepage-like roots as partial without article metadata", () => {
+    const links = Array.from({ length: 120 }, (_, index) =>
+      `<a href="/story-${index}">Synthetic story ${index}</a>`,
+    ).join("");
+    const images = Array.from({ length: 30 }, (_, index) =>
+      `<img src="/image-${index}.png" alt="Synthetic card ${index}">`,
+    ).join("");
+    const paragraphs = Array.from({ length: 18 }, (_, index) =>
+      `<p>Dense homepage structural fixture paragraph ${index} describes a fake public update card with enough readable text to tempt complete extraction.</p>`,
+    ).join("");
+    const dom = new JSDOM(`
+      <!doctype html>
+      <html>
+        <head><title>Dense Homepage Fixture</title></head>
+        <body>
+          <main>
+            <h1>Top stories</h1>
+            ${paragraphs}
+            ${links}
+            ${images}
+          </main>
+        </body>
+      </html>
+    `, { url: "https://news.example.test/" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: "https://news.example.test/",
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+  });
+
+  it("marks multi-card list pages as partial even with misleading article metadata", () => {
+    const cards = Array.from({ length: 8 }, (_, index) => `
+      <article>
+        <h2>Fixture card ${index}</h2>
+        <a href="/notice-${index}">Read synthetic notice ${index}</a>
+        <img src="/notice-${index}.png" alt="Synthetic notice ${index}">
+      </article>
+    `).join("");
+    const navLinks = Array.from({ length: 90 }, (_, index) =>
+      `<a href="/archive-${index}">Archive link ${index}</a>`,
+    ).join("");
+    const dom = new JSDOM(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Official List Fixture</title>
+          <meta property="article:published_time" content="2026-06-30T00:00:00Z">
+        </head>
+        <body>
+          <main>
+            <h1>Latest notices</h1>
+            <p>This synthetic official list fixture should remain partial because it is a card index, not one complete article.</p>
+            ${cards}
+            ${navLinks}
+          </main>
+        </body>
+      </html>
+    `, { url: "https://official.example.test/news" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: "https://official.example.test/news",
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+  });
+
   it("excludes non-reading node text from fallback extraction", () => {
     const html = fs.readFileSync(`${FIXTURE_DIR}/js-shell-bad-page.html`, "utf8");
     const dom = new JSDOM(html, { url: "https://example.test/app/shell" });

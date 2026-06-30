@@ -82,10 +82,13 @@ Completed in the dev/test spike layer:
 - Evaluation v3 hardens Truly's heuristic status/warning classifier for
   readable non-article pages, including forum threads, social public pages,
   list/search indexes, blocked pages, and client-shell bad pages.
-- The public synthetic fixture corpus now has 31 fixtures, and the private
+- The public synthetic fixture corpus now has 35 fixtures, and the private
   real-world evaluation runner scaffold writes sanitized parser/runtime metrics
   under `tmp/` without committing target URLs, HTML, text, excerpts, screenshots,
   or DOM snapshots.
+- V4 real-world follow-up hardens structural list/index detection for dense
+  homepage/card-grid pages; the private batch rerun had no runtime-baseline
+  suitability failures.
 - Parser dependencies remain dev-only and are still not imported by extension
   runtime code.
 

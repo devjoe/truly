@@ -1,6 +1,6 @@
 # General Page Reader Fixture V4 Plan
 
-Status: implemented
+Status: implemented and follow-up verified
 Date: 2026-06-30
 
 ## Boundary
@@ -82,6 +82,9 @@ Implementation result:
 - `npm run spike:general-page-parsers`: threshold pass and suitability pass
 - `truly-heuristic`: 35/35 threshold, 35/35 status suitability, 16/16 warning
   suitability, 16/16 bad-page suitability
+- private real-world follow-up after structural list/index classifier
+  hardening: 20/22 evaluated, 2 target failures where every parser returned
+  empty output, and no runtime-baseline suitability failures
 
 ## Acceptance Criteria For V4
 
@@ -101,3 +104,14 @@ short timeout. If failure buckets still show concentrated `list-index`
 suitability gaps, harden the classifier before adding more fixtures. If runtime
 diagnostics are stable but reruns remain slow enough to discourage iteration,
 add a conservative `--concurrency` option as a separate decision.
+
+Follow-up result on 2026-06-30:
+
+- the first v4 private rerun still showed concentrated `list-index` suitability
+  gaps;
+- the runtime heuristic was hardened with structural dense homepage/card-grid
+  detection using only public code and synthetic contract tests;
+- the second private rerun cleared all runtime suitability failures;
+- remaining target failures are empty/low-text pages where all parser
+  candidates returned empty output, so they do not justify adding more public
+  fixtures yet.

@@ -195,6 +195,15 @@ function nonArticlePageWarnings(
   const articleCount = root.querySelectorAll("article").length;
   const listItemCount = root.querySelectorAll("li").length;
   const linkCount = root.querySelectorAll("a[href]").length;
+  const imageCount = root.querySelectorAll("img").length;
+  const documentArticleCount = documentRef.querySelectorAll("article").length;
+  const documentParagraphCount = documentRef.querySelectorAll("p").length;
+  const documentLinkCount = documentRef.querySelectorAll("a[href]").length;
+  const documentImageCount = documentRef.querySelectorAll("img").length;
+  const hasArticleMeta = Boolean(firstMetaContent(documentRef, [
+    "meta[property=\"article:published_time\"]",
+    "meta[property=\"article:author\"]",
+  ]));
   const lowerSignals = `${url} ${title ?? ""} ${text}`.toLowerCase();
 
   if (
@@ -228,6 +237,23 @@ function nonArticlePageWarnings(
   if (
     articleCount >= 3 &&
     /(最新消息|公告列表|公告卡片|索引頁|不要把.+完整文章)/.test(lowerSignals)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  if (
+    !hasArticleMeta &&
+    documentLinkCount >= 100 &&
+    documentImageCount >= 24 &&
+    (linkCount >= 12 || imageCount >= 8)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  if (
+    documentArticleCount >= 3 &&
+    documentLinkCount >= 80 &&
+    (documentParagraphCount <= 12 || linkCount >= 12 || documentImageCount >= 20)
   ) {
     return ["large-navigation-noise"];
   }
