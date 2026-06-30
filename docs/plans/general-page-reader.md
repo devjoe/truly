@@ -183,6 +183,19 @@ export interface ReadingTarget {
 }
 ```
 
+Action vocabulary is shared across toolbar, popup, side panel, and future
+hotkeys:
+
+```ts
+export type ReadingActivationSource = "toolbar" | "popup" | "sidepanel" | "hotkey";
+export type ReadingActivationTargetKind = "page" | "selection" | "current-region";
+export type ReadingAction = "read" | "summarize" | "explain" | "extract_claims" | "fact_check";
+```
+
+The first runtime slice only enables `targetKind: "page"` plus
+`action: "read"`. Selection and current-region actions are contract-reserved so
+future hotkeys can reuse the same message shape without changing Page/Web state.
+
 Keep Facebook post data compatible by adapting it into this shape over time.
 Do not replace `PostData` and `DashboardPostEvent` in one large migration.
 
@@ -445,6 +458,7 @@ artifacts. It should cover:
 ### Slice 6: Current Region Interaction Spike
 
 - Add `ReadingTarget` contract tests.
+- Reuse the shared `ReadingActivation` action vocabulary.
 - Track mouse point and selection snapshots in a content script.
 - Resolve current target via selection, observed node, then nearest block at the
   mouse point.

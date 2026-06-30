@@ -32,6 +32,7 @@ import type {
 import type { LlmPostContext } from "./ollama-client";
 import type { ReadingSurface } from "./reading-surface-types";
 import type { ReadingTarget } from "./reading-target-types";
+import type { ReadingActivation } from "./reading-action-types";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./readiness";
 
 // ---------------------------------------------------------------------------
@@ -85,11 +86,7 @@ export interface PageReadingRequestMsg {
   type: "PAGE_READING_REQUEST";
   tabId?: number;
   inject?: boolean;
-  activation?: {
-    source: "toolbar" | "popup" | "sidepanel" | "hotkey";
-    targetKind: "page" | "selection" | "current-region";
-    action: "read" | "summarize" | "explain" | "extract_claims" | "fact_check";
-  };
+  activation?: ReadingActivation;
 }
 
 export interface PageReadingResultMsg {
