@@ -89,6 +89,168 @@
     .feed-container[hidden] {
       display: none;
     }
+    .tab-bar {
+      position: sticky;
+      top: 36px;
+      z-index: 7;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px;
+      padding: 4px 10px 6px;
+      background: color-mix(in srgb, var(--truly-sidepanel-bg) 94%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--truly-sidepanel-border) 70%, transparent);
+    }
+    .tab {
+      min-height: 30px;
+      border: 1px solid var(--truly-sidepanel-control-border);
+      border-radius: 8px;
+      background: var(--truly-sidepanel-muted-surface);
+      color: var(--truly-sidepanel-muted-text);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .tab[aria-selected="true"] {
+      background: var(--truly-sidepanel-surface);
+      color: var(--truly-sidepanel-accent);
+      border-color: color-mix(in srgb, var(--truly-sidepanel-accent) 42%, var(--truly-sidepanel-control-border));
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+    .tab:focus-visible {
+      outline: 2px solid var(--truly-sidepanel-accent);
+      outline-offset: 2px;
+    }
+    .page-container {
+      gap: 8px;
+    }
+    .page-reader-header,
+    .page-reader-card {
+      background: var(--truly-sidepanel-surface);
+      border: 1px solid var(--truly-sidepanel-border);
+      border-radius: 8px;
+      box-shadow:
+        0 1px 2px rgba(15, 23, 42, 0.08),
+        0 0 0 1px rgba(255, 255, 255, 0.55) inset;
+    }
+    .page-reader-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 10px 12px;
+    }
+    .page-reader-heading {
+      min-width: 0;
+    }
+    .page-reader-kicker {
+      margin-bottom: 2px;
+      color: var(--truly-sidepanel-muted-text);
+      font-size: 11px;
+      font-weight: 700;
+    }
+    .page-reader-heading h1,
+    .page-reader-title-block h2 {
+      margin: 0;
+      color: var(--truly-sidepanel-text);
+      letter-spacing: 0;
+    }
+    .page-reader-heading h1 {
+      font-size: 15px;
+      line-height: 1.25;
+    }
+    .page-reader-title-block h2 {
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .page-reader-status,
+    .page-reader-empty,
+    .page-reader-error {
+      padding: 9px 10px;
+      border: 1px solid var(--truly-sidepanel-soft-border);
+      border-radius: 8px;
+      background: var(--truly-sidepanel-muted-surface);
+      color: var(--truly-sidepanel-muted-text);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .page-reader-status-label {
+      color: var(--truly-sidepanel-text);
+      font-weight: 700;
+      margin-bottom: 2px;
+    }
+    .page-status-ready .page-reader-status-label {
+      color: #146c43;
+    }
+    .page-status-loading .page-reader-status-label,
+    .page-status-stale .page-reader-status-label {
+      color: #8a6d1f;
+    }
+    .page-status-error .page-reader-status-label,
+    .page-reader-error {
+      color: #b42318;
+    }
+    .page-reader-card {
+      padding: 11px 12px;
+    }
+    .page-reader-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 9px;
+    }
+    .page-reader-title-block {
+      min-width: 0;
+    }
+    .page-reader-url {
+      margin-top: 3px;
+      color: var(--truly-sidepanel-muted-text);
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .page-reader-excerpt {
+      color: var(--truly-sidepanel-text);
+      font-size: 12px;
+      line-height: 1.55;
+      margin: 0 0 10px;
+    }
+    .page-reader-meta {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin: 0;
+    }
+    .page-reader-meta div {
+      min-width: 0;
+      padding: 6px 7px;
+      border-radius: 6px;
+      background: var(--truly-sidepanel-muted-surface);
+    }
+    .page-reader-meta dt {
+      color: var(--truly-sidepanel-muted-text);
+      font-size: 10px;
+      font-weight: 700;
+    }
+    .page-reader-meta dd {
+      margin: 2px 0 0;
+      color: var(--truly-sidepanel-text);
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+    .page-reader-warnings {
+      margin-top: 8px;
+      color: var(--truly-sidepanel-muted-text);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+    .page-reader-warnings span {
+      color: var(--truly-sidepanel-text);
+      font-weight: 700;
+      margin-right: 5px;
+    }
     /* Applied for ~1800ms when OPEN_DASHBOARD_FOR_POST scrolls to a card */
     @keyframes truly-card-flash-anim {
       0%   { box-shadow: 0 0 0 2px rgba(24, 119, 242, 0.0); }
@@ -1230,8 +1392,14 @@
       <span data-i18n="popup.settings">設定</span>
     </button>
   </div>
+  <div class="tab-bar" role="tablist" aria-label="閱讀面板" data-i18n-aria-label="sidepanel.tabsAria">
+    <button class="tab" type="button" role="tab" data-tab="analysis" data-i18n="sidepanel.tab.feed">Feed</button>
+    <button class="tab" type="button" role="tab" data-tab="page" data-i18n="sidepanel.tab.page">Page/Web</button>
+  </div>
   <div id="analysis-pane" class="feed-container" role="tabpanel" data-tab="analysis" aria-label="閱讀輔助內容" data-i18n-aria-label="sidepanel.contentAria">
     <div class="placeholder" id="analysisPlaceholder" data-i18n="sidepanel.placeholder">等待目前可視貼文……</div>
+  </div>
+  <div id="page-pane" class="feed-container page-container" role="tabpanel" data-tab="page" aria-label="一般網頁閱讀" data-i18n-aria-label="sidepanel.page.contentAria" hidden>
   </div>
   <div id="truly-tooltip" role="tooltip"></div>
   <script type="module" src="sidepanel.js"></script>

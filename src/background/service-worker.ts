@@ -84,6 +84,19 @@ async function tierBApiKeyForMessage(
   return storedSecretString(["tierBApiKey"]);
 }
 
+function isPageReadingReply(value: unknown): value is Extract<TrulyMessage, { type: "PAGE_READING_RESULT" | "PAGE_READING_ERROR" }> {
+  return !!value &&
+    typeof value === "object" &&
+    ((value as { type?: unknown }).type === "PAGE_READING_RESULT" ||
+      (value as { type?: unknown }).type === "PAGE_READING_ERROR");
+}
+
+function broadcastPageReadingReply(message: Extract<TrulyMessage, { type: "PAGE_READING_RESULT" | "PAGE_READING_ERROR" }>): void {
+  chrome.runtime.sendMessage(message).catch(() => {});
+  setTimeout(() => chrome.runtime.sendMessage(message).catch(() => {}), 250);
+  setTimeout(() => chrome.runtime.sendMessage(message).catch(() => {}), 900);
+}
+
 async function clearPersistedClassificationCache(reason: string): Promise<void> {
   try {
     const stored = await chrome.storage.local.get(null);
@@ -232,19 +245,35 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
     const tabId = message.tabId;
     (async () => {
       try {
+        if (message.inject === true) {
+          await chrome.scripting.executeScript({
+            target: { tabId },
+            files: ["content_scripts/page-reader.js"],
+          });
+        }
         const reply = await chrome.tabs.sendMessage(tabId, {
           type: "PAGE_READING_REQUEST",
+          activation: message.activation,
         } satisfies TrulyMessage);
+        const routedReply = isPageReadingReply(reply)
+          ? { ...reply, tabId }
+          : reply;
+        try {
+          sendResponse(routedReply);
+        } catch {}
+        if (isPageReadingReply(routedReply)) {
+          broadcastPageReadingReply(routedReply);
+        }
+      } catch (error) {
+        const reply = {
+          type: "PAGE_READING_ERROR",
+          tabId,
+          error: error instanceof Error ? error.message.slice(0, 200) : "page_reader_unavailable",
+        } satisfies TrulyMessage;
         try {
           sendResponse(reply);
         } catch {}
-      } catch (error) {
-        try {
-          sendResponse({
-            type: "PAGE_READING_ERROR",
-            error: error instanceof Error ? error.message.slice(0, 200) : "page_reader_unavailable",
-          } satisfies TrulyMessage);
-        } catch {}
+        broadcastPageReadingReply(reply);
       }
     })();
     return true;

@@ -1,7 +1,7 @@
-export type TabId = "analysis" | "settings";
+export type TabId = "analysis" | "page" | "settings";
 
 const STORAGE_KEY = "truly-active-tab";
-const VALID: readonly TabId[] = ["analysis"] as const;
+const VALID: readonly TabId[] = ["analysis", "page"] as const;
 
 function isTabId(x: unknown): x is TabId {
   return typeof x === "string" && (VALID as readonly string[]).includes(x);

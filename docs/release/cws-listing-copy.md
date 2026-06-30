@@ -185,6 +185,8 @@ dashboard-facing summary:
 
 - `storage`: saves settings, readiness state, and model configuration.
 - `activeTab`: supports current-tab actions after user gesture.
+- `scripting`: injects the general page reader only after the user asks to read
+  the active page.
 - `sidePanel`: provides the reading side panel.
 - Facebook host permissions: injects the supported reading UI and reads visible
   post context on supported Facebook surfaces.

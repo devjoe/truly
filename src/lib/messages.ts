@@ -84,16 +84,24 @@ export interface ManualViewPostMsg {
 export interface PageReadingRequestMsg {
   type: "PAGE_READING_REQUEST";
   tabId?: number;
+  inject?: boolean;
+  activation?: {
+    source: "toolbar" | "popup" | "sidepanel" | "hotkey";
+    targetKind: "page" | "selection" | "current-region";
+    action: "read" | "summarize" | "explain" | "extract_claims" | "fact_check";
+  };
 }
 
 export interface PageReadingResultMsg {
   type: "PAGE_READING_RESULT";
   surface: ReadingSurface;
+  tabId?: number;
 }
 
 export interface PageReadingErrorMsg {
   type: "PAGE_READING_ERROR";
   error: string;
+  tabId?: number;
 }
 
 export interface ReadingTargetRequestMsg {

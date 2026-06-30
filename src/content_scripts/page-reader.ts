@@ -78,6 +78,16 @@ export function installPageReaderRuntime(
   });
 }
 
-if (typeof chrome !== "undefined" && chrome.runtime?.onMessage && typeof document !== "undefined") {
+const pageReaderGlobal = globalThis as typeof globalThis & {
+  __TRULY_PAGE_READER_INSTALLED__?: boolean;
+};
+
+if (
+  typeof chrome !== "undefined" &&
+  chrome.runtime?.onMessage &&
+  typeof document !== "undefined" &&
+  pageReaderGlobal.__TRULY_PAGE_READER_INSTALLED__ !== true
+) {
+  pageReaderGlobal.__TRULY_PAGE_READER_INSTALLED__ = true;
   installPageReaderRuntime(chrome.runtime, document, () => location.href, __TRULY_BUILD_ID__);
 }

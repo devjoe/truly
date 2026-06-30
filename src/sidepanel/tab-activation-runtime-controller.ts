@@ -2,7 +2,9 @@ import type { TabId } from "./tabs";
 
 export interface SidepanelTabActivationRuntimeController {
   setActivateTab(activateTab: (tab: TabId) => void): void;
+  activateTab(tab: TabId): void;
   activateAnalysisTab(): void;
+  activatePageTab(): void;
 }
 
 export function createSidepanelTabActivationRuntime(): SidepanelTabActivationRuntimeController {
@@ -12,8 +14,14 @@ export function createSidepanelTabActivationRuntime(): SidepanelTabActivationRun
     setActivateTab(nextActivateTab) {
       activateTab = nextActivateTab;
     },
+    activateTab(tab) {
+      activateTab?.(tab);
+    },
     activateAnalysisTab() {
       activateTab?.("analysis");
+    },
+    activatePageTab() {
+      activateTab?.("page");
     },
   };
 }

@@ -5,7 +5,7 @@
   "version": "0.1.1",
   "version_name": "0.1.1 Preview 11",
   "description": "Privacy-conscious reading assistance for social feeds and web pages.",
-  "permissions": ["storage", "activeTab", "sidePanel"],
+  "permissions": ["storage", "activeTab", "sidePanel", "scripting"],
   "host_permissions": [
     "http://localhost/*",
     "http://127.0.0.1/*",

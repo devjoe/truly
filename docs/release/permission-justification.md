@@ -1,6 +1,6 @@
 # Permission And Host Permission Justification
 
-Last updated: 2026-06-28
+Last updated: 2026-06-30
 
 This document explains why Truly requests each Chrome permission and host
 permission. It should stay aligned with `src/manifest.json`.
@@ -10,7 +10,8 @@ permission. It should stay aligned with `src/manifest.json`.
 | Permission | Why Truly needs it | User-facing behavior |
 |---|---|---|
 | `storage` | Persist extension settings, readiness state, theme/language choices, model configuration, and user preferences. | Options, Popup, Heads-up, and Side Panel stay in sync across sessions. |
-| `activeTab` | Use temporary access after a user gesture when the extension needs to interact with the current tab. | Popup and user-triggered actions can operate on the active Facebook page without broad tab history permissions. |
+| `activeTab` | Use temporary access after a user gesture when the extension needs to interact with the current tab. | Popup and user-triggered actions can operate on the active page without broad tab history permissions. |
+| `scripting` | Inject the general page reader content script only after a user action on the active tab. | The user can explicitly read the current web page without broad install-time page injection. |
 | `sidePanel` | Render the reading side panel through Chrome's Side Panel API. | The user can open a dedicated reading panel for the current post. |
 
 ## Static Host Permissions

@@ -116,6 +116,8 @@ surfaces:
 
 - `storage`: save user settings, readiness state, and extension preferences.
 - `activeTab`: interact with the current tab after user action.
+- `scripting`: inject the general page reader only after the user asks to read
+  the active page.
 - `sidePanel`: provide the user-opened reading side panel.
 - Facebook / FB CDN hosts: inject the reading UI and read post/image context on
   supported Facebook pages.

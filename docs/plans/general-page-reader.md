@@ -98,6 +98,7 @@ Do not include these in the first version:
 The MVP should use the current permission model:
 
 - `activeTab` for user-triggered current-page extraction;
+- `scripting` for one-shot content script injection after the user action;
 - `sidePanel` for the reading workspace;
 - `storage` for settings and readiness state.
 

@@ -59,6 +59,17 @@ function readinessSummary(record: ReadinessRecord | undefined, fallback: string,
   return t(`readiness.status.${record.status}`, lang);
 }
 
+function isGeneralPageUrl(rawUrl: string): boolean {
+  try {
+    const url = new URL(rawUrl);
+    const host = url.hostname.toLowerCase();
+    if (host === "facebook.com" || host.endsWith(".facebook.com")) return false;
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 async function init() {
   const settings = await loadSettings();
   createExtensionThemeController().setMode(settings.themeMode);
@@ -86,6 +97,7 @@ async function init() {
   }
 
   const pageSupport = getFacebookPageSupport(activeUrl);
+  const generalPageSupported = isGeneralPageUrl(activeUrl);
 
   const pageDot = document.getElementById("pageDot")!;
   const readinessTitle = document.getElementById("readinessTitle")!;
@@ -178,8 +190,8 @@ async function init() {
   }
 
   function renderReadiness(): void {
-    const canUseSidePanelAction = settings.enabled && pageSupport.supported;
-    const showCloseAction = canUseSidePanelAction && sidePanelOpen;
+    const canUseSidePanelAction = settings.enabled && (pageSupport.supported || generalPageSupported);
+    const showCloseAction = settings.enabled && pageSupport.supported && sidePanelOpen;
     dashboardLink.disabled = !canUseSidePanelAction;
     dashboardLink.setAttribute("aria-disabled", dashboardLink.disabled ? "true" : "false");
     dashboardLink.dataset.sidepanelOpen = showCloseAction ? "true" : "false";
@@ -188,6 +200,8 @@ async function init() {
         ? showCloseAction
           ? t("popup.closeSidebar", lang)
           : t("popup.openSidebar", lang)
+        : generalPageSupported
+          ? t("popup.readPage", lang)
         : t("popup.unavailable", lang)
     );
 
@@ -217,6 +231,13 @@ async function init() {
     }
 
     if (!pageSupport.supported) {
+      if (generalPageSupported) {
+        readinessTitle.textContent = t("popup.generalPage.title", lang);
+        readinessDetail.textContent = t("popup.generalPage.detail", lang);
+        pageDot.className = "status-dot checking";
+        hideExpandable();
+        return;
+      }
       readinessTitle.textContent = t("popup.unsupported.title", lang);
       readinessDetail.textContent = pageSupport.isFacebook
         ? t("popup.unsupported.detailFb", lang)
@@ -301,12 +322,24 @@ async function init() {
     if (dashboardLink.disabled) return;
     const win = await chrome.windows.getCurrent();
     if (win.id != null) {
-      if (sidePanelOpen && sidePanelCanClose) {
+      if (pageSupport.supported && sidePanelOpen && sidePanelCanClose) {
         await chrome.sidePanel.close({ windowId: win.id }).catch(() => {});
         sidePanelOpen = false;
       } else {
         await chrome.sidePanel.open({ windowId: win.id }).catch(() => {});
         sidePanelOpen = true;
+        if (generalPageSupported && typeof activeTab.id === "number") {
+          await browser.runtime.sendMessage({
+            type: "PAGE_READING_REQUEST",
+            tabId: activeTab.id,
+            inject: true,
+            activation: {
+              source: "popup",
+              targetKind: "page",
+              action: "read",
+            },
+          }).catch(() => {});
+        }
       }
     }
     window.close();

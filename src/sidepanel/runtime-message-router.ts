@@ -1,4 +1,5 @@
 import type { TrulyMessage } from "../lib/messages";
+import type { PageReadingErrorMsg, PageReadingResultMsg } from "../lib/messages";
 import type { DashboardPostEvent, UserSettings } from "../lib/types";
 
 export interface SidepanelRuntimeMessageHandlers {
@@ -8,6 +9,8 @@ export interface SidepanelRuntimeMessageHandlers {
   openDashboardForPost(id: string): void;
   currentViewPost(id: string | null): void;
   manualViewPost(id: string): void;
+  pageReadingResult?(message: PageReadingResultMsg): void;
+  pageReadingError?(message: PageReadingErrorMsg): void;
 }
 
 export function handleSidepanelRuntimeMessage(
@@ -32,6 +35,12 @@ export function handleSidepanelRuntimeMessage(
       break;
     case "MANUAL_VIEW_POST":
       handlers.manualViewPost(message.id);
+      break;
+    case "PAGE_READING_RESULT":
+      handlers.pageReadingResult?.(message);
+      break;
+    case "PAGE_READING_ERROR":
+      handlers.pageReadingError?.(message);
       break;
   }
   return false;

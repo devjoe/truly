@@ -22,6 +22,7 @@ import { createSidepanelDashboardReplayRuntime } from "./dashboard-replay-runtim
 import { createSidepanelStorageRuntimeController } from "./storage-runtime-controller";
 import { createSidepanelDashboardHistoryRuntime } from "./dashboard-history-runtime";
 import { createSidepanelTabActivationRuntime } from "./tab-activation-runtime-controller";
+import { createSidepanelPageReadingRuntime } from "./page-reading-runtime";
 import { initializeSidepanelBootstrap } from "./bootstrap-lifecycle";
 import type { FeedExpandedRenderOptions } from "./feed-expanded-renderer";
 import { createExtensionThemeController } from "../lib/theme-mode";
@@ -39,6 +40,7 @@ const themeController = createExtensionThemeController();
 const languageController = createExtensionLanguageController();
 
 const analysisPaneEl = document.getElementById("analysis-pane")!;
+const pagePaneEl = document.getElementById("page-pane")!;
 
 // currentViewPostId / manualFocusHoldUntil / replayInProgress live in panelState
 // (./state). MANUAL_FOCUS_HOLD_MS gates the manual-focus hold; see
@@ -87,6 +89,15 @@ const readingSurface = createSidepanelReadingSurface({
   readingBriefController,
   rerenderCard,
   getLang: () => languageController.current(),
+});
+
+const pageReadingRuntime = createSidepanelPageReadingRuntime({
+  pagePaneEl,
+  runtime: chrome.runtime,
+  tabs: chrome.tabs,
+  activateTab: tabActivationRuntime.activateTab,
+  getLang: () => languageController.current(),
+  now: Date.now,
 });
 
 const postRuntimeController = createSidepanelPostRuntimeController({
@@ -150,6 +161,8 @@ installSidepanelRuntimeMessageListener({
   replayDashboardEvents: dashboardReplayRuntime.replayDashboardEvents,
   renderAnalysisPane,
   activateAnalysisTab: tabActivationRuntime.activateAnalysisTab,
+  pageReadingResult: pageReadingRuntime.handlePageReadingResult,
+  pageReadingError: pageReadingRuntime.handlePageReadingError,
 });
 
 // Request replay on mount so the panel doesn't start empty after reopen.
@@ -174,3 +187,4 @@ const activateTab = initializeSidepanelBootstrap({
   initializeStorageState: storageRuntime.initializeStorageState,
 });
 tabActivationRuntime.setActivateTab(activateTab);
+pageReadingRuntime.install();
