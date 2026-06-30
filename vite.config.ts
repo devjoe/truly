@@ -134,6 +134,32 @@ function buildContentScriptIIFE(): Plugin {
         },
       });
 
+      // Build general page reader content script (IIFE, manually routed later)
+      await build({
+        configFile: false,
+        plugins: [buildIdPlugin],
+        build: {
+          outDir: "dist/content_scripts",
+          emptyOutDir: false,
+          sourcemap: true,
+          lib: {
+            entry: resolve(__dirname, "src/content_scripts/page-reader.ts"),
+            formats: ["iife"],
+            name: "TrulyPageReader",
+            fileName: () => "page-reader.js",
+          },
+          rollupOptions: {
+            output: {
+              inlineDynamicImports: true,
+            },
+          },
+        },
+        define: {
+          __BROWSER__: JSON.stringify(isFirefox ? "firefox" : "chrome"),
+          __TRULY_DEV_BUILD__: JSON.stringify(isDevBuild),
+        },
+      });
+
       // Build GraphQL interceptor (IIFE, injected into MAIN world)
       await build({
         configFile: false,

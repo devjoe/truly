@@ -218,6 +218,38 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
     return false;
   }
 
+  if (message.type === "PAGE_READING_REQUEST") {
+    if (typeof message.tabId !== "number") {
+      try {
+        sendResponse({
+          type: "PAGE_READING_ERROR",
+          error: "page_reading_missing_tab_id",
+        } satisfies TrulyMessage);
+      } catch {}
+      return false;
+    }
+
+    const tabId = message.tabId;
+    (async () => {
+      try {
+        const reply = await chrome.tabs.sendMessage(tabId, {
+          type: "PAGE_READING_REQUEST",
+        } satisfies TrulyMessage);
+        try {
+          sendResponse(reply);
+        } catch {}
+      } catch (error) {
+        try {
+          sendResponse({
+            type: "PAGE_READING_ERROR",
+            error: error instanceof Error ? error.message.slice(0, 200) : "page_reader_unavailable",
+          } satisfies TrulyMessage);
+        } catch {}
+      }
+    })();
+    return true;
+  }
+
   if (message.type === "DASHBOARD_REPLAY_REQUEST") {
     const replay: TrulyMessage = {
       type: "DASHBOARD_REPLAY",

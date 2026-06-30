@@ -459,14 +459,18 @@ describe("General Page Reader extraction contract", () => {
 
     const messages: TrulyMessage[] = [
       { type: "PAGE_READING_REQUEST", tabId: 1 },
+      { type: "PAGE_READING_REQUEST" },
       { type: "PAGE_READING_RESULT", surface },
+      { type: "PAGE_READING_ERROR", error: "page_reader_unavailable" },
       { type: "READING_TARGET_REQUEST", tabId: 1, trigger: "hotkey" },
       { type: "READING_TARGET_RESULT", target },
     ];
 
     expect(messages.map((message) => message.type)).toEqual([
       "PAGE_READING_REQUEST",
+      "PAGE_READING_REQUEST",
       "PAGE_READING_RESULT",
+      "PAGE_READING_ERROR",
       "READING_TARGET_REQUEST",
       "READING_TARGET_RESULT",
     ]);

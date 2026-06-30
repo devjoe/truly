@@ -89,9 +89,43 @@ avoid:
 - adding inline current-region UI;
 - adding Threads-specific DOM support.
 
+## Runtime Slice 1 Status
+
+Runtime slice 1 now creates a manually triggered content-script seam:
+
+1. `src/content_scripts/page-reader.ts` extracts the current page into a
+   `ReadingSurface` with the existing Truly heuristic extractor.
+2. `PAGE_READING_REQUEST` can be forwarded by the service worker to a target
+   tab and answered by a page-reader content script.
+3. `PAGE_READING_RESULT` and `PAGE_READING_ERROR` are typed runtime responses.
+4. `page-reader.ts` is built as an IIFE bundle for future manual/runtime
+   loading.
+
+This slice deliberately does not add broad manifest content-script injection.
+The next product step should decide how the side panel manually activates page
+reading under the current `activeTab` / optional host permission boundary.
+
 ## Next Runtime Slice
 
-The next implementation slice is a manually triggered content-script seam:
+The next implementation slice should connect a side-panel command to this seam:
+
+1. Identify the active tab from the side panel.
+2. Ensure the page-reader content script is available for that tab under the
+   accepted permission/loading strategy.
+3. Send `PAGE_READING_REQUEST` through the service worker.
+4. Render title, source, extraction status, warnings, and text preview.
+5. Do not route page surfaces into model prompts until the page-mode UI state is
+   reviewed.
+
+Original acceptance criteria for the content-script seam:
+
+- no third-party parser runtime imports;
+- no permission expansion beyond the current `activeTab`/optional host boundary;
+- Facebook content script behavior remains unchanged;
+- the page-reader message seam is covered by contract/unit tests;
+- `npm run check:public` passes.
+
+The original planned seam was:
 
 1. Add `src/content_scripts/page-reader.ts`.
 2. Extract the current page into a `ReadingSurface` with the existing Truly
@@ -99,11 +133,3 @@ The next implementation slice is a manually triggered content-script seam:
 3. Add or activate typed runtime messages for page-reading request/result/error.
 4. Keep the trigger manual and side-panel driven.
 5. Do not render new user-facing page-mode UI until this message seam is tested.
-
-Acceptance criteria for that slice:
-
-- no third-party parser runtime imports;
-- no permission expansion beyond the current `activeTab`/optional host boundary;
-- Facebook content script behavior remains unchanged;
-- the page-reader message seam is covered by contract/unit tests;
-- `npm run check:public` passes.

@@ -83,12 +83,17 @@ export interface ManualViewPostMsg {
 
 export interface PageReadingRequestMsg {
   type: "PAGE_READING_REQUEST";
-  tabId: number;
+  tabId?: number;
 }
 
 export interface PageReadingResultMsg {
   type: "PAGE_READING_RESULT";
   surface: ReadingSurface;
+}
+
+export interface PageReadingErrorMsg {
+  type: "PAGE_READING_ERROR";
+  error: string;
 }
 
 export interface ReadingTargetRequestMsg {
@@ -445,6 +450,7 @@ export type TrulyMessage =
   | ManualViewPostMsg
   | PageReadingRequestMsg
   | PageReadingResultMsg
+  | PageReadingErrorMsg
   | ReadingTargetRequestMsg
   | ReadingTargetResultMsg
   | SelectorHealthUpdateMsg
