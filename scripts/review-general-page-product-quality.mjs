@@ -126,7 +126,7 @@ async function reviewTarget(target, args) {
     const durationMs = performance.now() - start;
     const modelContext = buildGeneralPageModelContext(surface);
     const document = documentSignals(html, target.url);
-    const autoReview = autoReviewHints(surface, modelContext, document);
+    const autoReview = autoReviewHints(surface, modelContext, document, target);
     return {
       targetId: target.targetId,
       url: target.url,
@@ -241,7 +241,7 @@ function documentSignals(html, url) {
   };
 }
 
-function autoReviewHints(surface, modelContext, document) {
+function autoReviewHints(surface, modelContext, document, target) {
   const issueTags = [];
   if (surface.extraction.method === "fallback")
     issueTags.push("fallback");
@@ -259,7 +259,7 @@ function autoReviewHints(surface, modelContext, document) {
     issueTags.push("missing-title");
   if ((surface.links?.length ?? 0) >= 12)
     issueTags.push("many-source-links");
-  if (document.linkCount >= 120 && document.articleCount >= 3)
+  if (document.linkCount >= 120 && document.articleCount >= 3 && !isDocumentationReviewTarget(target, surface))
     issueTags.push("likely-index-or-feed");
 
   let suggestedVerdict = "good";
@@ -273,6 +273,11 @@ function autoReviewHints(surface, modelContext, document) {
     suggestedVerdict,
     issueTags: [...new Set(issueTags)],
   };
+}
+
+function isDocumentationReviewTarget(target, surface) {
+  const signals = `${target.category ?? ""} ${target.pageType ?? ""} ${target.url ?? ""} ${surface.title ?? ""}`.toLowerCase();
+  return /(?:technical_docs|documentation|knowledge_base|docs?|handbook|reference|developer)/.test(signals);
 }
 
 function emptyManualReview() {

@@ -297,3 +297,18 @@ Use the 200-target first pass to answer product questions:
 - Which noise families recur often enough to justify new synthetic fixtures?
 - Where do `@mozilla/readability`, `defuddle`, or a future hybrid route need a
   focused parser spike before runtime adoption?
+
+### Parser Spike Threshold Gate
+
+`npm run spike:general-page-parsers` evaluates multiple parser candidates, but
+only the `runtime-baseline` candidate is a blocking threshold gate for public
+checks. `@mozilla/readability`, `defuddle`, and `defuddle-markdown` remain dev
+spike comparison candidates until a separate runtime-adoption decision is made.
+
+This matters for fixtures that intentionally expose parser differences. For
+example, recirculation-heavy magazine fixtures may pass the Truly heuristic while
+a third-party candidate leaks teaser text. The report should keep those misses
+visible as non-blocking candidate misses, but `npm run check:general-page` should
+fail only when the committed runtime baseline misses the fixture threshold or
+when the runtime suitability policy fails.
+

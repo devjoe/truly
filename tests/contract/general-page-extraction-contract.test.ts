@@ -491,7 +491,7 @@ describe("General Page Reader extraction contract", () => {
 
     expect(surface.extraction.method).toBe("fallback");
     expect(surface.extraction.status).toBe("partial");
-    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.extraction.warnings).toContain("no-main-content");
     expect(surface.mainText).toContain("actual body explains a fictional public monitoring project");
     expect(surface.mainText).not.toBe("Advertising");
     expect(surface.mainText).not.toContain("Related source one");
@@ -528,6 +528,48 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).toContain("should not automatically make a clean documentation body look like a feed or index");
     expect(surface.mainText).not.toContain("On this page");
     expect(surface.mainText).not.toContain("Compiler options");
+  });
+
+  it("selects an article-like fallback block over magazine recirculation rails", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "zhtw-magazine-recirc-trap.html",
+        "https://magazine.example.test/culture/slow-lens-fixture",
+      ),
+      url: "https://magazine.example.test/culture/slow-lens-fixture",
+    });
+
+    expect(surface.extraction.method).toBe("fallback");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("no-main-content");
+    expect(surface.mainText).toContain("這個合成雜誌頁面描述一場虛構影像工作坊");
+    expect(surface.mainText).toContain("根據段落密度、標題相似度與連結密度挑選正文");
+    expect(surface.mainText).not.toContain("編輯選讀卡片摘要");
+    expect(surface.mainText).not.toContain("快門慢想延伸專題");
+    expect(surface.links).toEqual([
+      {
+        href: "https://magazine.example.test/culture/source-note",
+        text: "Article source",
+      },
+    ]);
+  });
+
+  it("does not promote homepage lead cards through fallback block scoring", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "homepage-lead-card-trap.html",
+        "https://daily.example.test/",
+      ),
+      url: "https://daily.example.test/",
+    });
+
+    expect(surface.extraction.method).toBe("fallback");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("homepage lead card trap fixture");
+    expect(surface.mainText).toContain("front page, not a single complete article");
+    expect(surface.mainText).not.toContain("Most read");
+    expect(surface.mainText).not.toContain("Sponsored shelf");
   });
 
   it("marks multi-card list pages as partial even with misleading article metadata", () => {

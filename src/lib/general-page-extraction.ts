@@ -116,6 +116,41 @@ const NOISY_BLOCK_CANDIDATE_SELECTOR = [
   "figcaption",
 ].join(",");
 
+const FALLBACK_CONTENT_CANDIDATE_SELECTOR = [
+  "article",
+  "main",
+  "[role=\"main\"]",
+  "section[class*=\"article\" i]",
+  "section[class*=\"body\" i]",
+  "section[class*=\"content\" i]",
+  "section[class*=\"entry\" i]",
+  "section[class*=\"feature\" i]",
+  "section[class*=\"post\" i]",
+  "section[class*=\"story\" i]",
+  "div[class*=\"article\" i]",
+  "div[class*=\"body\" i]",
+  "div[class*=\"content\" i]",
+  "div[class*=\"entry\" i]",
+  "div[class*=\"feature\" i]",
+  "div[class*=\"post\" i]",
+  "div[class*=\"story\" i]",
+  "section[id*=\"article\" i]",
+  "section[id*=\"body\" i]",
+  "section[id*=\"content\" i]",
+  "section[id*=\"entry\" i]",
+  "section[id*=\"post\" i]",
+  "section[id*=\"story\" i]",
+  "div[id*=\"article\" i]",
+  "div[id*=\"body\" i]",
+  "div[id*=\"content\" i]",
+  "div[id*=\"entry\" i]",
+  "div[id*=\"post\" i]",
+  "div[id*=\"story\" i]",
+].join(",");
+
+const FALLBACK_CONTENT_POSITIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:article|body|content|entry|feature|post|story|text|本文|正文|文章)(?:$|[\s_-])/i;
+const FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:ad|advert|archive|card|carousel|category|comment|footer|grid|latest|menu|most|nav|popular|promo|rank|recommend|recirc|related|search|share|sidebar|sponsor|tag|teaser|trend|widget|排行|推薦|熱門|相關|輪播|側欄|廣告|分類|搜尋|分享)(?:$|[\s_-])/i;
+
 const NON_READING_LINK_TEXT_PATTERNS = [
   /^home$/i,
   /^首頁$/,
@@ -170,6 +205,10 @@ export function extractGeneralPageSurface(
   const selectedTextIsUseful = Boolean(selectedText && selectedText.length >= minSelectedTextLength);
   const extractionRoot = findBestMainRoot(input.document, minMainTextLength);
   const rootText = extractionRoot ? readableText(extractionRoot) ?? "" : "";
+  const fallbackRoot = !selectedTextIsUseful
+    ? findBestFallbackContentRoot(input.document, currentUrl, title, minMainTextLength)
+    : null;
+  const fallbackRootText = fallbackRoot ? readableText(fallbackRoot) ?? "" : "";
   const bodyText = input.document.body ? readableText(input.document.body) ?? "" : "";
 
   let method: ReadingSurfaceExtractionMethod = "fallback";
@@ -183,6 +222,10 @@ export function extractGeneralPageSurface(
   } else if (rootText && rootText.length >= minMainTextLength) {
     method = "semantic-html";
     mainText = rootText;
+  } else if (fallbackRootText && fallbackRootText.length >= minMainTextLength) {
+    method = "fallback";
+    mainText = fallbackRootText;
+    warnings.push("no-main-content");
   } else if (rootText && bodyText && bodyText.length >= minMainTextLength && isShortSemanticRootFalseNegative(rootText, bodyText, minMainTextLength)) {
     method = "fallback";
     mainText = bodyText;
@@ -213,7 +256,7 @@ export function extractGeneralPageSurface(
   }
 
   const status = resolveExtractionStatus(mainText, warnings, minMainTextLength);
-  const linkRoot = extractionRoot ?? input.document.body ?? input.document.documentElement;
+  const linkRoot = extractionRoot ?? fallbackRoot ?? input.document.body ?? input.document.documentElement;
   const links = collectLinks(linkRoot, sourceUrl, maxLinks);
   const images = collectImages(linkRoot, sourceUrl, maxImages);
 
@@ -259,6 +302,127 @@ function findBestMainRoot(documentRef: Document, minLength: number): Element | n
   return ranked.find((candidate) => candidate.text.length >= minLength)?.element
     ?? ranked[0]?.element
     ?? null;
+}
+
+function findBestFallbackContentRoot(
+  documentRef: Document,
+  url: string,
+  title: string | undefined,
+  minLength: number,
+): Element | null {
+  if (!documentRef.body || isLikelyIndexFallbackDocument(documentRef, url, title))
+    return null;
+
+  const candidates = Array.from(new Set(
+    Array.from(documentRef.body.querySelectorAll(FALLBACK_CONTENT_CANDIDATE_SELECTOR)),
+  ));
+
+  const ranked = candidates
+    .map((element) => scoreFallbackContentCandidate(element, title, minLength))
+    .filter((candidate): candidate is FallbackContentCandidateScore => candidate !== null)
+    .sort((a, b) => b.score - a.score);
+
+  return ranked[0]?.element ?? null;
+}
+
+interface FallbackContentCandidateScore {
+  element: Element;
+  score: number;
+}
+
+function scoreFallbackContentCandidate(
+  element: Element,
+  title: string | undefined,
+  minLength: number,
+): FallbackContentCandidateScore | null {
+  const text = readableText(element) ?? "";
+  if (text.length < minLength)
+    return null;
+
+  const paragraphCount = element.querySelectorAll("p").length;
+  if (paragraphCount < 2 && text.length < minLength * 2)
+    return null;
+
+  const linkCount = element.querySelectorAll("a[href]").length;
+  const imageCount = element.querySelectorAll("img").length;
+  const linkDensity = linkedTextLength(element) / Math.max(text.length, 1);
+  if (linkDensity > 0.45)
+    return null;
+
+  const identity = `${element.tagName} ${element.getAttribute("class") ?? ""} ${element.getAttribute("id") ?? ""}`;
+  let score = Math.min(text.length, 3600) / 36;
+  score += Math.min(paragraphCount, 12) * 16;
+  score -= linkCount * 7;
+  score -= imageCount * 2;
+  score -= linkDensity * 120;
+
+  if (FALLBACK_CONTENT_POSITIVE_TOKEN_PATTERN.test(identity))
+    score += 45;
+  if (FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN.test(identity))
+    score -= 80;
+  if (element.querySelector("h1"))
+    score += 24;
+  if (title && hasHeadingSimilarToTitle(element, title))
+    score += 45;
+
+  return score >= 65 ? { element, score } : null;
+}
+
+function isLikelyIndexFallbackDocument(
+  documentRef: Document,
+  url: string,
+  title: string | undefined,
+): boolean {
+  const articleCount = documentRef.querySelectorAll("article").length;
+  const linkCount = documentRef.querySelectorAll("a[href]").length;
+  const imageCount = documentRef.querySelectorAll("img").length;
+  const listItemCount = documentRef.querySelectorAll("li").length;
+  const path = urlPath(url);
+  const bodyText = normalizeWhitespace(documentRef.body?.textContent ?? "") ?? "";
+  const signals = `${url} ${title ?? ""} ${bodyText.slice(0, 1200)}`.toLowerCase();
+
+  if (
+    path === "/" &&
+    (articleCount >= 2 || linkCount >= 6 || imageCount >= 3)
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(?:front page|home ?page|top stories|latest news|category hub|search results?|archive|topics|index|list page)\b/.test(signals) &&
+    (articleCount >= 2 || linkCount >= 6 || imageCount >= 3 || listItemCount >= 6)
+  ) {
+    return true;
+  }
+
+  if (
+    /(?:首頁|索引頁|列表頁|即時新聞|熱門新聞|最新消息|公告列表)/.test(signals) &&
+    (linkCount >= 3 || imageCount >= 3 || listItemCount >= 3)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function linkedTextLength(element: Element): number {
+  return Array.from(element.querySelectorAll("a[href]")).reduce((length, link) => {
+    return length + (normalizeWhitespace(link.textContent ?? "")?.length ?? 0);
+  }, 0);
+}
+
+function hasHeadingSimilarToTitle(element: Element, title: string): boolean {
+  const normalizedTitle = normalizeComparableText(title);
+  if (!normalizedTitle)
+    return false;
+  for (const heading of Array.from(element.querySelectorAll("h1,h2"))) {
+    const normalizedHeading = normalizeComparableText(heading.textContent ?? "");
+    if (!normalizedHeading)
+      continue;
+    if (normalizedTitle.includes(normalizedHeading) || normalizedHeading.includes(normalizedTitle))
+      return true;
+  }
+  return false;
 }
 
 function readableText(root: Element): string | undefined {
@@ -594,6 +758,18 @@ function normalizeUrl(url: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function urlPath(url: string): string {
+  try {
+    return new URL(url).pathname || "/";
+  } catch {
+    return "";
+  }
+}
+
+function normalizeComparableText(value: string): string {
+  return value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
 }
 
 function normalizeHref(value: string, baseUrl: string): string | undefined {

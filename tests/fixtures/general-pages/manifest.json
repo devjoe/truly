@@ -498,6 +498,32 @@
       }
     },
     {
+      "id": "zhtw-magazine-recirc-trap",
+      "file": "zhtw-magazine-recirc-trap.html",
+      "url": "https://magazine.example.test/culture/slow-lens-fixture",
+      "locale": "zh-TW",
+      "pageType": "article",
+      "patterns": ["P04-related-content-recirc", "P17-traditional-chinese-layout", "P16-missing-or-conflicting-metadata"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["這個合成雜誌頁面描述一場虛構影像工作坊", "根據段落密度、標題相似度與連結密度挑選正文"],
+        "excludes": ["快門慢想延伸專題", "編輯選讀卡片摘要"]
+      }
+    },
+    {
+      "id": "homepage-lead-card-trap",
+      "file": "homepage-lead-card-trap.html",
+      "url": "https://daily.example.test/",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P05-list-or-index-page", "P04-related-content-recirc", "P18-media-and-caption"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["homepage lead card trap fixture", "front page, not a single complete article"],
+        "excludes": ["Most read", "Sponsored shelf", "Newsletter signup"]
+      }
+    },
+    {
       "id": "docs-right-rail-long",
       "file": "docs-right-rail-long.html",
       "url": "https://docs.example.test/handbook/conditional-helper",

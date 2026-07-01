@@ -389,21 +389,31 @@ export function summarizeParserResults(results) {
 
 export function summarizeThresholds(results) {
   const failures = [];
+  const nonBlockingFailures = [];
   for (const fixture of results) {
     for (const engine of fixture.engines) {
       if (engine.threshold?.pass)
         continue;
-      failures.push({
+      const failure = {
         fixtureId: fixture.id,
         engine: engine.engine,
+        role: engine.role,
         failures: engine.threshold?.failures ?? ["missing-threshold-result"],
-      });
+      };
+      if (engine.role === "runtime-baseline") {
+        failures.push(failure);
+      } else {
+        nonBlockingFailures.push(failure);
+      }
     }
   }
   return {
     pass: failures.length === 0,
     failureCount: failures.length,
     failures,
+    gatedRole: "runtime-baseline",
+    nonBlockingFailureCount: nonBlockingFailures.length,
+    nonBlockingFailures,
   };
 }
 

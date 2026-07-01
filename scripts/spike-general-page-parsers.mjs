@@ -303,11 +303,19 @@ function printSummary(report) {
     );
   }
   if (report.threshold.pass) {
-    console.log("threshold: pass");
+    console.log(`threshold: pass (${report.threshold.gatedRole})`);
   } else {
-    console.error(`threshold: fail (${report.threshold.failureCount})`);
+    console.error(`threshold: fail (${report.threshold.failureCount}, ${report.threshold.gatedRole})`);
     for (const failure of report.threshold.failures) {
       console.error(
+        `${failure.engine}/${failure.fixtureId}: ${failure.failures.join("; ")}`,
+      );
+    }
+  }
+  if (report.threshold.nonBlockingFailureCount > 0) {
+    console.log(`threshold: non-blocking candidate misses (${report.threshold.nonBlockingFailureCount})`);
+    for (const failure of report.threshold.nonBlockingFailures) {
+      console.log(
         `${failure.engine}/${failure.fixtureId}: ${failure.failures.join("; ")}`,
       );
     }
