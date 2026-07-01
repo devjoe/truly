@@ -1,4 +1,12 @@
 import { t } from "../lib/i18n";
+import {
+  buildGeneralPageModelContext,
+  GENERAL_PAGE_MODEL_MIN_MAIN_TEXT_LENGTH,
+  type GeneralPageModelContext,
+  type GeneralPageModelIneligibilityReason,
+  type GeneralPageModelQualityIssue,
+  type GeneralPageModelSourceLink,
+} from "../lib/general-page-model-context";
 import type { Lang } from "../lib/types";
 import type { PageReadingErrorMsg, PageReadingResultMsg, TrulyMessage } from "../lib/messages";
 import type { ReadingSurface } from "../lib/reading-surface-types";
@@ -39,6 +47,9 @@ interface TabsApi {
   };
   onUpdated?: {
     addListener(listener: (tabId: number, changeInfo: { url?: string; status?: string }, tab: BrowserTab) => void): void;
+  };
+  onRemoved?: {
+    addListener(listener: (tabId: number, removeInfo: { windowId: number; isWindowClosing: boolean }) => void): void;
   };
   get?(tabId: number): Promise<BrowserTab>;
 }
@@ -118,8 +129,11 @@ function hostnameForUrl(rawUrl: string): string {
   }
 }
 
-function visibleExcerpt(surface: ReadingSurface): string {
-  const text = (surface.excerpt || surface.mainText || "").trim().replace(/\s+/g, " ");
+function visibleExcerpt(surface: ReadingSurface, modelContext?: GeneralPageModelContext): string {
+  const sourceText = modelContext && modelContext.qualityIssues.length > 0
+    ? modelContext.mainText
+    : surface.excerpt || surface.mainText;
+  const text = (sourceText || "").trim().replace(/\s+/g, " ");
   if (text.length <= 1200) return text;
   return `${text.slice(0, 1197)}...`;
 }
@@ -138,9 +152,87 @@ function buildCopyText(session: PageReadingSession): string {
     if (surface.extraction.warnings.length > 0)
       lines.push(`Warnings: ${surface.extraction.warnings.join(", ")}`);
   }
-  const excerpt = surface ? visibleExcerpt(surface) : "";
+  const modelContext = surface ? buildGeneralPageModelContext(surface, { targetKind: "page" }) : undefined;
+  const excerpt = surface ? visibleExcerpt(surface, modelContext) : "";
   if (excerpt) lines.push("", "Excerpt:", excerpt);
   return lines.join("\n");
+}
+
+function sourceLinksHtml(links: GeneralPageModelSourceLink[], title: string): string {
+  const visibleLinks = links.slice(0, 6);
+  if (visibleLinks.length === 0) return "";
+  return `
+    <section class="page-reader-source-links">
+      <h3>${escapeHtml(title)}</h3>
+      <ul>
+        ${visibleLinks.map((link) => {
+          const label = link.text?.trim() || link.href;
+          return `<li><a href="${escapeHtml(link.href)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a></li>`;
+        }).join("")}
+      </ul>
+    </section>
+  `;
+}
+
+function modelContextHtml(
+  context: GeneralPageModelContext | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (!context) return "";
+  const statusText = context.modelReadiness === "ready"
+    ? tr("sidepanel.page.model.ready")
+    : context.modelReadiness === "caution"
+    ? tr("sidepanel.page.model.caution")
+    : tr("sidepanel.page.model.blocked");
+  const reason = context.ineligibilityReason
+    ? tr(modelIneligibilityKey(context.ineligibilityReason))
+    : context.qualityIssues.length > 0
+    ? context.qualityIssues.map((issue) => tr(modelQualityIssueKey(issue))).join(" ")
+    : "";
+  const rows = [
+    [tr("sidepanel.page.model.text"), `${context.mainText.length}/${GENERAL_PAGE_MODEL_MIN_MAIN_TEXT_LENGTH}`],
+    [tr("sidepanel.page.model.links"), formatCount(context.links.length)],
+    [tr("sidepanel.page.model.imageAlt"), formatCount(context.imageAltText.length)],
+    [tr("sidepanel.page.model.target"), context.targetKind],
+  ];
+  return `
+    <section class="page-reader-model-context is-${context.modelReadiness}">
+      <div class="page-reader-model-context-header">
+        <h3>${escapeHtml(tr("sidepanel.page.model.title"))}</h3>
+        <span>${escapeHtml(statusText)}</span>
+      </div>
+      <p>${escapeHtml(context.modelReadiness === "ready" ? tr("sidepanel.page.model.readyDetail") : reason)}</p>
+      <dl>
+        ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+      </dl>
+    </section>
+  `;
+}
+
+function modelIneligibilityKey(reason: GeneralPageModelIneligibilityReason): string {
+  switch (reason) {
+    case "empty_or_blocked":
+      return "sidepanel.page.model.reason.emptyOrBlocked";
+    case "main_text_too_short":
+      return "sidepanel.page.model.reason.short";
+    case "not_web_page":
+      return "sidepanel.page.model.reason.notWebPage";
+  }
+}
+
+function modelQualityIssueKey(issue: GeneralPageModelQualityIssue): string {
+  switch (issue) {
+    case "fallback_extraction":
+      return "sidepanel.page.model.quality.fallback";
+    case "partial_extraction":
+      return "sidepanel.page.model.quality.partial";
+    case "large_navigation_noise":
+      return "sidepanel.page.model.quality.navigation";
+    case "no_main_content":
+      return "sidepanel.page.model.quality.noMain";
+    case "dynamic_content_partial":
+      return "sidepanel.page.model.quality.dynamic";
+  }
 }
 
 function errorMessage(error: unknown): string {
@@ -174,6 +266,9 @@ export function createSidepanelPageReadingRuntime({
     if (error.includes("Cannot access contents of the page")) {
       return tr("sidepanel.page.error.needsToolbarActivation");
     }
+    if (error === "page_reading_action_unsupported" || error === "reading_target_unsupported") {
+      return tr("sidepanel.page.error.unsupportedAction");
+    }
     return error;
   }
 
@@ -191,9 +286,24 @@ export function createSidepanelPageReadingRuntime({
       session.status = "stale";
       session.url = activeUrl;
       session.title = activeTitle || session.title;
+      session.surface = undefined;
       session.updatedAt = now();
     }
     render();
+  }
+
+  function markTabSessionStale(tabId: number, tab: BrowserTab): void {
+    const session = sessions.get(tabId);
+    const nextUrl = tab.url;
+    if (!session || !nextUrl || isMeaningfullySamePage(session.identity, nextUrl)) return;
+    sessions.set(tabId, {
+      ...session,
+      url: nextUrl,
+      title: tab.title || session.title,
+      surface: undefined,
+      status: "stale",
+      updatedAt: now(),
+    });
   }
 
   async function refreshActiveTab(activate = true): Promise<BrowserTab | undefined> {
@@ -218,7 +328,10 @@ export function createSidepanelPageReadingRuntime({
     const title = session?.surface?.title || session?.title || activeTitle || tr("sidepanel.page.untitled");
     const url = session?.surface?.canonicalUrl || session?.surface?.url || session?.url || activeUrl;
     const source = session?.surface?.sourceName || (url ? hostnameForUrl(url) : "");
-    const excerpt = session?.surface ? visibleExcerpt(session.surface) : "";
+    const modelContext = session?.surface
+      ? buildGeneralPageModelContext(session.surface, { targetKind: "page" })
+      : undefined;
+    const excerpt = session?.surface ? visibleExcerpt(session.surface, modelContext) : "";
     const warningText = session?.surface?.extraction.warnings.join(", ") || "";
     const updatedAt = session ? formatUpdatedAt(session.updatedAt, lang) : "";
     const metadataRows = session?.surface
@@ -258,6 +371,8 @@ export function createSidepanelPageReadingRuntime({
           <dl class="page-reader-meta">
             ${metadataRows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
           </dl>
+          ${modelContextHtml(modelContext, tr)}
+          ${sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"))}
           ${warningText ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(warningText)}</div>` : ""}
         </article>
       ` : emptyBody(platform, canRead)}
@@ -416,9 +531,14 @@ export function createSidepanelPageReadingRuntime({
       }
     });
     tabs.onUpdated?.addListener((tabId, changeInfo, tab) => {
+      if (changeInfo.url) markTabSessionStale(tabId, tab);
       if (tabId !== activeTabId) return;
       if (!changeInfo.url && changeInfo.status !== "complete") return;
       setActiveTab(tab, true);
+    });
+    tabs.onRemoved?.addListener((tabId) => {
+      sessions.delete(tabId);
+      if (tabId === activeTabId) render();
     });
     render();
   }

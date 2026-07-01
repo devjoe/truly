@@ -415,6 +415,121 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.extraction.warnings).toContain("large-navigation-noise");
   });
 
+  it("prunes browser prompts and structural chrome from fallback text", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Fallback Noise Fixture</title>
+          <meta property="og:site_name" content="Synthetic Daily">
+        </head>
+        <body>
+          <header>
+            <nav>
+              <a href="/">首頁</a>
+              <a href="/politics">政治</a>
+              <a href="/sports">體育</a>
+            </nav>
+            <p>為達最佳瀏覽效果，建議使用 Chrome、Firefox 或 Microsoft Edge 的瀏覽器。</p>
+            <p>請至Edge官網下載 請至FireFox官網下載 請至Google官網下載</p>
+            <p>即時 熱門 政治 軍武 社會 生活 健康 國際 地方 搜尋 會員 專區。</p>
+          </header>
+          <div class="layout">
+            <div class="story-body">
+              <h1>Fallback Noise Fixture</h1>
+              <p>這個合成頁面沒有 article 或 main 標籤，但真正正文描述一項公開服務測試。</p>
+              <p>第二段提供足夠內容，讓 fallback 抽取能夠保留可讀段落，同時不要把瀏覽器下載提示送進模型脈絡。</p>
+              <p>第三段補足長度，說明測試資料全部是假文字、假網址與假作者，適合公開提交到 repo。</p>
+              <a href="/source">Article source</a>
+            </div>
+            <aside class="related-sidebar">
+              <h2>熱門新聞</h2>
+              <a href="/related-1">相關文章一</a>
+              <a href="/related-2">相關文章二</a>
+            </aside>
+          </div>
+          <footer>關於我們 隱私權 服務條款</footer>
+        </body>
+      </html>
+    `, { url: "https://news.example.test/articles/fallback-noise" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: "https://news.example.test/articles/fallback-noise",
+    });
+
+    expect(surface.extraction).toMatchObject({
+      method: "fallback",
+      status: "partial",
+    });
+    expect(surface.extraction.warnings).toContain("no-main-content");
+    expect(surface.mainText).toContain("真正正文描述一項公開服務測試");
+    expect(surface.mainText).toContain("不要把瀏覽器下載提示送進模型脈絡");
+    expect(surface.mainText).not.toContain("首頁");
+    expect(surface.mainText).not.toContain("即時 熱門 政治");
+    expect(surface.mainText).not.toContain("建議使用 Chrome");
+    expect(surface.mainText).not.toContain("Edge官網下載");
+    expect(surface.mainText).not.toContain("Article source");
+    expect(surface.mainText).not.toContain("熱門新聞");
+    expect(surface.mainText).not.toContain("隱私權 服務條款");
+    expect(surface.links).toEqual([
+      {
+        href: "https://news.example.test/source",
+        text: "Article source",
+      },
+    ]);
+  });
+
+  it("falls back to body text when a semantic root is only an advertising label", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "semantic-ad-root-body-article.html",
+        "https://news.example.test/world/semantic-ad-root",
+      ),
+      url: "https://news.example.test/world/semantic-ad-root",
+    });
+
+    expect(surface.extraction.method).toBe("fallback");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("actual body explains a fictional public monitoring project");
+    expect(surface.mainText).not.toBe("Advertising");
+    expect(surface.mainText).not.toContain("Related source one");
+  });
+
+  it("keeps zh-TW homepage navigation from dominating fallback text", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "zhtw-homepage-nav-only.html",
+        "https://news.example.test/zh-tw/",
+      ),
+      url: "https://news.example.test/zh-tw/",
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("繁中首頁導覽假頁是索引頁");
+    expect(surface.mainText).not.toContain("2026世界盃 〉 即時 熱門 政治");
+    expect(surface.mainText).not.toContain("自由電子報 自由影音 即時 熱門");
+  });
+
+  it("keeps long documentation bodies usable despite dense right-rail links", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "docs-right-rail-long.html",
+        "https://docs.example.test/handbook/conditional-helper",
+      ),
+      url: "https://docs.example.test/handbook/conditional-helper",
+    });
+
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).not.toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("long, coherent technical body");
+    expect(surface.mainText).toContain("should not automatically make a clean documentation body look like a feed or index");
+    expect(surface.mainText).not.toContain("On this page");
+    expect(surface.mainText).not.toContain("Compiler options");
+  });
+
   it("marks multi-card list pages as partial even with misleading article metadata", () => {
     const cards = Array.from({ length: 8 }, (_, index) => `
       <article>
@@ -521,8 +636,18 @@ describe("General Page Reader extraction contract", () => {
       { type: "PAGE_READING_REQUEST" },
       { type: "PAGE_READING_RESULT", surface, tabId: 1 },
       { type: "PAGE_READING_ERROR", error: "page_reader_unavailable", tabId: 1 },
-      { type: "READING_TARGET_REQUEST", tabId: 1, trigger: "hotkey" },
-      { type: "READING_TARGET_RESULT", target },
+      {
+        type: "READING_TARGET_REQUEST",
+        tabId: 1,
+        trigger: "hotkey",
+        activation: {
+          source: "hotkey",
+          targetKind: "current-region",
+          action: "summarize",
+        },
+      },
+      { type: "READING_TARGET_RESULT", target, tabId: 1 },
+      { type: "READING_TARGET_ERROR", error: "reading_target_unsupported", tabId: 1 },
     ];
 
     expect(messages.map((message) => message.type)).toEqual([
@@ -533,6 +658,7 @@ describe("General Page Reader extraction contract", () => {
       "PAGE_READING_ERROR",
       "READING_TARGET_REQUEST",
       "READING_TARGET_RESULT",
+      "READING_TARGET_ERROR",
     ]);
   });
 });

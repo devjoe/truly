@@ -57,4 +57,70 @@ describe("page-reader content script", () => {
     expect(ignored).toBeUndefined();
     expect(handled?.type).toBe("PAGE_READING_RESULT");
   });
+
+  it("does not treat current selection as page input for a normal page read", () => {
+    const url = "https://example.test/articles/clean-article";
+    const documentRef = fixtureDocument("clean-article.html", url);
+    documentRef.getSelection = () => ({
+      toString: () => "Selected text should require an explicit future selection action.",
+    } as Selection);
+
+    const handled = handlePageReadingMessage(
+      {
+        type: "PAGE_READING_REQUEST",
+        activation: {
+          source: "popup",
+          targetKind: "page",
+          action: "read",
+        },
+      } satisfies TrulyMessage,
+      documentRef,
+      url,
+    );
+
+    expect(handled?.type).toBe("PAGE_READING_RESULT");
+    if (handled?.type !== "PAGE_READING_RESULT") return;
+    expect(handled.surface.mainText).toContain("public planning meeting");
+    expect(handled.surface.mainText).not.toContain("Selected text should require");
+    expect(handled.surface.selectedText).toBeUndefined();
+  });
+
+  it("fails closed for reserved selection and current-region actions", () => {
+    const url = "https://example.test/articles/clean-article";
+    const documentRef = fixtureDocument("clean-article.html", url);
+
+    const selection = handlePageReadingMessage(
+      {
+        type: "PAGE_READING_REQUEST",
+        activation: {
+          source: "hotkey",
+          targetKind: "selection",
+          action: "summarize",
+        },
+      } satisfies TrulyMessage,
+      documentRef,
+      url,
+    );
+    const currentRegion = handlePageReadingMessage(
+      {
+        type: "PAGE_READING_REQUEST",
+        activation: {
+          source: "hotkey",
+          targetKind: "current-region",
+          action: "fact_check",
+        },
+      } satisfies TrulyMessage,
+      documentRef,
+      url,
+    );
+
+    expect(selection).toEqual({
+      type: "PAGE_READING_ERROR",
+      error: "page_reading_action_unsupported",
+    });
+    expect(currentRegion).toEqual({
+      type: "PAGE_READING_ERROR",
+      error: "page_reading_action_unsupported",
+    });
+  });
 });

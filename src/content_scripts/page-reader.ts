@@ -12,6 +12,7 @@ import type {
   TrulyMessage,
 } from "../lib/messages";
 import { isTrulyMessage } from "../lib/messages";
+import type { ReadingActivation } from "../lib/reading-action-types";
 
 type PageReadingResponse = PageReadingResultMsg | PageReadingErrorMsg;
 
@@ -24,9 +25,14 @@ export function extractCurrentPageReadingSurface(
     surface: extractGeneralPageSurface({
       document: documentRef,
       url,
-      selectedText: documentRef.getSelection?.()?.toString(),
     }),
   };
+}
+
+function isSupportedPageReadActivation(activation: ReadingActivation | undefined): boolean {
+  if (!activation)
+    return true;
+  return activation.targetKind === "page" && activation.action === "read";
 }
 
 export function handlePageReadingMessage(
@@ -39,6 +45,12 @@ export function handlePageReadingMessage(
   }
   if (message.type !== "PAGE_READING_REQUEST") {
     return undefined;
+  }
+  if (!isSupportedPageReadActivation(message.activation)) {
+    return {
+      type: "PAGE_READING_ERROR",
+      error: "page_reading_action_unsupported",
+    };
   }
   try {
     return extractCurrentPageReadingSurface(documentRef, url);

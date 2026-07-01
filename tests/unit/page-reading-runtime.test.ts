@@ -26,8 +26,17 @@ function surface(overrides: Partial<ReadingSurface> = {}): ReadingSurface {
     url: "https://example.test/article",
     canonicalUrl: "https://example.test/article",
     title: "Runtime Fixture",
-    mainText: "Runtime fixture text long enough to show a preview without representing any real page content.",
+    mainText: [
+      "Runtime fixture text long enough to show a preview without representing any real page content.",
+      "This additional synthetic paragraph keeps the page above the model context threshold while remaining generic.",
+      "It mentions review notes, source inspection, and stable extraction metadata without using real website content.",
+      "The final sentence makes the fixture suitable for model-readiness display tests.",
+    ].join(" "),
     excerpt: "Runtime fixture excerpt.",
+    links: [{
+      href: "https://example.test/source",
+      text: "Synthetic source",
+    }],
     extraction: {
       method: "semantic-html",
       status: "complete",
@@ -120,5 +129,218 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("已讀取");
     expect(pagePaneEl.textContent).toContain("Runtime Fixture");
     expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
+    expect(pagePaneEl.textContent).toContain("模型脈絡");
+    expect(pagePaneEl.textContent).toContain("可送模型（尚未送出）");
+    expect(pagePaneEl.textContent).toContain("文字門檻");
+    expect(pagePaneEl.textContent).toContain("來源連結");
+    expect(pagePaneEl.textContent).toContain("Synthetic source");
+  });
+
+  it("shows why a short extraction should not be sent to a model", async () => {
+    const pagePaneEl = setupDom();
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: {
+        sendMessage: vi.fn(async () => ({
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface({
+            mainText: "Short synthetic text.",
+            excerpt: "Short synthetic text.",
+            extraction: {
+              method: "fallback",
+              status: "partial",
+              warnings: ["very-short-content"],
+            },
+          }),
+        } satisfies TrulyMessage)),
+      },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+
+    expect(pagePaneEl.textContent).toContain("模型脈絡");
+    expect(pagePaneEl.textContent).toContain("暫不送模型");
+    expect(pagePaneEl.textContent).toContain("可讀文字低於目前門檻");
+  });
+
+  it("downgrades noisy fallback extraction and hides navigation download links from source context", async () => {
+    const pagePaneEl = setupDom();
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: {
+        sendMessage: vi.fn(async () => ({
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface({
+            mainText: [
+              "為達最佳瀏覽效果，建議使用 Chrome、Firefox 或 Microsoft Edge 的瀏覽器。",
+              "請至 Edge 官網下載 請至 FireFox 官網下載 請至 Google 官網下載。",
+              "The actual synthetic report describes parser quality and source inspection.",
+              "It remains long enough for model-context threshold checks after common browser download noise is removed.",
+              "The cleaned passage also explains that fallback extraction should be reviewed before any model call, because layout text may still be mixed with the useful body.",
+              "A final synthetic sentence keeps this fixture above the readiness threshold while preserving the caution state from extraction warnings.",
+            ].join(" "),
+            excerpt: "請至 Edge 官網下載 請至 FireFox 官網下載 請至 Google 官網下載。",
+            extraction: {
+              method: "fallback",
+              status: "partial",
+              warnings: ["large-navigation-noise", "no-main-content"],
+            },
+            links: [
+              { href: "https://example.test/", text: "首頁" },
+              { href: "https://www.microsoft.com/edge/download", text: "請至 Edge 官網下載" },
+              { href: "https://www.mozilla.org/firefox/new", text: "請至 Firefox 官網下載" },
+              { href: "https://example.test/source", text: "Article source" },
+            ],
+          }),
+        } satisfies TrulyMessage)),
+      },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+
+    expect(pagePaneEl.textContent).toContain("需改善抽取（尚未送出）");
+    expect(pagePaneEl.textContent).toContain("目前使用 fallback 抽取");
+    expect(pagePaneEl.textContent).toContain("偵測到大量導覽噪音");
+    expect(pagePaneEl.textContent).toContain("Article source");
+    expect(pagePaneEl.textContent).not.toContain("請至 Edge 官網下載");
+    expect(pagePaneEl.textContent).not.toContain("請至 Firefox 官網下載");
+  });
+
+  it("shows a friendly explanation for reserved actions that are not enabled", async () => {
+    const pagePaneEl = setupDom();
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: {
+        sendMessage: vi.fn(async () => ({
+          type: "PAGE_READING_ERROR",
+          tabId: 42,
+          error: "page_reading_action_unsupported",
+        } satisfies TrulyMessage)),
+      },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+
+    expect(pagePaneEl.textContent).toContain("讀取失敗");
+    expect(pagePaneEl.textContent).toContain("這個閱讀動作尚未啟用");
+  });
+
+  it("scrubs stale surface text after a meaningful URL change", async () => {
+    const pagePaneEl = setupDom();
+    let onUpdated: ((tabId: number, changeInfo: { url?: string; status?: string }, tab: { id?: number; url?: string; title?: string }) => void) | undefined;
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: {
+        sendMessage: vi.fn(),
+      },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+        onUpdated: {
+          addListener: (listener) => {
+            onUpdated = listener;
+          },
+        },
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    runtime.install();
+    await Promise.resolve();
+    runtime.handlePageReadingResult({
+      type: "PAGE_READING_RESULT",
+      tabId: 42,
+      surface: surface({
+        mainText: "Sensitive stale runtime fixture text.",
+        excerpt: "Sensitive stale excerpt.",
+      }),
+    });
+
+    expect(pagePaneEl.textContent).toContain("Sensitive stale excerpt.");
+    onUpdated?.(42, { url: "https://example.test/other-article" }, {
+      id: 42,
+      url: "https://example.test/other-article",
+      title: "Other Fixture",
+    });
+
+    expect(pagePaneEl.textContent).toContain("頁面已變更");
+    expect(pagePaneEl.textContent).not.toContain("Sensitive stale excerpt.");
+    expect(pagePaneEl.textContent).not.toContain("Sensitive stale runtime fixture text.");
+  });
+
+  it("removes tab sessions when Chrome reports the tab closed", async () => {
+    const pagePaneEl = setupDom();
+    let onRemoved: ((tabId: number, removeInfo: { windowId: number; isWindowClosing: boolean }) => void) | undefined;
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: {
+        sendMessage: vi.fn(),
+      },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+        onRemoved: {
+          addListener: (listener) => {
+            onRemoved = listener;
+          },
+        },
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    runtime.install();
+    await Promise.resolve();
+    runtime.handlePageReadingResult({
+      type: "PAGE_READING_RESULT",
+      tabId: 42,
+      surface: surface({ excerpt: "Closed tab excerpt." }),
+    });
+
+    expect(pagePaneEl.textContent).toContain("Closed tab excerpt.");
+    onRemoved?.(42, { windowId: 1, isWindowClosing: false });
+
+    expect(pagePaneEl.textContent).not.toContain("Closed tab excerpt.");
   });
 });

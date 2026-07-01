@@ -105,11 +105,19 @@ export interface ReadingTargetRequestMsg {
   type: "READING_TARGET_REQUEST";
   tabId: number;
   trigger: "selection" | "hotkey" | "context-menu" | "click-hold";
+  activation?: ReadingActivation;
 }
 
 export interface ReadingTargetResultMsg {
   type: "READING_TARGET_RESULT";
   target: ReadingTarget;
+  tabId?: number;
+}
+
+export interface ReadingTargetErrorMsg {
+  type: "READING_TARGET_ERROR";
+  error: string;
+  tabId?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -458,6 +466,7 @@ export type TrulyMessage =
   | PageReadingErrorMsg
   | ReadingTargetRequestMsg
   | ReadingTargetResultMsg
+  | ReadingTargetErrorMsg
   | SelectorHealthUpdateMsg
   | OllamaClassifyMsg
   | OllamaResultMsg

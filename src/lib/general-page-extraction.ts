@@ -65,6 +65,72 @@ const NON_READING_TEXT_SELECTORS = [
   "svg",
 ] as const;
 
+const NON_READING_BLOCK_SELECTORS = [
+  "nav",
+  "aside",
+  "footer",
+  "form",
+  "dialog",
+  "[role=\"navigation\"]",
+  "[role=\"complementary\"]",
+  "[role=\"contentinfo\"]",
+  "[aria-modal=\"true\"]",
+  "[class*=\"breadcrumb\" i]",
+  "[class*=\"cookie\" i]",
+  "[class*=\"consent\" i]",
+  "[class*=\"drawer\" i]",
+  "[class*=\"modal\" i]",
+  "[class*=\"newsletter\" i]",
+  "[class*=\"popup\" i]",
+  "[class*=\"promo\" i]",
+  "[class*=\"related\" i]",
+  "[class*=\"share\" i]",
+  "[class*=\"sidebar\" i]",
+  "[class*=\"sponsor\" i]",
+  "[class*=\"toolbar\" i]",
+  "[id*=\"breadcrumb\" i]",
+  "[id*=\"cookie\" i]",
+  "[id*=\"consent\" i]",
+  "[id*=\"newsletter\" i]",
+  "[id*=\"related\" i]",
+  "[id*=\"sidebar\" i]",
+] as const;
+
+const NOISY_BLOCK_TEXT_PATTERNS = [
+  /為達最佳瀏覽效果，?\s*建議使用\s*Chrome、?\s*Firefox\s*或\s*Microsoft\s*Edge\s*的瀏覽器/i,
+  /請至\s*(?:Edge|Fire\s*Fox|Firefox|Google|Chrome|Microsoft\s*Edge)[^。.!?]*(?:下載|download)/i,
+  /For best viewing[^.!?]*(?:Chrome|Firefox|Edge)[^.!?]*(?:browser|download)/i,
+  /^Advertising$/i,
+  /^Advertisement$/i,
+  /^(?:(?:\S+)\s*〉\s*)?(?:即時\s+)?(?:熱門\s+)?(?:政治|財富自由|軍武|社會|生活|健康|國際|地方|蒐奇|影音|財經|娛樂|汽車|時尚|體育|3\s*C|3C|評論|藝文|玩咖|食譜|地產|搜尋|會員|專區|服務|求職|自由電子報|自由影音|TAIPEI TIMES)(?:\s+(?:即時|熱門|政治|財富自由|軍武|社會|生活|健康|國際|地方|蒐奇|影音|財經|娛樂|汽車|時尚|體育|3\s*C|3C|評論|藝文|玩咖|食譜|地產|搜尋|會員|專區|服務|求職|自由電子報|自由影音|TAIPEI TIMES)){3,}\s*[。.]?$/i,
+] as const;
+
+const NOISY_BLOCK_CANDIDATE_SELECTOR = [
+  "div",
+  "p",
+  "section",
+  "main",
+  "li",
+  "header",
+  "figure",
+  "figcaption",
+].join(",");
+
+const NON_READING_LINK_TEXT_PATTERNS = [
+  /^home$/i,
+  /^首頁$/,
+  /^主頁$/,
+  /^網站首頁$/,
+  /^read more$/i,
+  /^source link$/i,
+  /^article source$/i,
+  /^share$/i,
+  /^login$/i,
+  /^sign in$/i,
+  /下載/i,
+  /\bdownload\b/i,
+] as const;
+
 export function extractGeneralPageSurface(
   input: GeneralPageExtractionInput,
   options: GeneralPageExtractionOptions = {},
@@ -117,6 +183,10 @@ export function extractGeneralPageSurface(
   } else if (rootText && rootText.length >= minMainTextLength) {
     method = "semantic-html";
     mainText = rootText;
+  } else if (rootText && bodyText && bodyText.length >= minMainTextLength && isShortSemanticRootFalseNegative(rootText, bodyText, minMainTextLength)) {
+    method = "fallback";
+    mainText = bodyText;
+    warnings.push("large-navigation-noise");
   } else if (rootText) {
     method = "semantic-html";
     mainText = rootText;
@@ -198,8 +268,50 @@ function readableText(root: Element): string | undefined {
       element.remove();
     }
   }
+  pruneNonReadingBlocks(clone);
+  pruneNonReadingLinks(clone);
   addBlockBoundaries(clone);
-  return normalizeWhitespace(clone.textContent ?? "");
+  return normalizeWhitespace(cleanCommonPageNoise(clone.textContent ?? ""));
+}
+
+function pruneNonReadingBlocks(root: Element): void {
+  for (const selector of NON_READING_BLOCK_SELECTORS) {
+    for (const element of Array.from(root.querySelectorAll(selector))) {
+      if (shouldKeepReadingLayoutBlock(element))
+        continue;
+      element.remove();
+    }
+  }
+
+  for (const element of Array.from(root.querySelectorAll(NOISY_BLOCK_CANDIDATE_SELECTOR))) {
+    const text = normalizeWhitespace(element.textContent ?? "") ?? "";
+    if (!text)
+      continue;
+    if (text.length <= 420 && NOISY_BLOCK_TEXT_PATTERNS.some((pattern) => pattern.test(text)))
+      element.remove();
+  }
+}
+
+function isShortSemanticRootFalseNegative(rootText: string, bodyText: string, minMainTextLength: number): boolean {
+  if (rootText.length >= Math.min(120, minMainTextLength / 2))
+    return false;
+  if (/^(?:Advertising|Advertisement)$/i.test(rootText))
+    return true;
+  return bodyText.length >= Math.max(minMainTextLength, rootText.length * 8);
+}
+
+function shouldKeepReadingLayoutBlock(element: Element): boolean {
+  const className = element.getAttribute("class") ?? "";
+  return /(?:^|[\s_-])(?:with|beside)-sidebar(?:$|[\s_-])/i.test(className);
+}
+
+function pruneNonReadingLinks(root: Element): void {
+  for (const element of Array.from(root.querySelectorAll("a[href]"))) {
+    const text = normalizeWhitespace(element.textContent ?? "") ?? "";
+    const href = element.getAttribute("href") ?? "";
+    if (isNonReadingTextLink(text, href))
+      element.remove();
+  }
 }
 
 function addBlockBoundaries(root: Element): void {
@@ -261,6 +373,9 @@ function nonArticlePageWarnings(
   ]));
   const lowerSignals = `${url} ${title ?? ""} ${text}`.toLowerCase();
 
+  if (isLikelyDocumentationArticle(lowerSignals, text, documentParagraphCount))
+    return [];
+
   if (
     articleCount >= 3 &&
     /\b(thread|discussion|reply|replies|forum|community|comment|comments)\b/.test(lowerSignals)
@@ -292,6 +407,14 @@ function nonArticlePageWarnings(
   if (
     articleCount >= 3 &&
     /(最新消息|公告列表|公告卡片|索引頁|不要把.+完整文章)/.test(lowerSignals)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
+  if (
+    !rootIsArticle &&
+    /(首頁|索引頁|列表頁|不要把.+完整文章|front page|home ?page|list page|not a single complete article)/i.test(lowerSignals) &&
+    (linkCount >= 3 || imageCount >= 3 || listItemCount >= 3)
   ) {
     return ["large-navigation-noise"];
   }
@@ -339,6 +462,12 @@ function nonArticlePageWarnings(
   return [];
 }
 
+function isLikelyDocumentationArticle(lowerSignals: string, text: string, paragraphCount: number): boolean {
+  return text.length >= 1200 &&
+    paragraphCount >= 8 &&
+    /\b(?:docs?|documentation|handbook|guide|reference|learn|developer)\b/.test(lowerSignals);
+}
+
 function firstHeading(root: ParentNode): string | undefined {
   return normalizeWhitespace(root.querySelector("h1")?.textContent ?? "") ?? undefined;
 }
@@ -367,12 +496,15 @@ function firstMetaContent(
 function collectLinks(root: ParentNode, baseUrl: string, limit: number): ReadingSurfaceLink[] {
   const links: ReadingSurfaceLink[] = [];
   for (const element of Array.from(root.querySelectorAll("a[href]"))) {
+    const text = normalizeWhitespace(element.textContent ?? "") ?? undefined;
+    if (isNonReadingSourceLink(text ?? "", element.getAttribute("href") ?? ""))
+      continue;
     const href = normalizeHref(element.getAttribute("href") ?? "", baseUrl);
     if (!href)
       continue;
     links.push({
       href,
-      text: normalizeWhitespace(element.textContent ?? "") ?? undefined,
+      text,
     });
     if (links.length >= limit)
       break;
@@ -446,6 +578,16 @@ function normalizeWhitespace(value: string): string | undefined {
   return normalized.length > 0 ? normalized : undefined;
 }
 
+function cleanCommonPageNoise(value: string): string {
+  return value
+    .replace(/^\s*(?:Advertising|Advertisement)\s*$/gi, " ")
+    .replace(/為達最佳瀏覽效果，?\s*建議使用\s*Chrome、?\s*Firefox\s*或\s*Microsoft\s*Edge\s*的瀏覽器。?/gi, " ")
+    .replace(/請至\s*(?:Edge|Fire\s*Fox|Firefox|Google|Chrome|Microsoft\s*Edge)[^。.!?]*(?:下載|download)[^。.!?]*(?:[。.!?]|$)/gi, " ")
+    .replace(/For best viewing[^.!?]*(?:Chrome|Firefox|Edge)[^.!?]*(?:browser|download)[^.!?]*(?:[.!?]|$)/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function normalizeUrl(url: string): string | undefined {
   try {
     return new URL(url).href;
@@ -462,6 +604,32 @@ function normalizeHref(value: string, baseUrl: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function isNonReadingTextLink(text: string, href: string): boolean {
+  const cleanText = normalizeWhitespace(text) ?? "";
+  const lowerHref = href.trim().toLowerCase();
+  if (NON_READING_LINK_TEXT_PATTERNS.some((pattern) => pattern.test(cleanText)))
+    return true;
+  if (/(chrome|firefox|edge|google|microsoft|mozilla)/i.test(lowerHref))
+    return true;
+  return false;
+}
+
+function isNonReadingSourceLink(text: string, href: string): boolean {
+  const cleanText = normalizeWhitespace(text) ?? "";
+  const lowerHref = href.trim().toLowerCase();
+  if (/^(home|首頁|主頁|網站首頁)$/i.test(cleanText))
+    return true;
+  if (/^(即時|熱門|政治|軍武|社會|生活|健康|國際|地方|財經|娛樂|體育|3C|評論|藝文|玩咖|食譜|地產|專區|搜尋|會員)$/i.test(cleanText))
+    return true;
+  if (/^(related|more|recommended|popular|latest)\b/i.test(cleanText) || /相關文章/.test(cleanText))
+    return true;
+  if (/(下載|\bdownload\b)/i.test(cleanText))
+    return true;
+  if (/(chrome|firefox|edge|google|microsoft|mozilla)/i.test(lowerHref))
+    return true;
+  return false;
 }
 
 function hostnameLabel(url: string): string | undefined {

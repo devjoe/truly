@@ -21,6 +21,11 @@ paragraph and ask Truly to analyze, summarize, explain, or hand off that
 specific region. The output surface can remain a product experiment, but the
 targeting contract should be designed up front.
 
+Selection and current-region analysis must remain explicitly triggered. Selected
+text should not automatically become the model input just because the user has a
+selection on the page. A future version may show a small Truly action affordance
+near the selection, but the user must still choose to analyze it.
+
 This keeps the project loyal to the existing product promise: signals first,
 context when needed, and handoff only by choice. It also advances the public
 README promise of social feeds and web pages without taking on the live-DOM
@@ -377,6 +382,17 @@ The model instruction should say "web page" for General Page Reader and avoid
 Facebook-specific assumptions such as "post", "share", or "repost" unless the
 surface kind is social.
 
+The next autonomous slice should add a non-runtime model adapter contract before
+calling Tier B for Page/Web surfaces. The adapter should serialize
+`ReadingSurface` into a bounded model context, expose source links as model
+context, and keep those links visible in the early Page/Web UI so extraction
+quality can be judged manually. This is not runtime Tier B integration yet.
+
+Initial model-call eligibility should require a complete or partial web-page
+surface with at least 240 characters of `mainText`. Empty, blocked, or shorter
+surfaces should stay in extraction/preview mode and show warnings instead of
+being sent to a model.
+
 ## Testing Plan
 
 Use fixture-first tests. Do not rely on live websites in public tests.
@@ -441,12 +457,17 @@ artifacts. It should cover:
 - Reuse summary/brief/handoff UI where possible.
 - Keep Side Panel `Read this page` as a re-read / retry action. It must not be
   presented as the first-time permission grant path.
+- Keep Page/Web sessions ephemeral. Do not persist extracted page text,
+  summaries, analysis inputs, or history to `chrome.storage` in this slice.
+- Scrub stale in-memory page surfaces after meaningful navigation and clean up
+  sessions when their tab closes.
 
 ### Slice 4: Model Integration
 
 - Route page surfaces through Tier B summary and reading brief.
 - Make prompts surface-aware.
 - Add copy/export output format for web pages.
+- Revisit durable history only as a separate privacy/storage decision.
 
 ### Slice 5: Product Hardening
 
@@ -499,11 +520,12 @@ artifacts.
 
 ## Open Questions
 
-- Should selected text become the default input when selected text exists, or
-  should the user choose "Analyze selection" explicitly?
-- How much of source-link extraction should be shown to users versus kept only
-  as model context?
-- What minimum content length should be required before model calls are allowed?
+- What should the final selected-text affordance look like: a contextual Truly
+  button, a menu item, a hotkey-only action, or a combination?
+- How many extracted source links should remain visible once Page/Web moves from
+  early debugging into normal user-facing UI?
+- Should a future privacy-reviewed version offer durable Page/Web history, and
+  if so, which fields may be stored?
 
 ## Success Criteria
 

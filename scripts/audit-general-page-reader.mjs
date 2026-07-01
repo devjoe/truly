@@ -10,6 +10,7 @@ const DIST_BUILD_ID = resolve(ROOT, "dist", "build-id.txt");
 const CDP_PORT = Number(process.env.CDP_PORT || 9222);
 const CDP_BASE = `http://127.0.0.1:${CDP_PORT}`;
 const AUTO_RELOAD = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_AUTO_RELOAD || "");
+const EXTENSION_ID = (process.env.TRULY_EXTENSION_ID || "").trim();
 const STAMP = new Date().toISOString().replace(/[:.]/g, "-");
 const OUT_DIR = resolve(ROOT, "tmp", `general-page-reader-audit-${STAMP}`);
 
@@ -22,6 +23,7 @@ Artifacts are written under tmp/ and must not be committed.
 Environment:
   CDP_PORT=9222
   TRULY_AUDIT_AUTO_RELOAD=1   reload the loaded Truly extension before auditing
+  TRULY_EXTENSION_ID=<id>     audit a specific loaded Truly extension id
 `);
 }
 
@@ -147,9 +149,44 @@ function syntheticHtml(title, body) {
 </html>`;
 }
 
+function noisyFallbackHtml() {
+  const paragraphs = [
+    "為達最佳瀏覽效果，建議使用 Chrome、Firefox 或 Microsoft Edge 的瀏覽器。",
+    "請至 Edge 官網下載 請至 FireFox 官網下載 請至 Google 官網下載。",
+    "即時 熱門 政治 軍武 社會 生活 健康 國際 地方 搜尋 會員 專區。",
+    "This synthetic noisy fixture keeps enough body text to trigger fallback extraction without using a semantic main or article element.",
+    "The actual synthetic report describes a fictional public notice, the decision timeline, and a review workflow for parser quality testing.",
+    "The article source link below is the only link that should remain useful as model context after browser download and home navigation links are filtered.",
+  ];
+  return `<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>Noisy Fallback Reader Fixture</title>
+  <meta property="og:site_name" content="Synthetic Noisy News">
+  <link rel="canonical" href="/noisy">
+</head>
+<body>
+  <div class="layout-shell">
+    <a href="/">首頁</a>
+    <a href="https://www.microsoft.com/edge/download">請至 Edge 官網下載</a>
+    <a href="https://www.mozilla.org/firefox/new">請至 FireFox 官網下載</a>
+    <a href="https://www.google.com/chrome/">請至 Google 官網下載</a>
+    <h1>Noisy Fallback Reader Fixture</h1>
+    ${paragraphs.map((text) => `<p>${text}</p>`).join("\n    ")}
+    <a href="/source">Article source</a>
+  </div>
+</body>
+</html>`;
+}
+
 async function startSyntheticServer() {
   const server = createServer((req, res) => {
     res.setHeader("content-type", "text/html; charset=utf-8");
+    if (req.url?.startsWith("/noisy")) {
+      res.end(noisyFallbackHtml());
+      return;
+    }
     if (req.url?.startsWith("/article2")) {
       res.end(syntheticHtml("Second Synthetic Article", "This is a different synthetic article after a meaningful URL change."));
       return;
@@ -166,7 +203,11 @@ async function startSyntheticServer() {
     port,
     allowedBase: `http://127.0.0.1:${port}`,
     noGrantBase: `http://127.0.0.2:${port}`,
-    close: () => new Promise((resolveClose) => server.close(resolveClose)),
+    close: () => new Promise((resolveClose) => {
+      server.close(resolveClose);
+      server.closeIdleConnections?.();
+      server.closeAllConnections?.();
+    }),
   };
 }
 
@@ -182,7 +223,7 @@ async function listTargets() {
   });
 }
 
-async function findTrulyExtension(targets, expectedBuildId) {
+async function findTrulyExtension(targets, expectedBuildId, { allowStale = false, extensionId = "" } = {}) {
   const workers = targets.filter((target) =>
     target.type === "service_worker" &&
     typeof target.url === "string" &&
@@ -190,6 +231,7 @@ async function findTrulyExtension(targets, expectedBuildId) {
     target.webSocketDebuggerUrl
   );
 
+  const found = [];
   for (const target of workers) {
     const cdp = connectCdp(target.webSocketDebuggerUrl);
     try {
@@ -201,18 +243,31 @@ async function findTrulyExtension(targets, expectedBuildId) {
             name: manifest.name,
             version: manifest.version,
             versionName: manifest.version_name || "",
+            buildId: globalThis.__TRULY_BUILD_ID || null,
             url: location.href
           };
         } catch (error) {
           return { error: String(error) };
         }
       })()`).catch(() => null);
-      if (meta?.name === "Truly" || target.url.includes("/background/service-worker.js")) {
-        return { target, meta: { ...meta, expectedBuildId } };
-      }
+      if (meta?.name === "Truly") found.push({ target, meta: { ...meta, expectedBuildId } });
     } finally {
       cdp.close();
     }
+  }
+
+  const fresh = found.find((entry) => entry.meta.buildId === expectedBuildId);
+  if (fresh) return fresh;
+
+  const candidates = found.map((entry) => `${entry.meta.id} buildId=${entry.meta.buildId || "(missing)"}`).join(", ");
+  if (extensionId) {
+    const explicit = found.find((entry) => entry.meta.id === extensionId);
+    if (explicit) return explicit;
+    throw new Error(`TRULY_EXTENSION_ID=${extensionId} was not found among loaded Truly service workers. Candidates: ${candidates || "(none)"}.`);
+  }
+  if (allowStale && found.length === 1) return found[0];
+  if (found.length > 0) {
+    throw new Error(`No Truly service worker matches dist/build-id.txt ${expectedBuildId}. Candidates: ${candidates}. Set TRULY_EXTENSION_ID to the intended unpacked extension id or close stale Truly copies.`);
   }
   throw new Error("Truly service worker not found in the current Chrome CDP session.");
 }
@@ -320,7 +375,16 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     }))()`);
 
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web ready state");
+    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web ready state").catch(async (error) => {
+      const timeoutState = await capturePageReadTimeoutState(side, article, initial).catch((captureError) => ({
+        initial,
+        captureError: captureError.message,
+      }));
+      await side.screenshot(resolve(OUT_DIR, "page-ready-timeout.png")).catch(() => {});
+      writeFileSync(resolve(OUT_DIR, "page-ready-timeout.json"), JSON.stringify(timeoutState, null, 2));
+      error.message = `${error.message}; diagnostics: ${relative(ROOT, resolve(OUT_DIR, "page-ready-timeout.json"))}`;
+      throw error;
+    });
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
@@ -333,6 +397,22 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
         meta: [...pane?.querySelectorAll('.page-reader-meta div') || []].map((el) => ({
           label: el.querySelector('dt')?.textContent?.trim(),
           value: el.querySelector('dd')?.textContent?.trim()
+        })),
+        modelContext: (() => {
+          const el = pane?.querySelector('.page-reader-model-context');
+          return el ? {
+            title: el.querySelector('h3')?.textContent?.trim(),
+            status: el.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
+            detail: el.querySelector('p')?.textContent?.trim(),
+            rows: [...el.querySelectorAll('dl div')].map((row) => ({
+              label: row.querySelector('dt')?.textContent?.trim(),
+              value: row.querySelector('dd')?.textContent?.trim()
+            }))
+          } : null;
+        })(),
+        sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
+          label: el.textContent?.trim(),
+          href: el.href
         })),
         fullTailVisible: /quick brown test page explains a public planning process/.test(pane?.innerText || ''),
         copyButton: pane?.querySelector('#pageCopyMetadata')?.textContent?.trim()
@@ -380,7 +460,9 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     const afterMeaningful = await side.evaluateJson(`(() => ({
       status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
-      stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || '')
+      stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || ''),
+      oldExcerptVisible: /synthetic article for the General Page Reader CDP acceptance test/.test(document.querySelector('#page-pane')?.innerText || ''),
+      sourceLinkVisible: /Source link/.test(document.querySelector('#page-pane')?.innerText || '')
     }))()`);
 
     await side.screenshot(resolve(OUT_DIR, "page-ready-and-stale.png"));
@@ -392,6 +474,93 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     side.close();
     article.close();
   }
+}
+
+async function auditNoisyFallbackRead(extensionId, allowedBase) {
+  const noisyTarget = await createTarget(`${allowedBase}/noisy`);
+  const sideTarget = await openSidePanelTestPage(extensionId, noisyTarget, "noisy");
+  const noisy = connectCdp(noisyTarget.webSocketDebuggerUrl);
+  const side = connectCdp(sideTarget.webSocketDebuggerUrl);
+
+  try {
+    await sleep(800);
+    await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    await waitFor(side, `(() => /需改善抽取|Extraction needs improvement/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web noisy fallback caution state").catch(async (error) => {
+      const timeoutState = await capturePageReadTimeoutState(side, noisy, null).catch((captureError) => ({
+        captureError: captureError.message,
+      }));
+      await side.screenshot(resolve(OUT_DIR, "page-noisy-timeout.png")).catch(() => {});
+      writeFileSync(resolve(OUT_DIR, "page-noisy-timeout.json"), JSON.stringify(timeoutState, null, 2));
+      error.message = `${error.message}; diagnostics: ${relative(ROOT, resolve(OUT_DIR, "page-noisy-timeout.json"))}`;
+      throw error;
+    });
+
+    const ready = await side.evaluateJson(`(() => {
+      const pane = document.querySelector('#page-pane');
+      const model = pane?.querySelector('.page-reader-model-context');
+      return {
+        status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
+        meta: [...pane?.querySelectorAll('.page-reader-meta div') || []].map((el) => ({
+          label: el.querySelector('dt')?.textContent?.trim(),
+          value: el.querySelector('dd')?.textContent?.trim()
+        })),
+        modelContext: model ? {
+          status: model.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
+          detail: model.querySelector('p')?.textContent?.trim(),
+          className: model.className
+        } : null,
+        sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
+          label: el.textContent?.trim(),
+          href: el.href
+        })),
+        hasEdgeDownload: /Edge 官網下載/.test(pane?.innerText || ''),
+        hasFirefoxDownload: /FireFox 官網下載/.test(pane?.innerText || ''),
+        hasGoogleDownload: /Google 官網下載/.test(pane?.innerText || '')
+      };
+    })()`);
+    await side.screenshot(resolve(OUT_DIR, "page-noisy-caution.png"));
+    return { ready };
+  } finally {
+    await side.closeTarget().catch(() => {});
+    await noisy.closeTarget().catch(() => {});
+    side.close();
+    noisy.close();
+  }
+}
+
+async function capturePageReadTimeoutState(side, article, initial) {
+  const sideState = await side.evaluateJson(`(() => ({
+    url: location.href,
+    activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
+    readButtonText: document.querySelector('#pageReadCurrent')?.textContent?.trim(),
+    readDisabled: document.querySelector('#pageReadCurrent')?.disabled ?? null,
+    status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
+    detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
+    paneText: document.querySelector('#page-pane')?.innerText,
+    error: document.querySelector('#page-pane .page-reader-error')?.textContent?.trim()
+  }))()`);
+  const articleState = await article.evaluateJson(`(() => ({
+    url: location.href,
+    title: document.title,
+    bodyTextLength: document.body?.innerText?.length ?? 0,
+    readyState: document.readyState
+  }))()`);
+  const extensionState = await side.evaluateJson(`(() => new Promise((resolve) => {
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+      const tab = tabs?.[0];
+      resolve({
+        activeTab: tab ? {
+          id: tab.id,
+          url: tab.url,
+          title: tab.title,
+          active: tab.active,
+          windowId: tab.windowId
+        } : null,
+        lastError: chrome.runtime.lastError?.message || null
+      });
+    });
+  }))()`);
+  return { initial, sideState, articleState, extensionState };
 }
 
 async function auditNoGrantGuidance(extensionId, noGrantBase) {
@@ -448,14 +617,59 @@ function assertAudit(result) {
   if (result.success.ready.fullTailVisible) {
     errors.push("Page/Web pane includes the full synthetic body tail");
   }
+  if (!/模型脈絡|Model context/.test(result.success.ready.modelContext?.title || "")) {
+    errors.push("Page/Web pane does not show model context readiness");
+  }
+  if (!/可送模型|Model-ready/.test(result.success.ready.modelContext?.status || "")) {
+    errors.push(`unexpected model context status: ${result.success.ready.modelContext?.status || "(missing)"}`);
+  }
+  if (!hasPassingTextThresholdRow(result.success.ready.modelContext?.rows)) {
+    errors.push("model context text threshold row is missing or incorrect");
+  }
+  if (!result.success.ready.sourceLinks?.some((link) => link.label === "Source link" && /\/source$/.test(link.href))) {
+    errors.push("Page/Web pane does not expose extracted source links for early inspection");
+  }
   if (!result.success.copy.hasTitle || !result.success.copy.hasUrl || !result.success.copy.hasExcerpt || result.success.copy.hasFullTail) {
     errors.push("copy metadata boundary failed");
   }
   if (result.success.afterHash.stale) errors.push("hash-only URL change incorrectly marked stale");
   if (result.success.afterTracking.stale) errors.push("tracking-only query change incorrectly marked stale");
   if (!result.success.afterMeaningful.stale) errors.push("meaningful URL change did not mark stale");
+  if (result.success.afterMeaningful.oldExcerptVisible || result.success.afterMeaningful.sourceLinkVisible) {
+    errors.push("meaningful URL change did not scrub stale Page/Web surface content");
+  }
+  if (result.noisy.ready.status !== "已讀取" && result.noisy.ready.status !== "Ready") {
+    errors.push(`noisy fallback read did not reach ready status: ${result.noisy.ready.status}`);
+  }
+  if (!/需改善抽取|Extraction needs improvement/.test(result.noisy.ready.modelContext?.status || "")) {
+    errors.push(`noisy fallback model context was not downgraded to caution: ${result.noisy.ready.modelContext?.status || "(missing)"}`);
+  }
+  if (!/fallback|Fallback/.test(result.noisy.ready.modelContext?.detail || "")) {
+    errors.push("noisy fallback model context does not explain fallback extraction quality");
+  }
+  if (!/is-caution/.test(result.noisy.ready.modelContext?.className || "")) {
+    errors.push("noisy fallback model context does not use caution UI state");
+  }
+  if (!result.noisy.ready.meta?.some((row) => /抽取方式|Method/.test(row.label || "") && row.value === "fallback")) {
+    errors.push("noisy fallback audit did not exercise fallback extraction");
+  }
+  if (!result.noisy.ready.meta?.some((row) => /狀態|Status/.test(row.label || "") && row.value === "partial")) {
+    errors.push("noisy fallback audit did not exercise partial extraction");
+  }
+  if (!result.noisy.ready.sourceLinks?.some((link) => link.label === "Article source" && /\/source$/.test(link.href))) {
+    errors.push("noisy fallback audit did not preserve the real article source link");
+  }
+  if (result.noisy.ready.hasEdgeDownload || result.noisy.ready.hasFirefoxDownload || result.noisy.ready.hasGoogleDownload) {
+    errors.push("noisy fallback audit still exposes browser download links as source context");
+  }
   if (!result.noGrant.hasGuidance) errors.push("no-grant sidepanel path did not show toolbar activation guidance");
   return errors;
+}
+
+function hasPassingTextThresholdRow(rows) {
+  const row = rows?.find((item) => /文字門檻|Text threshold/.test(item.label || ""));
+  const match = String(row?.value ?? "").match(/^(\d+)\/240$/);
+  return Boolean(match && Number(match[1]) >= 240);
 }
 
 function writeSummary(result, errors) {
@@ -472,9 +686,14 @@ function writeSummary(result, errors) {
     `- Popup general page: ${result.popup.general.button} / disabled=${result.popup.general.disabled}`,
     `- Popup unsupported page disabled: ${result.popup.unsupported.disabled}`,
     `- Page/Web read status: ${result.success.ready.status}`,
+    `- Model context: ${result.success.ready.modelContext?.status || "(missing)"}`,
+    `- Source links visible: ${result.success.ready.sourceLinks?.length || 0}`,
+    `- Noisy fallback model context: ${result.noisy.ready.modelContext?.status || "(missing)"}`,
+    `- Noisy fallback source links: ${(result.noisy.ready.sourceLinks || []).map((link) => link.label).join(", ") || "(none)"}`,
     `- Hash-only stale: ${result.success.afterHash.stale}`,
     `- Tracking-only stale: ${result.success.afterTracking.stale}`,
     `- Meaningful URL stale: ${result.success.afterMeaningful.stale}`,
+    `- Meaningful URL scrubbed stale surface: ${!result.success.afterMeaningful.oldExcerptVisible && !result.success.afterMeaningful.sourceLinkVisible}`,
     `- Copy metadata title/url/excerpt: ${result.success.copy.hasTitle}/${result.success.copy.hasUrl}/${result.success.copy.hasExcerpt}`,
     `- No-grant guidance: ${result.noGrant.hasGuidance}`,
     "",
@@ -482,6 +701,7 @@ function writeSummary(result, errors) {
     "",
     `- ${relative(ROOT, resolve(OUT_DIR, "audit.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-no-grant.png"))}`,
     "",
     "## Public Repo Boundary",
@@ -498,10 +718,11 @@ function writeSummary(result, errors) {
 mkdirSync(OUT_DIR, { recursive: true });
 const expectedBuildId = readExpectedBuildId();
 const server = await startSyntheticServer();
+let exitCode = 0;
 
 try {
   const targets = await listTargets();
-  const extension = await findTrulyExtension(targets, expectedBuildId);
+  const extension = await findTrulyExtension(targets, expectedBuildId, { allowStale: AUTO_RELOAD, extensionId: EXTENSION_ID });
   const extensionId = extension.meta.id;
   if (AUTO_RELOAD) await reloadExtension(extensionId);
   const version = await currentVersion(extensionId);
@@ -518,6 +739,7 @@ try {
     },
     popup: await auditPopup(extensionId, `${server.allowedBase}/article`),
     success: await auditSuccessfulRead(extensionId, server.allowedBase),
+    noisy: await auditNoisyFallbackRead(extensionId, server.allowedBase),
     noGrant: await auditNoGrantGuidance(extensionId, server.noGrantBase),
     artifactDir: relative(ROOT, OUT_DIR),
   };
@@ -529,7 +751,22 @@ try {
   writeSummary(result, errors);
   console.log(`General Page Reader CDP audit ${result.ok ? "passed" : "failed"}`);
   console.log(`artifact: ${relative(ROOT, OUT_DIR)}`);
-  if (!result.ok) process.exit(1);
+  if (!result.ok) exitCode = 1;
+} catch (error) {
+  const failure = {
+    capturedAt: new Date().toISOString(),
+    cdpBase: CDP_BASE,
+    expectedBuildId,
+    error: error instanceof Error ? error.message : String(error),
+    stack: error instanceof Error ? error.stack : undefined,
+    artifactDir: relative(ROOT, OUT_DIR),
+  };
+  writeFileSync(resolve(OUT_DIR, "audit-failure.json"), JSON.stringify(failure, null, 2));
+  console.error(`General Page Reader CDP audit failed: ${failure.error}`);
+  console.error(`artifact: ${relative(ROOT, OUT_DIR)}`);
+  exitCode = 1;
 } finally {
   await server.close();
 }
+
+process.exit(exitCode);

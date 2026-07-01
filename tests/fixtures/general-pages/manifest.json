@@ -470,6 +470,45 @@
         "contains": ["mixed language fixture 使用繁體中文", "parser should keep the main note intact"],
         "excludes": ["Archive", "Previous posts"]
       }
+    },
+    {
+      "id": "semantic-ad-root-body-article",
+      "file": "semantic-ad-root-body-article.html",
+      "url": "https://news.example.test/world/semantic-ad-root",
+      "locale": "en",
+      "pageType": "news",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P16-missing-or-conflicting-metadata"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["semantic main landmark contains only a short advertising label", "actual body explains a fictional public monitoring project"],
+        "excludes": ["Related source one", "Related source two"]
+      }
+    },
+    {
+      "id": "zhtw-homepage-nav-only",
+      "file": "zhtw-homepage-nav-only.html",
+      "url": "https://news.example.test/zh-tw/",
+      "locale": "zh-TW",
+      "pageType": "list-index",
+      "patterns": ["P05-list-or-index-page", "P03-navigation-sidebar-noise", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["繁中首頁導覽假頁是索引頁", "不要把這些導覽列和卡片集合當成一篇可以直接送模型的文章正文"],
+        "excludes": []
+      }
+    },
+    {
+      "id": "docs-right-rail-long",
+      "file": "docs-right-rail-long.html",
+      "url": "https://docs.example.test/handbook/conditional-helper",
+      "locale": "en",
+      "pageType": "documentation",
+      "patterns": ["P06-nested-documentation-layout", "P07-api-reference-multipanel", "P03-navigation-sidebar-noise"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["long, coherent technical body", "should not automatically make a clean documentation body look like a feed or index"],
+        "excludes": ["On this page", "Compiler options", "API reference"]
+      }
     }
   ]
 }

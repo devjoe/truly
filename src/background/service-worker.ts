@@ -231,6 +231,17 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
     return false;
   }
 
+  if (message.type === "READING_TARGET_REQUEST") {
+    try {
+      sendResponse({
+        type: "READING_TARGET_ERROR",
+        tabId: message.tabId,
+        error: "reading_target_unsupported",
+      } satisfies TrulyMessage);
+    } catch {}
+    return false;
+  }
+
   if (message.type === "PAGE_READING_REQUEST") {
     if (typeof message.tabId !== "number") {
       try {

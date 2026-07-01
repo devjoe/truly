@@ -240,6 +240,97 @@
       font-size: 11px;
       overflow-wrap: anywhere;
     }
+    .page-reader-model-context {
+      margin-top: 9px;
+      padding: 8px 9px;
+      border: 1px solid var(--truly-sidepanel-soft-border);
+      border-radius: 7px;
+      background: var(--truly-sidepanel-muted-surface);
+    }
+    .page-reader-model-context-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+    .page-reader-model-context h3 {
+      margin: 0;
+      color: var(--truly-sidepanel-text);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0;
+    }
+    .page-reader-model-context-header span {
+      color: #8a6d1f;
+      font-size: 10px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .page-reader-model-context.is-ready .page-reader-model-context-header span {
+      color: #146c43;
+    }
+    .page-reader-model-context.is-caution .page-reader-model-context-header span {
+      color: #8a6d1f;
+    }
+    .page-reader-model-context.is-blocked .page-reader-model-context-header span {
+      color: #b42318;
+    }
+    .page-reader-model-context p {
+      margin: 0 0 7px;
+      color: var(--truly-sidepanel-muted-text);
+      font-size: 11px;
+      line-height: 1.45;
+    }
+    .page-reader-model-context dl {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 5px;
+      margin: 0;
+    }
+    .page-reader-model-context dt {
+      color: var(--truly-sidepanel-muted-text);
+      font-size: 9px;
+      font-weight: 700;
+    }
+    .page-reader-model-context dd {
+      margin: 1px 0 0;
+      color: var(--truly-sidepanel-text);
+      font-size: 10px;
+      overflow-wrap: anywhere;
+    }
+    .page-reader-source-links {
+      margin-top: 9px;
+      padding-top: 8px;
+      border-top: 1px solid var(--truly-sidepanel-soft-border);
+    }
+    .page-reader-source-links h3 {
+      margin: 0 0 5px;
+      color: var(--truly-sidepanel-muted-text);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+    .page-reader-source-links ul {
+      display: grid;
+      gap: 4px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    .page-reader-source-links li {
+      min-width: 0;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .page-reader-source-links a {
+      color: var(--truly-sidepanel-accent);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+    .page-reader-source-links a:hover {
+      text-decoration: underline;
+    }
     .page-reader-warnings {
       margin-top: 8px;
       color: var(--truly-sidepanel-muted-text);

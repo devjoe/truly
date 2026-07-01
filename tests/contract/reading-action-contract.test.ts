@@ -47,9 +47,31 @@ describe("reading action contract", () => {
           action: "fact_check",
         },
       },
+      {
+        type: "READING_TARGET_REQUEST",
+        tabId: 1,
+        trigger: "hotkey",
+        activation: {
+          source: "hotkey",
+          targetKind: "current-region",
+          action: "summarize",
+        },
+      },
     ];
 
     expect(messages.every((message) => isReadingActivation(message.activation))).toBe(true);
+  });
+
+  it("has an explicit error message for target actions that are reserved but not enabled", () => {
+    const messages: TrulyMessage[] = [
+      {
+        type: "READING_TARGET_ERROR",
+        tabId: 1,
+        error: "reading_target_unsupported",
+      },
+    ];
+
+    expect(messages.map((message) => message.type)).toEqual(["READING_TARGET_ERROR"]);
   });
 
   it("rejects partial or invented activation shapes", () => {

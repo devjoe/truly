@@ -207,9 +207,10 @@ The v4 fixture batch added focused regression pressure for:
 - empty social shells with login/app prompts and JSON state;
 - malformed mixed-language pages with uneven markup.
 
-The corpus is now at the current 35-fixture upper bound. Add more fixtures only
-after either replacing lower-value fixtures or intentionally raising the corpus
-checker limit.
+The corpus moved beyond the original 35-fixture upper bound after the first
+200-target private product-quality review. The checker now allows up to 40
+fixtures so high-signal manual-review findings can be converted into public
+synthetic regressions without removing still-useful earlier coverage.
 
 ## Private Real-World Evaluation Runner
 
@@ -250,3 +251,49 @@ one-off batches. Create a data-and-results-only private repository when private
 target manifests, manual labels, or longitudinal reports need durable
 cross-session history or multi-person collaboration. Keep reusable runner code
 in this public repo so public/private tooling does not fork.
+
+## Private Product-Quality Review Runner
+
+The sanitized real-world eval runner is appropriate for aggregate comparison
+and future CI, but it is intentionally too redacted for product judgment. Use
+the private product-quality review flow when the goal is manual inspection of
+whether the General Page Reader feels good enough on real pages.
+
+Discovery starts from a private seed manifest and writes real URLs only under
+`tmp/`:
+
+```bash
+npm run collect:general-page-review-targets -- \
+  --input tmp/general-page-review-seeds.json \
+  --allow-network \
+  --limit 200 \
+  --output tmp/general-page-product-quality/targets-200.json
+```
+
+Manual product-quality review then fetches those targets and writes a private
+HTML/JSONL packet:
+
+```bash
+npm run review:general-page-product-quality -- \
+  --input tmp/general-page-product-quality/targets-200.json \
+  --allow-network \
+  --limit 200 \
+  --concurrency 8 \
+  --timeout-ms 12000
+```
+
+This runner deliberately writes real URLs and extracted text previews because
+the reviewer needs to compare product output against the live page. The output
+must stay private under `tmp/` or a future private data-and-results repository.
+Do not commit the target manifest, review HTML, JSONL labels, screenshots, raw
+HTML, copied source text, or derived per-target findings into the public repo.
+
+Use the 200-target first pass to answer product questions:
+
+- Does the extracted preview contain the main readable content?
+- Does Page/Web honestly downgrade fallback, partial, blocked, index, and
+  social/feed-like pages?
+- Do source links look useful for evidence inspection, or are they navigation?
+- Which noise families recur often enough to justify new synthetic fixtures?
+- Where do `@mozilla/readability`, `defuddle`, or a future hybrid route need a
+  focused parser spike before runtime adoption?
