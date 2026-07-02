@@ -299,6 +299,21 @@ must stay private under `tmp/` or a future private data-and-results repository.
 Do not commit the target manifest, review HTML, JSONL labels, screenshots, raw
 HTML, copied source text, or derived per-target findings into the public repo.
 
+After manual labeling, run the private aggregate gate:
+
+```bash
+npm run score:general-page-product-quality -- \
+  --review tmp/general-page-product-quality/review-.../review.json \
+  --labels tmp/general-page-product-quality/review-.../manual-labels.jsonl \
+  --output tmp/general-page-product-quality/review-.../quality-gate.json
+```
+
+The gate output is a sanitized aggregate only: counts, rates, category/page-type
+breakdowns, and issue-tag totals. It intentionally omits URLs, text previews,
+notes, screenshots, and source content. Treat it as a local product-quality
+regression signal before deciding which patterns deserve new public synthetic
+fixtures.
+
 Use the 200-target first pass to answer product questions:
 
 - Does the extracted preview contain the main readable content?

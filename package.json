@@ -44,6 +44,7 @@
     "eval:general-page-real-world": "node scripts/evaluate-general-page-real-world.mjs",
     "collect:general-page-review-targets": "node scripts/collect-general-page-review-targets.mjs",
     "review:general-page-product-quality": "node scripts/review-general-page-product-quality.mjs",
+    "score:general-page-product-quality": "node scripts/score-general-page-product-quality.mjs",
     "observe:general-page-structure": "node scripts/observe-general-page-structure.mjs",
     "summarize:general-page-observations": "node scripts/summarize-general-page-observations.mjs",
     "check:general-page-corpus": "node scripts/check-general-page-corpus.mjs",

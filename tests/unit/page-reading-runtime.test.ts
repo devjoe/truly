@@ -423,6 +423,128 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("只適合頁面總覽");
   });
 
+  it("uses Tier B provider settings for parser advisor before falling back to local baseline", async () => {
+    const pagePaneEl = setupDom();
+    const weakSurface = surface({
+      mainText: [
+        "首頁 分類 熱門 推薦 導覽 Search Login Subscribe",
+        "Synthetic card one is only a teaser with a link.",
+        "Synthetic card two is another teaser with a link.",
+        "Synthetic card three makes the page look like a feed.",
+      ].join(" "),
+      excerpt: "首頁 分類 熱門 推薦 導覽 Search Login Subscribe",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["large-navigation-noise", "no-main-content"],
+      },
+      links: Array.from({ length: 16 }, (_, index) => ({
+        href: `https://example.test/link-${index}`,
+        text: `Link ${index}`,
+      })),
+    });
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return {
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: weakSurface,
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+        expect(message.providerRuntime).toMatchObject({
+          canUseModel: true,
+          effectiveProvider: "openai-compatible",
+          endpoint: "http://127.0.0.1:4999/v1/chat/completions",
+          model: "advisor-model",
+          mode: "tier-b-short-json",
+        });
+        return {
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: 42,
+          ok: true,
+          providerRuntime: {
+            ...message.providerRuntime,
+            mode: "tier-b-short-json",
+          },
+          advice: {
+            schemaVersion: 1,
+            pageType: "index_or_feed",
+            decision: "downgrade_to_index_or_feed",
+            confidence: "high",
+            needsUserSelection: false,
+            needsScreenshot: false,
+            riskTags: ["fallback_extraction", "large_navigation_noise", "index_or_feed"],
+            rationale: "Tier B advisor classifies the synthetic page as an overview target.",
+          },
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        expect(message.providerRuntime).toMatchObject({
+          canUseModel: true,
+          effectiveProvider: "openai-compatible",
+          model: "advisor-model",
+        });
+        expect(message.allowedUse).toBe("page_overview_only");
+        return {
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: 42,
+          ok: true,
+          brief: {
+            schemaVersion: 1,
+            summary: "Synthetic overview generated after Tier B parser advisor.",
+            claims: [{
+              c: "This claim should be stripped by overview guard.",
+              why: "Overview mode should not render claims.",
+              need: "No claim needed.",
+            }],
+            qs: [{ q: "Which linked card should the reader inspect?", kind: "source" }],
+            model: "advisor-model",
+            outputLang: "zh-TW",
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "advisor-model",
+      }),
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "GENERAL_PAGE_PARSER_ADVISOR_REQUEST",
+      providerRuntime: expect.objectContaining({
+        canUseModel: true,
+        mode: "tier-b-short-json",
+      }),
+    }));
+    expect(pagePaneEl.textContent).toContain("OpenAI 相容端點 / advisor-model");
+    expect(pagePaneEl.textContent).toContain("page_overview_only");
+    expect(pagePaneEl.textContent).toContain("Synthetic overview generated after Tier B parser advisor.");
+    expect(pagePaneEl.textContent).not.toContain("This claim should be stripped");
+  });
+
   it("does not send General Page brief requests when advisor requires a user target", async () => {
     const pagePaneEl = setupDom();
     const weakSurface = surface({
