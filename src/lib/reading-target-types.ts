@@ -15,6 +15,13 @@ export type ReadingTargetExtractionMethod =
   | "observed-node"
   | "fallback";
 
+export type ReadingTargetErrorReason =
+  | "reading_target_unsupported"
+  | "no_meaningful_selection"
+  | "page_grant_missing"
+  | "target_stale"
+  | "target_extraction_failed";
+
 export interface ReadingTargetRect {
   x: number;
   y: number;

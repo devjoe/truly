@@ -7,6 +7,7 @@ import {
   type GeneralPageModelQualityIssue,
   type GeneralPageModelSourceLink,
 } from "../lib/general-page-model-context";
+import { GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH } from "../lib/general-page-extraction";
 import {
   buildGeneralPageEffectiveModelContext,
   buildGeneralPageParserAdvisorRequest,
@@ -23,6 +24,8 @@ import type {
   GeneralPageParserAdvisorResultMsg,
   PageReadingErrorMsg,
   PageReadingResultMsg,
+  ReadingTargetErrorMsg,
+  ReadingTargetResultMsg,
   TrulyMessage,
 } from "../lib/messages";
 import {
@@ -34,6 +37,7 @@ import {
 import { providerRuntimeEndpoint, providerRuntimeModel } from "../lib/model-provider-runtime";
 import { providerCapabilities, providerNeedsEndpoint } from "../lib/provider-capabilities";
 import type { ReadingSurface } from "../lib/reading-surface-types";
+import type { ReadingTarget, ReadingTargetErrorReason } from "../lib/reading-target-types";
 import {
   isMeaningfullySamePage,
   pageUrlIdentity,
@@ -51,6 +55,7 @@ interface PageReadingSession {
   identity: PageUrlIdentity;
   title?: string;
   surface?: ReadingSurface;
+  target?: ReadingTarget;
   status: PageSessionStatus;
   error?: string;
   updatedAt: number;
@@ -170,7 +175,7 @@ function hostnameForUrl(rawUrl: string): string {
 }
 
 function visibleExcerpt(surface: ReadingSurface, modelContext?: GeneralPageModelContext): string {
-  const sourceText = modelContext && modelContext.qualityIssues.length > 0
+  const sourceText = modelContext && (modelContext.targetKind !== "page" || modelContext.qualityIssues.length > 0)
     ? modelContext.mainText
     : surface.excerpt || surface.mainText;
   const text = (sourceText || "").trim().replace(/\s+/g, " ");
@@ -192,10 +197,20 @@ function buildCopyText(session: PageReadingSession): string {
     if (surface.extraction.warnings.length > 0)
       lines.push(`Warnings: ${surface.extraction.warnings.join(", ")}`);
   }
-  const modelContext = surface ? buildGeneralPageModelContext(surface, { targetKind: "page" }) : undefined;
+  const modelContext = surface ? modelContextForSession({ ...session, surface }) : undefined;
   const excerpt = surface ? visibleExcerpt(surface, modelContext) : "";
   if (excerpt) lines.push("", "Excerpt:", excerpt);
   return lines.join("\n");
+}
+
+function modelContextForSession(session: PageReadingSession & { surface: ReadingSurface }): GeneralPageModelContext {
+  if (session.target) {
+    return buildGeneralPageModelContext(session.surface, {
+      target: session.target,
+      minMainTextLength: GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH,
+    });
+  }
+  return buildGeneralPageModelContext(session.surface, { targetKind: "page" });
 }
 
 function sourceLinksHtml(links: GeneralPageModelSourceLink[], title: string): string {
@@ -437,6 +452,7 @@ export function createSidepanelPageReadingRuntime({
       session.url = activeUrl;
       session.title = activeTitle || session.title;
       session.surface = undefined;
+      session.target = undefined;
       session.advisor = undefined;
       session.updatedAt = now();
     }
@@ -452,6 +468,7 @@ export function createSidepanelPageReadingRuntime({
       url: nextUrl,
       title: tab.title || session.title,
       surface: undefined,
+      target: undefined,
       advisor: undefined,
       status: "stale",
       updatedAt: now(),
@@ -481,7 +498,7 @@ export function createSidepanelPageReadingRuntime({
     const url = session?.surface?.canonicalUrl || session?.surface?.url || session?.url || activeUrl;
     const source = session?.surface?.sourceName || (url ? hostnameForUrl(url) : "");
     const modelContext = session?.surface
-      ? buildGeneralPageModelContext(session.surface, { targetKind: "page" })
+      ? modelContextForSession({ ...session, surface: session.surface })
       : undefined;
     const excerpt = session?.surface ? visibleExcerpt(session.surface, modelContext) : "";
     const warningText = session?.surface?.extraction.warnings.join(", ") || "";
@@ -503,7 +520,10 @@ export function createSidepanelPageReadingRuntime({
           <div class="page-reader-kicker">${escapeHtml(tr("sidepanel.page.kicker"))}</div>
           <h1>${escapeHtml(tr("sidepanel.page.title"))}</h1>
         </div>
-        <button id="pageReadCurrent" class="btn-investigation-secondary" type="button" ${canRead ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.readCurrent"))}</button>
+        <div class="page-reader-actions">
+          <button id="pageReadCurrent" class="btn-investigation-secondary" type="button" ${canRead ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.readCurrent"))}</button>
+          <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canRead && session?.surface ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.useSelection"))}</button>
+        </div>
       </section>
       <section class="page-reader-status${statusClass}">
         <div class="page-reader-status-label">${escapeHtml(statusLabel)}</div>
@@ -533,6 +553,9 @@ export function createSidepanelPageReadingRuntime({
 
     pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.addEventListener("click", () => {
       void requestReadCurrentPage("sidepanel");
+    });
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.addEventListener("click", () => {
+      void requestSelectionTarget("sidepanel");
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageCopyMetadata")?.addEventListener("click", async () => {
       const latest = currentSession();
@@ -565,6 +588,18 @@ export function createSidepanelPageReadingRuntime({
     return `<section class="page-reader-empty">${escapeHtml(tr("sidepanel.page.empty.general"))}</section>`;
   }
 
+  function friendlyTargetError(error: ReadingTargetErrorReason): string {
+    if (error === "no_meaningful_selection")
+      return tr("sidepanel.page.target.error.noSelection");
+    if (error === "page_grant_missing")
+      return tr("sidepanel.page.error.needsToolbarActivation");
+    if (error === "target_stale")
+      return tr("sidepanel.page.target.error.stale");
+    if (error === "reading_target_unsupported")
+      return tr("sidepanel.page.error.unsupportedAction");
+    return tr("sidepanel.page.target.error.failed");
+  }
+
   function setAdvisor(tabId: number, advisor: PageReadingAdvisorSession): void {
     const session = sessions.get(tabId);
     if (!session || session.status === "stale") return;
@@ -576,8 +611,13 @@ export function createSidepanelPageReadingRuntime({
     if (tabId === activeTabId) render();
   }
 
-  function startParserAdvisor(tabId: number, surface: ReadingSurface): void {
-    const context = buildGeneralPageModelContext(surface, { targetKind: "page" });
+  function startParserAdvisor(tabId: number, surface: ReadingSurface, target?: ReadingTarget): void {
+    const context = target
+      ? buildGeneralPageModelContext(surface, {
+          target,
+          minMainTextLength: GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH,
+        })
+      : buildGeneralPageModelContext(surface, { targetKind: "page" });
     const request = buildGeneralPageParserAdvisorRequest(context, {
       candidateBlocks: advisorCandidateBlocks(surface),
       allowScreenshot: false,
@@ -615,7 +655,11 @@ export function createSidepanelPageReadingRuntime({
       outputLang: getLang(),
     } satisfies TrulyMessage)).then((response) => {
       const current = sessions.get(tabId);
-      if (!current?.surface || !isMeaningfullySamePage(pageUrlIdentity(current.surface.url, current.surface.canonicalUrl), surface.url))
+      if (
+        !current?.surface ||
+        !isMeaningfullySamePage(pageUrlIdentity(current.surface.url, current.surface.canonicalUrl), surface.url) ||
+        (target && current.target?.id !== target.id)
+      )
         return;
       if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_PARSER_ADVISOR_RESULT") {
         setAdvisor(tabId, {
@@ -660,6 +704,62 @@ export function createSidepanelPageReadingRuntime({
     });
   }
 
+  async function requestSelectionTarget(source: PageActivationSource = "sidepanel"): Promise<void> {
+    try {
+      const tab = await refreshActiveTab(false);
+      const tabId = typeof tab?.id === "number" ? tab.id : activeTabId;
+      if (typeof tabId !== "number") return;
+      const session = sessions.get(tabId);
+      if (!session?.surface || session.status === "stale") {
+        render();
+        return;
+      }
+      if (!isMeaningfullySamePage(session.identity, tab?.url ?? session.url)) {
+        sessions.set(tabId, {
+          ...session,
+          surface: undefined,
+          target: undefined,
+          advisor: undefined,
+          status: "stale",
+          url: tab?.url ?? session.url,
+          updatedAt: now(),
+        });
+        render();
+        return;
+      }
+      setAdvisor(tabId, {
+        status: "checking",
+        providerRuntime: resolveAdvisorProviderRuntime(getSettings(), getTierAEndpoint(), getTierAModel()),
+        updatedAt: now(),
+      });
+      const response = await runtime.sendMessage({
+        type: "READING_TARGET_REQUEST",
+        tabId,
+        trigger: "selection",
+        surfaceId: session.surface.id,
+        activation: {
+          source,
+          targetKind: "selection",
+          action: "read",
+        },
+      } satisfies TrulyMessage);
+      if (!response || typeof response !== "object" || !("type" in response)) return;
+      if (response.type === "READING_TARGET_RESULT") {
+        handleReadingTargetResult(response as ReadingTargetResultMsg);
+      } else if (response.type === "READING_TARGET_ERROR") {
+        handleReadingTargetError(response as ReadingTargetErrorMsg);
+      }
+    } catch {
+      if (typeof activeTabId === "number") {
+        handleReadingTargetError({
+          type: "READING_TARGET_ERROR",
+          tabId: activeTabId,
+          error: "target_extraction_failed",
+        });
+      }
+    }
+  }
+
   async function requestReadCurrentPage(source: PageActivationSource = "sidepanel"): Promise<void> {
     try {
       const tab = await refreshActiveTab(false);
@@ -698,6 +798,7 @@ export function createSidepanelPageReadingRuntime({
         identity: pageUrlIdentity(activeUrl),
         title: activeTitle,
         status: "loading",
+        target: undefined,
         advisor: undefined,
         updatedAt: now(),
         activationSource: source,
@@ -742,12 +843,54 @@ export function createSidepanelPageReadingRuntime({
       identity: pageUrlIdentity(message.surface.url, message.surface.canonicalUrl),
       title: message.surface.title,
       surface: message.surface,
+      target: undefined,
       status: "ready",
       updatedAt: now(),
       activationSource: "sidepanel",
     });
     if (tabId === activeTabId) render();
     startParserAdvisor(tabId, message.surface);
+  }
+
+  function handleReadingTargetResult(message: ReadingTargetResultMsg): void {
+    const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
+    if (typeof tabId !== "number") return;
+    const existing = sessions.get(tabId);
+    if (!existing?.surface || existing.status === "stale") return;
+    if (message.target.surfaceId !== existing.surface.id) {
+      handleReadingTargetError({
+        type: "READING_TARGET_ERROR",
+        tabId,
+        error: "target_stale",
+      });
+      return;
+    }
+    sessions.set(tabId, {
+      ...existing,
+      target: message.target,
+      status: "ready",
+      updatedAt: now(),
+    });
+    if (tabId === activeTabId) render();
+    startParserAdvisor(tabId, existing.surface, message.target);
+  }
+
+  function handleReadingTargetError(message: ReadingTargetErrorMsg): void {
+    const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
+    if (typeof tabId !== "number") return;
+    const existing = sessions.get(tabId);
+    if (!existing?.surface) return;
+    sessions.set(tabId, {
+      ...existing,
+      advisor: {
+        status: "error",
+        error: friendlyTargetError(message.error),
+        providerRuntime: resolveAdvisorProviderRuntime(getSettings(), getTierAEndpoint(), getTierAModel()),
+        updatedAt: now(),
+      },
+      updatedAt: now(),
+    });
+    if (tabId === activeTabId) render();
   }
 
   function handlePageReadingError(message: PageReadingErrorMsg): void {
@@ -760,6 +903,7 @@ export function createSidepanelPageReadingRuntime({
       identity: existing?.identity || pageUrlIdentity(existing?.url || activeUrl),
       title: existing?.title || activeTitle,
       surface: existing?.surface,
+      target: undefined,
       advisor: undefined,
       status: "error",
       error: friendlyPageReadingError(message.error),

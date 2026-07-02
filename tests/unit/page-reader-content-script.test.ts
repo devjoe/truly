@@ -4,7 +4,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   extractCurrentPageReadingSurface,
+  extractCurrentSelectionTarget,
   handlePageReadingMessage,
+  handleReadingTargetMessage,
 } from "@src/content_scripts/page-reader";
 import type { TrulyMessage } from "@src/lib/messages";
 
@@ -121,6 +123,75 @@ describe("page-reader content script", () => {
     expect(currentRegion).toEqual({
       type: "PAGE_READING_ERROR",
       error: "page_reading_action_unsupported",
+    });
+  });
+
+  it("extracts a user-triggered selection target snapshot", () => {
+    const url = "https://example.test/articles/clean-article";
+    const documentRef = fixtureDocument("clean-article.html", url);
+    const surface = extractCurrentPageReadingSurface(documentRef, url).surface;
+    const selected = [
+      "This selected synthetic passage is intentionally long enough for the selection target flow.",
+      "It represents explicit reader intent and should become the model context target.",
+    ].join(" ");
+    documentRef.getSelection = () => ({
+      toString: () => selected,
+      rangeCount: 0,
+    } as Selection);
+
+    const handled = handleReadingTargetMessage(
+      {
+        type: "READING_TARGET_REQUEST",
+        tabId: 1,
+        trigger: "selection",
+        surfaceId: surface.id,
+        activation: {
+          source: "sidepanel",
+          targetKind: "selection",
+          action: "read",
+        },
+      } satisfies TrulyMessage,
+      documentRef,
+      url,
+    );
+
+    expect(handled).toMatchObject({
+      type: "READING_TARGET_RESULT",
+      target: {
+        surfaceId: surface.id,
+        kind: "selection",
+        text: selected,
+        extraction: {
+          method: "selection",
+          status: "complete",
+          warnings: [],
+        },
+      },
+    });
+  });
+
+  it("returns typed selection target errors for empty or stale selections", () => {
+    const url = "https://example.test/articles/clean-article";
+    const documentRef = fixtureDocument("clean-article.html", url);
+    documentRef.getSelection = () => ({
+      toString: () => "too short",
+      rangeCount: 0,
+    } as Selection);
+
+    expect(extractCurrentSelectionTarget(documentRef, url)).toEqual({
+      type: "READING_TARGET_ERROR",
+      error: "no_meaningful_selection",
+    });
+
+    const longSelection = "This selected synthetic passage is long enough to be meaningful, but the expected surface id is stale.";
+    documentRef.getSelection = () => ({
+      toString: () => longSelection,
+      rangeCount: 0,
+    } as Selection);
+
+    expect(extractCurrentSelectionTarget(documentRef, url, "surface:stale")).toEqual({
+      type: "READING_TARGET_ERROR",
+      error: "target_stale",
     });
   });
 });

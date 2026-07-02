@@ -348,6 +348,79 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("只適合頁面總覽");
   });
 
+  it("uses an explicit selection target for reading context", async () => {
+    const pagePaneEl = setupDom();
+    const selectedText = [
+      "This selected runtime passage is intentionally long enough for the selection target flow.",
+      "It should replace the whole-page preview while preserving the original page surface.",
+    ].join(" ");
+    const baseSurface = surface();
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return {
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: baseSurface,
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "READING_TARGET_REQUEST") {
+        return {
+          type: "READING_TARGET_RESULT",
+          tabId: 42,
+          target: {
+            id: "target:selection:test",
+            surfaceId: baseSurface.id,
+            kind: "selection",
+            text: selectedText,
+            surroundingText: "Synthetic surrounding text for the selected passage.",
+            extraction: {
+              method: "selection",
+              status: "complete",
+              warnings: [],
+            },
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "READING_TARGET_REQUEST",
+      tabId: 42,
+      trigger: "selection",
+      surfaceId: baseSurface.id,
+      activation: {
+        source: "sidepanel",
+        targetKind: "selection",
+        action: "read",
+      },
+    }));
+    expect(pagePaneEl.textContent).toContain(selectedText);
+    expect(pagePaneEl.textContent).toContain("目標");
+    expect(pagePaneEl.textContent).toContain("selection");
+    expect(pagePaneEl.textContent).toContain("Reading context");
+    expect(pagePaneEl.textContent).toContain("accept_current");
+  });
+
   it("shows a friendly explanation for reserved actions that are not enabled", async () => {
     const pagePaneEl = setupDom();
     const runtime = createSidepanelPageReadingRuntime({

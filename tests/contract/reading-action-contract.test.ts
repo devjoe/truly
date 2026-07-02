@@ -69,9 +69,23 @@ describe("reading action contract", () => {
         tabId: 1,
         error: "reading_target_unsupported",
       },
+      {
+        type: "READING_TARGET_ERROR",
+        tabId: 1,
+        error: "no_meaningful_selection",
+      },
+      {
+        type: "READING_TARGET_ERROR",
+        tabId: 1,
+        error: "target_stale",
+      },
     ];
 
-    expect(messages.map((message) => message.type)).toEqual(["READING_TARGET_ERROR"]);
+    expect(messages.map((message) => message.type)).toEqual([
+      "READING_TARGET_ERROR",
+      "READING_TARGET_ERROR",
+      "READING_TARGET_ERROR",
+    ]);
   });
 
   it("rejects partial or invented activation shapes", () => {

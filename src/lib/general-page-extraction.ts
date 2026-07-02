@@ -21,7 +21,7 @@ export interface GeneralPageExtractionOptions {
 }
 
 const DEFAULT_MIN_MAIN_TEXT_LENGTH = 240;
-const DEFAULT_MIN_SELECTED_TEXT_LENGTH = 80;
+export const GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH = 80;
 const DEFAULT_MAX_LINKS = 24;
 const DEFAULT_MAX_IMAGES = 12;
 const EXCERPT_LENGTH = 240;
@@ -171,7 +171,7 @@ export function extractGeneralPageSurface(
   options: GeneralPageExtractionOptions = {},
 ): ReadingSurface {
   const minMainTextLength = options.minMainTextLength ?? DEFAULT_MIN_MAIN_TEXT_LENGTH;
-  const minSelectedTextLength = options.minSelectedTextLength ?? DEFAULT_MIN_SELECTED_TEXT_LENGTH;
+  const minSelectedTextLength = options.minSelectedTextLength ?? GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH;
   const maxLinks = options.maxLinks ?? DEFAULT_MAX_LINKS;
   const maxImages = options.maxImages ?? DEFAULT_MAX_IMAGES;
 

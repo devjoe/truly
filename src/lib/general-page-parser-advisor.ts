@@ -1,4 +1,5 @@
 import type { ReadingSurfaceExtraction } from "./reading-surface-types";
+import { GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH } from "./general-page-extraction";
 import type {
   GeneralPageModelContext,
   GeneralPageModelQualityIssue,
@@ -492,6 +493,10 @@ export function buildRuleBasedGeneralPageParserAdvice(
   const reasons = new Set(request.escalation.reasons);
   const bestCandidate = bestCandidateBlock(request.candidateBlocks);
 
+  if (request.targetKind === "selection" && request.currentTextLength >= GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH) {
+    return advice("article", "accept_current", "high", request.escalation.reasons, "The user-selected text is the explicit reading target.");
+  }
+
   if (reasons.has("index_or_feed") || reasons.has("large_navigation_noise")) {
     return advice("index_or_feed", "downgrade_to_index_or_feed", "high", uniqueRiskTags([...request.escalation.reasons, "index_or_feed"]), "Navigation or list-density signals are too strong to treat as one clean article.");
   }
@@ -521,6 +526,7 @@ export function isGeneralPageParserAdvisorAdviceCompatible(
   const reasons = new Set(request.escalation.reasons);
   if (
     advisor.decision === "accept_current" &&
+    request.targetKind === "page" &&
     (reasons.has("index_or_feed") ||
       reasons.has("large_navigation_noise") ||
       reasons.has("login_or_paywall") ||

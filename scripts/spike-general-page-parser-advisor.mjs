@@ -104,6 +104,14 @@ function normalizeFixture(fixture) {
 
 async function importTsModule(sourcePath) {
   const absolutePath = path.resolve(process.cwd(), sourcePath);
+  return import(compileTsModuleDataUrl(absolutePath));
+}
+
+const tsModuleCache = new Map();
+
+function compileTsModuleDataUrl(absolutePath) {
+  if (tsModuleCache.has(absolutePath))
+    return tsModuleCache.get(absolutePath);
   const source = fs.readFileSync(absolutePath, "utf8");
   const transpiled = ts.transpileModule(source, {
     compilerOptions: {
@@ -114,8 +122,29 @@ async function importTsModule(sourcePath) {
     },
     fileName: absolutePath,
   });
-  const encoded = Buffer.from(transpiled.outputText, "utf8").toString("base64");
-  return import(`data:text/javascript;base64,${encoded}`);
+  const output = transpiled.outputText.replace(
+    /from\s+["'](\.[^"']+)["']/g,
+    (match, specifier) => {
+      const resolved = resolveTsImport(absolutePath, specifier);
+      if (!resolved)
+        return match;
+      return `from "${compileTsModuleDataUrl(resolved)}"`;
+    },
+  );
+  const encoded = Buffer.from(output, "utf8").toString("base64");
+  const dataUrl = `data:text/javascript;base64,${encoded}`;
+  tsModuleCache.set(absolutePath, dataUrl);
+  return dataUrl;
+}
+
+function resolveTsImport(fromPath, specifier) {
+  const basePath = path.resolve(path.dirname(fromPath), specifier);
+  const candidates = [
+    basePath,
+    `${basePath}.ts`,
+    path.join(basePath, "index.ts"),
+  ];
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? undefined;
 }
 
 function documentSignals(document) {

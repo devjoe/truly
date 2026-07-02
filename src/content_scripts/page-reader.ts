@@ -4,17 +4,22 @@
 // The first runtime slice proves the typed extraction responder without moving
 // third-party parsers into runtime or changing install-time permissions.
 
-import { extractGeneralPageSurface } from "../lib/general-page-extraction";
+import { extractGeneralPageSurface, GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH } from "../lib/general-page-extraction";
 import type {
   PageReadingErrorMsg,
   PageReadingRequestMsg,
   PageReadingResultMsg,
+  ReadingTargetErrorMsg,
+  ReadingTargetRequestMsg,
+  ReadingTargetResultMsg,
   TrulyMessage,
 } from "../lib/messages";
 import { isTrulyMessage } from "../lib/messages";
 import type { ReadingActivation } from "../lib/reading-action-types";
+import type { ReadingTarget, ReadingTargetRect } from "../lib/reading-target-types";
 
 type PageReadingResponse = PageReadingResultMsg | PageReadingErrorMsg;
+type ReadingTargetResponse = ReadingTargetResultMsg | ReadingTargetErrorMsg;
 
 export function extractCurrentPageReadingSurface(
   documentRef: Document,
@@ -26,6 +31,87 @@ export function extractCurrentPageReadingSurface(
       document: documentRef,
       url,
     }),
+  };
+}
+
+function normalizeSelectionText(input: string): string {
+  return input.replace(/\s+/g, " ").trim();
+}
+
+function stableTextHash(input: string): string {
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+function selectionRect(selection: Selection): ReadingTargetRect | undefined {
+  try {
+    if (selection.rangeCount <= 0) return undefined;
+    const rect = selection.getRangeAt(0).getBoundingClientRect();
+    if (!Number.isFinite(rect.width) || !Number.isFinite(rect.height)) return undefined;
+    return {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function selectionSurroundingText(selection: Selection, selectedText: string, documentRef: Document): string | undefined {
+  const rawScope = selection.rangeCount > 0
+    ? selection.getRangeAt(0).commonAncestorContainer.textContent
+    : undefined;
+  const scopeText = normalizeSelectionText(rawScope || documentRef.body?.textContent || "");
+  if (!scopeText || scopeText === selectedText) return undefined;
+  const selectedIndex = scopeText.indexOf(selectedText);
+  if (selectedIndex < 0) return scopeText.slice(0, 1200);
+  const start = Math.max(0, selectedIndex - 360);
+  const end = Math.min(scopeText.length, selectedIndex + selectedText.length + 360);
+  return scopeText.slice(start, end);
+}
+
+export function extractCurrentSelectionTarget(
+  documentRef: Document,
+  url: string,
+  expectedSurfaceId?: string,
+): ReadingTargetResultMsg | ReadingTargetErrorMsg {
+  const selection = documentRef.getSelection?.();
+  const selectedText = normalizeSelectionText(selection?.toString() || "");
+  if (selectedText.length < GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH) {
+    return {
+      type: "READING_TARGET_ERROR",
+      error: "no_meaningful_selection",
+    };
+  }
+  const surface = extractGeneralPageSurface({ document: documentRef, url });
+  if (expectedSurfaceId && surface.id !== expectedSurfaceId) {
+    return {
+      type: "READING_TARGET_ERROR",
+      error: "target_stale",
+    };
+  }
+  const target: ReadingTarget = {
+    id: `target:selection:${surface.id}:${stableTextHash(selectedText)}`,
+    surfaceId: surface.id,
+    kind: "selection",
+    text: selectedText,
+    surroundingText: selection ? selectionSurroundingText(selection, selectedText, documentRef) : undefined,
+    sourceRect: selection ? selectionRect(selection) : undefined,
+    extraction: {
+      method: "selection",
+      status: "complete",
+      warnings: [],
+    },
+  };
+  return {
+    type: "READING_TARGET_RESULT",
+    target,
   };
 }
 
@@ -62,6 +148,30 @@ export function handlePageReadingMessage(
   }
 }
 
+export function handleReadingTargetMessage(
+  message: TrulyMessage,
+  documentRef: Document,
+  url: string,
+): ReadingTargetResponse | undefined {
+  if (message.type !== "READING_TARGET_REQUEST") {
+    return undefined;
+  }
+  if (message.trigger !== "selection" || message.activation?.targetKind !== "selection") {
+    return {
+      type: "READING_TARGET_ERROR",
+      error: "reading_target_unsupported",
+    };
+  }
+  try {
+    return extractCurrentSelectionTarget(documentRef, url, message.surfaceId);
+  } catch {
+    return {
+      type: "READING_TARGET_ERROR",
+      error: "target_extraction_failed",
+    };
+  }
+}
+
 export function installPageReaderRuntime(
   runtime: Pick<typeof chrome.runtime, "onMessage">,
   documentRef: Document,
@@ -81,7 +191,8 @@ export function installPageReaderRuntime(
       return false;
     }
 
-    const response = handlePageReadingMessage(message, documentRef, urlProvider());
+    const response = handlePageReadingMessage(message, documentRef, urlProvider()) ??
+      handleReadingTargetMessage(message, documentRef, urlProvider());
     if (!response)
       return false;
 

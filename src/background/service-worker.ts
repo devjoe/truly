@@ -103,6 +103,13 @@ function isPageReadingReply(value: unknown): value is Extract<TrulyMessage, { ty
       (value as { type?: unknown }).type === "PAGE_READING_ERROR");
 }
 
+function isReadingTargetReply(value: unknown): value is Extract<TrulyMessage, { type: "READING_TARGET_RESULT" | "READING_TARGET_ERROR" }> {
+  return !!value &&
+    typeof value === "object" &&
+    ((value as { type?: unknown }).type === "READING_TARGET_RESULT" ||
+      (value as { type?: unknown }).type === "READING_TARGET_ERROR");
+}
+
 function broadcastPageReadingReply(message: Extract<TrulyMessage, { type: "PAGE_READING_RESULT" | "PAGE_READING_ERROR" }>): void {
   chrome.runtime.sendMessage(message).catch(() => {});
   setTimeout(() => chrome.runtime.sendMessage(message).catch(() => {}), 250);
@@ -244,14 +251,45 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   }
 
   if (message.type === "READING_TARGET_REQUEST") {
-    try {
-      sendResponse({
-        type: "READING_TARGET_ERROR",
-        tabId: message.tabId,
-        error: "reading_target_unsupported",
-      } satisfies TrulyMessage);
-    } catch {}
-    return false;
+    if (message.trigger !== "selection" || message.activation?.targetKind !== "selection") {
+      try {
+        sendResponse({
+          type: "READING_TARGET_ERROR",
+          tabId: message.tabId,
+          error: "reading_target_unsupported",
+        } satisfies TrulyMessage);
+      } catch {}
+      return false;
+    }
+
+    const tabId = message.tabId;
+    (async () => {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["content_scripts/page-reader.js"],
+        });
+        const reply = await chrome.tabs.sendMessage(tabId, message);
+        const routedReply = isReadingTargetReply(reply)
+          ? { ...reply, tabId }
+          : {
+              type: "READING_TARGET_ERROR",
+              tabId,
+              error: "target_extraction_failed",
+            } satisfies TrulyMessage;
+        sendResponse(routedReply);
+      } catch (error) {
+        const errorText = error instanceof Error ? error.message : String(error);
+        sendResponse({
+          type: "READING_TARGET_ERROR",
+          tabId,
+          error: errorText.includes("Cannot access contents of the page")
+            ? "page_grant_missing"
+            : "target_extraction_failed",
+        } satisfies TrulyMessage);
+      }
+    })();
+    return true;
   }
 
   if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {

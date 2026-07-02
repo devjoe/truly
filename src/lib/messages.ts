@@ -31,7 +31,7 @@ import type {
 } from "./types";
 import type { LlmPostContext } from "./ollama-client";
 import type { ReadingSurface } from "./reading-surface-types";
-import type { ReadingTarget } from "./reading-target-types";
+import type { ReadingTarget, ReadingTargetErrorReason } from "./reading-target-types";
 import type { ReadingActivation } from "./reading-action-types";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./readiness";
 import type {
@@ -111,6 +111,7 @@ export interface ReadingTargetRequestMsg {
   tabId: number;
   trigger: "selection" | "hotkey" | "context-menu" | "click-hold";
   activation?: ReadingActivation;
+  surfaceId?: string;
 }
 
 export interface ReadingTargetResultMsg {
@@ -121,7 +122,7 @@ export interface ReadingTargetResultMsg {
 
 export interface ReadingTargetErrorMsg {
   type: "READING_TARGET_ERROR";
-  error: string;
+  error: ReadingTargetErrorReason;
   tabId?: number;
 }
 

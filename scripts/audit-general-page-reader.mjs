@@ -456,6 +456,42 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     const copy = JSON.parse(copyRaw);
 
+    const selectedText = await article.evaluate(`(() => {
+      const paragraph = document.querySelector('article p:nth-of-type(3)');
+      const range = document.createRange();
+      range.selectNodeContents(paragraph);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return selection.toString().replace(/\\s+/g, ' ').trim();
+    })()`);
+    await side.evaluate(`document.querySelector('#pageReadSelection')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    await waitFor(side, `(() => {
+      const pane = document.querySelector('#page-pane');
+      return /targetKind|目標/.test(pane?.innerText || '') && /selection/.test(pane?.innerText || '');
+    })()`, 10000, "Page/Web selection target").catch(async (error) => {
+      await side.screenshot(resolve(OUT_DIR, "page-selection-timeout.png")).catch(() => {});
+      throw error;
+    });
+    const selection = await side.evaluateJson(`(() => {
+      const pane = document.querySelector('#page-pane');
+      const model = pane?.querySelector('.page-reader-model-context');
+      const advisor = pane?.querySelector('.page-reader-advisor');
+      return {
+        excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
+        modelRows: [...model?.querySelectorAll('dl div') || []].map((row) => ({
+          label: row.querySelector('dt')?.textContent?.trim(),
+          value: row.querySelector('dd')?.textContent?.trim()
+        })),
+        advisorRows: [...advisor?.querySelectorAll('dl div') || []].map((row) => ({
+          label: row.querySelector('dt')?.textContent?.trim(),
+          value: row.querySelector('dd')?.textContent?.trim()
+        })),
+        advisorStatus: advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
+      };
+    })()`);
+    await side.screenshot(resolve(OUT_DIR, "page-selection-target.png"));
+
     await article.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article#comments`)}; undefined`);
     await sleep(500);
     const afterHash = await side.evaluateJson(`(() => ({
@@ -482,7 +518,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
 
     await side.screenshot(resolve(OUT_DIR, "page-ready-and-stale.png"));
 
-    return { initial, ready, copy, afterHash, afterTracking, afterMeaningful };
+    return { initial, ready, copy, selection: { selectedText, ...selection }, afterHash, afterTracking, afterMeaningful };
   } finally {
     await side.closeTarget().catch(() => {});
     await article.closeTarget().catch(() => {});
@@ -676,6 +712,15 @@ function assertAudit(result) {
   if (!result.success.copy.hasTitle || !result.success.copy.hasUrl || !result.success.copy.hasExcerpt || result.success.copy.hasFullTail) {
     errors.push("copy metadata boundary failed");
   }
+  if (!result.success.selection?.selectedText || !result.success.selection.excerpt?.includes(result.success.selection.selectedText.slice(0, 60))) {
+    errors.push("selection target text was not rendered as the Page/Web preview");
+  }
+  if (!result.success.selection?.modelRows?.some((row) => /目標|Target/.test(row.label || "") && row.value === "selection")) {
+    errors.push("selection target did not switch model context targetKind to selection");
+  }
+  if (!result.success.selection?.advisorRows?.some((row) => /判斷|Decision/.test(row.label || "") && row.value === "accept_current")) {
+    errors.push("selection target did not preserve accept_current reading context");
+  }
   if (result.success.afterHash.stale) errors.push("hash-only URL change incorrectly marked stale");
   if (result.success.afterTracking.stale) errors.push("tracking-only query change incorrectly marked stale");
   if (!result.success.afterMeaningful.stale) errors.push("meaningful URL change did not mark stale");
@@ -747,6 +792,7 @@ function writeSummary(result, errors) {
     `- Page/Web read status: ${result.success.ready.status}`,
     `- Model context: ${result.success.ready.modelContext?.status || "(missing)"}`,
     `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
+    `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
     `- Source links visible: ${result.success.ready.sourceLinks?.length || 0}`,
     `- Noisy fallback model context: ${result.noisy.ready.modelContext?.status || "(missing)"}`,
     `- Noisy fallback reading context: ${result.noisy.ready.advisor?.status || "(missing)"}`,
@@ -762,6 +808,7 @@ function writeSummary(result, errors) {
     "",
     `- ${relative(ROOT, resolve(OUT_DIR, "audit.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-no-grant.png"))}`,
     "",
