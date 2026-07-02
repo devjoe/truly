@@ -6,7 +6,13 @@ import type {
 } from "./general-page-model-context";
 
 export const GENERAL_PAGE_PARSER_ADVISOR_SCHEMA_VERSION = 1;
+export const GENERAL_PAGE_ADVISOR_LANE = "general-page-advisor";
+export const GENERAL_PAGE_ADVISOR_PROVIDER_CONFIG_SOURCE = "tier-b-provider";
+export const GENERAL_PAGE_ADVISOR_UI_CONTEXT_LABEL = "Reading context";
+export const GENERAL_PAGE_EFFECTIVE_MODEL_CONTEXT_CODE_NAME = "effectiveModelContext";
 export const GENERAL_PAGE_PARSER_ADVISOR_TEXT_PREVIEW_LIMIT = 1200;
+export const GENERAL_PAGE_PARSER_ADVISOR_FULL_TEXT_MAX_CHARS = 8000;
+export const GENERAL_PAGE_PARSER_ADVISOR_MAX_PAYLOAD_CHARS = 12000;
 export const GENERAL_PAGE_PARSER_ADVISOR_MAX_CANDIDATE_BLOCKS = 8;
 
 export type GeneralPageParserAdvisorPageType =
@@ -27,6 +33,42 @@ export type GeneralPageParserAdvisorDecision =
   | "request_screenshot_region";
 
 export type GeneralPageParserAdvisorConfidence = "low" | "medium" | "high";
+
+export type GeneralPageParserAdvisorLane = typeof GENERAL_PAGE_ADVISOR_LANE;
+export type GeneralPageAdvisorProviderConfigSource = typeof GENERAL_PAGE_ADVISOR_PROVIDER_CONFIG_SOURCE;
+export type GeneralPageParserAdvisorTrigger = "user_read_action";
+export type GeneralPageParserAdvisorPersistence = "session-only";
+export type GeneralPageParserAdvisorPayloadTextMode = "full" | "preview";
+export type GeneralPageEffectiveModelContextUse =
+  | "article_or_selection_analysis"
+  | "page_overview_only"
+  | "requires_user_target"
+  | "blocked";
+
+export interface GeneralPageParserAdvisorRuntimePolicy {
+  lane: GeneralPageParserAdvisorLane;
+  trigger: GeneralPageParserAdvisorTrigger;
+  canAutoRunAfterReadIntent: true;
+  canRunInBackground: false;
+  providerConfigSource: GeneralPageAdvisorProviderConfigSource;
+  resultPersistence: GeneralPageParserAdvisorPersistence;
+  effectiveContextCodeName: typeof GENERAL_PAGE_EFFECTIVE_MODEL_CONTEXT_CODE_NAME;
+  userFacingContextLabel: typeof GENERAL_PAGE_ADVISOR_UI_CONTEXT_LABEL;
+  screenshot: {
+    defaultRequiresConfirmation: true;
+    autoScreenshotAllowed: boolean;
+  };
+}
+
+export interface GeneralPageParserAdvisorPayloadBudget {
+  fullTextMaxChars: number;
+  maxPayloadChars: number;
+  candidateBlockPreviewChars: number;
+  maxCandidateBlocks: number;
+  currentTextMode: GeneralPageParserAdvisorPayloadTextMode;
+  estimatedPayloadChars: number;
+  withinBudget: boolean;
+}
 
 export type GeneralPageParserAdvisorRiskTag =
   | "fallback_extraction"
@@ -70,6 +112,9 @@ export interface GeneralPageParserAdvisorEscalationPolicy {
 
 export interface GeneralPageParserAdvisorRequest {
   schemaVersion: 1;
+  lane: GeneralPageParserAdvisorLane;
+  providerConfigSource: GeneralPageAdvisorProviderConfigSource;
+  trigger: GeneralPageParserAdvisorTrigger;
   url: string;
   title?: string;
   targetKind: GeneralPageModelContext["targetKind"];
@@ -81,6 +126,27 @@ export interface GeneralPageParserAdvisorRequest {
   currentTextLength: number;
   candidateBlocks: GeneralPageParserAdvisorCandidateBlock[];
   escalation: GeneralPageParserAdvisorEscalationPolicy;
+  payloadBudget: GeneralPageParserAdvisorPayloadBudget;
+}
+
+export interface GeneralPageEffectiveModelContext {
+  codeName: typeof GENERAL_PAGE_EFFECTIVE_MODEL_CONTEXT_CODE_NAME;
+  uiLabel: typeof GENERAL_PAGE_ADVISOR_UI_CONTEXT_LABEL;
+  url: string;
+  title?: string;
+  mainText: string;
+  modelEligible: boolean;
+  modelReadiness: GeneralPageModelReadiness;
+  allowedUse: GeneralPageEffectiveModelContextUse;
+  pageType?: GeneralPageParserAdvisorPageType;
+  appliedDecision: GeneralPageParserAdvisorDecision | "none";
+  selectedBlockId?: string;
+  source: "current-extraction" | "candidate-block" | "advisor-downgrade" | "advisor-block" | "user-target-required";
+  trace: {
+    deterministicSurfacePreserved: true;
+    readingSurfaceOverwritten: false;
+    advisorApplied: boolean;
+  };
 }
 
 export interface GeneralPageParserAdvisorAdvice {
@@ -103,6 +169,7 @@ interface BuildGeneralPageParserAdvisorRequestOptions {
   candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
   document?: GeneralPageParserAdvisorDocumentSignals;
   allowScreenshot?: boolean;
+  payloadBudget?: Partial<Pick<GeneralPageParserAdvisorPayloadBudget, "fullTextMaxChars" | "maxPayloadChars" | "candidateBlockPreviewChars" | "maxCandidateBlocks">>;
 }
 
 const PAGE_TYPES = new Set<GeneralPageParserAdvisorPageType>([
@@ -143,11 +210,31 @@ const RISK_TAGS = new Set<GeneralPageParserAdvisorRiskTag>([
   "needs_visual_grounding",
 ]);
 
+export function resolveGeneralPageParserAdvisorRuntimePolicy(
+  options: { autoScreenshotEnabled?: boolean } = {},
+): GeneralPageParserAdvisorRuntimePolicy {
+  return {
+    lane: GENERAL_PAGE_ADVISOR_LANE,
+    trigger: "user_read_action",
+    canAutoRunAfterReadIntent: true,
+    canRunInBackground: false,
+    providerConfigSource: GENERAL_PAGE_ADVISOR_PROVIDER_CONFIG_SOURCE,
+    resultPersistence: "session-only",
+    effectiveContextCodeName: GENERAL_PAGE_EFFECTIVE_MODEL_CONTEXT_CODE_NAME,
+    userFacingContextLabel: GENERAL_PAGE_ADVISOR_UI_CONTEXT_LABEL,
+    screenshot: {
+      defaultRequiresConfirmation: true,
+      autoScreenshotAllowed: options.autoScreenshotEnabled === true,
+    },
+  };
+}
+
 export function buildGeneralPageParserAdvisorRequest(
   context: GeneralPageModelContext,
   options: BuildGeneralPageParserAdvisorRequestOptions = {},
 ): GeneralPageParserAdvisorRequest {
-  const candidateBlocks = normalizeCandidateBlocks(options.candidateBlocks ?? []);
+  const payloadBudget = resolvePayloadBudget(context.mainText, options.candidateBlocks ?? [], options.payloadBudget);
+  const candidateBlocks = normalizeCandidateBlocks(options.candidateBlocks ?? [], payloadBudget);
   const escalation = resolveGeneralPageParserEscalation(context, {
     candidateBlocks,
     document: options.document,
@@ -156,6 +243,9 @@ export function buildGeneralPageParserAdvisorRequest(
 
   return {
     schemaVersion: GENERAL_PAGE_PARSER_ADVISOR_SCHEMA_VERSION,
+    lane: GENERAL_PAGE_ADVISOR_LANE,
+    providerConfigSource: GENERAL_PAGE_ADVISOR_PROVIDER_CONFIG_SOURCE,
+    trigger: "user_read_action",
     url: context.canonicalUrl || context.url,
     title: context.title,
     targetKind: context.targetKind,
@@ -167,10 +257,11 @@ export function buildGeneralPageParserAdvisorRequest(
     modelReadiness: context.modelReadiness,
     qualityIssues: [...context.qualityIssues],
     document: options.document,
-    currentTextPreview: clampText(context.mainText, GENERAL_PAGE_PARSER_ADVISOR_TEXT_PREVIEW_LIMIT),
+    currentTextPreview: clampText(context.mainText, payloadBudget.currentTextMode === "full" ? payloadBudget.fullTextMaxChars : GENERAL_PAGE_PARSER_ADVISOR_TEXT_PREVIEW_LIMIT),
     currentTextLength: context.mainText.length,
     candidateBlocks,
     escalation,
+    payloadBudget,
   };
 }
 
@@ -323,6 +414,77 @@ export function parseGeneralPageParserAdvisorAdvice(
   };
 }
 
+export function buildGeneralPageEffectiveModelContext(
+  context: GeneralPageModelContext,
+  request?: GeneralPageParserAdvisorRequest,
+  advisor?: GeneralPageParserAdvisorAdvice,
+): GeneralPageEffectiveModelContext {
+  if (!advisor || advisor.decision === "accept_current") {
+    return effectiveContext(context, {
+      mainText: context.mainText,
+      modelEligible: context.modelEligible,
+      modelReadiness: context.modelReadiness,
+      allowedUse: "article_or_selection_analysis",
+      pageType: advisor?.pageType,
+      appliedDecision: advisor?.decision ?? "none",
+      source: "current-extraction",
+      advisorApplied: Boolean(advisor),
+    });
+  }
+
+  if (advisor.decision === "prefer_candidate_block") {
+    const selectedBlock = request?.candidateBlocks.find((block) => block.id === advisor.selectedBlockId);
+    return effectiveContext(context, {
+      mainText: selectedBlock?.textPreview || context.mainText,
+      modelEligible: true,
+      modelReadiness: advisor.confidence === "low" ? "caution" : "ready",
+      allowedUse: "article_or_selection_analysis",
+      pageType: advisor.pageType,
+      appliedDecision: advisor.decision,
+      selectedBlockId: selectedBlock?.id,
+      source: "candidate-block",
+      advisorApplied: true,
+    });
+  }
+
+  if (advisor.decision === "downgrade_to_index_or_feed") {
+    return effectiveContext(context, {
+      mainText: context.mainText,
+      modelEligible: true,
+      modelReadiness: "caution",
+      allowedUse: "page_overview_only",
+      pageType: "index_or_feed",
+      appliedDecision: advisor.decision,
+      source: "advisor-downgrade",
+      advisorApplied: true,
+    });
+  }
+
+  if (advisor.decision === "request_user_selection" || advisor.decision === "request_screenshot_region") {
+    return effectiveContext(context, {
+      mainText: context.mainText,
+      modelEligible: false,
+      modelReadiness: "blocked",
+      allowedUse: "requires_user_target",
+      pageType: advisor.pageType,
+      appliedDecision: advisor.decision,
+      source: "user-target-required",
+      advisorApplied: true,
+    });
+  }
+
+  return effectiveContext(context, {
+    mainText: "",
+    modelEligible: false,
+    modelReadiness: "blocked",
+    allowedUse: "blocked",
+    pageType: advisor.pageType,
+    appliedDecision: advisor.decision,
+    source: "advisor-block",
+    advisorApplied: true,
+  });
+}
+
 export function buildRuleBasedGeneralPageParserAdvice(
   request: GeneralPageParserAdvisorRequest,
 ): GeneralPageParserAdvisorAdvice {
@@ -349,6 +511,68 @@ export function buildRuleBasedGeneralPageParserAdvice(
   }
 
   return advice(inferReadyPageType(request), "accept_current", request.modelReadiness === "ready" ? "high" : "medium", request.escalation.reasons, "Current extraction is acceptable for model context.");
+}
+
+function effectiveContext(
+  context: GeneralPageModelContext,
+  values: {
+    mainText: string;
+    modelEligible: boolean;
+    modelReadiness: GeneralPageModelReadiness;
+    allowedUse: GeneralPageEffectiveModelContextUse;
+    pageType?: GeneralPageParserAdvisorPageType;
+    appliedDecision: GeneralPageParserAdvisorDecision | "none";
+    selectedBlockId?: string;
+    source: GeneralPageEffectiveModelContext["source"];
+    advisorApplied: boolean;
+  },
+): GeneralPageEffectiveModelContext {
+  return {
+    codeName: GENERAL_PAGE_EFFECTIVE_MODEL_CONTEXT_CODE_NAME,
+    uiLabel: GENERAL_PAGE_ADVISOR_UI_CONTEXT_LABEL,
+    url: context.canonicalUrl || context.url,
+    title: context.title,
+    mainText: values.mainText,
+    modelEligible: values.modelEligible,
+    modelReadiness: values.modelReadiness,
+    allowedUse: values.allowedUse,
+    pageType: values.pageType,
+    appliedDecision: values.appliedDecision,
+    selectedBlockId: values.selectedBlockId,
+    source: values.source,
+    trace: {
+      deterministicSurfacePreserved: true,
+      readingSurfaceOverwritten: false,
+      advisorApplied: values.advisorApplied,
+    },
+  };
+}
+
+function resolvePayloadBudget(
+  mainText: string,
+  candidateBlocks: GeneralPageParserAdvisorCandidateBlock[],
+  overrides: BuildGeneralPageParserAdvisorRequestOptions["payloadBudget"] = {},
+): GeneralPageParserAdvisorPayloadBudget {
+  const budget = {
+    fullTextMaxChars: overrides.fullTextMaxChars ?? GENERAL_PAGE_PARSER_ADVISOR_FULL_TEXT_MAX_CHARS,
+    maxPayloadChars: overrides.maxPayloadChars ?? GENERAL_PAGE_PARSER_ADVISOR_MAX_PAYLOAD_CHARS,
+    candidateBlockPreviewChars: overrides.candidateBlockPreviewChars ?? GENERAL_PAGE_PARSER_ADVISOR_TEXT_PREVIEW_LIMIT,
+    maxCandidateBlocks: overrides.maxCandidateBlocks ?? GENERAL_PAGE_PARSER_ADVISOR_MAX_CANDIDATE_BLOCKS,
+  };
+  const currentTextMode: GeneralPageParserAdvisorPayloadTextMode = mainText.length <= budget.fullTextMaxChars ? "full" : "preview";
+  const currentTextChars = currentTextMode === "full"
+    ? mainText.length
+    : Math.min(mainText.length, GENERAL_PAGE_PARSER_ADVISOR_TEXT_PREVIEW_LIMIT);
+  const candidateChars = candidateBlocks.slice(0, budget.maxCandidateBlocks).reduce((total, block) => {
+    return total + Math.min(block.textPreview.length, budget.candidateBlockPreviewChars) + block.label.length + 64;
+  }, 0);
+  const estimatedPayloadChars = currentTextChars + candidateChars + 1200;
+  return {
+    ...budget,
+    currentTextMode,
+    estimatedPayloadChars,
+    withinBudget: estimatedPayloadChars <= budget.maxPayloadChars,
+  };
 }
 
 function advice(
@@ -391,6 +615,7 @@ function candidateScore(block: GeneralPageParserAdvisorCandidateBlock): number {
 
 function normalizeCandidateBlocks(
   blocks: GeneralPageParserAdvisorCandidateBlock[],
+  payloadBudget: GeneralPageParserAdvisorPayloadBudget,
 ): GeneralPageParserAdvisorCandidateBlock[] {
   const seen = new Set<string>();
   const clean: GeneralPageParserAdvisorCandidateBlock[] = [];
@@ -402,12 +627,12 @@ function normalizeCandidateBlocks(
       id: block.id,
       label: clampText(block.label, 80),
       role: block.role,
-      textPreview: clampText(block.textPreview, GENERAL_PAGE_PARSER_ADVISOR_TEXT_PREVIEW_LIMIT),
+      textPreview: clampText(block.textPreview, payloadBudget.candidateBlockPreviewChars),
       textLength: Math.max(0, Math.floor(block.textLength)),
       linkCount: Math.max(0, Math.floor(block.linkCount)),
       imageCount: Math.max(0, Math.floor(block.imageCount)),
     });
-    if (clean.length >= GENERAL_PAGE_PARSER_ADVISOR_MAX_CANDIDATE_BLOCKS)
+    if (clean.length >= payloadBudget.maxCandidateBlocks)
       break;
   }
   return clean;

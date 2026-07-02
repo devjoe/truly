@@ -17,8 +17,9 @@ The committed implementation is policy-first and non-runtime:
 - The public contract is a short JSON advisor schema plus deterministic offline
   evaluation over synthetic fixtures.
 
-The goal is to make parser recovery reviewable before deciding provider UX,
-privacy consent, screenshot behavior, or automatic escalation.
+The goal is to make parser recovery reviewable before implementing provider
+calls. Product decisions from the July 2 grill-me session are now encoded as
+contract-level policy below.
 
 ## Recovery Stack
 
@@ -30,13 +31,48 @@ The intended stack is layered and fail-closed:
 3. Parser recovery policy decides whether an advisor would be useful and what
    decisions are allowed.
 4. Parser advisor returns short JSON only.
-5. Runtime integration, user confirmation, and screenshot recovery require later
-   product decisions.
+5. Runtime integration may use the advisor automatically only inside a
+   user-initiated `read page` action.
+6. Screenshot recovery is suggested by the advisor but defaults to user
+   confirmation unless the user explicitly enables automatic screenshot
+   permission for this flow.
 
 The policy consumes existing diagnostics rather than inventing a parallel
 vocabulary: fallback extraction, partial extraction, large navigation noise,
 missing main content, dynamic partial content, short text, and login/paywall
 signals.
+
+
+## Product Decisions
+
+These decisions are now part of the contract layer:
+
+- **Trigger:** After the user presses `讀取此頁`, Parser Advisor may run
+  automatically as part of that user-initiated task. It must not run for passive
+  browsing, background tabs, or URL changes without a fresh user action or a
+  future explicit auto-update setting.
+- **Provider lane:** General Page Advisor is an independent product lane named
+  `general-page-advisor`, but it should preferentially reuse the Tier B provider
+  connection settings. It must not reuse Facebook Tier A prompt semantics or
+  cache schema.
+- **Payload:** The advisor request uses a measured recovery packet. Short page
+  text may be sent in full; long text is clipped by a payload budget. The
+  current contract records estimated payload size, full-text threshold, max
+  candidate blocks, and whether the payload is within budget.
+- **Effective context:** Deterministic `ReadingSurface` is preserved. Advisor
+  output may create `effectiveModelContext`, which is what later model calls or
+  UI should treat as the usable reading context. The user-facing label is
+  `Reading context`.
+- **Index/list/feed pages:** These are not single articles. They may support
+  page overview, but article-grade tasks such as summary, claim extraction, or
+  fact-checking require a selected target, card, paragraph, or current region.
+- **Screenshot:** `request_screenshot_region` is a valid advisor decision only
+  when the caller allows it. Runtime screenshot sending defaults to confirmation;
+  an advanced user setting may authorize automatic screenshot use within the
+  same user-initiated read flow.
+- **Persistence:** Advisor result state is session-only. Do not persist raw
+  model payloads, screenshots, full page text, or advisor history to local
+  storage by default.
 
 ## Advisor Output
 
@@ -69,16 +105,18 @@ has the right shape before model-provider integration:
 - documentation and normal article fixtures should not be downgraded because of
   dense links alone.
 
-## Deferred Decisions
+## Remaining Runtime Work
 
-These still need product review before runtime integration:
+The contract still does not implement provider calls. The next runtime design
+needs to specify:
 
-- Should model-assisted parser recovery run automatically or only after the user
-  presses an explicit action?
-- Which provider lane should it use: Tier A-like compact classifier, Tier B
-  structured JSON, or a dedicated General Page lane?
-- When, if ever, may Truly send viewport or region screenshots to a model?
-- Should an index/list page remain `modelEligible` with caution, or should the
-  advisor block model use until the user picks a target?
-- How should the side panel explain advisor uncertainty and let the user correct
-  the selected block?
+- how to map the independent `general-page-advisor` lane onto Tier B provider
+  settings in service-worker or side-panel runtime code;
+- how to measure real prompt size, latency, and cost on the private 200-page
+  corpus before finalizing payload thresholds;
+- how to represent `effectiveModelContext` in side-panel state without
+  overwriting the deterministic `ReadingSurface`;
+- how the side panel lets the user confirm screenshot use, select a target, or
+  inspect advisor uncertainty;
+- whether page-overview actions need a new `targetKind` value before runtime
+  model calls are enabled.

@@ -3,11 +3,15 @@ import { describe, expect, it } from "vitest";
 import { extractGeneralPageSurface } from "@src/lib/general-page-extraction";
 import { buildGeneralPageModelContext } from "@src/lib/general-page-model-context";
 import {
+  GENERAL_PAGE_ADVISOR_UI_CONTEXT_LABEL,
+  GENERAL_PAGE_EFFECTIVE_MODEL_CONTEXT_CODE_NAME,
+  buildGeneralPageEffectiveModelContext,
   buildGeneralPageParserAdvisorRequest,
   buildGeneralPageParserAdvisorSystemPrompt,
   buildGeneralPageParserAdvisorUserPrompt,
   buildRuleBasedGeneralPageParserAdvice,
   parseGeneralPageParserAdvisorAdvice,
+  resolveGeneralPageParserAdvisorRuntimePolicy,
   resolveGeneralPageParserEscalation,
   type GeneralPageParserAdvisorRequest,
 } from "@src/lib/general-page-parser-advisor";
@@ -36,6 +40,49 @@ function requestFixture(): GeneralPageParserAdvisorRequest {
 }
 
 describe("General Page Parser Advisor contract", () => {
+
+  it("codifies the user-initiated automatic advisor lane", () => {
+    const policy = resolveGeneralPageParserAdvisorRuntimePolicy();
+    const autoScreenshotPolicy = resolveGeneralPageParserAdvisorRuntimePolicy({ autoScreenshotEnabled: true });
+
+    expect(policy).toMatchObject({
+      lane: "general-page-advisor",
+      trigger: "user_read_action",
+      canAutoRunAfterReadIntent: true,
+      canRunInBackground: false,
+      providerConfigSource: "tier-b-provider",
+      resultPersistence: "session-only",
+      effectiveContextCodeName: GENERAL_PAGE_EFFECTIVE_MODEL_CONTEXT_CODE_NAME,
+      userFacingContextLabel: GENERAL_PAGE_ADVISOR_UI_CONTEXT_LABEL,
+      screenshot: {
+        defaultRequiresConfirmation: true,
+        autoScreenshotAllowed: false,
+      },
+    });
+    expect(autoScreenshotPolicy.screenshot).toEqual({
+      defaultRequiresConfirmation: true,
+      autoScreenshotAllowed: true,
+    });
+  });
+
+  it("measures payload budget and permits full text only below threshold", () => {
+    const shortRequest = requestFixture();
+    const longText = `${"Long article sentence. ".repeat(700)}`;
+    const longDom = new JSDOM(`<!doctype html><title>Long</title><article><p>${longText}</p></article>`, {
+      url: "https://example.test/long",
+    });
+    const longSurface = extractGeneralPageSurface({
+      document: longDom.window.document,
+      url: "https://example.test/long",
+    });
+    const longRequest = buildGeneralPageParserAdvisorRequest(buildGeneralPageModelContext(longSurface));
+
+    expect(shortRequest.payloadBudget.currentTextMode).toBe("full");
+    expect(shortRequest.currentTextPreview.length).toBe(shortRequest.currentTextLength);
+    expect(longRequest.payloadBudget.currentTextMode).toBe("preview");
+    expect(longRequest.currentTextPreview.length).toBeLessThan(longRequest.currentTextLength);
+    expect(longRequest.payloadBudget.estimatedPayloadChars).toBeGreaterThan(0);
+  });
   it("builds a fail-closed advisor request from existing model context diagnostics", () => {
     const request = requestFixture();
 
@@ -96,6 +143,97 @@ describe("General Page Parser Advisor contract", () => {
     expect(system).toContain("downgrade_to_index_or_feed");
     expect(user).toContain("allowedDecisions");
     expect(user).toContain("Candidate Blocks");
+  });
+
+  it("builds an effective model context without overwriting the deterministic surface", () => {
+    const request = requestFixture();
+    const parsed = parseGeneralPageParserAdvisorAdvice(JSON.stringify({
+      schemaVersion: 1,
+      pageType: "article",
+      decision: "prefer_candidate_block",
+      confidence: "high",
+      selectedBlockId: "block-article",
+      needsUserSelection: false,
+      needsScreenshot: false,
+      riskTags: ["candidate_block_ambiguous"],
+      rationale: "Use the article-like block.",
+    }), request);
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok)
+      return;
+
+    const context = buildGeneralPageModelContext(extractGeneralPageSurface({
+      document: new JSDOM("<!doctype html><title>Fallback</title><body><p>Fallback body text is intentionally less specific than the selected candidate block but remains preserved.</p></body>", { url: "https://example.test/fallback" }).window.document,
+      url: "https://example.test/fallback",
+    }));
+    const effective = buildGeneralPageEffectiveModelContext(context, request, parsed.value);
+
+    expect(effective).toMatchObject({
+      codeName: "effectiveModelContext",
+      uiLabel: "Reading context",
+      allowedUse: "article_or_selection_analysis",
+      appliedDecision: "prefer_candidate_block",
+      selectedBlockId: "block-article",
+      source: "candidate-block",
+      trace: {
+        deterministicSurfacePreserved: true,
+        readingSurfaceOverwritten: false,
+        advisorApplied: true,
+      },
+    });
+    expect(effective.mainText).toContain("Useful article text");
+  });
+
+  it("turns index/list advice into page overview only effective context", () => {
+    const request = requestFixture();
+    const context = buildGeneralPageModelContext(extractGeneralPageSurface({
+      document: new JSDOM("<!doctype html><title>Index</title><body><main><h1>Top Stories</h1><p>Directory page lists several synthetic entries, not one article.</p></main></body>", { url: "https://example.test/" }).window.document,
+      url: "https://example.test/",
+    }));
+    const effective = buildGeneralPageEffectiveModelContext(context, request, {
+      schemaVersion: 1,
+      pageType: "index_or_feed",
+      decision: "downgrade_to_index_or_feed",
+      confidence: "high",
+      needsUserSelection: false,
+      needsScreenshot: false,
+      riskTags: ["index_or_feed"],
+      rationale: "This is a list page.",
+    });
+
+    expect(effective).toMatchObject({
+      modelEligible: true,
+      modelReadiness: "caution",
+      allowedUse: "page_overview_only",
+      pageType: "index_or_feed",
+      source: "advisor-downgrade",
+    });
+  });
+
+  it("requires an explicit target for user-selection or screenshot recovery", () => {
+    const context = buildGeneralPageModelContext(extractGeneralPageSurface({
+      document: new JSDOM("<!doctype html><body>short</body>", { url: "https://example.test/short" }).window.document,
+      url: "https://example.test/short",
+    }));
+    const request = buildGeneralPageParserAdvisorRequest(context, { allowScreenshot: true });
+    const effective = buildGeneralPageEffectiveModelContext(context, request, {
+      schemaVersion: 1,
+      pageType: "unknown",
+      decision: "request_screenshot_region",
+      confidence: "medium",
+      needsUserSelection: false,
+      needsScreenshot: true,
+      riskTags: ["needs_visual_grounding"],
+      rationale: "DOM text is insufficient.",
+    });
+
+    expect(effective).toMatchObject({
+      modelEligible: false,
+      modelReadiness: "blocked",
+      allowedUse: "requires_user_target",
+      appliedDecision: "request_screenshot_region",
+      source: "user-target-required",
+    });
   });
 
   it("rule baseline downgrades dense index pages before model runtime exists", () => {
