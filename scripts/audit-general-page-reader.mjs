@@ -466,6 +466,8 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       };
     })()`);
 
+    const pageBrief = await observePageBrief(side, "page-analysis-ready.png");
+
     const copyRaw = await side.evaluate(`(async () => {
       globalThis.__trulyCopiedText = null;
       const original = navigator.clipboard;
@@ -499,8 +501,12 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     await side.evaluate(`document.querySelector('#pageReadSelection')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     await waitFor(side, `(() => {
-      const pane = document.querySelector('#page-pane');
-      return /targetKind|目標/.test(pane?.innerText || '') && /selection/.test(pane?.innerText || '');
+      const model = document.querySelector('#page-pane .page-reader-model-context');
+      const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
+        label: row.querySelector('dt')?.textContent?.trim(),
+        value: row.querySelector('dd')?.textContent?.trim()
+      }));
+      return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && row.value === 'selection');
     })()`, 10000, "Page/Web selection target").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-selection-timeout.png")).catch(() => {});
       throw error;
@@ -550,13 +556,47 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
 
     await side.screenshot(resolve(OUT_DIR, "page-ready-and-stale.png"));
 
-    return { initial, ready, copy, selection: { selectedText, ...selection }, afterHash, afterTracking, afterMeaningful };
+    return { initial, ready, pageBrief, copy, selection: { selectedText, ...selection }, afterHash, afterTracking, afterMeaningful };
   } finally {
     await side.closeTarget().catch(() => {});
     await article.closeTarget().catch(() => {});
     side.close();
     article.close();
   }
+}
+
+async function observePageBrief(side, readyScreenshotName) {
+  const observation = {
+    status: "not_observed",
+    screenshot: null,
+    text: "",
+  };
+  try {
+    await waitFor(side, `(() => {
+      const analysis = document.querySelector('#page-pane .page-reader-analysis');
+      return analysis && !analysis.classList.contains('is-running');
+    })()`, 20000, "Page/Web page brief completion");
+  } catch {
+    observation.status = "pending_or_timeout";
+    observation.text = await side.evaluate(`document.querySelector('#page-pane .page-reader-analysis')?.innerText || ''`).catch(() => "");
+    await side.screenshot(resolve(OUT_DIR, "page-analysis-pending.png")).catch(() => {});
+    observation.screenshot = relative(ROOT, resolve(OUT_DIR, "page-analysis-pending.png"));
+    return observation;
+  }
+  const state = await side.evaluateJson(`(() => {
+    const analysis = document.querySelector('#page-pane .page-reader-analysis');
+    return {
+      className: analysis?.className || '',
+      header: analysis?.querySelector('h3')?.textContent?.trim(),
+      status: analysis?.querySelector('.page-reader-analysis-header span')?.textContent?.trim(),
+      text: analysis?.innerText?.trim() || ''
+    };
+  })()`);
+  observation.status = /is-ready/.test(state?.className || "") ? "ready" : /is-error/.test(state?.className || "") ? "error" : "unknown";
+  observation.text = state?.text || "";
+  await side.screenshot(resolve(OUT_DIR, readyScreenshotName)).catch(() => {});
+  observation.screenshot = relative(ROOT, resolve(OUT_DIR, readyScreenshotName));
+  return observation;
 }
 
 async function auditNoisyFallbackRead(extensionId, allowedBase) {
@@ -905,6 +945,7 @@ function writeSummary(result, errors) {
     `- Page/Web read status: ${result.success.ready.status}`,
     `- Model context: ${result.success.ready.modelContext?.status || "(missing)"}`,
     `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
+    `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
     `- Source links visible: ${result.success.ready.sourceLinks?.length || 0}`,
     `- Noisy fallback model context: ${result.noisy.ready.modelContext?.status || "(missing)"}`,
@@ -923,6 +964,7 @@ function writeSummary(result, errors) {
     "",
     `- ${relative(ROOT, resolve(OUT_DIR, "audit.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
+    result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-candidate-block.png"))}`,
