@@ -415,6 +415,41 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.extraction.warnings).toContain("large-navigation-noise");
   });
 
+  it("applies index/feed density heuristics to semantic main roots", () => {
+    const cards = Array.from({ length: 4 }, (_, index) => `
+      <article>
+        <h2>Synthetic card ${index + 1}</h2>
+        <p>Short synthetic card ${index + 1} describes a fictional public update and links to a separate detail page.</p>
+        <a href="/updates/${index + 1}">Open update ${index + 1}</a>
+      </article>
+    `).join("");
+    const dom = new JSDOM(`
+      <!doctype html>
+      <html>
+        <head>
+          <title>Municipal Updates Fixture</title>
+          <meta property="og:site_name" content="Example Office">
+        </head>
+        <body>
+          <main>
+            <h1>Municipal Updates Fixture</h1>
+            ${cards}
+          </main>
+        </body>
+      </html>
+    `, { url: "https://official.example.test/updates" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: "https://official.example.test/updates",
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("Municipal Updates Fixture");
+  });
+
   it("prunes browser prompts and structural chrome from fallback text", () => {
     const dom = new JSDOM(`
       <!doctype html>

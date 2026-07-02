@@ -524,6 +524,7 @@ function nonArticlePageWarnings(
   const root = extractionRoot ?? documentRef.body ?? documentRef.documentElement;
   const rootIsArticle = root.tagName.toLowerCase() === "article";
   const articleCount = root.querySelectorAll("article").length;
+  const paragraphCount = root.querySelectorAll("p").length;
   const listItemCount = root.querySelectorAll("li").length;
   const linkCount = root.querySelectorAll("a[href]").length;
   const imageCount = root.querySelectorAll("img").length;
@@ -539,6 +540,19 @@ function nonArticlePageWarnings(
 
   if (isLikelyDocumentationArticle(lowerSignals, text, documentParagraphCount))
     return [];
+
+  if (isLikelyStructuredIndexOrFeedRoot({
+    rootIsArticle,
+    hasArticleMeta,
+    textLength: text.length,
+    paragraphCount,
+    articleCount,
+    listItemCount,
+    linkCount,
+    imageCount,
+  })) {
+    return ["large-navigation-noise"];
+  }
 
   if (
     articleCount >= 3 &&
@@ -624,6 +638,45 @@ function nonArticlePageWarnings(
   }
 
   return [];
+}
+
+function isLikelyStructuredIndexOrFeedRoot(metrics: {
+  rootIsArticle: boolean;
+  hasArticleMeta: boolean;
+  textLength: number;
+  paragraphCount: number;
+  articleCount: number;
+  listItemCount: number;
+  linkCount: number;
+  imageCount: number;
+}): boolean {
+  if (metrics.rootIsArticle)
+    return false;
+
+  const averageArticleTextLength = metrics.articleCount > 0
+    ? metrics.textLength / metrics.articleCount
+    : metrics.textLength;
+  const shortRepeatedArticles = metrics.articleCount >= 3 &&
+    averageArticleTextLength < 420 &&
+    metrics.paragraphCount <= Math.max(10, metrics.articleCount * 2);
+  const listOrMediaDense = metrics.listItemCount >= 8 ||
+    metrics.linkCount >= 8 ||
+    metrics.imageCount >= 4;
+
+  if (shortRepeatedArticles && (listOrMediaDense || !metrics.hasArticleMeta))
+    return true;
+
+  if (
+    !metrics.hasArticleMeta &&
+    metrics.articleCount >= 2 &&
+    metrics.linkCount >= 6 &&
+    metrics.paragraphCount <= 8 &&
+    averageArticleTextLength < 520
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 function isLikelyDocumentationArticle(lowerSignals: string, text: string, paragraphCount: number): boolean {
