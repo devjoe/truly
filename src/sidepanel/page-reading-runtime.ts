@@ -432,7 +432,7 @@ export function createSidepanelPageReadingRuntime({
   }
 
   function friendlyPageReadingError(error: string): string {
-    if (error.includes("Cannot access contents of the page")) {
+    if (error === "page_grant_missing" || error.includes("Cannot access contents of the page")) {
       return tr("sidepanel.page.error.needsToolbarActivation");
     }
     if (error === "page_reading_action_unsupported" || error === "reading_target_unsupported") {

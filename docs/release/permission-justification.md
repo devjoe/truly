@@ -1,6 +1,6 @@
 # Permission And Host Permission Justification
 
-Last updated: 2026-06-30
+Last updated: 2026-07-02
 
 This document explains why Truly requests each Chrome permission and host
 permission. It should stay aligned with `src/manifest.json`.
@@ -27,12 +27,14 @@ permission. It should stay aligned with `src/manifest.json`.
 
 | Optional host permission | Why Truly may request it | Boundary |
 |---|---|---|
-| `http://*/*` | Support a user-configured HTTP model endpoint outside the default localhost hosts. | Requested only when the configured endpoint requires it. |
-| `https://*/*` | Support a user-configured HTTPS model endpoint outside the default hosts. | Requested only when the configured endpoint requires it. |
+| `http://*/*` | Support a user-configured HTTP model endpoint outside the default localhost hosts, and optionally let General Page Reader read HTTP pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current page only when the user presses a read/analyze action. |
+| `https://*/*` | Support a user-configured HTTPS model endpoint outside the default hosts, and optionally let General Page Reader read HTTPS pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current page only when the user presses a read/analyze action. |
 
 Truly should request optional endpoint permissions at save/test time for the
-specific user-configured endpoint. It should not request broad optional host
-permission unless the configured provider path needs it.
+specific user-configured endpoint. General Page all-sites access is a separate
+Settings opt-in for users who want the Page/Web tab to work without clicking the
+toolbar popup on each new site. The permission does not enable background
+crawling, automatic model submission, or persistent full-article storage.
 
 ## Content Security Policy
 

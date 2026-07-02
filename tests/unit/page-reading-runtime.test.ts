@@ -71,14 +71,15 @@ describe("sidepanel page reading runtime", () => {
 
     expect(pagePaneEl.textContent).toContain("讀取失敗");
     expect(pagePaneEl.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
+    expect(pagePaneEl.textContent).toContain("設定允許一般網頁的所有網站存取權");
   });
 
-  it("maps Chrome page-access errors to a friendly retry explanation", async () => {
+  it("maps page-access errors to a friendly retry explanation", async () => {
     const pagePaneEl = setupDom();
     const sendMessage = vi.fn(async () => ({
       type: "PAGE_READING_ERROR",
       tabId: 42,
-      error: "Cannot access contents of the page. Extension manifest must request permission to access the respective host.",
+      error: "page_grant_missing",
     } satisfies TrulyMessage));
     const runtime = createSidepanelPageReadingRuntime({
       pagePaneEl,
@@ -104,6 +105,7 @@ describe("sidepanel page reading runtime", () => {
     }));
     expect(pagePaneEl.textContent).toContain("讀取失敗");
     expect(pagePaneEl.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
+    expect(pagePaneEl.textContent).toContain("設定允許一般網頁的所有網站存取權");
   });
 
   it("renders a successful page reading result", async () => {

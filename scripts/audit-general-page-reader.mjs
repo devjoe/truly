@@ -741,7 +741,8 @@ async function auditNoGrantGuidance(extensionId, noGrantBase) {
       status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
       error: document.querySelector('#page-pane .page-reader-error')?.textContent?.trim(),
-      hasGuidance: /工具列圖示|toolbar icon/.test(document.querySelector('#page-pane')?.innerText || '')
+      hasGuidance: /工具列圖示|toolbar icon/.test(document.querySelector('#page-pane')?.innerText || ''),
+      hasAllSitesGuidance: /所有網站存取權|all-sites access/.test(document.querySelector('#page-pane')?.innerText || '')
     }))()`);
   } finally {
     await side.closeTarget().catch(() => {});
@@ -878,6 +879,7 @@ function assertAudit(result) {
     errors.push("candidate block recovery did not preserve candidate source link visibility");
   }
   if (!result.noGrant.hasGuidance) errors.push("no-grant sidepanel path did not show toolbar activation guidance");
+  if (!result.noGrant.hasAllSitesGuidance) errors.push("no-grant sidepanel path did not mention all-sites settings access");
   return errors;
 }
 
@@ -915,6 +917,7 @@ function writeSummary(result, errors) {
     `- Meaningful URL scrubbed stale surface: ${!result.success.afterMeaningful.oldExcerptVisible && !result.success.afterMeaningful.sourceLinkVisible}`,
     `- Copy metadata title/url/excerpt: ${result.success.copy.hasTitle}/${result.success.copy.hasUrl}/${result.success.copy.hasExcerpt}`,
     `- No-grant guidance: ${result.noGrant.hasGuidance}`,
+    `- No-grant all-sites settings guidance: ${result.noGrant.hasAllSitesGuidance}`,
     "",
     "## Artifacts",
     "",

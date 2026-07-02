@@ -1,7 +1,7 @@
 # MV3 Remote-Code And CSP Compliance Note
 
 Status: Alpha readiness note
-Last updated: 2026-06-28
+Last updated: 2026-07-02
 
 This note records the current Chrome MV3 compliance boundary for Alpha review.
 It should stay aligned with `src/manifest.json`,
@@ -46,9 +46,11 @@ longer needs it.
 
 Truly does not request `downloads`, `history`, broad `tabs`, `webRequest`, or
 `declarativeNetRequest`. `scripting` is limited to user-triggered current-page
-reading under the `activeTab` boundary. Optional host permissions are reserved for
-user-configured model endpoints and should be requested only when the user saves
-or tests an endpoint that needs that origin.
+reading under the `activeTab` boundary by default. Optional host permissions are
+reserved for explicit user actions: user-configured model endpoints, or the
+General Page all-sites Settings opt-in that lets the Side Panel read the current
+page when the user presses a read/analyze action. This does not enable background
+crawling, automatic model submission, or persistent full-article storage.
 
 ## Security Follow-ups
 

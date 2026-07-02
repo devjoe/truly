@@ -431,10 +431,13 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           broadcastPageReadingReply(routedReply);
         }
       } catch (error) {
+        const errorText = error instanceof Error ? error.message : String(error);
         const reply = {
           type: "PAGE_READING_ERROR",
           tabId,
-          error: error instanceof Error ? error.message.slice(0, 200) : "page_reader_unavailable",
+          error: errorText.includes("Cannot access contents of the page")
+            ? "page_grant_missing"
+            : errorText.slice(0, 200) || "page_reader_unavailable",
         } satisfies TrulyMessage;
         try {
           sendResponse(reply);

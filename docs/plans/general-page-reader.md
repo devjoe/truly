@@ -108,11 +108,14 @@ The MVP should use the current permission model:
 - `storage` for settings and readiness state.
 
 Avoid adding `<all_urls>` or broad static host permissions for page reading.
-If a future in-page overlay needs persistent page access, that should be a
-separate permission decision with updated reviewer notes and privacy docs.
+Truly may request the existing optional `http://*/*` and `https://*/*` host
+permissions only after the user explicitly enables General Page all-sites access
+from Settings. That opt-in lets the Page/Web tab read the current page directly
+when the user presses a read/analyze action; it does not enable automatic model
+sending, background crawling, or persistent article storage.
 
-Optional endpoint host permissions remain only for user-configured model
-endpoints.
+Optional endpoint host permissions may also be requested for user-configured
+model endpoints.
 
 ### Activation Semantics
 
@@ -122,14 +125,15 @@ general web page. Clicking the extension action gives Truly the temporary
 current page.
 
 The Side Panel `讀取此頁` / `Read this page` button should remain long term, but
-its product meaning is re-read / retry, not first-time permission grant. It can
-re-read when the content script or page access is already available. If Chrome
-does not grant access, the panel must show a clear toolbar-activation guidance
-message instead of failing silently.
+its default product meaning is re-read / retry, not first-time permission grant.
+It can re-read when the content script or page access is already available. If
+Chrome does not grant access, the panel must show clear guidance: either click
+the Truly toolbar icon for one-time access or enable General Page all-sites
+access in Settings.
 
 Do not add broad static host permissions to make the Side Panel button work as
-a first-time activation path. If a future version wants direct Side Panel reads
-without toolbar activation, that should be a separate permission decision.
+a first-time activation path. Direct Side Panel reads without toolbar activation
+must remain behind explicit optional host permission.
 
 ## Information Architecture
 
