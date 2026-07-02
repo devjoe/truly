@@ -13,7 +13,7 @@
 // reloads are cosmetic noise (the content script context dies mid-flight)
 // and are silently ignored on the content side.
 
-import { callTierBDeepDetailed, callTierBReadingBrief } from "../lib/tier-b-client";
+import { callTierBDeepDetailed, callTierBGeneralPageParserAdvisor, callTierBReadingBrief } from "../lib/tier-b-client";
 import { callGeminiNanoTierB, callGeminiNanoReadingBrief, GEMINI_NANO_PROVIDER } from "../lib/gemini-nano-client";
 import { initDevReloadClient } from "./dev-reload-client";
 import type { TierAProvider, TierBProvider } from "../lib/types";
@@ -21,9 +21,14 @@ import {
   providerEndpointKind,
 } from "../lib/provider-capabilities";
 import { providerCanRunTierBFeature } from "../lib/feature-readiness";
+import {
+  buildRuleBasedGeneralPageParserAdvice,
+  isGeneralPageParserAdvisorAdviceCompatible,
+} from "../lib/general-page-parser-advisor";
 import type {
   TrulyMessage,
   DeepClassifyResultMsg,
+  GeneralPageParserAdvisorResultMsg,
   ReadingBriefResultMsg,
   ReadinessRunChecksResultMsg,
   ExportLogBufferResultMsg,
@@ -81,6 +86,13 @@ async function tierBApiKeyForMessage(
 ): Promise<string | undefined> {
   if (message.apiKey?.trim()) return message.apiKey.trim();
   if (message.provider !== OPENAI_COMPAT_PROVIDER) return undefined;
+  return storedSecretString(["tierBApiKey"]);
+}
+
+async function tierBApiKeyForProvider(
+  provider: TierAProvider | TierBProvider | undefined,
+): Promise<string | undefined> {
+  if (provider !== OPENAI_COMPAT_PROVIDER) return undefined;
   return storedSecretString(["tierBApiKey"]);
 }
 
@@ -240,6 +252,69 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
       } satisfies TrulyMessage);
     } catch {}
     return false;
+  }
+
+  if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+    (async () => {
+      let modelAttempted = false;
+      try {
+        if (message.providerRuntime.canUseModel && message.providerRuntime.endpoint && message.providerRuntime.model) {
+          modelAttempted = true;
+          const modelResult = await callTierBGeneralPageParserAdvisor({
+            endpoint: message.providerRuntime.endpoint,
+            model: message.providerRuntime.model,
+            apiKey: await tierBApiKeyForProvider(message.providerRuntime.effectiveProvider),
+            request: message.request,
+            outputLang: message.outputLang,
+          });
+          if (
+            modelResult.ok &&
+            modelResult.advice &&
+            isGeneralPageParserAdvisorAdviceCompatible(message.request, modelResult.advice)
+          ) {
+            sendResponse({
+              type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+              tabId: message.tabId,
+              ok: true,
+              advice: modelResult.advice,
+              providerRuntime: {
+                ...message.providerRuntime,
+                mode: "tier-b-short-json",
+              },
+            } satisfies GeneralPageParserAdvisorResultMsg);
+            return;
+          }
+          console.warn(
+            "[Truly General Page Parser Advisor] model fallback:",
+            modelResult.error ?? "advisor_incompatible_with_deterministic_risk",
+          );
+        }
+
+        const advice = buildRuleBasedGeneralPageParserAdvice(message.request);
+        sendResponse({
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: message.tabId,
+          ok: true,
+          advice,
+          providerRuntime: {
+            ...message.providerRuntime,
+            mode: modelAttempted ? "tier-b-short-json-fallback" : "rule-based-runtime-baseline",
+          },
+        } satisfies GeneralPageParserAdvisorResultMsg);
+      } catch (error) {
+        sendResponse({
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: message.tabId,
+          ok: false,
+          providerRuntime: {
+            ...message.providerRuntime,
+            mode: modelAttempted ? "tier-b-short-json-fallback" : "rule-based-runtime-baseline",
+          },
+          error: error instanceof Error ? error.message.slice(0, 200) : "parser_advisor_failed",
+        } satisfies GeneralPageParserAdvisorResultMsg);
+      }
+    })();
+    return true;
   }
 
   if (message.type === "PAGE_READING_REQUEST") {

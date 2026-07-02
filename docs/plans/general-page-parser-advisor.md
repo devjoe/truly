@@ -96,7 +96,7 @@ against the public synthetic corpus and writes a private tmp report under
 `tmp/parser-advisor-spikes/`.
 
 This spike does not claim model quality. It verifies that the recovery policy
-has the right shape before model-provider integration:
+has the right shape independently of runtime provider availability:
 
 - list/index fixtures should downgrade rather than become model-ready articles;
 - blocked/paywall fixtures should stay fail-closed;
@@ -105,18 +105,43 @@ has the right shape before model-provider integration:
 - documentation and normal article fixtures should not be downgraded because of
   dense links alone.
 
+## Runtime Integration
+
+The first runtime integration keeps the deterministic `ReadingSurface` as the
+source of truth, then builds a session-only advisor request after the user
+presses `讀取此頁` / `Read this page`.
+
+Implemented runtime behavior:
+
+- Side Panel stores advisor state per tab session as
+  `not_needed | checking | ready | error`.
+- Side Panel resolves the `general-page-advisor` lane through the existing Tier
+  B provider settings and passes that provider runtime metadata to the service
+  worker.
+- Endpoint-backed Tier B providers may receive the short JSON parser-advisor
+  request. The service worker validates the response with the public advisor
+  schema.
+- Valid model JSON is still checked against deterministic risk signals. If the
+  model says `accept_current` while extraction already found index/feed,
+  large-navigation, login/paywall, or no-main-content risk, the runtime rejects
+  that advice and falls back locally.
+- If the provider is unavailable, disabled, times out, or returns invalid JSON,
+  the service worker falls back to the local rule-based advisor baseline.
+- Side Panel renders `Reading context` / `effectiveModelContext` separately from
+  the model-context preview, without overwriting the deterministic
+  `ReadingSurface`.
+- Advisor state is session-only; no raw payload, full page text, screenshot, or
+  advisor history is persisted.
+
 ## Remaining Runtime Work
 
-The contract still does not implement provider calls. The next runtime design
-needs to specify:
+The remaining design and implementation work is narrower:
 
-- how to map the independent `general-page-advisor` lane onto Tier B provider
-  settings in service-worker or side-panel runtime code;
 - how to measure real prompt size, latency, and cost on the private 200-page
   corpus before finalizing payload thresholds;
-- how to represent `effectiveModelContext` in side-panel state without
-  overwriting the deterministic `ReadingSurface`;
 - how the side panel lets the user confirm screenshot use, select a target, or
   inspect advisor uncertainty;
-- whether page-overview actions need a new `targetKind` value before runtime
-  model calls are enabled.
+- whether page-overview actions need a new `targetKind` value before downstream
+  article-analysis calls consume `effectiveModelContext`;
+- whether Chrome Gemini Nano should get a native parser-advisor path separate
+  from endpoint-backed Tier B chat completions.

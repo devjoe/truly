@@ -10,6 +10,13 @@ import type {
   ReadingBrief,
   ReadingBriefQuestionKind,
 } from "./types";
+import {
+  buildGeneralPageParserAdvisorSystemPrompt,
+  buildGeneralPageParserAdvisorUserPrompt,
+  parseGeneralPageParserAdvisorAdvice,
+  type GeneralPageParserAdvisorAdvice,
+  type GeneralPageParserAdvisorRequest,
+} from "./general-page-parser-advisor";
 import { compactZhtwEvidence } from "./zhtw-review";
 import { resolveStructuredPostContext } from "./post-context";
 import { applyDeepOutputReview, applyReadingBriefOutputReview } from "./model-output-review";
@@ -19,6 +26,7 @@ export type { DeepClassification };
 
 export const TIER_B_DEEP_TIMEOUT_MS = 45_000;
 export const TIER_B_READING_BRIEF_TIMEOUT_MS = 45_000;
+export const TIER_B_GENERAL_PAGE_PARSER_ADVISOR_TIMEOUT_MS = 20_000;
 export const TIER_B_CONTEXT_LIMIT_TOKENS = 16_384;
 // Keep a client-side guard even though vLLM also receives
 // `truncate_prompt_tokens`. CJK-heavy posts can approach two tokens per
@@ -306,6 +314,22 @@ export interface TierBReadingBriefRequest {
   outputLang?: Lang;
 }
 
+export interface TierBGeneralPageParserAdvisorRequest {
+  endpoint: string;
+  model: string;
+  apiKey?: string;
+  request: GeneralPageParserAdvisorRequest;
+  timeoutMs?: number;
+  outputLang?: Lang;
+}
+
+export interface TierBGeneralPageParserAdvisorResult {
+  ok: boolean;
+  advice: GeneralPageParserAdvisorAdvice | null;
+  raw?: string;
+  error?: "parser_advisor_network_error" | "parser_advisor_timeout" | "parser_advisor_http_error" | "parser_advisor_format_error";
+}
+
 export interface TierBVisionProbeRequest {
   endpoint: string;
   model: string;
@@ -576,6 +600,27 @@ export function buildTierBReadingBriefChatBody(req: TierBReadingBriefRequest): T
   return body;
 }
 
+export function buildTierBGeneralPageParserAdvisorChatBody(
+  req: TierBGeneralPageParserAdvisorRequest,
+): TierBChatBody {
+  const body: TierBChatBody = {
+    model: req.model,
+    messages: [
+      { role: "system", content: buildGeneralPageParserAdvisorSystemPrompt() },
+      { role: "user", content: buildGeneralPageParserAdvisorUserPrompt(req.request) },
+    ],
+    temperature: 0,
+    max_tokens: 420,
+    response_format: { type: "json_object" },
+    truncate_prompt_tokens: Math.min(TIER_B_CONTEXT_LIMIT_TOKENS, 8192),
+    chat_template_kwargs: { enable_thinking: false },
+  };
+  if (shouldRequestOpenAICompatNoThinking(req.endpoint, req.model)) {
+    body.reasoning_effort = "none";
+  }
+  return body;
+}
+
 export function buildTierBVisionProbeChatBody(req: TierBVisionProbeRequest): TierBChatBody {
   const body: TierBChatBody = {
     model: req.model,
@@ -673,6 +718,44 @@ export async function callTierBReadingBrief(
   } catch (e) {
     console.warn("[Truly Tier B-2] error:", e);
     return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function callTierBGeneralPageParserAdvisor(
+  req: TierBGeneralPageParserAdvisorRequest,
+): Promise<TierBGeneralPageParserAdvisorResult> {
+  const url = tierBCompletionsUrl(req.endpoint);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), req.timeoutMs ?? TIER_B_GENERAL_PAGE_PARSER_ADVISOR_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: jsonRequestHeaders(req.apiKey),
+      body: JSON.stringify(buildTierBGeneralPageParserAdvisorChatBody(req)),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      let errBody = "";
+      try { errBody = (await resp.text()).slice(0, 400); } catch { /* ignore */ }
+      console.warn(`[Truly General Page Parser Advisor] HTTP ${resp.status}: ${errBody}`);
+      return { ok: false, advice: null, raw: errBody, error: "parser_advisor_http_error" };
+    }
+    const data = await resp.json();
+    const raw = String(data?.choices?.[0]?.message?.content || "").trim();
+    const parsed = parseGeneralPageParserAdvisorAdvice(raw, req.request);
+    if (!parsed.ok) {
+      console.warn(`[Truly General Page Parser Advisor] ${parsed.error}:`, raw.slice(0, 240));
+      return { ok: false, advice: null, raw: raw.slice(0, 1200), error: "parser_advisor_format_error" };
+    }
+    return { ok: true, advice: parsed.value, raw: raw.slice(0, 1200) };
+  } catch (error) {
+    console.warn("[Truly General Page Parser Advisor] error:", error);
+    const code = error instanceof DOMException && error.name === "AbortError"
+      ? "parser_advisor_timeout"
+      : "parser_advisor_network_error";
+    return { ok: false, advice: null, error: code };
   } finally {
     clearTimeout(timer);
   }

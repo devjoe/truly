@@ -385,9 +385,14 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       error.message = `${error.message}; diagnostics: ${relative(ROOT, resolve(OUT_DIR, "page-ready-timeout.json"))}`;
       throw error;
     });
+    await waitFor(side, `(() => /Reading context/.test(document.querySelector('#page-pane .page-reader-advisor')?.textContent || ''))()`, 8000, "Page/Web reading context").catch(async (error) => {
+      await side.screenshot(resolve(OUT_DIR, "page-ready-advisor-timeout.png")).catch(() => {});
+      throw error;
+    });
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const advisor = pane?.querySelector('.page-reader-advisor');
       return {
         activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
         status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
@@ -410,6 +415,16 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
             }))
           } : null;
         })(),
+        advisor: advisor ? {
+          title: advisor.querySelector('h3')?.textContent?.trim(),
+          status: advisor.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
+          detail: advisor.querySelector('p')?.textContent?.trim(),
+          rows: [...advisor.querySelectorAll('dl div')].map((row) => ({
+            label: row.querySelector('dt')?.textContent?.trim(),
+            value: row.querySelector('dd')?.textContent?.trim()
+          })),
+          note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim()
+        } : null,
         sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
           label: el.textContent?.trim(),
           href: el.href
@@ -494,10 +509,19 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
       error.message = `${error.message}; diagnostics: ${relative(ROOT, resolve(OUT_DIR, "page-noisy-timeout.json"))}`;
       throw error;
     });
+    await waitFor(side, `(() => {
+      const advisor = document.querySelector('#page-pane .page-reader-advisor');
+      const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
+      return /Reading context/.test(advisor?.textContent || '') && !/檢查中|Checking/.test(status);
+    })()`, 26000, "Page/Web parser advisor completion").catch(async (error) => {
+      await side.screenshot(resolve(OUT_DIR, "page-noisy-advisor-timeout.png")).catch(() => {});
+      throw error;
+    });
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
       const model = pane?.querySelector('.page-reader-model-context');
+      const advisor = pane?.querySelector('.page-reader-advisor');
       return {
         status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         meta: [...pane?.querySelectorAll('.page-reader-meta div') || []].map((el) => ({
@@ -508,6 +532,17 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
           status: model.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
           detail: model.querySelector('p')?.textContent?.trim(),
           className: model.className
+        } : null,
+        advisor: advisor ? {
+          title: advisor.querySelector('h3')?.textContent?.trim(),
+          status: advisor.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
+          detail: advisor.querySelector('p')?.textContent?.trim(),
+          rows: [...advisor.querySelectorAll('dl div')].map((row) => ({
+            label: row.querySelector('dt')?.textContent?.trim(),
+            value: row.querySelector('dd')?.textContent?.trim()
+          })),
+          note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
+          className: advisor.className
         } : null,
         sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
           label: el.textContent?.trim(),
@@ -626,6 +661,15 @@ function assertAudit(result) {
   if (!hasPassingTextThresholdRow(result.success.ready.modelContext?.rows)) {
     errors.push("model context text threshold row is missing or incorrect");
   }
+  if (!/Reading context/.test(result.success.ready.advisor?.title || "")) {
+    errors.push("Page/Web pane does not show Reading context advisor state");
+  }
+  if (!/本地通過|Local pass/.test(result.success.ready.advisor?.status || "")) {
+    errors.push(`successful read advisor should be local pass: ${result.success.ready.advisor?.status || "(missing)"}`);
+  }
+  if (!result.success.ready.advisor?.rows?.some((row) => /判斷|Decision/.test(row.label || "") && row.value === "accept_current")) {
+    errors.push("successful read advisor does not preserve accept_current effective context");
+  }
   if (!result.success.ready.sourceLinks?.some((link) => link.label === "Source link" && /\/source$/.test(link.href))) {
     errors.push("Page/Web pane does not expose extracted source links for early inspection");
   }
@@ -662,6 +706,21 @@ function assertAudit(result) {
   if (result.noisy.ready.hasEdgeDownload || result.noisy.ready.hasFirefoxDownload || result.noisy.ready.hasGoogleDownload) {
     errors.push("noisy fallback audit still exposes browser download links as source context");
   }
+  if (!/Reading context/.test(result.noisy.ready.advisor?.title || "")) {
+    errors.push("noisy fallback does not show Reading context advisor state");
+  }
+  if (/檢查中|Checking/.test(result.noisy.ready.advisor?.status || "")) {
+    errors.push("noisy fallback advisor remained pending");
+  }
+  const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
+  const noisyDecision = noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
+  const noisyUse = noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  if (noisyDecision !== "downgrade_to_index_or_feed") {
+    errors.push(`noisy fallback advisor did not downgrade to index/feed: ${noisyDecision || "(missing)"}`);
+  }
+  if (noisyUse !== "page_overview_only") {
+    errors.push(`noisy fallback effective context was not page overview only: ${noisyUse || "(missing)"}`);
+  }
   if (!result.noGrant.hasGuidance) errors.push("no-grant sidepanel path did not show toolbar activation guidance");
   return errors;
 }
@@ -687,8 +746,10 @@ function writeSummary(result, errors) {
     `- Popup unsupported page disabled: ${result.popup.unsupported.disabled}`,
     `- Page/Web read status: ${result.success.ready.status}`,
     `- Model context: ${result.success.ready.modelContext?.status || "(missing)"}`,
+    `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
     `- Source links visible: ${result.success.ready.sourceLinks?.length || 0}`,
     `- Noisy fallback model context: ${result.noisy.ready.modelContext?.status || "(missing)"}`,
+    `- Noisy fallback reading context: ${result.noisy.ready.advisor?.status || "(missing)"}`,
     `- Noisy fallback source links: ${(result.noisy.ready.sourceLinks || []).map((link) => link.label).join(", ") || "(none)"}`,
     `- Hash-only stale: ${result.success.afterHash.stale}`,
     `- Tracking-only stale: ${result.success.afterTracking.stale}`,

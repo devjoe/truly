@@ -97,6 +97,9 @@ const pageReadingRuntime = createSidepanelPageReadingRuntime({
   tabs: chrome.tabs,
   activateTab: tabActivationRuntime.activateTab,
   getLang: () => languageController.current(),
+  getSettings: () => panelState.cachedSettings,
+  getTierAEndpoint: () => panelState.cachedTierAEndpoint,
+  getTierAModel: () => panelState.cachedTierAModel,
   now: Date.now,
 });
 

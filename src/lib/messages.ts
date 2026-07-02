@@ -34,6 +34,11 @@ import type { ReadingSurface } from "./reading-surface-types";
 import type { ReadingTarget } from "./reading-target-types";
 import type { ReadingActivation } from "./reading-action-types";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./readiness";
+import type {
+  GeneralPageEffectiveModelContext,
+  GeneralPageParserAdvisorAdvice,
+  GeneralPageParserAdvisorRequest,
+} from "./general-page-parser-advisor";
 
 // ---------------------------------------------------------------------------
 // Live dashboard pipeline (content script → service worker → side panel)
@@ -118,6 +123,35 @@ export interface ReadingTargetErrorMsg {
   type: "READING_TARGET_ERROR";
   error: string;
   tabId?: number;
+}
+
+export interface GeneralPageParserAdvisorProviderRuntime {
+  configSource: "tier-b-provider";
+  provider: TierBProvider;
+  effectiveProvider: TierAProvider | TierBProvider;
+  endpoint: string;
+  model: string;
+  canUseModel: boolean;
+  mode: "rule-based-runtime-baseline" | "tier-b-short-json" | "tier-b-short-json-fallback";
+  blockedReason?: string;
+}
+
+export interface GeneralPageParserAdvisorRequestMsg {
+  type: "GENERAL_PAGE_PARSER_ADVISOR_REQUEST";
+  tabId?: number;
+  request: GeneralPageParserAdvisorRequest;
+  providerRuntime: GeneralPageParserAdvisorProviderRuntime;
+  outputLang?: Lang;
+}
+
+export interface GeneralPageParserAdvisorResultMsg {
+  type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT";
+  tabId?: number;
+  ok: boolean;
+  advice?: GeneralPageParserAdvisorAdvice;
+  effectiveModelContext?: GeneralPageEffectiveModelContext;
+  providerRuntime: GeneralPageParserAdvisorProviderRuntime;
+  error?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -467,6 +501,8 @@ export type TrulyMessage =
   | ReadingTargetRequestMsg
   | ReadingTargetResultMsg
   | ReadingTargetErrorMsg
+  | GeneralPageParserAdvisorRequestMsg
+  | GeneralPageParserAdvisorResultMsg
   | SelectorHealthUpdateMsg
   | OllamaClassifyMsg
   | OllamaResultMsg

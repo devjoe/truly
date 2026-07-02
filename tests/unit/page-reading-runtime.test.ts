@@ -46,6 +46,11 @@ function surface(overrides: Partial<ReadingSurface> = {}): ReadingSurface {
   };
 }
 
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 describe("sidepanel page reading runtime", () => {
   it("shows toolbar activation guidance when the active tab URL is hidden", async () => {
     const pagePaneEl = setupDom();
@@ -134,6 +139,37 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("文字門檻");
     expect(pagePaneEl.textContent).toContain("來源連結");
     expect(pagePaneEl.textContent).toContain("Synthetic source");
+  });
+
+  it("marks clean page readings as current reading context without an advisor request", async () => {
+    const pagePaneEl = setupDom();
+    const sendMessage = vi.fn(async () => ({
+      type: "PAGE_READING_RESULT",
+      tabId: 42,
+      surface: surface(),
+    } satisfies TrulyMessage));
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(pagePaneEl.textContent).toContain("Reading context");
+    expect(pagePaneEl.textContent).toContain("本地通過");
+    expect(pagePaneEl.textContent).toContain("accept_current");
   });
 
   it("shows why a short extraction should not be sent to a model", async () => {
@@ -226,6 +262,90 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("Article source");
     expect(pagePaneEl.textContent).not.toContain("請至 Edge 官網下載");
     expect(pagePaneEl.textContent).not.toContain("請至 Firefox 官網下載");
+  });
+
+  it("runs parser advisor after a weak page reading and renders page-overview effective context", async () => {
+    const pagePaneEl = setupDom();
+    const weakSurface = surface({
+      mainText: [
+        "首頁 分類 熱門 推薦 下載 導覽 Search Login Subscribe",
+        "Card one synthetic teaser with only a short summary and many links.",
+        "Card two synthetic teaser with another unrelated headline and link.",
+        "Card three synthetic teaser that makes the page look like a feed.",
+      ].join(" "),
+      excerpt: "首頁 分類 熱門 推薦 下載 導覽 Search Login Subscribe",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["large-navigation-noise", "no-main-content"],
+      },
+      links: Array.from({ length: 18 }, (_, index) => ({
+        href: `https://example.test/link-${index}`,
+        text: `Link ${index}`,
+      })),
+    });
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return {
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: weakSurface,
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+        return {
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: 42,
+          ok: true,
+          providerRuntime: {
+            ...message.providerRuntime,
+            mode: "rule-based-runtime-baseline",
+          },
+          advice: {
+            schemaVersion: 1,
+            pageType: "index_or_feed",
+            decision: "downgrade_to_index_or_feed",
+            confidence: "high",
+            needsUserSelection: false,
+            needsScreenshot: false,
+            riskTags: ["fallback_extraction", "large_navigation_noise", "index_or_feed"],
+            rationale: "Synthetic navigation density is too high for article extraction.",
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "GENERAL_PAGE_PARSER_ADVISOR_REQUEST",
+      tabId: 42,
+      providerRuntime: expect.objectContaining({
+        configSource: "tier-b-provider",
+        mode: "rule-based-runtime-baseline",
+      }),
+    }));
+    expect(pagePaneEl.textContent).toContain("Reading context");
+    expect(pagePaneEl.textContent).toContain("已建立");
+    expect(pagePaneEl.textContent).toContain("downgrade_to_index_or_feed");
+    expect(pagePaneEl.textContent).toContain("page_overview_only");
+    expect(pagePaneEl.textContent).toContain("只適合頁面總覽");
   });
 
   it("shows a friendly explanation for reserved actions that are not enabled", async () => {

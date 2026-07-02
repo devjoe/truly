@@ -289,12 +289,13 @@ export function resolveGeneralPageParserEscalation(
     reasons.push("login_or_paywall");
   if (context.ineligibilityReason === "main_text_too_short")
     reasons.push("short_text");
-  if ((options.candidateBlocks?.length ?? 0) >= 2 && context.modelReadiness !== "ready")
+  const selectableCandidateBlocks = options.candidateBlocks?.filter((block) => block.role !== "current-main-text") ?? [];
+  if (selectableCandidateBlocks.length > 0 && context.modelReadiness !== "ready")
     reasons.push("candidate_block_ambiguous");
 
   const uniqueReasons = uniqueRiskTags(reasons);
   const allowedDecisions: GeneralPageParserAdvisorDecision[] = ["accept_current"];
-  if (options.candidateBlocks?.length)
+  if (selectableCandidateBlocks.length > 0)
     allowedDecisions.push("prefer_candidate_block");
   allowedDecisions.push("downgrade_to_index_or_feed", "mark_blocked_or_empty", "request_user_selection");
   if (options.allowScreenshot)
@@ -511,6 +512,28 @@ export function buildRuleBasedGeneralPageParserAdvice(
   }
 
   return advice(inferReadyPageType(request), "accept_current", request.modelReadiness === "ready" ? "high" : "medium", request.escalation.reasons, "Current extraction is acceptable for model context.");
+}
+
+export function isGeneralPageParserAdvisorAdviceCompatible(
+  request: GeneralPageParserAdvisorRequest,
+  advisor: GeneralPageParserAdvisorAdvice,
+): boolean {
+  const reasons = new Set(request.escalation.reasons);
+  if (
+    advisor.decision === "accept_current" &&
+    (reasons.has("index_or_feed") ||
+      reasons.has("large_navigation_noise") ||
+      reasons.has("login_or_paywall") ||
+      reasons.has("no_main_content"))
+  ) {
+    return false;
+  }
+  if (advisor.decision === "prefer_candidate_block") {
+    return request.candidateBlocks.some(
+      (block) => block.id === advisor.selectedBlockId && block.role !== "current-main-text",
+    );
+  }
+  return true;
 }
 
 function effectiveContext(

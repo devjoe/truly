@@ -7,8 +7,32 @@ import {
   type GeneralPageModelQualityIssue,
   type GeneralPageModelSourceLink,
 } from "../lib/general-page-model-context";
-import type { Lang } from "../lib/types";
-import type { PageReadingErrorMsg, PageReadingResultMsg, TrulyMessage } from "../lib/messages";
+import {
+  buildGeneralPageEffectiveModelContext,
+  buildGeneralPageParserAdvisorRequest,
+  GENERAL_PAGE_ADVISOR_PROVIDER_CONFIG_SOURCE,
+  type GeneralPageEffectiveModelContext,
+  type GeneralPageParserAdvisorAdvice,
+  type GeneralPageParserAdvisorCandidateBlock,
+  type GeneralPageParserAdvisorRequest,
+} from "../lib/general-page-parser-advisor";
+import type { Lang, UserSettings } from "../lib/types";
+import { DEFAULT_SETTINGS } from "../lib/types";
+import type {
+  GeneralPageParserAdvisorProviderRuntime,
+  GeneralPageParserAdvisorResultMsg,
+  PageReadingErrorMsg,
+  PageReadingResultMsg,
+  TrulyMessage,
+} from "../lib/messages";
+import {
+  getTierBProvider,
+  resolveEffectiveTierBEndpoint,
+  resolveEffectiveTierBModel,
+  resolveEffectiveTierBProvider,
+} from "../lib/settings";
+import { providerRuntimeEndpoint, providerRuntimeModel } from "../lib/model-provider-runtime";
+import { providerCapabilities, providerNeedsEndpoint } from "../lib/provider-capabilities";
 import type { ReadingSurface } from "../lib/reading-surface-types";
 import {
   isMeaningfullySamePage,
@@ -31,6 +55,19 @@ interface PageReadingSession {
   error?: string;
   updatedAt: number;
   activationSource: PageActivationSource;
+  advisor?: PageReadingAdvisorSession;
+}
+
+type PageReadingAdvisorStatus = "not_needed" | "checking" | "ready" | "error";
+
+interface PageReadingAdvisorSession {
+  status: PageReadingAdvisorStatus;
+  request?: GeneralPageParserAdvisorRequest;
+  advice?: GeneralPageParserAdvisorAdvice;
+  effectiveModelContext?: GeneralPageEffectiveModelContext;
+  providerRuntime?: GeneralPageParserAdvisorProviderRuntime;
+  error?: string;
+  updatedAt: number;
 }
 
 interface BrowserTab {
@@ -71,6 +108,9 @@ export interface CreateSidepanelPageReadingRuntimeOptions {
   tabs: TabsApi;
   activateTab(tab: TabId): void;
   getLang(): Lang;
+  getSettings?(): UserSettings;
+  getTierAEndpoint?(): string | undefined;
+  getTierAModel?(): string | undefined;
   now(): number;
 }
 
@@ -235,6 +275,113 @@ function modelQualityIssueKey(issue: GeneralPageModelQualityIssue): string {
   }
 }
 
+function advisorCandidateBlocks(_surface: ReadingSurface): GeneralPageParserAdvisorCandidateBlock[] {
+  return [];
+}
+
+function resolveAdvisorProviderRuntime(
+  settings: UserSettings,
+  tierAEndpoint: string | undefined,
+  tierAModel: string | undefined,
+): GeneralPageParserAdvisorProviderRuntime {
+  const provider = getTierBProvider(settings);
+  const effectiveProvider = resolveEffectiveTierBProvider(settings);
+  const endpoint = providerRuntimeEndpoint(
+    effectiveProvider,
+    resolveEffectiveTierBEndpoint(settings, tierAEndpoint),
+  );
+  const model = providerRuntimeModel(
+    effectiveProvider,
+    resolveEffectiveTierBModel(settings, tierAModel),
+  );
+  const needsEndpoint = providerNeedsEndpoint(effectiveProvider);
+  const canUseModel = Boolean(
+    settings.deepClassifyEnabled &&
+      provider !== "none" &&
+      needsEndpoint &&
+      endpoint &&
+      model,
+  );
+  const blockedReason = canUseModel
+    ? undefined
+    : !settings.deepClassifyEnabled || provider === "none"
+    ? "tier_b_not_enabled"
+    : needsEndpoint && (!endpoint || !model)
+    ? "tier_b_endpoint_or_model_missing"
+    : "tier_b_unavailable";
+  return {
+    configSource: GENERAL_PAGE_ADVISOR_PROVIDER_CONFIG_SOURCE,
+    provider,
+    effectiveProvider,
+    endpoint,
+    model,
+    canUseModel,
+    mode: canUseModel ? "tier-b-short-json" : "rule-based-runtime-baseline",
+    blockedReason,
+  };
+}
+
+function providerRuntimeLabel(providerRuntime?: GeneralPageParserAdvisorProviderRuntime): string {
+  if (!providerRuntime) return "";
+  const label = providerCapabilities(providerRuntime.effectiveProvider).label.replace("（實驗）", "");
+  return providerRuntime.model ? `${label} / ${providerRuntime.model}` : label;
+}
+
+function advisorDecisionLabel(
+  advisor: PageReadingAdvisorSession,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (advisor.status === "not_needed") return tr("sidepanel.page.advisor.decision.notNeeded");
+  if (advisor.status === "checking") return tr("sidepanel.page.advisor.decision.checking");
+  if (advisor.status === "error") return tr("sidepanel.page.advisor.decision.error");
+  return advisor.advice?.decision ?? "none";
+}
+
+function advisorHtml(
+  advisor: PageReadingAdvisorSession | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (!advisor) return "";
+  const effective = advisor.effectiveModelContext;
+  const provider = providerRuntimeLabel(advisor.providerRuntime) || tr("sidepanel.page.advisor.provider.local");
+  const statusText = tr(`sidepanel.page.advisor.status.${advisor.status}`);
+  const detail = advisor.status === "error"
+    ? advisor.error || tr("sidepanel.page.advisor.detail.error")
+    : advisor.status === "checking"
+    ? tr("sidepanel.page.advisor.detail.checking")
+    : advisor.status === "not_needed"
+    ? tr("sidepanel.page.advisor.detail.notNeeded")
+    : effective?.allowedUse === "page_overview_only"
+    ? tr("sidepanel.page.advisor.detail.pageOverview")
+    : effective?.allowedUse === "requires_user_target"
+    ? tr("sidepanel.page.advisor.detail.needsTarget")
+    : tr("sidepanel.page.advisor.detail.ready");
+  const rows = [
+    [tr("sidepanel.page.advisor.decision"), advisorDecisionLabel(advisor, tr)],
+    [tr("sidepanel.page.advisor.provider"), provider],
+    [tr("sidepanel.page.advisor.payload"), advisor.request ? `${advisor.request.payloadBudget.estimatedPayloadChars}/${advisor.request.payloadBudget.maxPayloadChars}` : "-"],
+    [tr("sidepanel.page.advisor.allowedUse"), effective?.allowedUse ?? "-"],
+  ];
+  const modelMode = advisor.providerRuntime?.mode === "tier-b-short-json" && advisor.providerRuntime.canUseModel
+    ? tr("sidepanel.page.advisor.mode.modelReady")
+    : advisor.providerRuntime?.mode === "tier-b-short-json-fallback"
+    ? tr("sidepanel.page.advisor.mode.modelFallback")
+    : tr("sidepanel.page.advisor.mode.localBaseline");
+  return `
+    <section class="page-reader-advisor is-${escapeHtml(advisor.status)}">
+      <div class="page-reader-advisor-header">
+        <h3>${escapeHtml(tr("sidepanel.page.advisor.title"))}</h3>
+        <span>${escapeHtml(statusText)}</span>
+      </div>
+      <p>${escapeHtml(detail)}</p>
+      <dl>
+        ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+      </dl>
+      <div class="page-reader-advisor-note">${escapeHtml(modelMode)}</div>
+    </section>
+  `;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 200) : "page_reader_unavailable";
 }
@@ -245,6 +392,9 @@ export function createSidepanelPageReadingRuntime({
   tabs,
   activateTab,
   getLang,
+  getSettings = () => DEFAULT_SETTINGS,
+  getTierAEndpoint = () => undefined,
+  getTierAModel = () => undefined,
   now,
 }: CreateSidepanelPageReadingRuntimeOptions): SidepanelPageReadingRuntime {
   const sessions = new Map<number, PageReadingSession>();
@@ -287,6 +437,7 @@ export function createSidepanelPageReadingRuntime({
       session.url = activeUrl;
       session.title = activeTitle || session.title;
       session.surface = undefined;
+      session.advisor = undefined;
       session.updatedAt = now();
     }
     render();
@@ -301,6 +452,7 @@ export function createSidepanelPageReadingRuntime({
       url: nextUrl,
       title: tab.title || session.title,
       surface: undefined,
+      advisor: undefined,
       status: "stale",
       updatedAt: now(),
     });
@@ -372,6 +524,7 @@ export function createSidepanelPageReadingRuntime({
             ${metadataRows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
           </dl>
           ${modelContextHtml(modelContext, tr)}
+          ${advisorHtml(session.advisor, tr)}
           ${sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"))}
           ${warningText ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(warningText)}</div>` : ""}
         </article>
@@ -412,6 +565,101 @@ export function createSidepanelPageReadingRuntime({
     return `<section class="page-reader-empty">${escapeHtml(tr("sidepanel.page.empty.general"))}</section>`;
   }
 
+  function setAdvisor(tabId: number, advisor: PageReadingAdvisorSession): void {
+    const session = sessions.get(tabId);
+    if (!session || session.status === "stale") return;
+    sessions.set(tabId, {
+      ...session,
+      advisor,
+      updatedAt: session.updatedAt,
+    });
+    if (tabId === activeTabId) render();
+  }
+
+  function startParserAdvisor(tabId: number, surface: ReadingSurface): void {
+    const context = buildGeneralPageModelContext(surface, { targetKind: "page" });
+    const request = buildGeneralPageParserAdvisorRequest(context, {
+      candidateBlocks: advisorCandidateBlocks(surface),
+      allowScreenshot: false,
+    });
+    const providerRuntime = resolveAdvisorProviderRuntime(
+      getSettings(),
+      getTierAEndpoint(),
+      getTierAModel(),
+    );
+    const effectiveModelContext = buildGeneralPageEffectiveModelContext(context, request);
+
+    if (!request.escalation.shouldAskModel) {
+      setAdvisor(tabId, {
+        status: "not_needed",
+        request,
+        effectiveModelContext,
+        providerRuntime,
+        updatedAt: now(),
+      });
+      return;
+    }
+
+    setAdvisor(tabId, {
+      status: "checking",
+      request,
+      providerRuntime,
+      updatedAt: now(),
+    });
+
+    void Promise.resolve(runtime.sendMessage({
+      type: "GENERAL_PAGE_PARSER_ADVISOR_REQUEST",
+      tabId,
+      request,
+      providerRuntime,
+      outputLang: getLang(),
+    } satisfies TrulyMessage)).then((response) => {
+      const current = sessions.get(tabId);
+      if (!current?.surface || !isMeaningfullySamePage(pageUrlIdentity(current.surface.url, current.surface.canonicalUrl), surface.url))
+        return;
+      if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_PARSER_ADVISOR_RESULT") {
+        setAdvisor(tabId, {
+          status: "error",
+          request,
+          providerRuntime,
+          effectiveModelContext,
+          error: "parser_advisor_no_response",
+          updatedAt: now(),
+        });
+        return;
+      }
+      const result = response as GeneralPageParserAdvisorResultMsg;
+      if (!result.ok || !result.advice) {
+        setAdvisor(tabId, {
+          status: "error",
+          request,
+          providerRuntime: result.providerRuntime ?? providerRuntime,
+          effectiveModelContext,
+          error: result.error || "parser_advisor_failed",
+          updatedAt: now(),
+        });
+        return;
+      }
+      setAdvisor(tabId, {
+        status: "ready",
+        request,
+        advice: result.advice,
+        providerRuntime: result.providerRuntime ?? providerRuntime,
+        effectiveModelContext: buildGeneralPageEffectiveModelContext(context, request, result.advice),
+        updatedAt: now(),
+      });
+    }).catch((error) => {
+      setAdvisor(tabId, {
+        status: "error",
+        request,
+        providerRuntime,
+        effectiveModelContext,
+        error: errorMessage(error),
+        updatedAt: now(),
+      });
+    });
+  }
+
   async function requestReadCurrentPage(source: PageActivationSource = "sidepanel"): Promise<void> {
     try {
       const tab = await refreshActiveTab(false);
@@ -450,6 +698,7 @@ export function createSidepanelPageReadingRuntime({
         identity: pageUrlIdentity(activeUrl),
         title: activeTitle,
         status: "loading",
+        advisor: undefined,
         updatedAt: now(),
         activationSource: source,
       });
@@ -498,6 +747,7 @@ export function createSidepanelPageReadingRuntime({
       activationSource: "sidepanel",
     });
     if (tabId === activeTabId) render();
+    startParserAdvisor(tabId, message.surface);
   }
 
   function handlePageReadingError(message: PageReadingErrorMsg): void {
@@ -510,6 +760,7 @@ export function createSidepanelPageReadingRuntime({
       identity: existing?.identity || pageUrlIdentity(existing?.url || activeUrl),
       title: existing?.title || activeTitle,
       surface: existing?.surface,
+      advisor: undefined,
       status: "error",
       error: friendlyPageReadingError(message.error),
       updatedAt: now(),

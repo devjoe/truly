@@ -3,9 +3,15 @@ import { describe, expect, it } from "vitest";
 
 import { parseCompactScores } from "@src/lib/ollama-client";
 import {
+  buildTierBGeneralPageParserAdvisorChatBody,
   parseTierBDeepContent,
   parseTierBReadingBriefContent,
 } from "@src/lib/tier-b-client";
+import {
+  isGeneralPageParserAdvisorAdviceCompatible,
+  parseGeneralPageParserAdvisorAdvice,
+  type GeneralPageParserAdvisorRequest,
+} from "@src/lib/general-page-parser-advisor";
 import type { ReadingBrief } from "@src/lib/types";
 
 interface TierACompactFixture {
@@ -46,6 +52,40 @@ const readingBriefFixtures = JSON.parse(
   fs.readFileSync("tests/fixtures/tier-b/reading-brief-contract.json", "utf8"),
 ) as ReadingBriefFixture[];
 
+const parserAdvisorRequest: GeneralPageParserAdvisorRequest = {
+  schemaVersion: 1,
+  lane: "general-page-advisor",
+  providerConfigSource: "tier-b-provider",
+  trigger: "user_read_action",
+  url: "https://example.test/runtime-fixture",
+  title: "Synthetic Runtime Fixture",
+  targetKind: "page",
+  extraction: {
+    method: "fallback",
+    status: "partial",
+    warnings: ["large-navigation-noise", "no-main-content"],
+  },
+  modelReadiness: "caution",
+  qualityIssues: ["fallback_extraction", "large_navigation_noise", "no_main_content"],
+  currentTextPreview: "Synthetic navigation and card-grid text that should be downgraded to page overview.",
+  currentTextLength: 280,
+  candidateBlocks: [],
+  escalation: {
+    shouldAskModel: true,
+    reasons: ["fallback_extraction", "large_navigation_noise", "index_or_feed", "no_main_content"],
+    allowedDecisions: ["accept_current", "downgrade_to_index_or_feed", "mark_blocked_or_empty", "request_user_selection"],
+  },
+  payloadBudget: {
+    fullTextMaxChars: 8000,
+    maxPayloadChars: 12000,
+    candidateBlockPreviewChars: 1200,
+    maxCandidateBlocks: 8,
+    currentTextMode: "full",
+    estimatedPayloadChars: 1600,
+    withinBudget: true,
+  },
+};
+
 describe("Tier A compact-digits public contract", () => {
   it.each(tierACompactFixtures)("$id", (fixture) => {
     expect(parseCompactScores(fixture.raw, fixture.customRules)).toEqual(fixture.expected);
@@ -73,5 +113,63 @@ describe("Tier B-2 reading brief public contract", () => {
     }
     expect(parsed.ok).toBe(true);
     expect(parsed.value).toEqual(expect.objectContaining(fixture.expected ?? {}));
+  });
+});
+
+describe("Tier B General Page parser advisor public contract", () => {
+  it("builds a short JSON-only advisor chat body", () => {
+    const body = buildTierBGeneralPageParserAdvisorChatBody({
+      endpoint: "http://localhost:11434",
+      model: "gemma4:e4b",
+      request: parserAdvisorRequest,
+    });
+
+    expect(body.response_format).toEqual({ type: "json_object" });
+    expect(body.max_tokens).toBeLessThanOrEqual(420);
+    expect(body.messages[0]?.content).toContain("web-page parser recovery classifier");
+    expect(body.messages[1]?.content).toContain("allowedDecisions");
+    expect(body.messages[1]?.content).not.toContain("request_screenshot_region");
+  });
+
+  it("accepts valid short advisor JSON and rejects disallowed decisions", () => {
+    const valid = parseGeneralPageParserAdvisorAdvice(JSON.stringify({
+      schemaVersion: 1,
+      pageType: "index_or_feed",
+      decision: "downgrade_to_index_or_feed",
+      confidence: "high",
+      needsUserSelection: false,
+      needsScreenshot: false,
+      riskTags: ["fallback_extraction", "index_or_feed"],
+      rationale: "The page is a synthetic index and should not be treated as one article.",
+    }), parserAdvisorRequest);
+    expect(valid).toEqual(expect.objectContaining({ ok: true }));
+
+    const invalid = parseGeneralPageParserAdvisorAdvice(JSON.stringify({
+      schemaVersion: 1,
+      pageType: "unknown",
+      decision: "request_screenshot_region",
+      confidence: "medium",
+      needsUserSelection: false,
+      needsScreenshot: true,
+      riskTags: ["needs_visual_grounding"],
+      rationale: "Screenshot is not allowed for this request.",
+    }), parserAdvisorRequest);
+    expect(invalid).toEqual({ ok: false, error: "decision_not_allowed" });
+  });
+
+  it("rejects model advice that overrides deterministic index/feed risk", () => {
+    const parsed = parseGeneralPageParserAdvisorAdvice(JSON.stringify({
+      schemaVersion: 1,
+      pageType: "article",
+      decision: "accept_current",
+      confidence: "high",
+      needsUserSelection: false,
+      needsScreenshot: false,
+      riskTags: ["fallback_extraction"],
+      rationale: "The model believes the current extraction is usable.",
+    }), parserAdvisorRequest);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok && isGeneralPageParserAdvisorAdviceCompatible(parserAdvisorRequest, parsed.value)).toBe(false);
   });
 });
