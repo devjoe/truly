@@ -159,9 +159,29 @@ function resolveIneligibilityReason(
     return "not_web_page";
   if (surface.extraction.status === "empty" || surface.extraction.status === "blocked")
     return "empty_or_blocked";
-  if (mainText.length < minMainTextLength)
+  if (mainText.length < minMainTextLength && !isUsefulShortSemanticArticle(surface, mainText, minMainTextLength))
     return "main_text_too_short";
   return undefined;
+}
+
+function isUsefulShortSemanticArticle(
+  surface: ReadingSurface,
+  mainText: string,
+  minMainTextLength: number,
+): boolean {
+  if (surface.extraction.method !== "semantic-html")
+    return false;
+  if (mainText.length < Math.max(160, Math.floor(minMainTextLength * 0.6)))
+    return false;
+  const warnings = surface.extraction.warnings;
+  if (warnings.some((warning) => warning !== "very-short-content"))
+    return false;
+  return Boolean(surface.title && (
+    surface.authorName ||
+    surface.publishedAt ||
+    surface.sourceName ||
+    surface.canonicalUrl
+  ));
 }
 
 function resolveQualityIssues(surface: ReadingSurface): GeneralPageModelQualityIssue[] {
@@ -236,6 +256,10 @@ function isLikelyNavigationOrDownloadLink(link: ReadingSurfaceLink, pageUrl: str
   const lowerText = text.toLowerCase();
   const href = link.href.trim();
   const lowerHref = href.toLowerCase();
+  if (/^(share|comments?|latest|most read|newsletter|popular|recommended|related|more)\b/i.test(text))
+    return true;
+  if (/(\/share\/|\/comments?(?:\/|$)|\/most-read(?:\/|$)|\/latest(?:\/|$)|\/recommended(?:\/|$)|\/newsletter(?:\/|$))/i.test(lowerHref))
+    return true;
   if (/(下載|download)/i.test(text) && /(chrome|firefox|edge|google|microsoft|mozilla)/i.test(text))
     return true;
   if (/(chrome|firefox|edge)/i.test(lowerHref) && /(download|下載|browser|瀏覽器)/i.test(lowerText))

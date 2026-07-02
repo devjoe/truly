@@ -208,9 +208,20 @@ The v4 fixture batch added focused regression pressure for:
 - malformed mixed-language pages with uneven markup.
 
 The corpus moved beyond the original 35-fixture upper bound after the first
-200-target private product-quality review. The checker now allows up to 40
+200-target private product-quality reviews. The checker now allows up to 48
 fixtures so high-signal manual-review findings can be converted into public
 synthetic regressions without removing still-useful earlier coverage.
+
+The v5 fixture batch added focused regression pressure for:
+
+- blog and personal-site prose containers that lack `article` or `main`
+  landmarks but contain a clear body block;
+- short semantic articles that are complete enough for model context but should
+  remain visually marked as caution;
+- dense semantic `main` card collections that should be treated as index/feed
+  pages rather than trusted as complete articles;
+- article footer links where source context should filter utility navigation,
+  sharing, comment, newsletter, and recirculation links.
 
 ## Private Real-World Evaluation Runner
 
@@ -311,4 +322,3 @@ a third-party candidate leaks teaser text. The report should keep those misses
 visible as non-blocking candidate misses, but `npm run check:general-page` should
 fail only when the committed runtime baseline misses the fixture threshold or
 when the runtime suitability policy fails.
-

@@ -527,6 +527,7 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.extraction.method).toBe("fallback");
     expect(surface.extraction.status).toBe("partial");
     expect(surface.extraction.warnings).toContain("no-main-content");
+    expect(surface.extraction.warnings).not.toContain("large-navigation-noise");
     expect(surface.mainText).toContain("actual body explains a fictional public monitoring project");
     expect(surface.mainText).not.toBe("Advertising");
     expect(surface.mainText).not.toContain("Related source one");
@@ -563,6 +564,57 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).toContain("should not automatically make a clean documentation body look like a feed or index");
     expect(surface.mainText).not.toContain("On this page");
     expect(surface.mainText).not.toContain("Compiler options");
+  });
+
+  it("selects blog prose containers when no semantic article landmark exists", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "blog-prose-with-nav-shell.html",
+        "https://personal.example.test/notes/prose-shell",
+      ),
+      url: "https://personal.example.test/notes/prose-shell",
+    });
+
+    expect(surface.extraction.method).toBe("fallback");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("no-main-content");
+    expect(surface.mainText).toContain("blog prose with nav shell fixture");
+    expect(surface.mainText).toContain("paragraph density and heading similarity should beat archive widgets");
+    expect(surface.mainText).not.toContain("Previous posts");
+    expect(surface.mainText).not.toContain("Popular essay one");
+    expect(surface.mainText).not.toContain("Privacy Terms Contact");
+  });
+
+  it("keeps short semantic articles extractable while marking them partial", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "short-semantic-news-brief.html",
+        "https://briefs.example.test/news/short-semantic-brief",
+      ),
+      url: "https://briefs.example.test/news/short-semantic-brief",
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toEqual(["very-short-content"]);
+    expect(surface.mainText).toContain("short semantic news brief fixture");
+    expect(surface.mainText).toContain("Short article bodies can still be useful model context");
+  });
+
+  it("downgrades dense semantic main card collections as index-like pages", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "semantic-main-card-index-dense.html",
+        "https://civic.example.test/desk",
+      ),
+      url: "https://civic.example.test/desk",
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("semantic main card index dense fixture");
+    expect(surface.mainText).toContain("collection page rather than one complete article");
   });
 
   it("selects an article-like fallback block over magazine recirculation rails", () => {

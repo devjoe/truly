@@ -535,6 +535,58 @@
         "contains": ["long, coherent technical body", "should not automatically make a clean documentation body look like a feed or index"],
         "excludes": ["On this page", "Compiler options", "API reference"]
       }
+    },
+    {
+      "id": "blog-prose-with-nav-shell",
+      "file": "blog-prose-with-nav-shell.html",
+      "url": "https://personal.example.test/notes/prose-shell",
+      "locale": "en",
+      "pageType": "blog",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P16-missing-or-conflicting-metadata"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["blog prose with nav shell fixture", "paragraph density and heading similarity should beat archive widgets"],
+        "excludes": ["Previous posts", "Tag cloud", "Popular essay one", "Privacy Terms Contact"]
+      }
+    },
+    {
+      "id": "short-semantic-news-brief",
+      "file": "short-semantic-news-brief.html",
+      "url": "https://briefs.example.test/news/short-semantic-brief",
+      "locale": "en",
+      "pageType": "news",
+      "patterns": ["P01-semantic-article", "P15-rich-metadata"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["short semantic news brief fixture", "Short article bodies can still be useful model context"],
+        "excludes": ["Home", "Latest"]
+      }
+    },
+    {
+      "id": "semantic-main-card-index-dense",
+      "file": "semantic-main-card-index-dense.html",
+      "url": "https://civic.example.test/desk",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P02-main-role-without-article", "P05-list-or-index-page", "P18-media-and-caption"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["semantic main card index dense fixture", "collection page rather than one complete article"],
+        "excludes": []
+      }
+    },
+    {
+      "id": "article-source-link-noise",
+      "file": "article-source-link-noise.html",
+      "url": "https://news.example.test/research/source-link-noise",
+      "locale": "en",
+      "pageType": "article",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P04-related-content-recirc"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["article source link noise fixture", "utility links that should not become model source context"],
+        "excludes": []
+      }
     }
   ]
 }

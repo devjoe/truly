@@ -85,6 +85,44 @@ describe("general page model context contract", () => {
     expect(context.mainText).not.toContain("Google 官網下載");
   });
 
+  it("filters article utility links out of model source context", () => {
+    const url = "https://news.example.test/research/source-link-noise";
+    const surface = extractGeneralPageSurface({
+      document: fixtureDocument("article-source-link-noise.html", url),
+      url,
+    });
+
+    const context = buildGeneralPageModelContext(surface);
+
+    expect(context.modelEligible).toBe(true);
+    expect(context.links).toEqual([
+      {
+        href: "https://news.example.test/research/source-link-noise/source",
+        text: "Article source",
+      },
+    ]);
+    expect(context.mainText).toContain("article source link noise fixture");
+  });
+
+  it("allows strong short semantic articles through the model gate as caution", () => {
+    const url = "https://briefs.example.test/news/short-semantic-brief";
+    const surface = extractGeneralPageSurface({
+      document: fixtureDocument("short-semantic-news-brief.html", url),
+      url,
+    });
+
+    const context = buildGeneralPageModelContext(surface);
+
+    expect(context).toMatchObject({
+      modelEligible: true,
+      modelReadiness: "caution",
+      ineligibilityReason: undefined,
+      qualityIssues: ["partial_extraction"],
+    });
+    expect(context.mainText.length).toBeLessThan(GENERAL_PAGE_MODEL_MIN_MAIN_TEXT_LENGTH);
+    expect(context.mainText).toContain("Short article bodies can still be useful model context");
+  });
+
   it("marks long fallback or partial extraction as caution instead of clean model-ready", () => {
     const url = "https://example.test/articles/clean-article";
     const surface = extractGeneralPageSurface({

@@ -125,30 +125,38 @@ const FALLBACK_CONTENT_CANDIDATE_SELECTOR = [
   "section[class*=\"content\" i]",
   "section[class*=\"entry\" i]",
   "section[class*=\"feature\" i]",
+  "section[class*=\"markdown\" i]",
   "section[class*=\"post\" i]",
+  "section[class*=\"prose\" i]",
   "section[class*=\"story\" i]",
   "div[class*=\"article\" i]",
   "div[class*=\"body\" i]",
   "div[class*=\"content\" i]",
   "div[class*=\"entry\" i]",
   "div[class*=\"feature\" i]",
+  "div[class*=\"markdown\" i]",
   "div[class*=\"post\" i]",
+  "div[class*=\"prose\" i]",
   "div[class*=\"story\" i]",
   "section[id*=\"article\" i]",
   "section[id*=\"body\" i]",
   "section[id*=\"content\" i]",
   "section[id*=\"entry\" i]",
+  "section[id*=\"markdown\" i]",
   "section[id*=\"post\" i]",
+  "section[id*=\"prose\" i]",
   "section[id*=\"story\" i]",
   "div[id*=\"article\" i]",
   "div[id*=\"body\" i]",
   "div[id*=\"content\" i]",
   "div[id*=\"entry\" i]",
+  "div[id*=\"markdown\" i]",
   "div[id*=\"post\" i]",
+  "div[id*=\"prose\" i]",
   "div[id*=\"story\" i]",
 ].join(",");
 
-const FALLBACK_CONTENT_POSITIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:article|body|content|entry|feature|post|story|text|本文|正文|文章)(?:$|[\s_-])/i;
+const FALLBACK_CONTENT_POSITIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:article|body|content|copy|entry|feature|markdown|post|prose|story|text|本文|正文|文章)(?:$|[\s_-])/i;
 const FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:ad|advert|archive|card|carousel|category|comment|footer|grid|latest|menu|most|nav|popular|promo|rank|recommend|recirc|related|search|share|sidebar|sponsor|tag|teaser|trend|widget|排行|推薦|熱門|相關|輪播|側欄|廣告|分類|搜尋|分享)(?:$|[\s_-])/i;
 
 const NON_READING_LINK_TEXT_PATTERNS = [
@@ -160,6 +168,12 @@ const NON_READING_LINK_TEXT_PATTERNS = [
   /^source link$/i,
   /^article source$/i,
   /^share$/i,
+  /^comments?$/i,
+  /^latest$/i,
+  /^most read$/i,
+  /^newsletter$/i,
+  /^popular$/i,
+  /^recommended$/i,
   /^login$/i,
   /^sign in$/i,
   /下載/i,
@@ -247,12 +261,14 @@ export function extractGeneralPageSurface(
     warnings.push("no-main-content");
   }
 
-  if (looksBlockedOrPaywalled(input.document, extractionRoot, title, mainText, minMainTextLength)) {
+  const extractionSignalRoot = extractionRoot ?? fallbackRoot;
+
+  if (looksBlockedOrPaywalled(input.document, extractionSignalRoot, title, mainText, minMainTextLength)) {
     warnings.push("login-or-paywall-like");
   }
 
   if (!selectedTextIsUseful && mainText) {
-    warnings.push(...nonArticlePageWarnings(input.document, extractionRoot, mainText, currentUrl, title));
+    warnings.push(...nonArticlePageWarnings(input.document, extractionSignalRoot, mainText, currentUrl, title));
   }
 
   const status = resolveExtractionStatus(mainText, warnings, minMainTextLength);
@@ -379,7 +395,9 @@ function isLikelyIndexFallbackDocument(
   const listItemCount = documentRef.querySelectorAll("li").length;
   const path = urlPath(url);
   const bodyText = normalizeWhitespace(documentRef.body?.textContent ?? "") ?? "";
-  const signals = `${url} ${title ?? ""} ${bodyText.slice(0, 1200)}`.toLowerCase();
+  const urlTitleSignals = `${url} ${title ?? ""}`.toLowerCase();
+  const bodySignals = bodyText.slice(0, 1200).toLowerCase();
+  const signals = `${urlTitleSignals} ${bodySignals}`;
 
   if (
     path === "/" &&
@@ -389,8 +407,15 @@ function isLikelyIndexFallbackDocument(
   }
 
   if (
-    /\b(?:front page|home ?page|top stories|latest news|category hub|search results?|archive|topics|index|list page)\b/.test(signals) &&
+    /\b(?:front page|home ?page|top stories|latest news|category hub|search results?|archive|topics|index|list page)\b/.test(urlTitleSignals) &&
     (articleCount >= 2 || linkCount >= 6 || imageCount >= 3 || listItemCount >= 6)
+  ) {
+    return true;
+  }
+
+  if (
+    /\b(?:front page|home ?page|top stories|latest news|category hub|search results?|list page)\b/.test(bodySignals) &&
+    (articleCount >= 2 || linkCount >= 8 || imageCount >= 3 || listItemCount >= 6)
   ) {
     return true;
   }
@@ -528,6 +553,8 @@ function nonArticlePageWarnings(
   const listItemCount = root.querySelectorAll("li").length;
   const linkCount = root.querySelectorAll("a[href]").length;
   const imageCount = root.querySelectorAll("img").length;
+  const sectionCount = root.querySelectorAll("section").length;
+  const linkDensity = linkedTextLength(root) / Math.max(text.length, 1);
   const documentArticleCount = documentRef.querySelectorAll("article").length;
   const documentParagraphCount = documentRef.querySelectorAll("p").length;
   const documentLinkCount = documentRef.querySelectorAll("a[href]").length;
@@ -550,6 +577,8 @@ function nonArticlePageWarnings(
     listItemCount,
     linkCount,
     imageCount,
+    sectionCount,
+    linkDensity,
   })) {
     return ["large-navigation-noise"];
   }
@@ -649,6 +678,8 @@ function isLikelyStructuredIndexOrFeedRoot(metrics: {
   listItemCount: number;
   linkCount: number;
   imageCount: number;
+  sectionCount: number;
+  linkDensity: number;
 }): boolean {
   if (metrics.rootIsArticle)
     return false;
@@ -662,9 +693,30 @@ function isLikelyStructuredIndexOrFeedRoot(metrics: {
   const listOrMediaDense = metrics.listItemCount >= 8 ||
     metrics.linkCount >= 8 ||
     metrics.imageCount >= 4;
+  const cardLikeSections = metrics.sectionCount >= 4 &&
+    metrics.linkCount >= metrics.sectionCount &&
+    metrics.paragraphCount <= Math.max(10, metrics.sectionCount + 2);
 
   if (shortRepeatedArticles && (listOrMediaDense || !metrics.hasArticleMeta))
     return true;
+
+  if (
+    !metrics.hasArticleMeta &&
+    cardLikeSections &&
+    (metrics.imageCount >= 4 || metrics.linkDensity >= 0.18)
+  ) {
+    return true;
+  }
+
+  if (
+    !metrics.hasArticleMeta &&
+    metrics.textLength < 2600 &&
+    metrics.linkCount >= 10 &&
+    metrics.paragraphCount <= 10 &&
+    (metrics.imageCount >= 4 || metrics.linkDensity >= 0.22 || metrics.listItemCount >= 8)
+  ) {
+    return true;
+  }
 
   if (
     !metrics.hasArticleMeta &&
@@ -852,7 +904,7 @@ function isNonReadingSourceLink(text: string, href: string): boolean {
     return true;
   if (/^(即時|熱門|政治|軍武|社會|生活|健康|國際|地方|財經|娛樂|體育|3C|評論|藝文|玩咖|食譜|地產|專區|搜尋|會員)$/i.test(cleanText))
     return true;
-  if (/^(related|more|recommended|popular|latest)\b/i.test(cleanText) || /相關文章/.test(cleanText))
+  if (/^(comments?|share|related|more|recommended|popular|latest|most read|newsletter)\b/i.test(cleanText) || /相關文章/.test(cleanText))
     return true;
   if (/(下載|\bdownload\b)/i.test(cleanText))
     return true;
