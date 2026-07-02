@@ -315,7 +315,8 @@ export interface ReadingBrief {
 
 export type ModelOutputReviewScope =
   | "tier_b_deep"
-  | "tier_b2_reading_brief";
+  | "tier_b2_reading_brief"
+  | "general_page_brief";
 
 export interface ModelOutputFinding {
   path: string;

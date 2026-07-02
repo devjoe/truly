@@ -6,6 +6,7 @@ import type {
   ModelOutputReviewScope,
   ReadingBrief,
 } from "./types";
+import type { GeneralPageBrief } from "./general-page-analysis";
 
 const REVIEW_VERSION = "2026-05-20-zh-tw-safe-v1";
 
@@ -139,5 +140,54 @@ export function applyReadingBriefOutputReview(brief: ReadingBrief): ReadingBrief
 
   const review = buildReview("tier_b2_reading_brief", findings, fixes);
   if (review) out.outputReview = review;
+  return out;
+}
+
+export function applyGeneralPageBriefOutputReview(brief: GeneralPageBrief): GeneralPageBrief {
+  const findings: ModelOutputFinding[] = [];
+  const fixes: ModelOutputFix[] = [];
+  const out: GeneralPageBrief = {
+    ...brief,
+    bg: brief.bg?.map((item) => ({ ...item })),
+    claims: brief.claims?.map((item) => ({ ...item })),
+    qs: brief.qs?.map((item) => ({ ...item })),
+    outputReview: brief.outputReview ? { ...brief.outputReview } : undefined,
+  };
+
+  out.summary = reviewText(out.summary, "summary", findings, fixes) ?? out.summary;
+  out.bg = out.bg?.map((item, index) => ({
+    ...item,
+    t: reviewText(item.t, `bg.${index}.t`, findings, fixes) ?? item.t,
+    why: reviewText(item.why, `bg.${index}.why`, findings, fixes) ?? item.why,
+    q: reviewText(item.q, `bg.${index}.q`, findings, fixes),
+  }));
+  out.claims = out.claims?.map((item, index) => ({
+    ...item,
+    c: reviewText(item.c, `claims.${index}.c`, findings, fixes) ?? item.c,
+    why: reviewText(item.why, `claims.${index}.why`, findings, fixes) ?? item.why,
+    need: reviewText(item.need, `claims.${index}.need`, findings, fixes) ?? item.need,
+    q: reviewText(item.q, `claims.${index}.q`, findings, fixes),
+  }));
+  out.qs = out.qs?.map((item, index) => ({
+    ...item,
+    q: reviewText(item.q, `qs.${index}.q`, findings, fixes) ?? item.q,
+  }));
+  out.note = reviewText(out.note, "note", findings, fixes);
+
+  const review = buildReview("general_page_brief", findings, fixes);
+  if (!review) return out;
+  const existing = out.outputReview;
+  if (!existing) {
+    out.outputReview = review;
+    return out;
+  }
+  out.outputReview = {
+    ...existing,
+    scope: "general_page_brief",
+    findingCount: existing.findingCount + review.findingCount,
+    autoFixCount: existing.autoFixCount + review.autoFixCount,
+    findings: [...existing.findings, ...review.findings],
+    autoFixes: [...existing.autoFixes, ...review.autoFixes],
+  };
   return out;
 }

@@ -1,6 +1,7 @@
 # General Page Target Flow Design Review
 
-Status: design recommendation; Slice 6a accepted and implemented in this branch
+Status: design recommendation; Slice 6a accepted and implemented in this branch;
+open questions resolved by maintainer (see Resolved Decisions)
 Date: 2026-07-02
 
 ## Scope
@@ -198,15 +199,25 @@ page for the chosen block's full text only after the advisor returns
 4. Slice 6b paragraph / point targeting spike.
 5. Screenshot confirmation flow, then the auto-screenshot setting.
 
-## Open Questions For The Maintainer
+## Resolved Decisions (Maintainer, 2026-07-02)
 
-- Should the selection action also appear when extraction succeeded cleanly
-  (as a scope-narrowing tool), or only as a recovery path? Recommendation:
-  both, but the recovery placement is the one that must ship in 6a.
-- Is `no_meaningful_selection` guidance enough, or should the panel live-check
-  selection presence and disable the button? Live-checking requires polling or
-  a selectionchange broadcast; recommendation is to keep 6a poll-free and
-  accept the error-message path.
-- For the future overview action: does an index/feed overview prompt actually
-  differ enough from a page summary prompt to justify a new action, or is
-  `page_overview_only` context labeling sufficient for the model?
+- **All-sites optional host permission: ratified.** General Page Reader may
+  offer all-sites access as a user-facing option. It stays an optional runtime
+  permission with an explicit user action, default off, with grant/revoke in
+  Options. It must never become an install-time static host permission.
+- **Selection action placement: always available plus recovery.** The
+  "use my selection" action stays visible whenever a read surface exists
+  (scope-narrowing tool) and doubles as the recovery path for
+  `requires_user_target`. Current implementation is correct as shipped.
+- **Empty selection: error-message path.** No `selectionchange` listening or
+  polling. Pressing the action with no meaningful selection returns
+  `no_meaningful_selection` and the panel shows guidance. This keeps the
+  explicit-trigger principle intact.
+- **Overview action: defer to Slice 4.** Do not add `"overview"` to
+  `READING_ACTIONS` now. `allowedUse: "page_overview_only"` remains the single
+  source of truth. Revisit only if Slice 4 prompt work shows an index/feed
+  overview prompt differs materially from a page summary prompt.
+- **Page/Web history: session-only.** No durable history. Sessions clear on
+  meaningful navigation and tab close; nothing analysis-related enters
+  `chrome.storage`. Users keep results via Markdown copy/export. Any future
+  history feature requires its own privacy review.

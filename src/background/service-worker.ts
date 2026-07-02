@@ -13,7 +13,7 @@
 // reloads are cosmetic noise (the content script context dies mid-flight)
 // and are silently ignored on the content side.
 
-import { callTierBDeepDetailed, callTierBGeneralPageParserAdvisor, callTierBReadingBrief } from "../lib/tier-b-client";
+import { callTierBDeepDetailed, callTierBGeneralPageBrief, callTierBGeneralPageParserAdvisor, callTierBReadingBrief } from "../lib/tier-b-client";
 import { callGeminiNanoTierB, callGeminiNanoReadingBrief, GEMINI_NANO_PROVIDER } from "../lib/gemini-nano-client";
 import { initDevReloadClient } from "./dev-reload-client";
 import type { TierAProvider, TierBProvider } from "../lib/types";
@@ -28,6 +28,7 @@ import {
 import type {
   TrulyMessage,
   DeepClassifyResultMsg,
+  GeneralPageAnalysisResultMsg,
   GeneralPageParserAdvisorResultMsg,
   ReadingBriefResultMsg,
   ReadinessRunChecksResultMsg,
@@ -392,6 +393,51 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           },
           error: error instanceof Error ? error.message.slice(0, 200) : "parser_advisor_failed",
         } satisfies GeneralPageParserAdvisorResultMsg);
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+    (async () => {
+      try {
+        if (!message.providerRuntime.canUseModel || !message.providerRuntime.endpoint || !message.providerRuntime.model) {
+          throw new Error(message.providerRuntime.blockedReason || "general_page_brief_provider_unavailable");
+        }
+        const startedAt = Date.now();
+        const result = await callTierBGeneralPageBrief({
+          endpoint: message.providerRuntime.endpoint,
+          model: message.providerRuntime.model,
+          apiKey: await tierBApiKeyForProvider(message.providerRuntime.effectiveProvider),
+          context: message.context,
+          allowedUse: message.allowedUse,
+          outputLang: message.outputLang,
+        });
+        if (result.ok && result.brief) {
+          sendResponse({
+            type: "GENERAL_PAGE_ANALYSIS_RESULT",
+            tabId: message.tabId,
+            ok: true,
+            brief: {
+              ...result.brief,
+              elapsedMs: Date.now() - startedAt,
+            },
+          } satisfies GeneralPageAnalysisResultMsg);
+          return;
+        }
+        sendResponse({
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: message.tabId,
+          ok: false,
+          error: result.error ?? "general_page_brief_failed",
+        } satisfies GeneralPageAnalysisResultMsg);
+      } catch (error) {
+        sendResponse({
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: message.tabId,
+          ok: false,
+          error: error instanceof Error ? error.message.slice(0, 200) : "general_page_brief_failed",
+        } satisfies GeneralPageAnalysisResultMsg);
       }
     })();
     return true;

@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 
 import { parseCompactScores } from "@src/lib/ollama-client";
 import {
+  buildTierBGeneralPageBriefChatBody,
   buildTierBGeneralPageParserAdvisorChatBody,
   parseTierBDeepContent,
   parseTierBReadingBriefContent,
 } from "@src/lib/tier-b-client";
+import type { GeneralPageModelContext } from "@src/lib/general-page-model-context";
 import {
   isGeneralPageParserAdvisorAdviceCompatible,
   parseGeneralPageParserAdvisorAdvice,
@@ -84,6 +86,24 @@ const parserAdvisorRequest: GeneralPageParserAdvisorRequest = {
     estimatedPayloadChars: 1600,
     withinBudget: true,
   },
+};
+
+const generalPageContext: GeneralPageModelContext = {
+  surfaceKind: "web-page",
+  surfaceSource: "general",
+  targetKind: "selection",
+  title: "Synthetic Selection Page",
+  url: "https://example.test/page",
+  domain: "example.test",
+  selectedText: "Selected passage about a fictional public notice.",
+  mainText: "Selected passage about a fictional public notice.",
+  surroundingText: "Surrounding page text is context only.",
+  links: [{ href: "https://example.test/source", text: "Source link" }],
+  imageAltText: [],
+  extractionWarnings: [],
+  modelEligible: true,
+  modelReadiness: "ready",
+  qualityIssues: [],
 };
 
 describe("Tier A compact-digits public contract", () => {
@@ -171,5 +191,38 @@ describe("Tier B General Page parser advisor public contract", () => {
 
     expect(parsed.ok).toBe(true);
     expect(parsed.ok && isGeneralPageParserAdvisorAdviceCompatible(parserAdvisorRequest, parsed.value)).toBe(false);
+  });
+});
+
+describe("Tier B General Page brief public contract", () => {
+  it("builds a JSON-only page brief chat body for selection analysis", () => {
+    const body = buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://localhost:11434",
+      model: "gemma4:e4b",
+      context: generalPageContext,
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+    });
+
+    expect(body.response_format).toEqual({ type: "json_object" });
+    expect(body.temperature).toBe(0);
+    expect(body.max_tokens).toBeLessThanOrEqual(1400);
+    expect(body.messages[0]?.content).toContain("General Page reading assistant");
+    expect(body.messages[0]?.content).toContain("targetKind is selection");
+    expect(body.messages[1]?.content).toContain("targetKind: selection");
+    expect(body.messages[1]?.content).toContain("Selected passage about a fictional public notice.");
+  });
+
+  it("uses the overview system variant for page overview only contexts", () => {
+    const body = buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://localhost:11434",
+      model: "gemma4:e4b",
+      context: { ...generalPageContext, targetKind: "page" },
+      allowedUse: "page_overview_only",
+      outputLang: "en",
+    });
+
+    expect(body.messages[0]?.content).toContain("page overview only");
+    expect(body.messages[0]?.content).toContain("Return claims as an empty array");
   });
 });

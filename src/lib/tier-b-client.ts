@@ -10,9 +10,17 @@ import type {
   ReadingBrief,
   ReadingBriefQuestionKind,
 } from "./types";
+import type { GeneralPageModelContext } from "./general-page-model-context";
+import {
+  applyGeneralPageBriefPostGuards,
+  parseGeneralPageBriefContent,
+  type GeneralPageBrief,
+} from "./general-page-analysis";
+import { buildGeneralPageModelUserPrompt } from "./general-page-model-context";
 import {
   buildGeneralPageParserAdvisorSystemPrompt,
   buildGeneralPageParserAdvisorUserPrompt,
+  type GeneralPageEffectiveModelContextUse,
   parseGeneralPageParserAdvisorAdvice,
   type GeneralPageParserAdvisorAdvice,
   type GeneralPageParserAdvisorRequest,
@@ -26,6 +34,7 @@ export type { DeepClassification };
 
 export const TIER_B_DEEP_TIMEOUT_MS = 45_000;
 export const TIER_B_READING_BRIEF_TIMEOUT_MS = 45_000;
+export const TIER_B_GENERAL_PAGE_BRIEF_TIMEOUT_MS = 45_000;
 export const TIER_B_GENERAL_PAGE_PARSER_ADVISOR_TIMEOUT_MS = 20_000;
 export const TIER_B_CONTEXT_LIMIT_TOKENS = 16_384;
 // Keep a client-side guard even though vLLM also receives
@@ -181,6 +190,38 @@ export function readingBriefSystemPrompt(outputLang?: Lang): string {
   return tierBOutputLang(outputLang) === "en" ? READING_BRIEF_SYSTEM_PROMPT_EN : READING_BRIEF_SYSTEM_PROMPT;
 }
 
+export function generalPageBriefSystemPrompt(
+  outputLang: Lang | undefined,
+  allowedUse: GeneralPageEffectiveModelContextUse,
+): string {
+  const lang = tierBOutputLang(outputLang);
+  const overview = allowedUse === "page_overview_only";
+  if (lang === "en") {
+    return [
+      "You are Truly's General Page reading assistant. You receive extracted web-page context and must return JSON only.",
+      "Schema: {\"schemaVersion\":1,\"summary\":\"2-4 neutral sentences\",\"bg\":[{\"t\":\"background topic\",\"why\":\"why it matters\",\"q\":\"optional question\"}],\"claims\":[{\"c\":\"checkable claim\",\"why\":\"why it matters\",\"need\":\"evidence needed\",\"q\":\"optional question\"}],\"qs\":[{\"q\":\"follow-up question\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"optional short note\"}",
+      `Write every natural-language field in English. ${TEMPORAL_CONTEXT_GUIDANCE_EN}.`,
+      "Use only the supplied page context. Do not invent sources, dates, authors, facts, motives, or URLs.",
+      "When targetKind is selection, summarize and analyze only the selected text; surrounding text is context only.",
+      overview
+        ? "This is page overview only. Describe what kind of page it is, what linked topics or sections appear, and what the reader may inspect next. Return claims as an empty array or omit it. Do not produce article-grade claims."
+        : "For article or selection analysis, return a neutral summary, useful background, checkable claims only when the supplied text supports them, and follow-up questions.",
+      "Do not use markdown. Do not output extra fields.",
+    ].join("\n");
+  }
+  return [
+    "你是 Truly 的一般網頁閱讀助理。你會收到抽取後的網頁脈絡，只能回傳 JSON。",
+    "Schema: {\"schemaVersion\":1,\"summary\":\"2-4 句中立摘要\",\"bg\":[{\"t\":\"背景主題\",\"why\":\"為何重要\",\"q\":\"可選問題\"}],\"claims\":[{\"c\":\"可查核主張\",\"why\":\"為何重要\",\"need\":\"需要的證據\",\"q\":\"可選問題\"}],\"qs\":[{\"q\":\"延伸問題\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"可選短提醒\"}",
+    `所有自然語言欄位使用台灣慣用繁體中文。${TEMPORAL_CONTEXT_GUIDANCE}。${ZHTW_OUTPUT_GUIDANCE}。`,
+    "只能使用提供的頁面脈絡。不要發明來源、日期、作者、事實、動機或網址。",
+    "targetKind 是 selection 時，只摘要與分析選取文字；surrounding text 只能當脈絡，不可當成摘要主體。",
+    overview
+      ? "這只允許頁面總覽。請描述這是什麼類型的頁面、它連到哪些主題或區塊、讀者下一步可檢視什麼。claims 必須回空陣列或省略，不得產生文章級查核主張。"
+      : "文章或選取文字分析可回傳中立摘要、有用背景、僅限文本支持的可查核主張，以及延伸問題。",
+    "不要 markdown，不要輸出其他欄位。",
+  ].join("\n");
+}
+
 interface ChatContent {
   type: "text" | "image_url";
   text?: string;
@@ -321,6 +362,23 @@ export interface TierBGeneralPageParserAdvisorRequest {
   request: GeneralPageParserAdvisorRequest;
   timeoutMs?: number;
   outputLang?: Lang;
+}
+
+export interface TierBGeneralPageBriefRequest {
+  endpoint: string;
+  model: string;
+  apiKey?: string;
+  context: GeneralPageModelContext;
+  allowedUse: GeneralPageEffectiveModelContextUse;
+  timeoutMs?: number;
+  outputLang?: Lang;
+}
+
+export interface TierBGeneralPageBriefResult {
+  ok: boolean;
+  brief: GeneralPageBrief | null;
+  raw?: string;
+  error?: "general_page_brief_network_error" | "general_page_brief_timeout" | "general_page_brief_http_error" | "general_page_brief_format_error";
 }
 
 export interface TierBGeneralPageParserAdvisorResult {
@@ -600,6 +658,40 @@ export function buildTierBReadingBriefChatBody(req: TierBReadingBriefRequest): T
   return body;
 }
 
+export function buildGeneralPageBriefPrompt(
+  context: GeneralPageModelContext,
+  outputLang?: Lang,
+): string {
+  const lang = tierBOutputLang(outputLang);
+  const answerLabel = lang === "en"
+    ? "## Required Answer Language\nAlways answer in English. The page itself may be in any language."
+    : "## 輸出語言\n所有自然語言欄位使用台灣慣用繁體中文。";
+  return [
+    temporalContextBlock(buildPromptTemporalContext(), lang),
+    answerLabel,
+    buildGeneralPageModelUserPrompt(context),
+  ].join("\n\n");
+}
+
+export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefRequest): TierBChatBody {
+  const body: TierBChatBody = {
+    model: req.model,
+    messages: [
+      { role: "system", content: generalPageBriefSystemPrompt(req.outputLang, req.allowedUse) },
+      { role: "user", content: buildGeneralPageBriefPrompt(req.context, req.outputLang) },
+    ],
+    temperature: 0,
+    max_tokens: 1400,
+    response_format: { type: "json_object" },
+    truncate_prompt_tokens: TIER_B_CONTEXT_LIMIT_TOKENS,
+    chat_template_kwargs: { enable_thinking: false },
+  };
+  if (shouldRequestOpenAICompatNoThinking(req.endpoint, req.model)) {
+    body.reasoning_effort = "none";
+  }
+  return body;
+}
+
 export function buildTierBGeneralPageParserAdvisorChatBody(
   req: TierBGeneralPageParserAdvisorRequest,
 ): TierBChatBody {
@@ -718,6 +810,45 @@ export async function callTierBReadingBrief(
   } catch (e) {
     console.warn("[Truly Tier B-2] error:", e);
     return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function callTierBGeneralPageBrief(
+  req: TierBGeneralPageBriefRequest,
+): Promise<TierBGeneralPageBriefResult> {
+  const url = tierBCompletionsUrl(req.endpoint);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), req.timeoutMs ?? TIER_B_GENERAL_PAGE_BRIEF_TIMEOUT_MS);
+  try {
+    const resp = await fetch(url, {
+      method: "POST",
+      headers: jsonRequestHeaders(req.apiKey),
+      body: JSON.stringify(buildTierBGeneralPageBriefChatBody(req)),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      let errBody = "";
+      try { errBody = (await resp.text()).slice(0, 400); } catch { /* ignore */ }
+      console.warn(`[Truly General Page Brief] HTTP ${resp.status}: ${errBody}`);
+      return { ok: false, brief: null, raw: errBody, error: "general_page_brief_http_error" };
+    }
+    const data = await resp.json();
+    const raw = String(data?.choices?.[0]?.message?.content || "").trim();
+    const parsed = parseGeneralPageBriefContent(raw, req.model, req.outputLang);
+    if (!parsed.ok || !parsed.value) {
+      console.warn(`[Truly General Page Brief] ${parsed.error}:`, raw.slice(0, 240));
+      return { ok: false, brief: null, raw: raw.slice(0, 1200), error: "general_page_brief_format_error" };
+    }
+    const brief = applyGeneralPageBriefPostGuards(parsed.value, req.allowedUse);
+    return { ok: true, brief, raw: raw.slice(0, 1200) };
+  } catch (error) {
+    console.warn("[Truly General Page Brief] error:", error);
+    const code = error instanceof DOMException && error.name === "AbortError"
+      ? "general_page_brief_timeout"
+      : "general_page_brief_network_error";
+    return { ok: false, brief: null, error: code };
   } finally {
     clearTimeout(timer);
   }

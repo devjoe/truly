@@ -33,9 +33,12 @@ import type { LlmPostContext } from "./ollama-client";
 import type { ReadingSurface } from "./reading-surface-types";
 import type { ReadingTarget, ReadingTargetErrorReason } from "./reading-target-types";
 import type { ReadingActivation } from "./reading-action-types";
+import type { GeneralPageBrief } from "./general-page-analysis";
+import type { GeneralPageModelContext } from "./general-page-model-context";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./readiness";
 import type {
   GeneralPageEffectiveModelContext,
+  GeneralPageEffectiveModelContextUse,
   GeneralPageParserAdvisorAdvice,
   GeneralPageParserAdvisorCandidateBlock,
   GeneralPageParserAdvisorRequest,
@@ -177,6 +180,23 @@ export interface GeneralPageParserAdvisorResultMsg {
   advice?: GeneralPageParserAdvisorAdvice;
   effectiveModelContext?: GeneralPageEffectiveModelContext;
   providerRuntime: GeneralPageParserAdvisorProviderRuntime;
+  error?: string;
+}
+
+export interface GeneralPageAnalysisRequestMsg {
+  type: "GENERAL_PAGE_ANALYSIS_REQUEST";
+  tabId: number;
+  context: GeneralPageModelContext;
+  allowedUse: GeneralPageEffectiveModelContextUse;
+  providerRuntime: GeneralPageParserAdvisorProviderRuntime;
+  outputLang?: Lang;
+}
+
+export interface GeneralPageAnalysisResultMsg {
+  type: "GENERAL_PAGE_ANALYSIS_RESULT";
+  tabId: number;
+  ok: boolean;
+  brief?: GeneralPageBrief;
   error?: string;
 }
 
@@ -532,6 +552,8 @@ export type TrulyMessage =
   | GeneralPageCandidateBlockTextErrorMsg
   | GeneralPageParserAdvisorRequestMsg
   | GeneralPageParserAdvisorResultMsg
+  | GeneralPageAnalysisRequestMsg
+  | GeneralPageAnalysisResultMsg
   | SelectorHealthUpdateMsg
   | OllamaClassifyMsg
   | OllamaResultMsg

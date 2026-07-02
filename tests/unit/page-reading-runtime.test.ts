@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { TrulyMessage } from "@src/lib/messages";
 import type { ReadingSurface } from "@src/lib/reading-surface-types";
+import { DEFAULT_SETTINGS } from "@src/lib/types";
 import { createSidepanelPageReadingRuntime } from "@src/sidepanel/page-reading-runtime";
 
 function setupDom(): HTMLElement {
@@ -172,6 +173,78 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("Reading context");
     expect(pagePaneEl.textContent).toContain("本地通過");
     expect(pagePaneEl.textContent).toContain("accept_current");
+  });
+
+  it("auto-generates a session-only General Page brief when Tier B is available", async () => {
+    const pagePaneEl = setupDom();
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return {
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface(),
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        expect(message.allowedUse).toBe("article_or_selection_analysis");
+        expect(message.context.targetKind).toBe("page");
+        expect(message.context.mainText).toContain("Runtime fixture text long enough");
+        return {
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: 42,
+          ok: true,
+          brief: {
+            schemaVersion: 1,
+            summary: "Synthetic model summary for the current page.",
+            bg: [{ t: "Context", why: "The page is a synthetic runtime article." }],
+            claims: [{ c: "Runtime claim", why: "It is central to the sample.", need: "Check the source." }],
+            qs: [{ q: "What source supports the runtime claim?", kind: "source" }],
+            model: "brief-model",
+            outputLang: "zh-TW",
+            elapsedMs: 1200,
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "GENERAL_PAGE_ANALYSIS_REQUEST",
+      tabId: 42,
+      providerRuntime: expect.objectContaining({
+        canUseModel: true,
+        effectiveProvider: "openai-compatible",
+        model: "brief-model",
+      }),
+    }));
+    expect(pagePaneEl.textContent).toContain("頁面重點");
+    expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
+    expect(pagePaneEl.textContent).toContain("Runtime claim");
+    expect(pagePaneEl.textContent).toContain("brief-model 使用 1.2 秒");
   });
 
   it("shows why a short extraction should not be sent to a model", async () => {
@@ -348,6 +421,91 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("downgrade_to_index_or_feed");
     expect(pagePaneEl.textContent).toContain("page_overview_only");
     expect(pagePaneEl.textContent).toContain("只適合頁面總覽");
+  });
+
+  it("does not send General Page brief requests when advisor requires a user target", async () => {
+    const pagePaneEl = setupDom();
+    const weakSurface = surface({
+      mainText: [
+        "首頁 分類 熱門 推薦 下載 導覽 Search Login Subscribe",
+        "Short synthetic teaser cards make this page ambiguous.",
+        "The user should choose a target before analysis.",
+      ].join(" "),
+      excerpt: "首頁 分類 熱門 推薦 下載 導覽 Search Login Subscribe",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["large-navigation-noise", "no-main-content"],
+      },
+      links: Array.from({ length: 14 }, (_, index) => ({
+        href: `https://example.test/link-${index}`,
+        text: `Link ${index}`,
+      })),
+    });
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return {
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: weakSurface,
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+        return {
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: 42,
+          ok: true,
+          providerRuntime: {
+            ...message.providerRuntime,
+            mode: "tier-b-short-json",
+          },
+          advice: {
+            schemaVersion: 1,
+            pageType: "unknown",
+            decision: "request_user_selection",
+            confidence: "high",
+            needsUserSelection: true,
+            needsScreenshot: false,
+            riskTags: ["fallback_extraction", "large_navigation_noise", "needs_user_attention"],
+            rationale: "Synthetic page needs a specific user target.",
+          },
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        throw new Error("analysis request should not be sent when user target is required");
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    expect(sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: "GENERAL_PAGE_ANALYSIS_REQUEST",
+    }));
+    expect(pagePaneEl.textContent).toContain("requires_user_target");
+    expect(pagePaneEl.textContent).toContain("需要使用者選取段落");
   });
 
   it("re-extracts full candidate block text before applying prefer-candidate context", async () => {

@@ -13,14 +13,21 @@ import {
   buildGeneralPageParserAdvisorRequest,
   GENERAL_PAGE_ADVISOR_PROVIDER_CONFIG_SOURCE,
   type GeneralPageEffectiveModelContext,
+  type GeneralPageEffectiveModelContextUse,
   type GeneralPageParserAdvisorAdvice,
   type GeneralPageParserAdvisorCandidateBlock,
   type GeneralPageParserAdvisorRequest,
 } from "../lib/general-page-parser-advisor";
+import {
+  generalPageBriefEligibility,
+  type GeneralPageAnalysisEligibilityReason,
+  type GeneralPageBrief,
+} from "../lib/general-page-analysis";
 import type { Lang, UserSettings } from "../lib/types";
 import { DEFAULT_SETTINGS } from "../lib/types";
 import type {
   GeneralPageCandidateBlockTextResultMsg,
+  GeneralPageAnalysisResultMsg,
   GeneralPageParserAdvisorProviderRuntime,
   GeneralPageParserAdvisorResultMsg,
   PageReadingErrorMsg,
@@ -44,6 +51,7 @@ import {
   pageUrlIdentity,
   type PageUrlIdentity,
 } from "../lib/page-url-identity";
+import { safeFilenamePart, saveMarkdownTextFile } from "./browser-actions";
 import type { TabId } from "./tabs";
 
 type PagePlatform = "facebook" | "general" | "unsupported";
@@ -63,9 +71,11 @@ interface PageReadingSession {
   updatedAt: number;
   activationSource: PageActivationSource;
   advisor?: PageReadingAdvisorSession;
+  analysis?: PageReadingAnalysisSession;
 }
 
 type PageReadingAdvisorStatus = "not_needed" | "checking" | "ready" | "error";
+type PageReadingAnalysisStatus = "idle" | "running" | "ready" | "error";
 
 interface PageReadingAdvisorSession {
   status: PageReadingAdvisorStatus;
@@ -74,6 +84,15 @@ interface PageReadingAdvisorSession {
   effectiveModelContext?: GeneralPageEffectiveModelContext;
   providerRuntime?: GeneralPageParserAdvisorProviderRuntime;
   error?: string;
+  updatedAt: number;
+}
+
+interface PageReadingAnalysisSession {
+  status: PageReadingAnalysisStatus;
+  key?: string;
+  brief?: GeneralPageBrief;
+  error?: string;
+  allowedUse?: GeneralPageEffectiveModelContextUse;
   updatedAt: number;
 }
 
@@ -208,7 +227,39 @@ function buildCopyText(session: PageReadingSession): string {
   const modelContext = surface ? modelContextForSession({ ...session, surface }) : undefined;
   const excerpt = surface ? visibleExcerpt(surface, modelContext, session.advisor?.effectiveModelContext) : "";
   if (excerpt) lines.push("", "Excerpt:", excerpt);
+  const brief = session.analysis?.status === "ready" ? session.analysis.brief : undefined;
+  if (brief) lines.push(...generalPageBriefCopyLines(brief, session.analysis?.allowedUse));
   return lines.join("\n");
+}
+
+function buildPageMarkdownFilename(session: PageReadingSession): string {
+  const date = new Date(session.updatedAt).toISOString().slice(0, 10);
+  const title = safeFilenamePart(session.surface?.title || session.title, "page");
+  const domain = safeFilenamePart(hostnameForUrl(session.surface?.canonicalUrl || session.surface?.url || session.url), "web");
+  return `truly-page-${date}-${domain}-${title}.md`;
+}
+
+function generalPageBriefCopyLines(
+  brief: GeneralPageBrief,
+  allowedUse: GeneralPageEffectiveModelContextUse | undefined,
+): string[] {
+  const lines = ["", "Model brief:", brief.summary];
+  if (allowedUse === "page_overview_only") lines.push("Scope: page overview only");
+  if (brief.bg?.length) {
+    lines.push("", "Reading context:");
+    for (const item of brief.bg) lines.push(`- ${item.t}: ${item.why}${item.q ? ` (${item.q})` : ""}`);
+  }
+  if (brief.claims?.length) {
+    lines.push("", "Claims to inspect:");
+    for (const claim of brief.claims) lines.push(`- ${claim.c}: ${claim.why} Need: ${claim.need}`);
+  }
+  if (brief.qs?.length) {
+    lines.push("", "Questions:");
+    for (const question of brief.qs) lines.push(`- [${question.kind}] ${question.q}`);
+  }
+  if (brief.note) lines.push("", `Note: ${brief.note}`);
+  lines.push("", `Analyzed by: ${brief.model}${brief.elapsedMs ? ` (${Math.round(brief.elapsedMs / 100) / 10}s)` : ""}`);
+  return lines;
 }
 
 function modelContextForSession(session: PageReadingSession & { surface: ReadingSurface }): GeneralPageModelContext {
@@ -401,6 +452,68 @@ function advisorHtml(
   `;
 }
 
+function analysisHtml(
+  analysis: PageReadingAnalysisSession | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (!analysis || analysis.status === "idle") return "";
+  const title = tr("sidepanel.page.analysis.title");
+  const statusText = tr(`sidepanel.page.analysis.status.${analysis.status}`);
+  const body = analysis.status === "running"
+    ? `<p>${escapeHtml(tr("sidepanel.page.analysis.running"))}</p>`
+    : analysis.status === "error"
+    ? `
+      <p>${escapeHtml(analysis.error || tr("sidepanel.page.analysis.error"))}</p>
+      <button id="pageAnalysisRetry" class="btn-investigation-secondary page-reader-analysis-retry" type="button">${escapeHtml(tr("sidepanel.page.analysis.retry"))}</button>
+    `
+    : analysis.brief
+    ? briefHtml(analysis.brief, analysis.allowedUse, tr)
+    : "";
+  return `
+    <section class="page-reader-analysis is-${escapeHtml(analysis.status)}">
+      <div class="page-reader-analysis-header">
+        <h3>${escapeHtml(title)}</h3>
+        <span>${escapeHtml(statusText)}</span>
+      </div>
+      ${body}
+    </section>
+  `;
+}
+
+function briefHtml(
+  brief: GeneralPageBrief,
+  allowedUse: GeneralPageEffectiveModelContextUse | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const modelNote = brief.elapsedMs
+    ? tr("sidepanel.page.analysis.modelNoteWithElapsed", {
+        model: brief.model,
+        elapsed: Math.round(brief.elapsedMs / 100) / 10,
+      })
+    : tr("sidepanel.page.analysis.modelNote", { model: brief.model });
+  return `
+    ${allowedUse === "page_overview_only" ? `<div class="page-reader-analysis-badge">${escapeHtml(tr("sidepanel.page.analysis.overview"))}</div>` : ""}
+    <p class="page-reader-analysis-summary">${escapeHtml(brief.summary)}</p>
+    ${briefSectionHtml(tr("sidepanel.page.analysis.context"), brief.bg?.map((item) => `${item.t}: ${item.why}${item.q ? ` ${item.q}` : ""}`) ?? [])}
+    ${allowedUse === "page_overview_only" ? "" : briefSectionHtml(tr("sidepanel.page.analysis.claims"), brief.claims?.map((claim) => `${claim.c}: ${claim.why} ${claim.need}`) ?? [])}
+    ${briefSectionHtml(tr("sidepanel.page.analysis.questions"), brief.qs?.map((question) => question.q) ?? [])}
+    ${brief.note ? `<p class="page-reader-analysis-note">${escapeHtml(brief.note)}</p>` : ""}
+    <div class="page-reader-analysis-model">${escapeHtml(modelNote)}</div>
+  `;
+}
+
+function briefSectionHtml(title: string, items: string[]): string {
+  if (items.length === 0) return "";
+  return `
+    <div class="page-reader-analysis-section">
+      <h4>${escapeHtml(title)}</h4>
+      <ul>
+        ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+      </ul>
+    </div>
+  `;
+}
+
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message.slice(0, 200) : "page_reader_unavailable";
 }
@@ -422,6 +535,7 @@ export function createSidepanelPageReadingRuntime({
   let activeTitle = "";
   let installed = false;
   let copyState: "idle" | "copied" | "failed" = "idle";
+  let downloadState: "idle" | "saved" | "cancelled" | "failed" = "idle";
 
   function tr(key: string, params?: Record<string, string | number>): string {
     return t(key, getLang(), params);
@@ -459,6 +573,7 @@ export function createSidepanelPageReadingRuntime({
       session.target = undefined;
       session.candidateBlocks = undefined;
       session.advisor = undefined;
+      session.analysis = undefined;
       session.updatedAt = now();
     }
     render();
@@ -476,6 +591,7 @@ export function createSidepanelPageReadingRuntime({
       target: undefined,
       candidateBlocks: undefined,
       advisor: undefined,
+      analysis: undefined,
       status: "stale",
       updatedAt: now(),
     });
@@ -545,7 +661,10 @@ export function createSidepanelPageReadingRuntime({
               <h2>${escapeHtml(title)}</h2>
               <div class="page-reader-url">${escapeHtml(source || url)}</div>
             </div>
-            <button id="pageCopyMetadata" class="btn-investigation-secondary" type="button">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</button>
+            <div class="page-reader-card-actions">
+              <button id="pageCopyMetadata" class="btn-investigation-secondary" type="button">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</button>
+              <button id="pageDownloadMarkdown" class="btn-investigation-secondary" type="button">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</button>
+            </div>
           </div>
           ${excerpt ? `<p class="page-reader-excerpt">${escapeHtml(excerpt)}</p>` : `<p class="page-reader-empty">${escapeHtml(tr("sidepanel.page.noExcerpt"))}</p>`}
           <dl class="page-reader-meta">
@@ -553,6 +672,7 @@ export function createSidepanelPageReadingRuntime({
           </dl>
           ${modelContextHtml(modelContext, tr)}
           ${advisorHtml(session.advisor, tr)}
+          ${analysisHtml(session.analysis, tr)}
           ${sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"))}
           ${warningText ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(warningText)}</div>` : ""}
         </article>
@@ -575,6 +695,27 @@ export function createSidepanelPageReadingRuntime({
         copyState = "failed";
       }
       render();
+    });
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageDownloadMarkdown")?.addEventListener("click", async () => {
+      const latest = currentSession();
+      if (!latest) return;
+      try {
+        const outcome = await saveMarkdownTextFile(
+          buildCopyText(latest),
+          buildPageMarkdownFilename(latest),
+          "text/markdown;charset=utf-8",
+          { mode: getSettings().markdownDownloadMode },
+        );
+        downloadState = outcome === "cancelled" ? "cancelled" : "saved";
+      } catch {
+        downloadState = "failed";
+      }
+      render();
+    });
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageAnalysisRetry")?.addEventListener("click", () => {
+      const latest = currentSession();
+      if (!latest || typeof activeTabId !== "number") return;
+      runGeneralPageAnalysisIfEligible(activeTabId, latest, true);
     });
   }
 
@@ -611,12 +752,138 @@ export function createSidepanelPageReadingRuntime({
   function setAdvisor(tabId: number, advisor: PageReadingAdvisorSession): void {
     const session = sessions.get(tabId);
     if (!session || session.status === "stale") return;
-    sessions.set(tabId, {
+    const nextSession: PageReadingSession = {
       ...session,
       advisor,
+      analysis: advisor.effectiveModelContext ? session.analysis : undefined,
+      updatedAt: session.updatedAt,
+    };
+    sessions.set(tabId, nextSession);
+    if (tabId === activeTabId) render();
+    if (advisor.effectiveModelContext) runGeneralPageAnalysisIfEligible(tabId, nextSession, false);
+  }
+
+  function runGeneralPageAnalysisIfEligible(tabId: number, session: PageReadingSession, force: boolean): void {
+    const effective = session.advisor?.effectiveModelContext;
+    const providerRuntime = session.advisor?.providerRuntime;
+    if (!effective || !providerRuntime) return;
+    const surface = session.surface;
+    if (!surface) return;
+    const analysisContext = analysisContextForEffectiveSession(session, surface, effective);
+    const surfaceCurrent = tabId !== activeTabId || !activeUrl || isMeaningfullySamePage(session.identity, activeUrl);
+    const eligibility = generalPageBriefEligibility({
+      sessionReady: session.status === "ready",
+      surfaceCurrent,
+      context: analysisContext,
+      allowedUse: effective.allowedUse,
+      provider: providerRuntime.effectiveProvider,
+    });
+    if (!eligibility.ok || !providerRuntime.canUseModel || !providerRuntime.endpoint || !providerRuntime.model) {
+      if (force) setAnalysisError(tabId, analysisEligibilityMessage(eligibility.reason ?? "provider_not_ready"));
+      return;
+    }
+    const key = generalPageAnalysisKey(effective, providerRuntime);
+    if (!force && session.analysis?.key === key && (session.analysis.status === "running" || session.analysis.status === "ready")) {
+      return;
+    }
+    setAnalysis(tabId, {
+      status: "running",
+      key,
+      allowedUse: effective.allowedUse,
+      updatedAt: now(),
+    });
+    void Promise.resolve(runtime.sendMessage({
+      type: "GENERAL_PAGE_ANALYSIS_REQUEST",
+      tabId,
+      context: analysisContext,
+      allowedUse: effective.allowedUse,
+      providerRuntime,
+      outputLang: getLang(),
+    } satisfies TrulyMessage)).then((response) => {
+      const current = sessions.get(tabId);
+      if (!current || current.status === "stale" || current.analysis?.key !== key) return;
+      if (!current.surface || !isMeaningfullySamePage(current.identity, current.surface.url)) return;
+      if (tabId === activeTabId && activeUrl && !isMeaningfullySamePage(current.identity, activeUrl)) return;
+      if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_ANALYSIS_RESULT") {
+        setAnalysisError(tabId, "general_page_brief_no_response", key, effective.allowedUse);
+        return;
+      }
+      const result = response as GeneralPageAnalysisResultMsg;
+      if (!result.ok || !result.brief) {
+        setAnalysisError(tabId, result.error || "general_page_brief_failed", key, effective.allowedUse);
+        return;
+      }
+      setAnalysis(tabId, {
+        status: "ready",
+        key,
+        brief: result.brief,
+        allowedUse: effective.allowedUse,
+        updatedAt: now(),
+      });
+    }).catch((error) => {
+      setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse);
+    });
+  }
+
+  function setAnalysis(tabId: number, analysis: PageReadingAnalysisSession): void {
+    const session = sessions.get(tabId);
+    if (!session || session.status === "stale") return;
+    sessions.set(tabId, {
+      ...session,
+      analysis,
       updatedAt: session.updatedAt,
     });
     if (tabId === activeTabId) render();
+  }
+
+  function setAnalysisError(
+    tabId: number,
+    error: string,
+    key?: string,
+    allowedUse?: GeneralPageEffectiveModelContextUse,
+  ): void {
+    setAnalysis(tabId, {
+      status: "error",
+      key,
+      error,
+      allowedUse,
+      updatedAt: now(),
+    });
+  }
+
+  function generalPageAnalysisKey(
+    effective: GeneralPageEffectiveModelContext,
+    providerRuntime: GeneralPageParserAdvisorProviderRuntime,
+  ): string {
+    return [
+      effective.allowedUse,
+      effective.source,
+      effective.mainText.length,
+      effective.mainText.slice(0, 160),
+      providerRuntime.effectiveProvider,
+      providerRuntime.model,
+    ].join("|");
+  }
+
+  function analysisContextForEffectiveSession(
+    session: PageReadingSession,
+    surface: ReadingSurface,
+    effective: GeneralPageEffectiveModelContext,
+  ): GeneralPageModelContext {
+    const base = modelContextForSession({ ...session, surface });
+    return {
+      ...base,
+      title: effective.title ?? base.title,
+      url: effective.url || base.url,
+      mainText: effective.mainText,
+      modelEligible: effective.modelEligible,
+      modelReadiness: effective.modelReadiness,
+      ineligibilityReason: effective.modelEligible ? undefined : base.ineligibilityReason,
+    };
+  }
+
+  function analysisEligibilityMessage(reason: GeneralPageAnalysisEligibilityReason): string {
+    return tr(`sidepanel.page.analysis.reason.${reason}`);
   }
 
   function startParserAdvisor(
@@ -774,6 +1041,7 @@ export function createSidepanelPageReadingRuntime({
           target: undefined,
           candidateBlocks: undefined,
           advisor: undefined,
+          analysis: undefined,
           status: "stale",
           url: tab?.url ?? session.url,
           updatedAt: now(),
@@ -843,6 +1111,7 @@ export function createSidepanelPageReadingRuntime({
         return;
       }
       copyState = "idle";
+      downloadState = "idle";
       activeTabId = tab.id;
       activeUrl = tabUrl;
       activeTitle = tab.title ?? "";
@@ -854,6 +1123,7 @@ export function createSidepanelPageReadingRuntime({
         status: "loading",
         target: undefined,
         advisor: undefined,
+        analysis: undefined,
         updatedAt: now(),
         activationSource: source,
       });
@@ -891,6 +1161,7 @@ export function createSidepanelPageReadingRuntime({
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
     copyState = "idle";
+    downloadState = "idle";
     sessions.set(tabId, {
       tabId,
       url: message.surface.url,
@@ -902,6 +1173,7 @@ export function createSidepanelPageReadingRuntime({
       status: "ready",
       updatedAt: now(),
       activationSource: "sidepanel",
+      analysis: undefined,
     });
     if (tabId === activeTabId) render();
     startParserAdvisor(tabId, message.surface, {
@@ -927,7 +1199,10 @@ export function createSidepanelPageReadingRuntime({
       target: message.target,
       status: "ready",
       updatedAt: now(),
+      analysis: undefined,
     });
+    copyState = "idle";
+    downloadState = "idle";
     if (tabId === activeTabId) render();
     startParserAdvisor(tabId, existing.surface, {
       target: message.target,
@@ -948,6 +1223,7 @@ export function createSidepanelPageReadingRuntime({
         providerRuntime: resolveAdvisorProviderRuntime(getSettings(), getTierAEndpoint(), getTierAModel()),
         updatedAt: now(),
       },
+      analysis: undefined,
       updatedAt: now(),
     });
     if (tabId === activeTabId) render();
@@ -966,6 +1242,7 @@ export function createSidepanelPageReadingRuntime({
       target: undefined,
       candidateBlocks: existing?.candidateBlocks,
       advisor: undefined,
+      analysis: undefined,
       status: "error",
       error: friendlyPageReadingError(message.error),
       updatedAt: now(),

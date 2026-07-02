@@ -468,10 +468,22 @@ artifacts. It should cover:
 
 ### Slice 4: Model Integration
 
-- Route page surfaces through Tier B summary and reading brief.
-- Make prompts surface-aware.
-- Add copy/export output format for web pages.
-- Revisit durable history only as a separate privacy/storage decision.
+- Status: first runtime slice implemented on `codex/general-page-reader-contract`.
+- Route Page/Web effective reading context through a single Tier B
+  `GeneralPageBrief` call after the parser advisor has produced
+  `effectiveModelContext`.
+- Keep eligibility fail-closed: stale sessions, model-ineligible contexts,
+  `requires_user_target`, `blocked`, and unavailable provider runtime do not
+  send analysis requests.
+- Make prompts surface-aware and target-aware. Selection requests send the
+  selected/effective text plus bounded surrounding context, not the original
+  whole-page body.
+- Deterministically guard `page_overview_only` output by stripping model claims
+  after parse.
+- Render the resulting page brief in the Page/Web Side Panel and include it in
+  copy/export text.
+- Keep Page/Web analysis session-only. Revisit durable history only as a
+  separate privacy/storage decision.
 
 ### Slice 5: Product Hardening
 
@@ -516,11 +528,14 @@ General Page Reader runtime changes should additionally pass:
 
 ```bash
 npm run audit:general-page-reader
+npm run audit:general-page-model-integration
 ```
 
-This audit attaches to the existing Chrome CDP session, uses synthetic local
-HTML only, and writes screenshots/JSON under `tmp/`. Do not commit those
-artifacts.
+`audit:general-page-reader` attaches to the existing Chrome CDP session, uses
+synthetic local HTML only, and writes screenshots/JSON under `tmp/`. Do not
+commit those artifacts. `audit:general-page-model-integration` runs a local
+OpenAI-compatible mock endpoint and verifies payload scoping plus overview
+post-guards without storing page analysis content.
 
 ## Open Questions
 
