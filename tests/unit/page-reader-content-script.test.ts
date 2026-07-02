@@ -3,8 +3,10 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
 import {
+  collectGeneralPageCandidateBlocks,
   extractCurrentPageReadingSurface,
   extractCurrentSelectionTarget,
+  handleCandidateBlockTextMessage,
   handlePageReadingMessage,
   handleReadingTargetMessage,
 } from "@src/content_scripts/page-reader";
@@ -39,6 +41,50 @@ describe("page-reader content script", () => {
       },
     });
     expect(result.surface.mainText).toContain("public planning meeting");
+  });
+
+  it("collects candidate block previews and resolves a selected block to full text", () => {
+    const url = "https://example.test/articles/candidate-block";
+    const longParagraphs = Array.from({ length: 18 }, (_, index) => (
+      `Synthetic candidate paragraph ${index + 1} contains enough local-only text to exceed the preview limit while remaining safe for a public fixture.`
+    )).join(" ");
+    const dom = new JSDOM(`
+      <!doctype html>
+      <main>
+        <nav><a href="/one">One</a><a href="/two">Two</a></nav>
+        <article id="story-body">${longParagraphs}</article>
+      </main>
+    `, { url });
+    const documentRef = dom.window.document;
+
+    const blocks = collectGeneralPageCandidateBlocks(documentRef);
+    const articleBlock = blocks.find((block) => block.label.includes("#story-body"));
+
+    expect(articleBlock).toMatchObject({
+      id: expect.stringMatching(/^block-/),
+      role: "semantic-root",
+      textLength: longParagraphs.length,
+    });
+    expect(articleBlock?.textPreview.length).toBeLessThan(longParagraphs.length);
+
+    const surface = extractCurrentPageReadingSurface(documentRef, url).surface;
+    const handled = articleBlock ? handleCandidateBlockTextMessage(
+      {
+        type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST",
+        tabId: 1,
+        surfaceId: surface.id,
+        blockId: articleBlock.id,
+      } satisfies TrulyMessage,
+      documentRef,
+      url,
+    ) : undefined;
+
+    expect(handled).toMatchObject({
+      type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT",
+      surfaceId: surface.id,
+      blockId: articleBlock?.id,
+      text: longParagraphs,
+    });
   });
 
   it("responds only to page reading requests", () => {

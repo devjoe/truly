@@ -184,6 +184,35 @@ describe("General Page Parser Advisor contract", () => {
     expect(effective.mainText).toContain("Useful article text");
   });
 
+  it("uses re-extracted full candidate text when applying prefer-candidate advice", () => {
+    const request = requestFixture();
+    const context = buildGeneralPageModelContext(extractGeneralPageSurface({
+      document: new JSDOM("<!doctype html><title>Fallback</title><body><p>Fallback body text is intentionally less specific than the selected candidate block but remains preserved.</p></body>", { url: "https://example.test/fallback" }).window.document,
+      url: "https://example.test/fallback",
+    }));
+    const fullCandidateText = [
+      "Useful article text from the re-extracted candidate block.",
+      "This second sentence is intentionally absent from the advisor preview and should still reach effective model context.",
+    ].join(" ");
+    const effective = buildGeneralPageEffectiveModelContext(context, request, {
+      schemaVersion: 1,
+      pageType: "article",
+      decision: "prefer_candidate_block",
+      confidence: "high",
+      selectedBlockId: "block-article",
+      needsUserSelection: false,
+      needsScreenshot: false,
+      riskTags: ["candidate_block_ambiguous"],
+      rationale: "Use the article-like block.",
+    }, {
+      selectedBlockText: fullCandidateText,
+    });
+
+    expect(effective.source).toBe("candidate-block");
+    expect(effective.mainText).toBe(fullCandidateText);
+    expect(effective.mainText).toContain("absent from the advisor preview");
+  });
+
   it("turns index/list advice into page overview only effective context", () => {
     const request = requestFixture();
     const context = buildGeneralPageModelContext(extractGeneralPageSurface({

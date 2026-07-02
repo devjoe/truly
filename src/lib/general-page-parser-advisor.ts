@@ -166,6 +166,10 @@ export type GeneralPageParserAdvisorParseResult =
   | { ok: true; value: GeneralPageParserAdvisorAdvice }
   | { ok: false; error: string };
 
+interface BuildGeneralPageEffectiveModelContextOptions {
+  selectedBlockText?: string;
+}
+
 interface BuildGeneralPageParserAdvisorRequestOptions {
   candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
   document?: GeneralPageParserAdvisorDocumentSignals;
@@ -420,6 +424,7 @@ export function buildGeneralPageEffectiveModelContext(
   context: GeneralPageModelContext,
   request?: GeneralPageParserAdvisorRequest,
   advisor?: GeneralPageParserAdvisorAdvice,
+  options: BuildGeneralPageEffectiveModelContextOptions = {},
 ): GeneralPageEffectiveModelContext {
   if (!advisor || advisor.decision === "accept_current") {
     return effectiveContext(context, {
@@ -436,8 +441,9 @@ export function buildGeneralPageEffectiveModelContext(
 
   if (advisor.decision === "prefer_candidate_block") {
     const selectedBlock = request?.candidateBlocks.find((block) => block.id === advisor.selectedBlockId);
+    const selectedBlockText = options.selectedBlockText?.trim();
     return effectiveContext(context, {
-      mainText: selectedBlock?.textPreview || context.mainText,
+      mainText: selectedBlockText || selectedBlock?.textPreview || context.mainText,
       modelEligible: true,
       modelReadiness: advisor.confidence === "low" ? "caution" : "ready",
       allowedUse: "article_or_selection_analysis",

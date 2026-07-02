@@ -20,6 +20,7 @@ import {
 import type { Lang, UserSettings } from "../lib/types";
 import { DEFAULT_SETTINGS } from "../lib/types";
 import type {
+  GeneralPageCandidateBlockTextResultMsg,
   GeneralPageParserAdvisorProviderRuntime,
   GeneralPageParserAdvisorResultMsg,
   PageReadingErrorMsg,
@@ -56,6 +57,7 @@ interface PageReadingSession {
   title?: string;
   surface?: ReadingSurface;
   target?: ReadingTarget;
+  candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
   status: PageSessionStatus;
   error?: string;
   updatedAt: number;
@@ -174,8 +176,14 @@ function hostnameForUrl(rawUrl: string): string {
   }
 }
 
-function visibleExcerpt(surface: ReadingSurface, modelContext?: GeneralPageModelContext): string {
-  const sourceText = modelContext && (modelContext.targetKind !== "page" || modelContext.qualityIssues.length > 0)
+function visibleExcerpt(
+  surface: ReadingSurface,
+  modelContext?: GeneralPageModelContext,
+  effectiveContext?: GeneralPageEffectiveModelContext,
+): string {
+  const sourceText = effectiveContext?.source === "candidate-block"
+    ? effectiveContext.mainText
+    : modelContext && (modelContext.targetKind !== "page" || modelContext.qualityIssues.length > 0)
     ? modelContext.mainText
     : surface.excerpt || surface.mainText;
   const text = (sourceText || "").trim().replace(/\s+/g, " ");
@@ -198,7 +206,7 @@ function buildCopyText(session: PageReadingSession): string {
       lines.push(`Warnings: ${surface.extraction.warnings.join(", ")}`);
   }
   const modelContext = surface ? modelContextForSession({ ...session, surface }) : undefined;
-  const excerpt = surface ? visibleExcerpt(surface, modelContext) : "";
+  const excerpt = surface ? visibleExcerpt(surface, modelContext, session.advisor?.effectiveModelContext) : "";
   if (excerpt) lines.push("", "Excerpt:", excerpt);
   return lines.join("\n");
 }
@@ -288,10 +296,6 @@ function modelQualityIssueKey(issue: GeneralPageModelQualityIssue): string {
     case "dynamic_content_partial":
       return "sidepanel.page.model.quality.dynamic";
   }
-}
-
-function advisorCandidateBlocks(_surface: ReadingSurface): GeneralPageParserAdvisorCandidateBlock[] {
-  return [];
 }
 
 function resolveAdvisorProviderRuntime(
@@ -453,6 +457,7 @@ export function createSidepanelPageReadingRuntime({
       session.title = activeTitle || session.title;
       session.surface = undefined;
       session.target = undefined;
+      session.candidateBlocks = undefined;
       session.advisor = undefined;
       session.updatedAt = now();
     }
@@ -469,6 +474,7 @@ export function createSidepanelPageReadingRuntime({
       title: tab.title || session.title,
       surface: undefined,
       target: undefined,
+      candidateBlocks: undefined,
       advisor: undefined,
       status: "stale",
       updatedAt: now(),
@@ -500,7 +506,9 @@ export function createSidepanelPageReadingRuntime({
     const modelContext = session?.surface
       ? modelContextForSession({ ...session, surface: session.surface })
       : undefined;
-    const excerpt = session?.surface ? visibleExcerpt(session.surface, modelContext) : "";
+    const excerpt = session?.surface
+      ? visibleExcerpt(session.surface, modelContext, session.advisor?.effectiveModelContext)
+      : "";
     const warningText = session?.surface?.extraction.warnings.join(", ") || "";
     const updatedAt = session ? formatUpdatedAt(session.updatedAt, lang) : "";
     const metadataRows = session?.surface
@@ -611,7 +619,15 @@ export function createSidepanelPageReadingRuntime({
     if (tabId === activeTabId) render();
   }
 
-  function startParserAdvisor(tabId: number, surface: ReadingSurface, target?: ReadingTarget): void {
+  function startParserAdvisor(
+    tabId: number,
+    surface: ReadingSurface,
+    options: {
+      target?: ReadingTarget;
+      candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
+    } = {},
+  ): void {
+    const target = options.target;
     const context = target
       ? buildGeneralPageModelContext(surface, {
           target,
@@ -619,7 +635,7 @@ export function createSidepanelPageReadingRuntime({
         })
       : buildGeneralPageModelContext(surface, { targetKind: "page" });
     const request = buildGeneralPageParserAdvisorRequest(context, {
-      candidateBlocks: advisorCandidateBlocks(surface),
+      candidateBlocks: target ? [] : options.candidateBlocks ?? [],
       allowScreenshot: false,
     });
     const providerRuntime = resolveAdvisorProviderRuntime(
@@ -653,7 +669,7 @@ export function createSidepanelPageReadingRuntime({
       request,
       providerRuntime,
       outputLang: getLang(),
-    } satisfies TrulyMessage)).then((response) => {
+    } satisfies TrulyMessage)).then(async (response) => {
       const current = sessions.get(tabId);
       if (
         !current?.surface ||
@@ -689,7 +705,7 @@ export function createSidepanelPageReadingRuntime({
         request,
         advice: result.advice,
         providerRuntime: result.providerRuntime ?? providerRuntime,
-        effectiveModelContext: buildGeneralPageEffectiveModelContext(context, request, result.advice),
+        effectiveModelContext: await buildEffectiveContextForAdvice(tabId, surface, context, request, result.advice),
         updatedAt: now(),
       });
     }).catch((error) => {
@@ -702,6 +718,43 @@ export function createSidepanelPageReadingRuntime({
         updatedAt: now(),
       });
     });
+  }
+
+  async function buildEffectiveContextForAdvice(
+    tabId: number,
+    surface: ReadingSurface,
+    context: GeneralPageModelContext,
+    request: GeneralPageParserAdvisorRequest,
+    advice: GeneralPageParserAdvisorAdvice,
+  ): Promise<GeneralPageEffectiveModelContext> {
+    if (advice.decision !== "prefer_candidate_block" || !advice.selectedBlockId) {
+      return buildGeneralPageEffectiveModelContext(context, request, advice);
+    }
+    const selectedBlockText = await requestCandidateBlockText(tabId, surface.id, advice.selectedBlockId);
+    return buildGeneralPageEffectiveModelContext(context, request, advice, { selectedBlockText });
+  }
+
+  async function requestCandidateBlockText(
+    tabId: number,
+    surfaceId: string,
+    blockId: string,
+  ): Promise<string | undefined> {
+    try {
+      const response = await runtime.sendMessage({
+        type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST",
+        tabId,
+        surfaceId,
+        blockId,
+      } satisfies TrulyMessage);
+      if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT")
+        return undefined;
+      const result = response as GeneralPageCandidateBlockTextResultMsg;
+      if (result.surfaceId !== surfaceId || result.blockId !== blockId)
+        return undefined;
+      return result.text;
+    } catch {
+      return undefined;
+    }
   }
 
   async function requestSelectionTarget(source: PageActivationSource = "sidepanel"): Promise<void> {
@@ -719,6 +772,7 @@ export function createSidepanelPageReadingRuntime({
           ...session,
           surface: undefined,
           target: undefined,
+          candidateBlocks: undefined,
           advisor: undefined,
           status: "stale",
           url: tab?.url ?? session.url,
@@ -844,12 +898,15 @@ export function createSidepanelPageReadingRuntime({
       title: message.surface.title,
       surface: message.surface,
       target: undefined,
+      candidateBlocks: message.candidateBlocks ?? [],
       status: "ready",
       updatedAt: now(),
       activationSource: "sidepanel",
     });
     if (tabId === activeTabId) render();
-    startParserAdvisor(tabId, message.surface);
+    startParserAdvisor(tabId, message.surface, {
+      candidateBlocks: message.candidateBlocks ?? [],
+    });
   }
 
   function handleReadingTargetResult(message: ReadingTargetResultMsg): void {
@@ -872,7 +929,10 @@ export function createSidepanelPageReadingRuntime({
       updatedAt: now(),
     });
     if (tabId === activeTabId) render();
-    startParserAdvisor(tabId, existing.surface, message.target);
+    startParserAdvisor(tabId, existing.surface, {
+      target: message.target,
+      candidateBlocks: existing.candidateBlocks,
+    });
   }
 
   function handleReadingTargetError(message: ReadingTargetErrorMsg): void {
@@ -904,6 +964,7 @@ export function createSidepanelPageReadingRuntime({
       title: existing?.title || activeTitle,
       surface: existing?.surface,
       target: undefined,
+      candidateBlocks: existing?.candidateBlocks,
       advisor: undefined,
       status: "error",
       error: friendlyPageReadingError(message.error),

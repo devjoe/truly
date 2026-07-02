@@ -110,6 +110,13 @@ function isReadingTargetReply(value: unknown): value is Extract<TrulyMessage, { 
       (value as { type?: unknown }).type === "READING_TARGET_ERROR");
 }
 
+function isCandidateBlockTextReply(value: unknown): value is Extract<TrulyMessage, { type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT" | "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR" }> {
+  return !!value &&
+    typeof value === "object" &&
+    ((value as { type?: unknown }).type === "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT" ||
+      (value as { type?: unknown }).type === "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR");
+}
+
 function broadcastPageReadingReply(message: Extract<TrulyMessage, { type: "PAGE_READING_RESULT" | "PAGE_READING_ERROR" }>): void {
   chrome.runtime.sendMessage(message).catch(() => {});
   setTimeout(() => chrome.runtime.sendMessage(message).catch(() => {}), 250);
@@ -286,6 +293,41 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           error: errorText.includes("Cannot access contents of the page")
             ? "page_grant_missing"
             : "target_extraction_failed",
+        } satisfies TrulyMessage);
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST") {
+    const tabId = message.tabId;
+    (async () => {
+      try {
+        await chrome.scripting.executeScript({
+          target: { tabId },
+          files: ["content_scripts/page-reader.js"],
+        });
+        const reply = await chrome.tabs.sendMessage(tabId, message);
+        const routedReply = isCandidateBlockTextReply(reply)
+          ? { ...reply, tabId }
+          : {
+              type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR",
+              tabId,
+              surfaceId: message.surfaceId,
+              blockId: message.blockId,
+              error: "candidate_block_extraction_failed",
+            } satisfies TrulyMessage;
+        sendResponse(routedReply);
+      } catch (error) {
+        const errorText = error instanceof Error ? error.message : String(error);
+        sendResponse({
+          type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR",
+          tabId,
+          surfaceId: message.surfaceId,
+          blockId: message.blockId,
+          error: errorText.includes("Cannot access contents of the page")
+            ? "page_grant_missing"
+            : "candidate_block_extraction_failed",
         } satisfies TrulyMessage);
       }
     })();

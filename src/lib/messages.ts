@@ -37,6 +37,7 @@ import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./rea
 import type {
   GeneralPageEffectiveModelContext,
   GeneralPageParserAdvisorAdvice,
+  GeneralPageParserAdvisorCandidateBlock,
   GeneralPageParserAdvisorRequest,
 } from "./general-page-parser-advisor";
 
@@ -97,6 +98,7 @@ export interface PageReadingRequestMsg {
 export interface PageReadingResultMsg {
   type: "PAGE_READING_RESULT";
   surface: ReadingSurface;
+  candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
   tabId?: number;
 }
 
@@ -124,6 +126,29 @@ export interface ReadingTargetErrorMsg {
   type: "READING_TARGET_ERROR";
   error: ReadingTargetErrorReason;
   tabId?: number;
+}
+
+export interface GeneralPageCandidateBlockTextRequestMsg {
+  type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST";
+  tabId: number;
+  surfaceId: string;
+  blockId: string;
+}
+
+export interface GeneralPageCandidateBlockTextResultMsg {
+  type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT";
+  tabId?: number;
+  surfaceId: string;
+  blockId: string;
+  text: string;
+}
+
+export interface GeneralPageCandidateBlockTextErrorMsg {
+  type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR";
+  tabId?: number;
+  surfaceId?: string;
+  blockId?: string;
+  error: "candidate_block_not_found" | "candidate_block_stale" | "candidate_block_extraction_failed" | "page_grant_missing";
 }
 
 export interface GeneralPageParserAdvisorProviderRuntime {
@@ -502,6 +527,9 @@ export type TrulyMessage =
   | ReadingTargetRequestMsg
   | ReadingTargetResultMsg
   | ReadingTargetErrorMsg
+  | GeneralPageCandidateBlockTextRequestMsg
+  | GeneralPageCandidateBlockTextResultMsg
+  | GeneralPageCandidateBlockTextErrorMsg
   | GeneralPageParserAdvisorRequestMsg
   | GeneralPageParserAdvisorResultMsg
   | SelectorHealthUpdateMsg

@@ -348,6 +348,105 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("只適合頁面總覽");
   });
 
+  it("re-extracts full candidate block text before applying prefer-candidate context", async () => {
+    const pagePaneEl = setupDom();
+    const weakSurface = surface({
+      id: "general:https://example.test/candidate",
+      url: "https://example.test/candidate",
+      canonicalUrl: "https://example.test/candidate",
+      mainText: "Short fallback text that should be replaced by a stronger candidate block.",
+      excerpt: "Short fallback text.",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["very-short-content"],
+      },
+    });
+    const candidatePreview = "Candidate preview paragraph that is useful but intentionally incomplete.";
+    const candidateFullText = [
+      candidatePreview,
+      "Full candidate continuation should appear in the visible reading preview and later model context.",
+    ].join(" ");
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return {
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: weakSurface,
+          candidateBlocks: [{
+            id: "block-article",
+            label: "article#body",
+            role: "semantic-root",
+            textPreview: candidatePreview,
+            textLength: candidateFullText.length,
+            linkCount: 0,
+            imageCount: 0,
+          }],
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+        return {
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: 42,
+          ok: true,
+          providerRuntime: {
+            ...message.providerRuntime,
+            mode: "rule-based-runtime-baseline",
+          },
+          advice: {
+            schemaVersion: 1,
+            pageType: "article",
+            decision: "prefer_candidate_block",
+            confidence: "high",
+            selectedBlockId: "block-article",
+            needsUserSelection: false,
+            needsScreenshot: false,
+            riskTags: ["short_text", "candidate_block_ambiguous"],
+            rationale: "Synthetic candidate block is stronger than fallback extraction.",
+          },
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST") {
+        return {
+          type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT",
+          tabId: 42,
+          surfaceId: weakSurface.id,
+          blockId: "block-article",
+          text: candidateFullText,
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/candidate",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST",
+      tabId: 42,
+      surfaceId: weakSurface.id,
+      blockId: "block-article",
+    }));
+    expect(pagePaneEl.textContent).toContain("prefer_candidate_block");
+    expect(pagePaneEl.textContent).toContain("article_or_selection_analysis");
+    expect(pagePaneEl.textContent).toContain("Full candidate continuation should appear");
+  });
+
   it("uses an explicit selection target for reading context", async () => {
     const pagePaneEl = setupDom();
     const selectedText = [

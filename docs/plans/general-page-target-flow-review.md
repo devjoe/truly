@@ -185,6 +185,11 @@ re-extract the full text of the chosen block from the live page (by candidate
 block id) instead of reusing the advisor payload preview. Track this as a
 Slice 4 precondition.
 
+Implementation note: the branch now collects candidate block previews during
+the page read, keeps the advisor payload preview-limited, and asks the live
+page for the chosen block's full text only after the advisor returns
+`prefer_candidate_block`.
+
 ## Suggested Review / Implementation Order
 
 1. Slice 6a selection flow (contracts + runtime + CDP audit case).

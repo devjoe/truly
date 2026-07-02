@@ -180,11 +180,43 @@ function noisyFallbackHtml() {
 </html>`;
 }
 
+function candidateBlockHtml() {
+  const candidateParagraphs = [
+    "Candidate block recovery fixture starts with synthetic article text that is cleaner than the surrounding fallback shell.",
+    "The candidate body describes a fictional civic workshop, a review timeline, and a parser recovery decision without copying any real website content.",
+    "Full candidate continuation should appear in the visible reading preview after the advisor chooses the candidate block.",
+    "A final synthetic paragraph keeps the block comfortably above the model threshold while avoiding private data, real names, or real URLs.",
+  ];
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Candidate Block Recovery Fixture</title>
+  <meta property="og:site_name" content="Synthetic Recovery Notes">
+  <link rel="canonical" href="/candidate">
+</head>
+<body>
+  <header>Home Topics Archive</header>
+  <div class="layout-shell">
+    <h1>Candidate Block Recovery Fixture</h1>
+    <div class="story-body">
+      ${candidateParagraphs.map((text) => `<p>${text}</p>`).join("\n      ")}
+      <a href="/candidate-source">Candidate source</a>
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
 async function startSyntheticServer() {
   const server = createServer((req, res) => {
     res.setHeader("content-type", "text/html; charset=utf-8");
     if (req.url?.startsWith("/noisy")) {
       res.end(noisyFallbackHtml());
+      return;
+    }
+    if (req.url?.startsWith("/candidate")) {
+      res.end(candidateBlockHtml());
       return;
     }
     if (req.url?.startsWith("/article2")) {
@@ -599,6 +631,67 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
   }
 }
 
+async function auditCandidateBlockRecovery(extensionId, allowedBase) {
+  const candidateTarget = await createTarget(`${allowedBase}/candidate`);
+  const sideTarget = await openSidePanelTestPage(extensionId, candidateTarget, "candidate");
+  const candidate = connectCdp(candidateTarget.webSocketDebuggerUrl);
+  const side = connectCdp(sideTarget.webSocketDebuggerUrl);
+
+  try {
+    await sleep(800);
+    await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "candidate block page ready");
+    await waitFor(side, `(() => {
+      const advisor = document.querySelector('#page-pane .page-reader-advisor');
+      const text = advisor?.textContent || '';
+      const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
+      return /prefer_candidate_block/.test(text) && !/檢查中|Checking/.test(status);
+    })()`, 26000, "candidate block advisor decision").catch(async (error) => {
+      await side.screenshot(resolve(OUT_DIR, "page-candidate-timeout.png")).catch(() => {});
+      throw error;
+    });
+
+    const ready = await side.evaluateJson(`(() => {
+      const pane = document.querySelector('#page-pane');
+      const model = pane?.querySelector('.page-reader-model-context');
+      const advisor = pane?.querySelector('.page-reader-advisor');
+      return {
+        status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
+        excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
+        modelContext: model ? {
+          status: model.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
+          detail: model.querySelector('p')?.textContent?.trim(),
+          className: model.className
+        } : null,
+        advisor: advisor ? {
+          title: advisor.querySelector('h3')?.textContent?.trim(),
+          status: advisor.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
+          detail: advisor.querySelector('p')?.textContent?.trim(),
+          rows: [...advisor.querySelectorAll('dl div')].map((row) => ({
+            label: row.querySelector('dt')?.textContent?.trim(),
+            value: row.querySelector('dd')?.textContent?.trim()
+          })),
+          note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
+          className: advisor.className
+        } : null,
+        sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
+          label: el.textContent?.trim(),
+          href: el.href
+        })),
+        hasFullCandidateContinuation: /Full candidate continuation should appear/.test(pane?.innerText || ''),
+        hasCandidateSource: /Candidate source/.test(pane?.innerText || '')
+      };
+    })()`);
+    await side.screenshot(resolve(OUT_DIR, "page-candidate-block.png"));
+    return { ready };
+  } finally {
+    await side.closeTarget().catch(() => {});
+    await candidate.closeTarget().catch(() => {});
+    side.close();
+    candidate.close();
+  }
+}
+
 async function capturePageReadTimeoutState(side, article, initial) {
   const sideState = await side.evaluateJson(`(() => ({
     url: location.href,
@@ -766,6 +859,24 @@ function assertAudit(result) {
   if (noisyUse !== "page_overview_only") {
     errors.push(`noisy fallback effective context was not page overview only: ${noisyUse || "(missing)"}`);
   }
+  if (result.candidate.ready.status !== "已讀取" && result.candidate.ready.status !== "Ready") {
+    errors.push(`candidate block recovery did not reach ready status: ${result.candidate.ready.status}`);
+  }
+  const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
+  const candidateDecision = candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
+  const candidateUse = candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  if (candidateDecision !== "prefer_candidate_block") {
+    errors.push(`candidate block recovery did not prefer candidate block: ${candidateDecision || "(missing)"}`);
+  }
+  if (candidateUse !== "article_or_selection_analysis") {
+    errors.push(`candidate block effective context was not article analysis: ${candidateUse || "(missing)"}`);
+  }
+  if (!result.candidate.ready.hasFullCandidateContinuation) {
+    errors.push("candidate block recovery did not render the re-extracted full candidate text");
+  }
+  if (!result.candidate.ready.hasCandidateSource) {
+    errors.push("candidate block recovery did not preserve candidate source link visibility");
+  }
   if (!result.noGrant.hasGuidance) errors.push("no-grant sidepanel path did not show toolbar activation guidance");
   return errors;
 }
@@ -797,6 +908,7 @@ function writeSummary(result, errors) {
     `- Noisy fallback model context: ${result.noisy.ready.modelContext?.status || "(missing)"}`,
     `- Noisy fallback reading context: ${result.noisy.ready.advisor?.status || "(missing)"}`,
     `- Noisy fallback source links: ${(result.noisy.ready.sourceLinks || []).map((link) => link.label).join(", ") || "(none)"}`,
+    `- Candidate block recovery: ${result.candidate.ready.advisor?.status || "(missing)"}`,
     `- Hash-only stale: ${result.success.afterHash.stale}`,
     `- Tracking-only stale: ${result.success.afterTracking.stale}`,
     `- Meaningful URL stale: ${result.success.afterMeaningful.stale}`,
@@ -810,6 +922,7 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-candidate-block.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-no-grant.png"))}`,
     "",
     "## Public Repo Boundary",
@@ -848,6 +961,7 @@ try {
     popup: await auditPopup(extensionId, `${server.allowedBase}/article`),
     success: await auditSuccessfulRead(extensionId, server.allowedBase),
     noisy: await auditNoisyFallbackRead(extensionId, server.allowedBase),
+    candidate: await auditCandidateBlockRecovery(extensionId, server.allowedBase),
     noGrant: await auditNoGrantGuidance(extensionId, server.noGrantBase),
     artifactDir: relative(ROOT, OUT_DIR),
   };

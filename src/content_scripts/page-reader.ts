@@ -6,6 +6,8 @@
 
 import { extractGeneralPageSurface, GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH } from "../lib/general-page-extraction";
 import type {
+  GeneralPageCandidateBlockTextErrorMsg,
+  GeneralPageCandidateBlockTextResultMsg,
   PageReadingErrorMsg,
   PageReadingRequestMsg,
   PageReadingResultMsg,
@@ -15,11 +17,33 @@ import type {
   TrulyMessage,
 } from "../lib/messages";
 import { isTrulyMessage } from "../lib/messages";
+import type { GeneralPageParserAdvisorCandidateBlock } from "../lib/general-page-parser-advisor";
 import type { ReadingActivation } from "../lib/reading-action-types";
 import type { ReadingTarget, ReadingTargetRect } from "../lib/reading-target-types";
 
 type PageReadingResponse = PageReadingResultMsg | PageReadingErrorMsg;
 type ReadingTargetResponse = ReadingTargetResultMsg | ReadingTargetErrorMsg;
+type CandidateBlockTextResponse = GeneralPageCandidateBlockTextResultMsg | GeneralPageCandidateBlockTextErrorMsg;
+
+const CANDIDATE_SELECTOR = [
+  "article",
+  "main",
+  "[role='main']",
+  "[role=\"main\"]",
+  "section",
+  "div[class*=article i]",
+  "div[class*=body i]",
+  "div[class*=content i]",
+  "div[class*=feature i]",
+  "div[class*=story i]",
+  "div[id*=article i]",
+  "div[id*=body i]",
+  "div[id*=content i]",
+  "div[id*=story i]",
+].join(",");
+
+const CANDIDATE_TEXT_PREVIEW_LIMIT = 1200;
+const MAX_CANDIDATE_BLOCKS = 8;
 
 export function extractCurrentPageReadingSurface(
   documentRef: Document,
@@ -31,7 +55,79 @@ export function extractCurrentPageReadingSurface(
       document: documentRef,
       url,
     }),
+    candidateBlocks: collectGeneralPageCandidateBlocks(documentRef),
   };
+}
+
+function cleanText(input: string): string {
+  return input.replace(/\s+/g, " ").trim();
+}
+
+function candidateRole(element: Element): GeneralPageParserAdvisorCandidateBlock["role"] {
+  const tag = element.tagName.toLowerCase();
+  if (tag === "article" || tag === "main" || element.getAttribute("role") === "main")
+    return "semantic-root";
+  return "fallback-block";
+}
+
+function candidateLabel(element: Element): string {
+  const tag = element.tagName.toLowerCase();
+  const id = element.getAttribute("id");
+  const className = element.getAttribute("class");
+  return [tag, id ? `#${id}` : undefined, className ? `.${className.replace(/\s+/g, ".")}` : undefined]
+    .filter(Boolean)
+    .join("");
+}
+
+export function collectGeneralPageCandidateBlocks(
+  documentRef: Document,
+): GeneralPageParserAdvisorCandidateBlock[] {
+  const candidates: GeneralPageParserAdvisorCandidateBlock[] = [];
+  const seenText = new Set<string>();
+  let index = 0;
+  for (const element of Array.from(documentRef.body?.querySelectorAll(CANDIDATE_SELECTOR) ?? [])) {
+    const text = cleanText(element.textContent ?? "");
+    if (text.length < 120)
+      continue;
+    const textKey = text.slice(0, 160);
+    if (seenText.has(textKey))
+      continue;
+    seenText.add(textKey);
+    candidates.push({
+      id: `block-${index + 1}`,
+      label: candidateLabel(element),
+      role: candidateRole(element),
+      textPreview: text.slice(0, CANDIDATE_TEXT_PREVIEW_LIMIT),
+      textLength: text.length,
+      linkCount: element.querySelectorAll("a[href]").length,
+      imageCount: element.querySelectorAll("img").length,
+    });
+    index += 1;
+    if (candidates.length >= MAX_CANDIDATE_BLOCKS)
+      break;
+  }
+  return candidates;
+}
+
+function candidateBlockText(documentRef: Document, blockId: string): string | undefined {
+  const candidates = Array.from(documentRef.body?.querySelectorAll(CANDIDATE_SELECTOR) ?? []);
+  const seenText = new Set<string>();
+  let index = 0;
+  for (const element of candidates) {
+    const text = cleanText(element.textContent ?? "");
+    if (text.length < 120)
+      continue;
+    const textKey = text.slice(0, 160);
+    if (seenText.has(textKey))
+      continue;
+    seenText.add(textKey);
+    index += 1;
+    if (`block-${index}` === blockId)
+      return text;
+    if (index >= MAX_CANDIDATE_BLOCKS)
+      break;
+  }
+  return undefined;
 }
 
 function normalizeSelectionText(input: string): string {
@@ -172,6 +268,49 @@ export function handleReadingTargetMessage(
   }
 }
 
+export function handleCandidateBlockTextMessage(
+  message: TrulyMessage,
+  documentRef: Document,
+  url: string,
+): CandidateBlockTextResponse | undefined {
+  if (message.type !== "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST") {
+    return undefined;
+  }
+  try {
+    const surface = extractGeneralPageSurface({ document: documentRef, url });
+    if (surface.id !== message.surfaceId) {
+      return {
+        type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR",
+        surfaceId: message.surfaceId,
+        blockId: message.blockId,
+        error: "candidate_block_stale",
+      };
+    }
+    const text = candidateBlockText(documentRef, message.blockId);
+    if (!text) {
+      return {
+        type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR",
+        surfaceId: message.surfaceId,
+        blockId: message.blockId,
+        error: "candidate_block_not_found",
+      };
+    }
+    return {
+      type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT",
+      surfaceId: message.surfaceId,
+      blockId: message.blockId,
+      text,
+    };
+  } catch {
+    return {
+      type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR",
+      surfaceId: message.surfaceId,
+      blockId: message.blockId,
+      error: "candidate_block_extraction_failed",
+    };
+  }
+}
+
 export function installPageReaderRuntime(
   runtime: Pick<typeof chrome.runtime, "onMessage">,
   documentRef: Document,
@@ -191,8 +330,10 @@ export function installPageReaderRuntime(
       return false;
     }
 
-    const response = handlePageReadingMessage(message, documentRef, urlProvider()) ??
-      handleReadingTargetMessage(message, documentRef, urlProvider());
+    const url = urlProvider();
+    const response = handlePageReadingMessage(message, documentRef, url) ??
+      handleReadingTargetMessage(message, documentRef, url) ??
+      handleCandidateBlockTextMessage(message, documentRef, url);
     if (!response)
       return false;
 
