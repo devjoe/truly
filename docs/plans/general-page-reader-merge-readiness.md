@@ -54,6 +54,7 @@ Run on 2026-07-03 from this worktree after the readiness-document update:
 npm run check:public
 npm run cws:preflight
 TRULY_EXTENSION_ID=idcjllbajkejmljompodofmmdmlbendl TRULY_AUDIT_AUTO_RELOAD=1 npm run audit:general-page-reader
+npm run smoke:general-page-current -- --url-pattern 'tw\.news\.yahoo\.com' --category current-browser-smoke --page-type news-article
 ```
 
 Results:
@@ -61,6 +62,7 @@ Results:
 - `check:public`: passed. This included public-boundary, release metadata, General Page corpus, parser spikes, parser-advisor spike, model integration audit, typecheck, public contract tests, public unit tests, production build, and release bundle audit.
 - `cws:preflight`: passed for `0.1.1 Preview 11` / `v0.1.1-preview.11`.
 - `audit:general-page-reader`: passed after compact ready-path model-context hardening. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T13-51-48-064Z`.
+- `smoke:general-page-current`: passed against the currently open Yahoo Taiwan news page through live CDP. Sanitized result: extracted, semantic HTML, partial/caution, model eligible, 6 model-context links after filtering; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T13-58-47-423Z`.
 
 ## Non-Blocking Follow-Ups
 

@@ -572,6 +572,17 @@ OpenAI-compatible mock endpoint and verifies payload scoping plus overview
 post-guards without storing page analysis content; it is now included in
 `check:general-page` and therefore in `check:public`.
 
+For a quick private smoke against the page currently open in Chrome, run:
+
+```bash
+npm run smoke:general-page-current -- --page-type news-article
+```
+
+This command selects the visible HTTP(S) CDP page, writes a private one-target
+manifest under `tmp/general-page-product-quality/`, runs the live-DOM review
+harness, and prints only a sanitized summary. The full URL, extracted previews,
+and review HTML remain in `tmp/` and must not be committed.
+
 ## Resolved Preview Decisions
 
 - Selected-text analysis is explicit and side-panel-first for this preview. Do

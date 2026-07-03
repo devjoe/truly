@@ -309,6 +309,17 @@ must stay private under `tmp/` or a future private data-and-results repository.
 Do not commit the target manifest, review HTML, JSONL labels, screenshots, raw
 HTML, copied source text, or derived per-target findings into the public repo.
 
+For a one-page reviewer smoke against the visible Chrome tab, use:
+
+```bash
+npm run smoke:general-page-current -- --page-type news-article
+```
+
+Add `--url-pattern <regex>` when multiple HTTP(S) tabs are open. The command
+creates a private target manifest and live-DOM review output under
+`tmp/general-page-product-quality/`, then prints a sanitized summary containing
+counts, extraction status, readiness, quality issues, and artifact paths only.
+
 After manual labeling, run the private aggregate gate:
 
 ```bash
