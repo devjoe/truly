@@ -46,17 +46,18 @@ This document is the current public-safe readiness index for the General Page Re
 Before merging this branch back to Truly, rerun these from a clean worktree:
 
 ```bash
-git merge-base --is-ancestor main HEAD
-git rev-list --left-right --count main...HEAD
+git fetch origin main
+npm run check:merge-readiness
 npm run check:public
 npm run cws:preflight
 TRULY_EXTENSION_ID=<loaded-extension-id> TRULY_AUDIT_AUTO_RELOAD=1 npm run audit:general-page-reader
 ```
 
-The local branch-base sanity check should show that `main` is an ancestor of
-the feature branch before reviewer validation starts. A nonzero right-side
-count is expected until the branch is merged; a nonzero left-side count means
-the worktree needs to catch up with `main` first.
+`check:merge-readiness` verifies that `origin/main` is an ancestor of the
+feature branch, that the branch is synced with its upstream, and that the
+worktree is clean. A nonzero right-side count is expected until the branch is
+merged; a nonzero left-side count means the worktree needs to catch up with the
+remote mainline first.
 
 If packaging is the next action, run this only after the branch is pushed and release metadata is final:
 

@@ -58,6 +58,7 @@
     "check:type": "tsc --noEmit",
     "check:public-boundary": "node scripts/check-public-boundary.mjs",
     "check:release-metadata": "node scripts/check-release-metadata.mjs",
+    "check:merge-readiness": "node scripts/check-merge-readiness.mjs",
     "audit:facebook-current": "node scripts/audit-facebook-current.mjs",
     "audit:facebook-current:zh": "TRULY_AUDIT_EXPECT_LOCALE=zh node scripts/audit-facebook-current.mjs",
     "audit:facebook-current:en": "TRULY_AUDIT_EXPECT_LOCALE=en node scripts/audit-facebook-current.mjs",
