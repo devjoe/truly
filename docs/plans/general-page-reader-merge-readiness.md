@@ -46,6 +46,13 @@ If packaging is the next action, run this only after the branch is pushed and re
 npm run cws:package
 ```
 
+## Advisory Review And Packaging State
+
+- `release:review:local-limited-context -- --dry-run`: passed on 2026-07-03 and generated ignored `artifacts/review/...` prompt/schema artifacts only.
+- `cws:review:local-limited-context -- --dry-run`: passed on 2026-07-03 and generated ignored `artifacts/review/...` prompt/schema artifacts only.
+- Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review:local-limited-context`: not run in this session because the environment review rejected sending local repository context to an external Claude service without explicit approval.
+- `npm run cws:package`: currently stops before packaging because `codex/general-page-reader-contract` has no configured upstream. This is expected until the branch is pushed or an upstream remote branch is configured; no package artifact was produced by this attempt.
+
 ## Latest Local Verification
 
 Run on 2026-07-03 from this worktree after the readiness-document update:
