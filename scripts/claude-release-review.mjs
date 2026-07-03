@@ -383,6 +383,11 @@ function describeClaudeFailure(stdout, stderr) {
     const parsed = JSON.parse(stdout || "{}");
     const parts = [];
     if (parsed.subtype) parts.push(parsed.subtype);
+    if (parsed.is_error === true) parts.push("is_error=true");
+    if (parsed.api_error_status) parts.push(`api_error_status=${parsed.api_error_status}`);
+    if (typeof parsed.result === "string" && parsed.result.trim()) {
+      parts.push(`result=${capText(parsed.result.trim(), 500)}`);
+    }
     if (Array.isArray(parsed.errors) && parsed.errors.length > 0) {
       parts.push(parsed.errors.join("; "));
     }
