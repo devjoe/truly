@@ -16,6 +16,10 @@ Status: Preview 11 reviewer-notes reference
 - Package report: use the latest
   `artifacts/cws/0.1.1-<commit>-<timestamp>/cws-package-report.md`.
 
+Do not use `artifacts/cws-local-smoke/` ZIPs or reports for Chrome Web Store
+submission. Those artifacts are local packaging smoke evidence only and are
+explicitly non-uploadable.
+
 The CWS package checks pass through `npm run cws:package`, including clean-tree
 and upstream checks, release-tag-to-commit verification, public-boundary checks,
 release metadata, typecheck, public contract tests, public unit tests,

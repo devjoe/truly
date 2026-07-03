@@ -48,6 +48,20 @@ const contractDocs = [
       "must never be uploaded to Chrome Web Store",
     ],
   },
+  {
+    path: "docs/release/cws-reviewer-notes.md",
+    snippets: [
+      "artifacts/cws-local-smoke/",
+      "explicitly non-uploadable",
+    ],
+  },
+  {
+    path: "docs/release/cws-submission-checklist.md",
+    snippets: [
+      "artifacts/cws-local-smoke/",
+      "explicitly non-uploadable",
+    ],
+  },
 ];
 const errors = [];
 

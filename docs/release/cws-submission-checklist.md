@@ -27,6 +27,8 @@ Store. The dashboard copy should still come from
   the package commit.
 - [ ] Upload the extension ZIP recorded in the generated
   `artifacts/cws/0.1.1-<commit>-<timestamp>/cws-package-report.md`.
+- [ ] Do not upload any ZIP from `artifacts/cws-local-smoke/`; those artifacts
+  are local packaging smoke evidence only and are explicitly non-uploadable.
 - [ ] Keep the CWS package report open while filling the dashboard.
 - [ ] Confirm package metadata:
   - Version: `0.1.1`
