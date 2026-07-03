@@ -112,6 +112,12 @@ paths:
 - Model analysis: content is sent to the model environment selected by the
   user, such as Chrome built-in Gemini Nano, a local endpoint, or a private
   endpoint.
+- Page/Web screenshot-assisted recovery: if text extraction is not enough,
+  Truly may offer a visible-tab screenshot preview only when the selected Tier B
+  model source has passed a vision capability check. The screenshot is sent to
+  the selected model source only after the user confirms the preview. Screenshot
+  data is session-only and is not stored in `chrome.storage`, logs, or durable
+  page history.
 - Google / Gemini search: the user explicitly clicks a follow-up question; a
   search query opens in a browser page/tab.
 - Meta AI handoff: the user explicitly clicks the handoff action; Truly copies
@@ -176,6 +182,14 @@ should request access only when a configured endpoint requires that origin.
 General Page all-sites access uses the same optional permission surface only
 after an explicit Settings opt-in; it reads the current page after a user action
 and does not enable background crawling or persistent page history.
+
+### Does Page/Web capture screenshots automatically?
+
+No. Screenshot-assisted recovery is offered only after a user-triggered Page/Web
+read, only when the selected model source supports vision input, and only when
+text extraction needs a user target. The user sees a preview and must confirm
+before the screenshot is sent to the selected model source. The data URL remains
+session-only and is not written to extension storage or logs.
 
 ### Does model output count as remote code?
 

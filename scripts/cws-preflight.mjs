@@ -53,6 +53,26 @@ const contractDocs = [
     snippets: [
       "artifacts/cws-local-smoke/",
       "explicitly non-uploadable",
+      "Screenshot-assisted recovery is offered only after a user-triggered Page/Web",
+      "vision input",
+      "not written to extension storage or logs",
+    ],
+  },
+  {
+    path: "docs/release/privacy-policy.md",
+    snippets: [
+      "screenshot-assisted recovery",
+      "confirm the preview",
+      "not written to Chrome extension storage, logs",
+      "durable page history",
+    ],
+  },
+  {
+    path: "docs/release/permission-justification.md",
+    snippets: [
+      "Page/Web screenshot-assisted recovery uses the same user-gesture boundary",
+      "does not add a separate screenshot permission",
+      "not written to Chrome extension storage or logs",
     ],
   },
   {

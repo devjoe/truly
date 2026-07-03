@@ -20,6 +20,9 @@ When you use Truly on supported pages, the extension may process:
 - visible post text, shared-post text, link previews, and image/video context;
 - visible current-page text and page metadata when you explicitly use Page/Web
   reading;
+- a visible-tab screenshot only when Page/Web offers screenshot-assisted
+  recovery, the configured model source supports vision input, and you confirm
+  the preview;
 - page-hosted media URLs or image alt text when needed for reading
   assistance;
 - model analysis generated from the selected model source;
@@ -38,6 +41,14 @@ Processing depends on your selected model source:
   in Chrome when permission is required.
 
 Truly does not send feed or page content to a Truly-owned server.
+
+Page/Web screenshot-assisted recovery is off by default and not automatic. If
+Truly cannot build enough reading context from visible page text, it may offer a
+screenshot preview only when the selected model source has passed a vision
+capability check. The screenshot is sent to that selected model source only
+after you confirm the preview. Screenshot data is kept in the current in-memory
+Page/Web session only; it is not written to Chrome extension storage, logs, or
+durable page history.
 
 ## User-Triggered External Tools
 
@@ -64,6 +75,9 @@ bearer tokens, or other secrets in model endpoint URLs.
 Page/Web reading sessions are session-only by default. Truly does not store a
 durable full-page reading history unless a future privacy-reviewed feature
 explicitly changes that behavior.
+
+Confirmed Page/Web screenshots are also session-only. They are cleared with the
+current Page/Web session and are not persisted to `chrome.storage`.
 
 Markdown notes are saved only when you explicitly download them. Clipboard
 content is written only when you explicitly use a copy action.

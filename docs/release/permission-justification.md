@@ -36,6 +36,13 @@ Settings opt-in for users who want the Page/Web tab to work without clicking the
 toolbar popup on each new site. The permission does not enable background
 crawling, automatic model submission, or persistent full-article storage.
 
+Page/Web screenshot-assisted recovery uses the same user-gesture boundary. It
+does not add a separate screenshot permission. When text extraction is not
+enough, the Side Panel can offer a visible-tab screenshot preview only after a
+user-triggered Page/Web read, only when the selected model source supports
+vision input, and only after the user confirms the preview. Screenshot data is
+session-only and is not written to Chrome extension storage or logs.
+
 ## Content Security Policy
 
 | CSP item | Why Truly needs it | Boundary |

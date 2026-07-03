@@ -97,6 +97,17 @@ const REQUIRED_SNIPPETS = [
       "Page/Web",
       "toolbar activation",
       "General Page all-sites access",
+      "Screenshot-assisted recovery is offered only after a user-triggered Page/Web",
+      "not written to extension storage or logs",
+    ],
+  },
+  {
+    path: "docs/release/privacy-policy.md",
+    snippets: [
+      "screenshot-assisted recovery",
+      "confirm the preview",
+      "not written to Chrome extension storage, logs",
+      "durable page history",
     ],
   },
   {
@@ -107,6 +118,8 @@ const REQUIRED_SNIPPETS = [
       "`http://*/*`",
       "`https://*/*`",
       "General Page all-sites access",
+      "Page/Web screenshot-assisted recovery uses the same user-gesture boundary",
+      "does not add a separate screenshot permission",
     ],
   },
 ];
