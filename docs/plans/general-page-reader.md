@@ -1,10 +1,11 @@
 # General Page Reader Plan
 
-Status: implementation in progress; Slices 1-4 and the 6a selection flow are
-implemented on this branch, and the 200-target product-quality gate passed its
-first external validation run (see
-`general-page-reader-fable5-validation.md`)
-Last updated: 2026-07-02
+Status: implementation in progress; Slices 1-4, 6a selection, 6b
+current-region targeting, screenshot confirmation, live-DOM review mode, and
+session-only multi-page switching are implemented on this branch. The
+200-target product-quality gate passed its first external validation run (see
+`general-page-reader-fable5-validation.md`).
+Last updated: 2026-07-03
 
 ## Decision
 
@@ -493,6 +494,11 @@ artifacts. It should cover:
 - Update popup activation wording.
 - Update CWS reviewer notes and permission justification.
 - Add browser QA against a small manually selected page matrix.
+- Keep Page/Web diagnostics visible but compact. Model-context and parser
+  advisor detail rows should use progressive disclosure by default, expanding
+  automatically only for caution, blocked, error, overview-only, or
+  user-target-required states. This preserves early quality inspection without
+  making ordinary article reads feel like a developer console.
 - Decide whether selected-text mini-actions belong in the next preview.
 
 ### Slice 6: Current Region Interaction Spike

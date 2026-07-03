@@ -355,6 +355,7 @@ function modelContextHtml(
     [tr("sidepanel.page.model.imageAlt"), formatCount(context.imageAltText.length)],
     [tr("sidepanel.page.model.target"), context.targetKind],
   ];
+  const detailsOpen = context.modelReadiness !== "ready";
   return `
     <section class="page-reader-model-context is-${context.modelReadiness}">
       <div class="page-reader-model-context-header">
@@ -362,9 +363,12 @@ function modelContextHtml(
         <span>${escapeHtml(statusText)}</span>
       </div>
       <p>${escapeHtml(context.modelReadiness === "ready" ? tr("sidepanel.page.model.readyDetail") : reason)}</p>
-      <dl>
-        ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
-      </dl>
+      <details class="page-reader-diagnostics"${detailsOpen ? " open" : ""}>
+        <summary>${escapeHtml(tr("sidepanel.page.diagnostics.details"))}</summary>
+        <dl>
+          ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+        </dl>
+      </details>
     </section>
   `;
 }
@@ -478,6 +482,12 @@ function advisorHtml(
     [tr("sidepanel.page.advisor.payload"), advisor.request ? `${advisor.request.payloadBudget.estimatedPayloadChars}/${advisor.request.payloadBudget.maxPayloadChars}` : "-"],
     [tr("sidepanel.page.advisor.allowedUse"), effective?.allowedUse ?? "-"],
   ];
+  const decision = advisor.advice?.decision;
+  const detailsOpen = advisor.status === "checking" ||
+    advisor.status === "error" ||
+    effective?.allowedUse === "page_overview_only" ||
+    effective?.allowedUse === "requires_user_target" ||
+    (Boolean(decision) && decision !== "accept_current");
   const modelMode = advisor.providerRuntime?.mode === "tier-b-short-json" && advisor.providerRuntime.canUseModel
     ? tr("sidepanel.page.advisor.mode.modelReady")
     : advisor.providerRuntime?.mode === "tier-b-short-json-fallback"
@@ -490,9 +500,12 @@ function advisorHtml(
         <span>${escapeHtml(statusText)}</span>
       </div>
       <p>${escapeHtml(detail)}</p>
-      <dl>
-        ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
-      </dl>
+      <details class="page-reader-diagnostics"${detailsOpen ? " open" : ""}>
+        <summary>${escapeHtml(tr("sidepanel.page.diagnostics.details"))}</summary>
+        <dl>
+          ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+        </dl>
+      </details>
       <div class="page-reader-advisor-note">${escapeHtml(modelMode)}</div>
     </section>
   `;
