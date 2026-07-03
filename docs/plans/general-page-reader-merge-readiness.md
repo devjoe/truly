@@ -21,6 +21,10 @@ This document is the current public-safe readiness index for the General Page Re
 - `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, model brief generation, 430px Page/Web responsive overflow, Page/Web design restraint, Page/Web interaction accessibility, session switching, selection, current-region, URL stale handling, noisy fallback, candidate recovery, teaser-hub overview downgrade, and no-grant guidance.
 - `general-page-ui-readiness-review.md` records the current Page/Web component decisions: keep ready pages quiet, expand diagnostics only for caution/recovery, preserve the compact Feed-aligned side-panel style, and avoid decorative reader-mode UI.
 - Long-running `audit:general-page-reader` phases are bounded by phase-level timeouts and write `audit-progress.json` plus `audit-phase-log.json`, so a CDP/browser hang fails with a diagnosable artifact instead of blocking reviewer validation indefinitely. Individual CDP commands also have client-side timeouts so an unresponsive `Runtime.evaluate` cannot bypass the phase's inner diagnostic screenshots and JSON state capture.
+- `check:merge-readiness` verifies that the feature branch is clean, synced with
+  its upstream, and caught up with `origin/main`, so reviewer validation does
+  not depend on a stale local `main` checkout or a visually inspected
+  ahead/behind count.
 - `audit:general-page-model-integration` is included in `check:general-page` and verifies model payload scoping, overview guards, and session-only storage behavior with a local mock endpoint.
 - The live-DOM 200-target review proved the harness is useful for finding false-ready page patterns; public follow-up is represented only as aggregate findings plus synthetic fixtures.
 - `smoke:general-page-current` writes a public-safe `current-browser-smoke-summary.json` and `current-browser-smoke-summary.md` next to the private review artifacts. These summaries omit real URLs, titles, extracted text, screenshots, copied page content, and per-target notes while preserving readiness counts, issue tags, threshold results, and sanitized host-level evidence. Localhost and private/internal hosts are reduced to `localhost` or `private-host`. The smoke script rejects unsafe summary fields such as `url`, `title`, `mainText`, `textContent`, raw HTML, screenshots, data URLs, and `http(s)` strings before writing the public-safe summary.
@@ -109,6 +113,41 @@ npm run cluster:general-page-quality-followups -- --review tmp/general-page-prod
 
 Results:
 
+- `check:merge-readiness`: added and passed from clean HEAD `94eae34` after the
+  branch was pushed. It reported `origin/main` behind=0 / ahead=118 /
+  ancestor=true, and `origin/codex/general-page-reader-contract` ahead=0 /
+  behind=0. A pre-push strict run correctly failed on one unpushed commit,
+  proving the gate catches local-only reviewer state before merge validation.
+- `check:public`: passed from clean HEAD `94eae34`. This included
+  public-boundary, release metadata, General Page readiness-docs check, General
+  Page corpus, parser spikes, parser-advisor spike, model integration audit,
+  typecheck, public contract tests, public unit tests, production build, and
+  release bundle audit. The production build recorded build ID
+  `1783110226179-94eae34`, with no dirty suffix.
+- `audit:general-page-reader`: passed from clean HEAD `94eae34`. Expected and
+  live build IDs matched `1783110226179-94eae34`; QA matrix rows passed for
+  popup activation, ordinary article read, model brief generation, 430px
+  responsive layout, Page/Web design restraint, interaction accessibility,
+  saved-session switching, selection target, current-region shortcut, URL
+  identity/stale scrub, noisy fallback caution, candidate block recovery,
+  teaser-hub overview, and no-grant guidance. A Bencium-guided visual check of
+  `page-analysis-ready.png` and `page-responsive-430.png` confirmed the ready
+  path remains compact, diagnostic-collapsed, Feed-aligned, and free of narrow
+  side-panel overflow or clipped controls. Private CDP artifact:
+  `tmp/general-page-reader-audit-2026-07-03T20-23-55-663Z`.
+- `smoke:general-page-current --all-open --min-page-count 4 --max-error-count
+  0`: passed from clean HEAD against four currently open HTTP(S) tabs through
+  live CDP. Sanitized aggregate: 3 extracted caution pages, 1 blocked/empty
+  page, 0 fetch/runtime errors, threshold `pass`, and no pages marked ready;
+  public-safe summary:
+  `tmp/general-page-product-quality/current-browser-review-2026-07-03T20-25-25-388Z/current-browser-smoke-summary.md`.
+- `cws:package:local-smoke`: passed from clean HEAD `94eae34`. It wrote an
+  explicitly non-uploadable local package report at
+  `artifacts/cws-local-smoke/0.1.2-94eae34b9f71-2026-07-03T20-25-57-134Z/cws-local-smoke-report.md`,
+  audited the generated ZIP, ran `check:public`, ran `cws:preflight`, recorded
+  build ID `1783110356289-94eae34`, confirmed branch upstream was synced, kept
+  `Uploadable: no`, and listed all selected CWS screenshots and promo tile as
+  `status=ok` with expected/actual dimensions.
 - Branch-base sanity check from clean HEAD `dc2497b` after `git fetch origin
   main`: `origin/main` is an ancestor of the feature branch and
   `origin/main...HEAD` reported `0 116`, so reviewer validation is not blocked
