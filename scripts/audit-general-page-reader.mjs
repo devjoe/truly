@@ -436,6 +436,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           label: el.querySelector('dt')?.textContent?.trim(),
           value: el.querySelector('dd')?.textContent?.trim()
         })),
+        extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
         modelContext: (() => {
           const el = pane?.querySelector('.page-reader-model-context');
           return el ? {
@@ -445,7 +446,8 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
             rows: [...el.querySelectorAll('dl div')].map((row) => ({
               label: row.querySelector('dt')?.textContent?.trim(),
               value: row.querySelector('dd')?.textContent?.trim()
-            }))
+            })),
+            diagnosticsOpen: el.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
           } : null;
         })(),
         advisor: advisor ? {
@@ -456,7 +458,8 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
             label: row.querySelector('dt')?.textContent?.trim(),
             value: row.querySelector('dd')?.textContent?.trim()
           })),
-          note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim()
+          note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
+          diagnosticsOpen: advisor.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
         } : null,
         sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
           label: el.textContent?.trim(),
@@ -812,10 +815,12 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
           label: el.querySelector('dt')?.textContent?.trim(),
           value: el.querySelector('dd')?.textContent?.trim()
         })),
+        extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
         modelContext: model ? {
           status: model.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
           detail: model.querySelector('p')?.textContent?.trim(),
-          className: model.className
+          className: model.className,
+          diagnosticsOpen: model.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
         } : null,
         advisor: advisor ? {
           title: advisor.querySelector('h3')?.textContent?.trim(),
@@ -826,7 +831,8 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
             value: row.querySelector('dd')?.textContent?.trim()
           })),
           note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
-          className: advisor.className
+          className: advisor.className,
+          diagnosticsOpen: advisor.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
         } : null,
         sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
           label: el.textContent?.trim(),
@@ -874,10 +880,12 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
       return {
         status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
+        extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
         modelContext: model ? {
           status: model.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
           detail: model.querySelector('p')?.textContent?.trim(),
-          className: model.className
+          className: model.className,
+          diagnosticsOpen: model.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
         } : null,
         advisor: advisor ? {
           title: advisor.querySelector('h3')?.textContent?.trim(),
@@ -888,7 +896,8 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
             value: row.querySelector('dd')?.textContent?.trim()
           })),
           note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
-          className: advisor.className
+          className: advisor.className,
+          diagnosticsOpen: advisor.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
         } : null,
         sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
           label: el.textContent?.trim(),
@@ -1019,6 +1028,18 @@ function assertAudit(result) {
   if (!result.success.ready.sourceLinks?.some((link) => link.label === "Source link" && /\/source$/.test(link.href))) {
     errors.push("Page/Web pane does not expose extracted source links for early inspection");
   }
+  if (result.success.ready.extractionDiagnosticsOpen !== false) {
+    errors.push("successful read should keep extraction diagnostics collapsed by default");
+  }
+  if (result.success.ready.modelContext?.diagnosticsOpen !== false) {
+    errors.push("successful read should keep model diagnostics collapsed by default");
+  }
+  if (result.success.ready.advisor?.diagnosticsOpen !== false) {
+    errors.push("successful read should keep advisor diagnostics collapsed by default");
+  }
+  if ((result.success.ready.sourceLinks?.length ?? 0) > 6) {
+    errors.push("successful read exposes more than six source links");
+  }
   if (!result.success.copy.hasTitle || !result.success.copy.hasUrl || !result.success.copy.hasExcerpt || result.success.copy.hasFullTail) {
     errors.push("copy metadata boundary failed");
   }
@@ -1074,6 +1095,18 @@ function assertAudit(result) {
   if (!result.noisy.ready.sourceLinks?.some((link) => link.label === "Article source" && /\/source$/.test(link.href))) {
     errors.push("noisy fallback audit did not preserve the real article source link");
   }
+  if (result.noisy.ready.extractionDiagnosticsOpen !== true) {
+    errors.push("noisy fallback should expand extraction diagnostics");
+  }
+  if (result.noisy.ready.modelContext?.diagnosticsOpen !== true) {
+    errors.push("noisy fallback should expand model diagnostics");
+  }
+  if (result.noisy.ready.advisor?.diagnosticsOpen !== true) {
+    errors.push("noisy fallback should expand advisor diagnostics");
+  }
+  if ((result.noisy.ready.sourceLinks?.length ?? 0) > 6) {
+    errors.push("noisy fallback exposes more than six source links");
+  }
   if (result.noisy.ready.hasEdgeDownload || result.noisy.ready.hasFirefoxDownload || result.noisy.ready.hasGoogleDownload) {
     errors.push("noisy fallback audit still exposes browser download links as source context");
   }
@@ -1109,6 +1142,18 @@ function assertAudit(result) {
   }
   if (!result.candidate.ready.hasCandidateSource) {
     errors.push("candidate block recovery did not preserve candidate source link visibility");
+  }
+  if (result.candidate.ready.extractionDiagnosticsOpen !== true) {
+    errors.push("candidate block recovery should expand extraction diagnostics");
+  }
+  if (result.candidate.ready.modelContext?.diagnosticsOpen !== true) {
+    errors.push("candidate block recovery should expand model diagnostics");
+  }
+  if (result.candidate.ready.advisor?.diagnosticsOpen !== true) {
+    errors.push("candidate block recovery should expand advisor diagnostics");
+  }
+  if ((result.candidate.ready.sourceLinks?.length ?? 0) > 6) {
+    errors.push("candidate block recovery exposes more than six source links");
   }
   if (!result.noGrant.hasGuidance) errors.push("no-grant sidepanel path did not show toolbar activation guidance");
   if (!result.noGrant.hasAllSitesGuidance) errors.push("no-grant sidepanel path did not mention all-sites settings access");
