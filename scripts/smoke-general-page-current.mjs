@@ -71,7 +71,7 @@ async function main() {
   const report = JSON.parse(fs.readFileSync(path.join(outputDir, "review.json"), "utf8"));
   const safePages = pages.map((page) => ({
     titleLength: page.title.length,
-    host: safeHost(page.url),
+    host: safeSmokeHost(page.url),
   }));
   const sanitized = {
     selectedPages: safePages,
@@ -286,7 +286,7 @@ function canonicalPageKey(url) {
 
 function sanitizedResult(item, page) {
   return {
-    host: page?.host ?? safeHost(item.url),
+    host: page?.host ?? safeSmokeHost(item.url),
     ok: item.ok,
     category: item.category,
     pageType: item.pageType,
@@ -374,12 +374,30 @@ async function fetchJson(url) {
   return response.json();
 }
 
-function safeHost(url) {
+function safeSmokeHost(url) {
   try {
-    return new URL(url).hostname;
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (isLocalhost(hostname))
+      return "localhost";
+    if (isPrivateHostname(hostname))
+      return "private-host";
+    return hostname;
   } catch {
     return "";
   }
+}
+
+function isLocalhost(hostname) {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+}
+
+function isPrivateHostname(hostname) {
+  return hostname.endsWith(".local") ||
+    hostname.endsWith(".internal") ||
+    hostname.endsWith(".lan") ||
+    /^10\./.test(hostname) ||
+    /^192\.168\./.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(hostname);
 }
 
 function writeSmokeSummary(summary, args) {
@@ -489,4 +507,5 @@ export {
   evaluateSmokeThreshold,
   parseArgs as parseCurrentBrowserSmokeArgs,
   renderSmokeSummaryMarkdown,
+  safeSmokeHost,
 };

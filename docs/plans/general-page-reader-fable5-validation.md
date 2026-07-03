@@ -101,9 +101,21 @@ parser advisor and model-brief path are implemented.
      --output tmp/general-page-product-quality/review-.../quality-gate.json
    ```
 
-7. Inspect failures by category and issue tag, then decide whether they become
-   new synthetic fixtures, parser heuristic changes, or model-advisor prompt
-   changes.
+7. Produce a public-safe follow-up summary from the same private review and
+   labels. This groups bad labels, auto-overconfident good suggestions,
+   auto-underconfident blocked suggestions, caution clusters, and issue-tag
+   clusters without copying real URLs, titles, excerpts, previews, notes,
+   screenshots, target ids, or source content:
+
+   ```bash
+   npm run summarize:general-page-quality-findings -- \
+     --review tmp/general-page-product-quality/review-.../review.json \
+     --labels tmp/general-page-product-quality/review-.../manual-labels.jsonl
+   ```
+
+8. Inspect `quality-gate.json` and `quality-findings-summary.md`, then decide
+   whether each cluster becomes a new synthetic fixture, parser heuristic
+   change, model-advisor prompt change, or private-only observation.
 
 ## Privacy Boundary
 
