@@ -53,8 +53,10 @@ npm run release:bump-cws-preview
 ```
 
 The CWS helper bumps both the Chrome-compatible numeric version and the human
-Preview label. For example, after `0.1.1 Preview 9`, the next CWS Preview is
-`0.1.2 Preview 10`, with tag `v0.1.2-preview.10`.
+Preview label counter. The Preview label counter is global, so it can diverge
+from the numeric package version when GitHub-only previews advance the label
+without a CWS numeric bump. For example, after `0.1.1 Preview 11`, the next
+CWS Preview is `0.1.2 Preview 12`, with tag `v0.1.2-preview.12`.
 
 ## Preview Closeout Checklist
 

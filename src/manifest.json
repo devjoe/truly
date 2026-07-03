@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "Truly",
-  "version": "0.1.1",
-  "version_name": "0.1.1 Preview 11",
+  "version": "0.1.2",
+  "version_name": "0.1.2 Preview 12",
   "description": "Privacy-conscious reading assistance for social feeds and web pages.",
   "permissions": [
     "storage",

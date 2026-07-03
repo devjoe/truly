@@ -1,20 +1,20 @@
 # Chrome Web Store Reviewer Notes
 
-Last updated: 2026-07-03
+Last updated: 2026-07-04
 
-Status: Preview 11 reviewer-notes reference
+Status: Preview 12 reviewer-notes reference
 
 ## Submission Build
 
-- Version: `0.1.1`
-- Version name: `0.1.1 Preview 11`
-- Recommended tag: `v0.1.1-preview.11`
+- Version: `0.1.2`
+- Version name: `0.1.2 Preview 12`
+- Recommended tag: `v0.1.2-preview.12`
 - Commit: use the commit recorded in the latest `npm run cws:package`
   report.
-- Extension ZIP: use the `truly-cws-extension-0.1.1-<commit>.zip` path from the
+- Extension ZIP: use the `truly-cws-extension-0.1.2-<commit>.zip` path from the
   latest `npm run cws:package` report.
 - Package report: use the latest
-  `artifacts/cws/0.1.1-<commit>-<timestamp>/cws-package-report.md`.
+  `artifacts/cws/0.1.2-<commit>-<timestamp>/cws-package-report.md`.
 
 Do not use `artifacts/cws-local-smoke/` ZIPs or reports for Chrome Web Store
 submission. Those artifacts are local packaging smoke evidence only and are
@@ -27,7 +27,7 @@ production build, packaged ZIP audit, and CWS preflight. CWS preflight also
 checks the recorded published package version so a submitted package does not
 reuse the numeric `manifest.version` from the currently published item.
 
-Preview 11 includes the user-triggered Page/Web reader path while preserving
+Preview 12 includes the user-triggered Page/Web reader path while preserving
 the existing Facebook reading surface and release-package boundary.
 
 ## Product Summary

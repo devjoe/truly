@@ -80,6 +80,18 @@ const contractDocs = [
     snippets: [
       "artifacts/cws-local-smoke/",
       "explicitly non-uploadable",
+      "Before dashboard upload",
+      "otherwise occupied package",
+      "Record the outcome of Preview 9's numeric `0.1.1` submission before",
+    ],
+  },
+  {
+    path: "docs/release/cws-listing-copy.md",
+    snippets: [
+      "Page/Web screenshot-assisted recovery",
+      "selected model source supports",
+      "user confirms the preview",
+      "session-only and is not stored",
     ],
   },
 ];

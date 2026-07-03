@@ -1,9 +1,9 @@
 # Chrome Web Store Listing Copy
 
-Status: Preview 11 listing reference
-Last updated: 2026-07-03
+Status: Preview 12 listing reference
+Last updated: 2026-07-04
 
-This copy is used for the Preview 11 Unlisted Chrome Web Store submission. It
+This copy is used for the Preview 12 Unlisted Chrome Web Store submission. It
 should stay aligned with `README.md`,
 `src/manifest.json`, `src/_locales/*/messages.json`, and
 https://trulyreader.org/.
@@ -124,18 +124,18 @@ Use the selected first Unlisted review assets in
 
 ## Dashboard Submission Packet
 
-Use this packet for the Preview 11 Unlisted Chrome Web Store submission.
+Use this packet for the Preview 12 Unlisted Chrome Web Store submission.
 
 ### Package
 
-- Version: `0.1.1`
-- Version name: `0.1.1 Preview 11`
-- Recommended tag: `v0.1.1-preview.11`
-- Extension ZIP: use the `truly-cws-extension-0.1.1-<commit>.zip` path from the
+- Version: `0.1.2`
+- Version name: `0.1.2 Preview 12`
+- Recommended tag: `v0.1.2-preview.12`
+- Extension ZIP: use the `truly-cws-extension-0.1.2-<commit>.zip` path from the
   latest `npm run cws:package` report.
 - Commit: use the commit recorded in the latest `npm run cws:package` report.
 - Package report: use the latest
-  `artifacts/cws/0.1.1-<commit>-<timestamp>/cws-package-report.md`.
+  `artifacts/cws/0.1.2-<commit>-<timestamp>/cws-package-report.md`.
 - CWS published-version gate: current `manifest.version` must be greater than
   `docs/release/cws-published-version.json`'s `publishedVersion`.
 
@@ -180,6 +180,11 @@ facts intact:
 - Truly does not operate a project-owned backend for feed or page content.
 - The extension processes visible website content on supported Facebook
   surfaces and user-triggered Page/Web reads to provide reading assistance.
+- Page/Web screenshot-assisted recovery can process a visible-tab screenshot
+  only when text extraction is insufficient, the selected model source supports
+  vision input, and the user confirms the preview. The screenshot is
+  session-only and is not stored in `chrome.storage`, logs, or durable page
+  history.
 - The extension stores settings and readiness state in Chrome extension
   storage, including model endpoint configuration chosen by the user.
 - Content can be sent to Chrome built-in Gemini Nano, a local model endpoint, or

@@ -1,9 +1,9 @@
 # Chrome Web Store Submission Checklist
 
-Status: Preview 11 submission checklist
-Last updated: 2026-07-03
+Status: Preview 12 submission checklist
+Last updated: 2026-07-04
 
-Use this checklist when submitting the Preview 11 build to Chrome Web
+Use this checklist when submitting the Preview 12 build to Chrome Web
 Store. The dashboard copy should still come from
 `docs/release/cws-listing-copy.md`; this file is the operational checklist.
 
@@ -22,18 +22,25 @@ Store. The dashboard copy should still come from
 - [ ] If starting a new CWS-bound Preview, run
   `npm run release:bump-cws-preview` instead of only bumping
   `manifest.version_name`.
+- [ ] Before dashboard upload, confirm the Chrome Web Store dashboard has no
+  already published, in-review, or otherwise occupied package for the current
+  numeric `manifest.version`.
+- [ ] Record the outcome of Preview 9's numeric `0.1.1` submission before
+  dashboard upload. If it is still active in review, wait for that review to
+  finish or withdraw it before uploading Preview 12. If it was rejected or
+  withdrawn, record that result in this checklist or the release notes.
 - [ ] Run `npm run cws:package` from a clean, pushed branch.
 - [ ] Confirm the package report says the current Preview release tag points at
   the package commit.
 - [ ] Upload the extension ZIP recorded in the generated
-  `artifacts/cws/0.1.1-<commit>-<timestamp>/cws-package-report.md`.
+  `artifacts/cws/0.1.2-<commit>-<timestamp>/cws-package-report.md`.
 - [ ] Do not upload any ZIP from `artifacts/cws-local-smoke/`; those artifacts
   are local packaging smoke evidence only and are explicitly non-uploadable.
 - [ ] Keep the CWS package report open while filling the dashboard.
 - [ ] Confirm package metadata:
-  - Version: `0.1.1`
-  - Version name: `0.1.1 Preview 11`
-  - Recommended tag: `v0.1.1-preview.11`
+  - Version: `0.1.2`
+  - Version name: `0.1.2 Preview 12`
+  - Recommended tag: `v0.1.2-preview.12`
   - Commit: use the commit recorded in the CWS package report.
 - [ ] Confirm the packaged manifest does not include
   `commands.reload-extension`.

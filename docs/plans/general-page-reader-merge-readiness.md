@@ -75,6 +75,11 @@ npm run cws:package:local-smoke
 - `release:review:local-limited-context -- --dry-run`: passed on 2026-07-03 and generated ignored `artifacts/review/...` prompt/schema artifacts only.
 - `cws:review:local-limited-context -- --dry-run`: passed on 2026-07-03 and generated ignored `artifacts/review/...` prompt/schema artifacts only.
 - Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review:local-limited-context`: not run in this session because the environment review rejected sending local repository context to an external Claude service without explicit approval.
+- Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:local-limited-context`: passed for `0.1.2 Preview 12` with no blocker/high findings. The remaining advisory item is an operational pre-upload check: confirm the Chrome Web Store dashboard disposition of the older `0.1.1 Preview 9` submission before uploading `0.1.2`.
+- CWS preview metadata was bumped from `0.1.1 Preview 11` to `0.1.2 Preview 12` after advisory review flagged that reusing the numeric `0.1.1` package version would risk a dashboard collision with the earlier Preview 9 submission.
+- `docs/release/cws-submission-checklist.md` now includes a manual dashboard gate for already published, in-review, or otherwise occupied packages for the current numeric `manifest.version`.
+- `docs/release/cws-listing-copy.md`, `docs/release/cws-reviewer-notes.md`, `docs/release/permission-justification.md`, and `docs/release/privacy-policy.md` now all disclose Page/Web screenshot-assisted recovery as user-confirmed, vision-gated, session-only, and not stored in `chrome.storage`.
+- The hosted privacy policy source in the `trulyreader.org` repository has been updated with the same Page/Web screenshot-assisted recovery disclosure and pushed at commit `ee84ac5`. The canonical live URL `https://trulyreader.org/privacy/` was verified on 2026-07-04 with `curl` and contained the 2026-07-04 Page/Web screenshot-assisted recovery, vision-input, confirmation, session-only, and `chrome.storage` disclosure text.
 - `npm run cws:package`: currently stops before packaging because `codex/general-page-reader-contract` has no configured upstream. This is expected until the branch is pushed or an upstream remote branch is configured; no uploadable package artifact was produced by this attempt.
 - `npm run cws:package:local-smoke`: available for pre-push ZIP creation, package-boundary audit, and `cws:preflight`. Its artifacts live under `artifacts/cws-local-smoke/`, are explicitly non-uploadable, and do not satisfy the upstream-sync or release-tag upload gates.
 
@@ -102,7 +107,11 @@ Results:
 - `check:public`: passed again from clean HEAD after the advisory-review and
   supply-chain hardening commits. The production build recorded build ID
   `1783103572127-f5bb5e8`, with no dirty suffix.
-- `cws:preflight`: passed for `0.1.1 Preview 11` / `v0.1.1-preview.11`.
+- `check:public`: passed for the dirty `0.1.2 Preview 12` working tree after
+  the CWS preview bump, privacy disclosure alignment, CWS checklist gate, and
+  preflight guard update. The production build recorded build ID
+  `1783105172867-ed11944-dirty`; rerun after commit for clean-HEAD evidence.
+- `cws:preflight`: passed for `0.1.2 Preview 12` / `v0.1.2-preview.12`.
 - `cws:package:local-smoke`: passed from a clean tree. It wrote an explicitly non-uploadable local package report under `artifacts/cws-local-smoke/`, audited the generated ZIP, ran `cws:preflight`, and recorded `Uploadable: no`.
 - `audit:general-page-reader`: passed after adding the 430px Page/Web responsive overflow gate. The QA matrix also records Page/Web design restraint and interaction accessibility: ready-path diagnostics stay collapsed, model context remains compact, source links stay capped, caution diagnostics expand, the 430px layout remains clean, and visible controls keep accessible names without undersized primary buttons/tabs. The no-grant guidance path now verifies that toolbar/all-sites guidance appears in the primary status detail without generic retry text or a duplicate error block. Clean-HEAD private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T15-31-42-943Z` (`1783092670025-fe854b6`).
 - `smoke:general-page-current`: passed against the currently open Yahoo Taiwan news page through live CDP. Sanitized result: extracted, semantic HTML, partial/caution, model eligible, 6 model-context links after filtering; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T13-58-47-423Z`.
