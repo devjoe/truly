@@ -9,11 +9,11 @@ and must not be committed.
 
 - Review size: 200 public web targets.
 - Source mode: live DOM through CDP, not static HTML fetch.
-- Successful extraction: 200 targets.
+- Successful extraction: 199 targets.
 - Fetch/runtime errors: 0 targets.
-- Readiness distribution: 115 ready, 82 caution, 3 blocked.
-- Extraction status distribution: 115 complete, 83 partial, 2 blocked.
-- Extraction method distribution: 159 semantic HTML, 41 fallback.
+- Readiness distribution: 112 ready, 87 caution, 1 blocked.
+- Extraction status distribution: 112 complete, 87 partial, 1 empty.
+- Extraction method distribution: 161 semantic HTML, 39 fallback.
 
 ## Category Findings
 
@@ -40,6 +40,12 @@ and must not be committed.
 | --- | --- | --- |
 | JavaScript-disabled semantic main | Browser/app instruction pages can exceed the text threshold and look like complete articles. | `javascript-disabled-instruction` |
 | Access-checking article preview | Pages with article metadata and preview paragraphs can pass as ready while full content is gated. | `access-checking-preview` |
+| Gated continue-reading preview | Pages with article metadata, account forms, many site links, and "continue/full article" copy can pass as ready even though the visible text is only preview context. | `gated-continue-reading-preview` |
+
+The gated continue-reading regression was checked against the five private
+blocked-page false-ready targets that motivated it. After the heuristic change,
+all five reran as `caution` with `login-or-paywall-like` warnings instead of
+ready/complete.
 
 ## Current Conclusion
 

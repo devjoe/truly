@@ -497,6 +497,20 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).toContain("preview view while checking access");
   });
 
+  it("marks gated continue-reading previews as paywall-like partial content", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "gated-continue-reading-preview.html",
+        "https://review.example.test/member/continue-preview",
+      ),
+      url: "https://review.example.test/member/continue-preview",
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("login-or-paywall-like");
+    expect(surface.mainText).toContain("Continue reading the full article");
+  });
+
   it("marks dense homepage-like roots as partial without article metadata", () => {
     const links = Array.from({ length: 120 }, (_, index) =>
       `<a href="/story-${index}">Synthetic story ${index}</a>`,

@@ -657,6 +657,20 @@
         "excludes": [],
         "status": "partial"
       }
+    },
+    {
+      "id": "gated-continue-reading-preview",
+      "file": "gated-continue-reading-preview.html",
+      "url": "https://review.example.test/member/continue-preview",
+      "locale": "en",
+      "pageType": "blocked",
+      "patterns": ["P11-paywall-or-membership", "P12-login-wall"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["Gated Continue Reading Preview Fixture", "Continue reading the full article"],
+        "excludes": [],
+        "status": "partial"
+      }
     }
   ]
 }

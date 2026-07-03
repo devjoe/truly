@@ -66,6 +66,14 @@ const ACCESS_CHECKING_OR_PREVIEW_PATTERNS = [
   /(全文|完整文章).{0,24}(載入|顯示).{0,24}(確認|驗證)/,
 ] as const;
 
+const GATED_CONTINUE_READING_PATTERNS = [
+  /\bcontinue reading\b/i,
+  /\bread (?:the )?full article\b/i,
+  /\bfull article\b/i,
+  /繼續閱讀/,
+  /(閱讀|查看).{0,12}(全文|完整文章)/,
+] as const;
+
 const DYNAMIC_CONTENT_PARTIAL_PATTERNS = [
   /\b(?:enable|turn on)\s+javascript\b/i,
   /\bjavascript (?:is )?(?:disabled|required)\b/i,
@@ -890,6 +898,8 @@ function looksBlockedOrPaywalled(
   const signals = `${title ?? ""} ${text}`;
   if (ACCESS_CHECKING_OR_PREVIEW_PATTERNS.some((pattern) => pattern.test(signals)))
     return true;
+  if (looksGatedContinueReadingPage(documentRef, signals, text.length))
+    return true;
   const weakMatch = WEAK_PAYWALL_OR_LOGIN_PATTERNS.some((pattern) => pattern.test(signals));
   if (!weakMatch)
     return false;
@@ -908,6 +918,21 @@ function looksBlockedOrPaywalled(
   if (root.querySelector("input[type=\"password\"], input[type=\"email\"], form"))
     return true;
   return false;
+}
+
+function looksGatedContinueReadingPage(
+  documentRef: Document,
+  signals: string,
+  textLength: number,
+): boolean {
+  if (textLength >= 5000)
+    return false;
+  if (!GATED_CONTINUE_READING_PATTERNS.some((pattern) => pattern.test(signals)))
+    return false;
+
+  const formLikeCount = documentRef.querySelectorAll("form, input[type=\"email\"], input[type=\"password\"]").length;
+  const linkCount = documentRef.querySelectorAll("a[href]").length;
+  return formLikeCount > 0 && linkCount >= 24;
 }
 
 function looksDynamicContentPartial(title: string | undefined, text: string): boolean {
