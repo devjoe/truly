@@ -43,6 +43,12 @@ const REQUIRED_SNIPPETS = [
       "covered_by_existing_fixture",
       "auto-overconfident good suggestions",
       "target ids",
+      "git merge-base --is-ancestor main HEAD",
+      "general-page-ui-readiness-review.md",
+      "P25 `article-root-utility-dense-ready-trap`",
+      "P26 `multi-article-teaser-hub`",
+      "Teaser hub overview",
+      "page-teaser-hub-overview.png",
     ],
   },
   {
@@ -66,6 +72,20 @@ const REQUIRED_SNIPPETS = [
       "P24 `semantic-main-dashboard-table` / `semantic-main-short-leaderboard`",
       "--source cdp",
       "Do not attach or commit real URLs",
+      "P25 `article-root-utility-dense-ready-trap`",
+      "P26 `multi-article-teaser-hub`",
+      "Teaser hub overview",
+      "general-page-ui-readiness-review.md",
+    ],
+  },
+  {
+    path: "docs/plans/general-page-ui-readiness-review.md",
+    snippets: [
+      "Page/Web should stay close to the existing Facebook Feed experience",
+      "Ready pages keep the model context compact and diagnostics collapsed",
+      "caution/recovery",
+      "page-teaser-hub-overview.png",
+      "Do not add decorative visual polish",
     ],
   },
   {

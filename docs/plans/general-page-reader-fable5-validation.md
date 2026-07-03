@@ -256,3 +256,24 @@ Follow-up live-tab and runtime validation added two reviewer-facing gates:
 The latest sanitized live-tab smoke showed 3 extracted caution pages and 1
 blocked/empty page across four open HTTP(S) tabs, with no dashboard or
 leaderboard data surface marked ready/good.
+
+### Validation Refresh (2026-07-03, Page/Web Readiness)
+
+The later Page/Web readiness pass added reviewer-facing coverage for the
+remaining false-ready clusters and UI restraint:
+
+- **P25 `article-root-utility-dense-ready-trap`**: article roots that contain
+  dense utility controls, forms, ticker/search UI, and low body coverage now
+  surface `large-navigation-noise` instead of clean-ready confidence. Parser
+  advisor routing keeps these as article/candidate-block analysis when the
+  body is still usable, rather than blindly downgrading every noisy article to
+  page overview.
+- **P26 `multi-article-teaser-hub`**: repeated short `article` teaser cards
+  without article metadata now downgrade to `index_or_feed` /
+  `page_overview_only`. The CDP audit includes a `Teaser hub overview` row and
+  `page-teaser-hub-overview.png` screenshot.
+- **Page/Web UI readiness**: `general-page-ui-readiness-review.md` records the
+  current component decisions after visual CDP review. Ready pages keep
+  diagnostics collapsed and model context compact; caution and recovery pages
+  expose diagnostics because those are the states early reviewers must inspect.
+  No decorative reader-mode UI was added.

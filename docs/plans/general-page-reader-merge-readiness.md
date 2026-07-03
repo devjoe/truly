@@ -42,10 +42,17 @@ This document is the current public-safe readiness index for the General Page Re
 Before merging this branch back to Truly, rerun these from a clean worktree:
 
 ```bash
+git merge-base --is-ancestor main HEAD
+git rev-list --left-right --count main...HEAD
 npm run check:public
 npm run cws:preflight
 TRULY_EXTENSION_ID=<loaded-extension-id> TRULY_AUDIT_AUTO_RELOAD=1 npm run audit:general-page-reader
 ```
+
+The local branch-base sanity check should show that `main` is an ancestor of
+the feature branch before reviewer validation starts. A nonzero right-side
+count is expected until the branch is merged; a nonzero left-side count means
+the worktree needs to catch up with `main` first.
 
 If packaging is the next action, run this only after the branch is pushed and release metadata is final:
 
@@ -106,6 +113,7 @@ Results:
 - Cluster-to-fixture conversion continued with P26 `multi-article-teaser-hub`, derived from repeated private review clusters where several short `article` teaser cards were mistaken for an article-like context. Runtime extraction now marks short repeated article cards without article metadata as `large-navigation-noise`, parser-advisor downgrades the effective context to `page_overview_only`, and the public corpus covers 54 fixtures / 26 patterns.
 - `audit:general-page-reader`: passed after adding the teaser-hub runtime case. The QA matrix now includes `Teaser hub overview` and asserts `downgrade_to_index_or_feed`, `page_overview_only`, expanded caution diagnostics, and no header/sidebar utility source links. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T17-34-50-496Z` (`1783099966448-a74a0f3-dirty`).
 - `smoke:general-page-current --all-open --min-page-count 4 --max-error-count 0`: passed after the P26 change against six open HTTP(S) tabs. Sanitized result: 5 extracted / 1 empty-or-blocked, 5 caution / 1 blocked, 0 fetch/runtime errors, threshold `pass`, and no pages marked ready; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T17-36-10-587Z`.
+- `general-page-ui-readiness-review.md`: added after visual inspection of clean CDP screenshots. It records that ready pages stay quiet, caution/recovery pages expand diagnostics, source links remain capped, and Page/Web keeps the compact Feed-aligned side-panel style. The CDP screenshot set now includes `page-teaser-hub-overview.png` for the P26 overview-only path.
 
 ## Non-Blocking Follow-Ups
 
