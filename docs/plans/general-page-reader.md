@@ -1,7 +1,10 @@
 # General Page Reader Plan
 
-Status: implementation in progress
-Last updated: 2026-07-01
+Status: implementation in progress; Slices 1-4 and the 6a selection flow are
+implemented on this branch, and the 200-target product-quality gate passed its
+first external validation run (see
+`general-page-reader-fable5-validation.md`)
+Last updated: 2026-07-02
 
 ## Decision
 

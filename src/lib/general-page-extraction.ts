@@ -103,6 +103,12 @@ const NOISY_BLOCK_TEXT_PATTERNS = [
   /^Advertising$/i,
   /^Advertisement$/i,
   /^(?:(?:\S+)\s*〉\s*)?(?:即時\s+)?(?:熱門\s+)?(?:政治|財富自由|軍武|社會|生活|健康|國際|地方|蒐奇|影音|財經|娛樂|汽車|時尚|體育|3\s*C|3C|評論|藝文|玩咖|食譜|地產|搜尋|會員|專區|服務|求職|自由電子報|自由影音|TAIPEI TIMES)(?:\s+(?:即時|熱門|政治|財富自由|軍武|社會|生活|健康|國際|地方|蒐奇|影音|財經|娛樂|汽車|時尚|體育|3\s*C|3C|評論|藝文|玩咖|食譜|地產|搜尋|會員|專區|服務|求職|自由電子報|自由影音|TAIPEI TIMES)){3,}\s*[。.]?$/i,
+  // P21-breaking-ticker-lead: ticker strips are short blocks that start with a
+  // breaking-news marker and carry two or more clock stamps.
+  /^(?:快訊|即時新聞|突發|BREAKING(?:\s+NEWS)?)[\s:：][\s\S]{0,360}?\b\d{1,2}:\d{2}\b[\s\S]{0,360}?\b\d{1,2}:\d{2}\b/i,
+  // P21: inline audio-player shells around news bodies.
+  /Your browser does not support (?:the )?HTML5 Audio/i,
+  /聽新聞\s*0:00\s*\/\s*0:00/,
 ] as const;
 
 const NOISY_BLOCK_CANDIDATE_SELECTOR = [
@@ -604,6 +610,19 @@ function nonArticlePageWarnings(
     return ["large-navigation-noise"];
   }
 
+  // P22-dated-report-list: report/list hubs render many dated, linked list
+  // items inside a content-like layout and can pass as a ready article.
+  if (
+    !rootIsArticle &&
+    !hasArticleMeta &&
+    countDateStamps(text.slice(0, 2400)) >= 5 &&
+    listItemCount >= 6 &&
+    linkCount >= 6 &&
+    paragraphCount <= 12
+  ) {
+    return ["large-navigation-noise"];
+  }
+
   if (
     articleCount >= 3 &&
     /\b(index|directory|latest entries|latest news|top stories|home ?page|front page|archive|topics|list page|cards?)\b/.test(lowerSignals)
@@ -737,6 +756,22 @@ function isLikelyDocumentationArticle(lowerSignals: string, text: string, paragr
     /\b(?:docs?|documentation|handbook|guide|reference|learn|developer)\b/.test(lowerSignals);
 }
 
+const DATE_STAMP_PATTERNS = [
+  /\b\d{1,2}\s+(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{4}\b/gi,
+  /\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/gi,
+  /\b\d{4}-\d{2}-\d{2}\b/g,
+  /\b\d{4}\/\d{1,2}\/\d{1,2}\b/g,
+  /\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日/g,
+] as const;
+
+function countDateStamps(text: string): number {
+  let count = 0;
+  for (const pattern of DATE_STAMP_PATTERNS) {
+    count += text.match(pattern)?.length ?? 0;
+  }
+  return count;
+}
+
 function firstHeading(root: ParentNode): string | undefined {
   return normalizeWhitespace(root.querySelector("h1")?.textContent ?? "") ?? undefined;
 }
@@ -812,6 +847,16 @@ function resolveExtractionStatus(
   return "complete";
 }
 
+const MEMBER_TEASER_MAX_TEXT_LENGTH = 620;
+
+const MEMBER_ZONE_MARKER_PATTERNS = [
+  /會員專區/,
+  /付費會員/,
+  /訂閱會員/,
+  /\bmembers?[ -]only\b/i,
+  /\bmember (?:zone|area|exclusive)\b/i,
+] as const;
+
 function looksBlockedOrPaywalled(
   documentRef: Document,
   extractionRoot: Element | null,
@@ -828,6 +873,14 @@ function looksBlockedOrPaywalled(
     return true;
   if (text.length < minMainTextLength)
     return true;
+  // P23-member-zone-teaser: a short body carrying explicit member-zone
+  // markers is a truncated teaser, not a complete article.
+  if (
+    text.length < MEMBER_TEASER_MAX_TEXT_LENGTH &&
+    MEMBER_ZONE_MARKER_PATTERNS.some((pattern) => pattern.test(signals))
+  ) {
+    return true;
+  }
   if (root.querySelector("input[type=\"password\"], input[type=\"email\"], form"))
     return true;
   return false;

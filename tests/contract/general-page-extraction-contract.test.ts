@@ -381,6 +381,51 @@ describe("General Page Reader extraction contract", () => {
     }
   });
 
+  it("strips breaking-ticker and audio-player boilerplate before the article body", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "ticker-lead-article.html",
+        "https://portal.example.test/news/story/ticker-lead-article",
+      ),
+      url: "https://portal.example.test/news/story/ticker-lead-article",
+    });
+
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.mainText).toContain("虛構水利計畫已完成前期規劃");
+    expect(surface.mainText).toContain("滯洪池整建與排水幹線更新");
+    expect(surface.mainText).not.toContain("候選人甲自行宣布當選");
+    expect(surface.mainText).not.toContain("Your browser does not support HTML5 Audio");
+    expect(surface.mainText).not.toContain("聽新聞 0:00 / 0:00");
+  });
+
+  it("marks dated report-list hubs as partial instead of ready articles", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "dated-list-hub-ready-trap.html",
+        "https://agency.example.test/field-reports",
+      ),
+      url: "https://agency.example.test/field-reports",
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("latest synthetic field reports provide fictional updates");
+  });
+
+  it("marks short member-zone teasers as partial with a paywall warning", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "member-teaser-short.html",
+        "https://technews.example.test/analysis/member-teaser-short",
+      ),
+      url: "https://technews.example.test/analysis/member-teaser-short",
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("login-or-paywall-like");
+    expect(surface.mainText).toContain("虛構的電池材料量產計畫");
+  });
+
   it("marks dense homepage-like roots as partial without article metadata", () => {
     const links = Array.from({ length: 120 }, (_, index) =>
       `<a href="/story-${index}">Synthetic story ${index}</a>`,

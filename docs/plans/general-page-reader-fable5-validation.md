@@ -1,5 +1,7 @@
 # General Page Reader Fable 5 Validation Handoff
 
+Status: validation run completed 2026-07-02 (see Validation Run Record)
+
 This checklist is for an external product/design review after the Page/Web
 parser advisor and model-brief path are implemented.
 
@@ -47,3 +49,84 @@ parser advisor and model-brief path are implemented.
 Do not attach or commit real URLs, screenshots, review HTML, JSONL labels,
 source HTML, copied page text, or per-target findings to the public repo. Public
 follow-up should be aggregate-only or converted into synthetic fixtures.
+
+## Validation Run Record (2026-07-02, Claude Fable 5)
+
+Reviewer: Claude Fable 5, acting as external product reviewer at the
+maintainer's request. Private artifacts (labels, gate JSON) live under the
+private review run directory in `tmp/general-page-product-quality/` and must
+not be committed. Everything below is sanitized aggregate.
+
+### Gate Result: PASS
+
+- 200 targets; 193 reviewed (96.5%), 7 left unreviewed because the harness
+  fetch was rate-limited (HTTP 429) — a harness condition, not a product
+  extraction result.
+- Acceptable rate 100% of reviewed; bad rate 0%.
+- Final verdicts: 130 good, 56 usable_with_caution, 7 blocked_or_empty_ok.
+- Reviewer was stricter than the auto-suggestion on 15 targets (auto-good
+  downgraded to usable_with_caution) and resolved all 6 blocked-review
+  targets plus 1 auto-caution target as blocked_or_empty_ok.
+
+### Review Method
+
+- All 200 target records were read at extraction-preview level (title,
+  diagnostics, main-text preview, readiness).
+- Suspicious clusters were expanded to full previews and URLs.
+- CDP browser spot checks confirmed: a JS-rendered government homepage
+  (static fetch yields title-only; live DOM renders ~1.6k chars of index
+  text), a publisher special-topic teaser hub that is genuinely thin in the
+  live browser, and a wire-service article whose live body matches the
+  harness extraction.
+
+### Findings Worth Acting On (aggregate only)
+
+1. **Leading ticker noise (8 targets, one TW news portal family).** Article
+   extraction leads with the site's breaking-news ticker and audio-player
+   boilerplate before the real body. The body is present, so results stay
+   usable, but the noise would contaminate model briefs. Candidate fix:
+   strip repeated leading link-dense/timestamp-dense blocks; convert to a
+   synthetic fixture.
+2. **Index-like pages rated `ready` (3 targets, one intergovernmental
+   site).** List/landing pages passed as clean ready articles with nav
+   vocabulary in the text. `likely-index-or-feed` heuristics could weigh
+   menu-word density near the text head.
+3. **Member-gated teasers rated good (3 targets).** Very short bodies that
+   end at a member wall were auto-suggested good. A "very short body +
+   member-zone markers" demotion to caution would be more honest.
+4. **Harness vs live-DOM divergence.** The review harness fetches static
+   HTML, but the extension reads the live DOM. JS-heavy sites therefore look
+   worse in the harness than in the product. Aggregate-level implication:
+   blocked/empty counts here are an upper bound. A future live-DOM review
+   mode (CDP-driven) would remove this bias.
+
+None of these block the gate; items 1-3 are candidates for synthetic
+fixtures and heuristic follow-ups.
+
+### Follow-Up Implementation (2026-07-02, Claude Fable 5)
+
+Findings 1-3 are implemented on this branch as corpus patterns P21-P23 with
+matching synthetic fixtures and heuristics:
+
+- **P21 `ticker-lead-article`**: `NOISY_BLOCK_TEXT_PATTERNS` now strips short
+  leading blocks that start with a breaking-news marker and carry two or more
+  clock stamps, plus HTML5-audio player shells. The fixture asserts the body
+  survives and the ticker/player text never enters `mainText`.
+- **P22 `dated-list-hub-ready-trap`**: `nonArticlePageWarnings` adds a
+  dated-report-list rule — five or more date stamps in the text head plus six
+  or more list items and links, few paragraphs, no article metadata, and a
+  non-`article` root now yield `large-navigation-noise` (status `partial`).
+- **P23 `member-teaser-short`**: `looksBlockedOrPaywalled` adds a member-zone
+  teaser rule — bodies under 620 chars with explicit member-zone markers
+  (會員專區, members-only, etc.) are flagged `login-or-paywall-like`
+  (status `partial`).
+
+Verified in a clean Linux environment (fresh `npm ci`): typecheck, corpus
+check, both parser spikes (runtime-baseline threshold 47/47), full public
+contract suite (80 tests), full public unit suite (93 tests), production
+build, and the release-bundle audit all pass. `check:public-boundary`
+(requires git) and the CDP extension audit (requires the loaded extension)
+still need a run on the maintainer's machine before commit.
+
+Finding 4 (live-DOM review mode for the harness) remains open as a tooling
+follow-up.

@@ -587,6 +587,48 @@
         "contains": ["article source link noise fixture", "utility links that should not become model source context"],
         "excludes": []
       }
+    },
+    {
+      "id": "ticker-lead-article",
+      "file": "ticker-lead-article.html",
+      "url": "https://portal.example.test/news/story/ticker-lead-article",
+      "locale": "zh-TW",
+      "pageType": "article",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P21-breaking-ticker-lead"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["虛構水利計畫已完成前期規劃", "滯洪池整建與排水幹線更新"],
+        "excludes": ["候選人甲自行宣布當選", "Your browser does not support HTML5 Audio"],
+        "status": "complete"
+      }
+    },
+    {
+      "id": "dated-list-hub-ready-trap",
+      "file": "dated-list-hub-ready-trap.html",
+      "url": "https://agency.example.test/field-reports",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P02-main-role-without-article", "P05-list-or-index-page", "P22-dated-report-list"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["latest synthetic field reports provide fictional updates"],
+        "excludes": [],
+        "status": "partial"
+      }
+    },
+    {
+      "id": "member-teaser-short",
+      "file": "member-teaser-short.html",
+      "url": "https://technews.example.test/analysis/member-teaser-short",
+      "locale": "zh-TW",
+      "pageType": "blocked",
+      "patterns": ["P11-paywall-or-membership", "P23-member-zone-teaser"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["虛構的電池材料量產計畫"],
+        "excludes": [],
+        "status": "partial"
+      }
     }
   ]
 }

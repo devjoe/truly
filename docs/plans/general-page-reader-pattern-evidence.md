@@ -77,6 +77,9 @@ Not allowed in this file:
 | P18-media-and-caption | observed-category | News with media, social posts, media-first cards | `clean-article`, `public-social-feed`, `media-first-card` | Decide how captions contribute to source context. |
 | P19-comments-heavy-page | observed-category | Forums, Q&A, social replies, comment-heavy news | `forum-thread`, `qa-accepted-answer` | Parser route must separate primary body from discussion context. |
 | P20-canonical-amp-syndication | observed-category | Syndicated news, AMP copies, canonical variants | `jsonld-og-metadata`, `canonical-conflict-page`, `amp-syndicated-copy` | Source identity should remain explicit in parser adapter output. |
+| P21-breaking-ticker-lead | observed-category | TW news portals with breaking tickers and audio players before the body (2026-07-02 product-quality review aggregate) | `ticker-lead-article` | Ticker headlines and player boilerplate must not enter the article body or model briefs. |
+| P22-dated-report-list | observed-category | Intergovernmental/report hubs with dated list items in content layouts (2026-07-02 product-quality review aggregate) | `dated-list-hub-ready-trap` | Dated list hubs should surface `large-navigation-noise` instead of passing as ready articles. |
+| P23-member-zone-teaser | observed-category | Member-zone tech/finance sites with short public teasers (2026-07-02 product-quality review aggregate) | `member-teaser-short` | Short member-zone teasers should be partial/caution, not complete/ready. |
 
 ## Evaluation V2 Exit Criteria
 

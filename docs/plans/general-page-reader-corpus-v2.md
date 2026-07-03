@@ -58,6 +58,9 @@ Synthetic fixtures can combine multiple patterns.
 | P18-media-and-caption | Images, figures, captions, cards | Caption/media text may dominate or disappear | `clean-article`, `public-social-feed`, `multi-post-social-feed`, `news-homepage-card-grid` |
 | P19-comments-heavy-page | Comments or replies are meaningful but noisy | Parser must distinguish body from discussion context | `forum-thread`, `dense-forum-thread` |
 | P20-canonical-amp-syndication | Canonical/AMP/syndicated variants exist | URL identity and source attribution can drift | `jsonld-og-metadata` |
+| P21-breaking-ticker-lead | Breaking-news ticker and player boilerplate precede the article body | Unrelated ticker headlines contaminate the extracted body and model briefs | `ticker-lead-article` |
+| P22-dated-report-list | Dated report/list hub inside a content-like layout | Repeated dated list items pass as a ready single article | `dated-list-hub-ready-trap` |
+| P23-member-zone-teaser | Short member-zone teaser with real intro text | Truncated member content is rated complete/ready | `member-teaser-short` |
 
 ### 3. Synthetic Fixtures
 
