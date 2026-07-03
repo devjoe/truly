@@ -80,7 +80,12 @@ npm run cws:package:local-smoke
 - `docs/release/cws-submission-checklist.md` now includes a manual dashboard gate for already published, in-review, or otherwise occupied packages for the current numeric `manifest.version`.
 - `docs/release/cws-listing-copy.md`, `docs/release/cws-reviewer-notes.md`, `docs/release/permission-justification.md`, and `docs/release/privacy-policy.md` now all disclose Page/Web screenshot-assisted recovery as user-confirmed, vision-gated, session-only, and not stored in `chrome.storage`.
 - The hosted privacy policy source in the `trulyreader.org` repository has been updated with the same Page/Web screenshot-assisted recovery disclosure and pushed at commit `ee84ac5`. The canonical live URL `https://trulyreader.org/privacy/` was verified on 2026-07-04 with `curl` and contained the 2026-07-04 Page/Web screenshot-assisted recovery, vision-input, confirmation, session-only, and `chrome.storage` disclosure text.
-- `npm run cws:package`: currently stops before packaging because `codex/general-page-reader-contract` has no configured upstream. This is expected until the branch is pushed or an upstream remote branch is configured; no uploadable package artifact was produced by this attempt.
+- `codex/general-page-reader-contract` is pushed and tracks
+  `origin/codex/general-page-reader-contract`. A formal uploadable
+  `npm run cws:package` still requires the release tag
+  `v0.1.2-preview.12` to exist locally and point at HEAD, and the Chrome Web
+  Store dashboard state for the earlier `0.1.1 Preview 9` submission must be
+  confirmed before uploading.
 - `npm run cws:package:local-smoke`: available for pre-push ZIP creation, package-boundary audit, and `cws:preflight`. Its artifacts live under `artifacts/cws-local-smoke/`, are explicitly non-uploadable, and do not satisfy the upstream-sync or release-tag upload gates.
 
 ## Recent Local Verification Evidence
@@ -147,12 +152,41 @@ Results:
   current-region, URL stale handling, noisy fallback, candidate recovery,
   teaser-hub overview, and no-grant guidance. Private CDP artifact:
   `tmp/general-page-reader-audit-2026-07-03T18-33-55-219Z`.
+- `audit:general-page-reader`: passed again from Preview 12 clean HEAD
+  `80a0e9a`. Expected and live build IDs matched
+  `1783105722071-80a0e9a`; QA matrix rows passed for popup activation,
+  ordinary article read, model brief generation, 430px responsive layout,
+  Page/Web design restraint, interaction accessibility, saved-session
+  switching, selection target, current-region shortcut, URL identity/stale
+  scrub, noisy fallback caution, candidate block recovery, teaser-hub overview,
+  and no-grant guidance. Private CDP artifact:
+  `tmp/general-page-reader-audit-2026-07-03T19-12-16-973Z`.
 - `smoke:general-page-current --all-open --min-page-count 4 --max-error-count
   0`: passed from clean HEAD against four currently open HTTP(S) tabs through
   live CDP. Sanitized aggregate: 3 extracted caution pages, 1 blocked/empty
   page, 0 fetch/runtime errors, threshold `pass`, and no pages marked ready;
   public-safe summary:
   `tmp/general-page-product-quality/current-browser-review-2026-07-03T18-35-20-959Z/current-browser-smoke-summary.md`.
+- `smoke:general-page-current --all-open --min-page-count 4 --max-error-count
+  0`: passed again from Preview 12 against four currently open HTTP(S) tabs
+  through live CDP. Sanitized aggregate: 3 extracted caution pages, 1
+  blocked/empty page, 0 fetch/runtime errors, threshold `pass`, and no pages
+  marked ready; public-safe summary:
+  `tmp/general-page-product-quality/current-browser-review-2026-07-03T19-13-43-648Z/current-browser-smoke-summary.md`.
+- `review:general-page-product-quality --source cdp --limit 200`: reran
+  against the balanced v2 private target list from Preview 12. Sanitized
+  aggregate: 199/200 extracted, 1 empty-or-blocked, 0 fetch errors, readiness
+  `ready: 100`, `caution: 98`, `blocked: 2`; private artifact:
+  `tmp/general-page-product-quality/review-2026-07-03T19-14-56-810Z`. The
+  public-safe follow-up plan reported 12 items: 8 `needs_private_review` and 4
+  `covered_by_existing_fixture`. No new synthetic fixture was added because the
+  unlabelled run did not prove a repeated public-safe DOM pattern.
+- `review:general-page-product-quality`: now uses a quiet jsdom virtual
+  console for product-quality HTML parsing so malformed real-site CSS does not
+  flood long CDP review output with `Could not parse CSS stylesheet` noise.
+  A synthetic bad-CSS smoke under `/private/tmp` verified that the harness still
+  prints normal aggregate progress and summary lines without jsdom CSS parser
+  noise.
 
 ## Non-Blocking Follow-Ups
 

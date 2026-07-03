@@ -5,7 +5,7 @@ import path from "node:path";
 import process from "node:process";
 import { performance } from "node:perf_hooks";
 import ts from "typescript";
-import { JSDOM } from "jsdom";
+import { JSDOM, VirtualConsole } from "jsdom";
 import { labelingClientScript } from "./lib/review-labeling-client.mjs";
 import { cdpBaseForPort, fetchRenderedPageHtml } from "./lib/cdp-page-source.mjs";
 import { createProductQualityProgressTracker } from "./lib/product-quality-progress.mjs";
@@ -16,6 +16,7 @@ const DEFAULT_CONCURRENCY = 8;
 const DEFAULT_LIMIT = 200;
 const PREVIEW_LIMIT = 1600;
 const USER_AGENT = "TrulyGeneralPageReaderProductQuality/0.1 (+https://example.test/truly)";
+const quietJsdomVirtualConsole = new VirtualConsole();
 
 let extractorModulePromise;
 let modelContextModulePromise;
@@ -138,7 +139,7 @@ async function reviewTarget(target, args) {
     const html = await loadHtml(target, args);
     const { extractGeneralPageSurface } = await loadRuntimeModule("src/lib/general-page-extraction.ts", "extractor");
     const { buildGeneralPageModelContext } = await loadRuntimeModule("src/lib/general-page-model-context.ts", "modelContext");
-    const dom = new JSDOM(html, { url: target.url });
+    const dom = createReviewDom(html, target.url);
     const start = performance.now();
     const surface = extractGeneralPageSurface({
       document: dom.window.document,
@@ -249,7 +250,7 @@ async function importTsModule(sourcePath) {
 }
 
 function documentSignals(html, url) {
-  const dom = new JSDOM(html, { url });
+  const dom = createReviewDom(html, url);
   const document = dom.window.document;
   return {
     htmlLength: html.length,
@@ -267,6 +268,13 @@ function documentSignals(html, url) {
     hasArticleMeta: Boolean(document.querySelector("meta[property^='article:']")),
     hasOpenGraph: Boolean(document.querySelector("meta[property^='og:']")),
   };
+}
+
+function createReviewDom(html, url) {
+  return new JSDOM(html, {
+    url,
+    virtualConsole: quietJsdomVirtualConsole,
+  });
 }
 
 function autoReviewHints(surface, modelContext, document, target) {

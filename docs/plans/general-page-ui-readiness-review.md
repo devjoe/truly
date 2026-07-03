@@ -1,7 +1,7 @@
 # General Page Reader UI Readiness Review
 
 Status: current Page/Web UI is ready for focused reviewer validation
-Date: 2026-07-03
+Date: 2026-07-04
 
 This review records the current UI/UX decision for the General Page Reader
 branch. It is based on the Page/Web CDP audit screenshots under `tmp/`; those
@@ -32,6 +32,11 @@ and what the next model-facing context would be.
 
 ## Visual Review Notes
 
+- A follow-up Bencium impact review on 2026-07-04 reaffirmed the current
+  direction: Page/Web should remain an industrial/utilitarian inspection
+  surface, not a decorative reader mode. The memorable product choice is
+  restraint: quiet ready pages, explicit user-triggered actions, and visible
+  uncertainty only when extraction quality needs review.
 - Ready pages keep the model context compact and diagnostics collapsed. This is
   the main evidence that Page/Web has not become a developer console by
   default.
@@ -46,6 +51,11 @@ and what the next model-facing context would be.
   cards.
 - The no-grant path is intentionally sparse: one primary status block and one
   short detail block. It avoids duplicate retry panels.
+- Latest screenshot review checked the 430px ready path, selected-text path,
+  teaser-hub overview path, and no-grant path from
+  `tmp/general-page-reader-audit-2026-07-03T19-12-16-973Z`. The visual
+  conclusion stayed unchanged: all visible components have a current product
+  job, and the side-panel language remains aligned with the existing Feed tab.
 
 ## Current Non-Changes
 
