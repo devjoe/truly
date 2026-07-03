@@ -8,6 +8,7 @@ const REQUIRED_SNIPPETS = [
     snippets: [
       "430px Page/Web responsive overflow",
       "Page/Web design restraint",
+      "Page/Web interaction accessibility",
       "smoke:general-page-current -- --all-open",
       "--max-ready-count 0",
       "P24 dashboard/data-surface",
@@ -30,6 +31,7 @@ const REQUIRED_SNIPPETS = [
     snippets: [
       "430px Page/Web responsive",
       "Page/Web design restraint audit",
+      "Page/Web interaction accessibility audit",
       "smoke:general-page-current -- --all-open",
       "--max-ready-count 0",
       "current-browser-smoke-summary.md",

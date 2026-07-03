@@ -193,6 +193,9 @@ Follow-up live-tab and runtime validation added two reviewer-facing gates:
   a QA Matrix row for low-distraction UI behavior: ordinary ready pages keep
   diagnostics collapsed and model context compact, source links stay capped,
   caution pages expand diagnostics, and the 430px layout stays clean.
+- **Page/Web interaction accessibility audit**: `audit:general-page-reader`
+  fails when visible Page/Web controls lack accessible names or when primary
+  buttons/tabs become undersized in the 430px side-panel viewport.
 
 The latest sanitized live-tab smoke showed 3 extracted caution pages and 1
 blocked/empty page across four open HTTP(S) tabs, with no dashboard or

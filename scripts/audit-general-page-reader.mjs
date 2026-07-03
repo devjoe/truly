@@ -806,17 +806,25 @@ async function auditResponsivePageWebLayout(side, screenshotName) {
         "#page-pane a",
         ".tab",
       ].join(",");
-      const interactiveOverflows = Array.from(document.querySelectorAll(interactiveSelectors))
+      const interactiveElements = Array.from(document.querySelectorAll(interactiveSelectors))
         .map((element) => {
           const rect = element.getBoundingClientRect();
           const textClipped = element.scrollWidth - element.clientWidth > 2 ||
             element.scrollHeight - element.clientHeight > 2;
           const viewportClipped = rect.left < -1 || rect.right > window.innerWidth + 1;
+          const accessibleName = norm(
+            element.getAttribute("aria-label") ||
+            element.getAttribute("title") ||
+            element.textContent ||
+            element.getAttribute("alt") ||
+            ""
+          );
           return {
             tag: element.tagName,
             id: element.id || "",
             className: String(element.className || ""),
             text: norm(element.textContent).slice(0, 120),
+            accessibleName: accessibleName.slice(0, 120),
             rect: { left: rect.left, right: rect.right, width: rect.width, height: rect.height },
             clientWidth: element.clientWidth,
             scrollWidth: element.scrollWidth,
@@ -826,7 +834,19 @@ async function auditResponsivePageWebLayout(side, screenshotName) {
             viewportClipped,
           };
         })
-        .filter((item) => item.rect.width > 0 && item.rect.height > 0 && (item.textClipped || item.viewportClipped));
+        .filter((item) => item.rect.width > 0 && item.rect.height > 0);
+      const interactiveOverflows = interactiveElements
+        .filter((item) => item.textClipped || item.viewportClipped);
+      const unnamedInteractive = interactiveElements
+        .filter((item) => !item.accessibleName);
+      const undersizedControls = interactiveElements
+        .filter((item) => (
+          item.tag === "BUTTON" ||
+          /\btab\b/.test(item.className)
+        ) && (
+          item.rect.width < 28 ||
+          item.rect.height < 28
+        ));
       const visibleCardsOutsideViewport = Array.from(document.querySelectorAll("#page-pane .page-reader-card, #page-pane .page-reader-model-context, #page-pane .page-reader-advisor, #page-pane .page-reader-analysis"))
         .map((element) => {
           const rect = element.getBoundingClientRect();
@@ -843,6 +863,8 @@ async function auditResponsivePageWebLayout(side, screenshotName) {
         documentWidth: root.scrollWidth,
         horizontalOverflow: root.scrollWidth > window.innerWidth + 1,
         interactiveOverflows,
+        unnamedInteractive,
+        undersizedControls,
         visibleCardsOutsideViewport,
         pageText: norm(document.querySelector("#page-pane")?.innerText || "").slice(0, 2000),
       };
@@ -1134,6 +1156,12 @@ function assertAudit(result) {
   if ((result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) > 0) {
     errors.push(`Page/Web 430px layout renders cards outside viewport: ${result.success.responsive.visibleCardsOutsideViewport.map((item) => item.className || item.tag).join(", ")}`);
   }
+  if ((result.success.responsive?.unnamedInteractive?.length ?? 0) > 0) {
+    errors.push(`Page/Web interactive elements are missing accessible names: ${result.success.responsive.unnamedInteractive.map((item) => item.id || item.className || item.tag).join(", ")}`);
+  }
+  if ((result.success.responsive?.undersizedControls?.length ?? 0) > 0) {
+    errors.push(`Page/Web primary controls are too small at 430px: ${result.success.responsive.undersizedControls.map((item) => item.text || item.accessibleName || item.id || item.className || item.tag).join(", ")}`);
+  }
   if (!result.success.copy.hasTitle || !result.success.copy.hasUrl || !result.success.copy.hasExcerpt || result.success.copy.hasFullTail) {
     errors.push("copy metadata boundary failed");
   }
@@ -1292,13 +1320,16 @@ function designRestraint(result) {
   const responsiveClean = result.success.responsive?.horizontalOverflow === false &&
     (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
     (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0;
+  const interactionAccessible = (result.success.responsive?.unnamedInteractive?.length ?? 0) === 0 &&
+    (result.success.responsive?.undersizedControls?.length ?? 0) === 0;
   return {
-    pass: readyDiagnosticsCollapsed && readyModelCompact && sourceLinksCapped && cautionDiagnosticsExpanded && responsiveClean,
+    pass: readyDiagnosticsCollapsed && readyModelCompact && sourceLinksCapped && cautionDiagnosticsExpanded && responsiveClean && interactionAccessible,
     readyDiagnosticsCollapsed,
     readyModelCompact,
     sourceLinksCapped,
     cautionDiagnosticsExpanded,
     responsiveClean,
+    interactionAccessible,
   };
 }
 
@@ -1349,7 +1380,15 @@ function qaMatrixRows(result) {
         "; compactModel=" + restraint.readyModelCompact +
         "; sourceLinksCapped=" + restraint.sourceLinksCapped +
         "; cautionExpanded=" + restraint.cautionDiagnosticsExpanded +
-        "; responsiveClean=" + restraint.responsiveClean,
+        "; responsiveClean=" + restraint.responsiveClean +
+        "; interactionAccessible=" + restraint.interactionAccessible,
+    ],
+    [
+      "Page/Web interaction accessibility",
+      (result.success.responsive?.unnamedInteractive?.length ?? 0) === 0 &&
+        (result.success.responsive?.undersizedControls?.length ?? 0) === 0,
+      "unnamed=" + (result.success.responsive?.unnamedInteractive?.length ?? 0) +
+        "; undersizedControls=" + (result.success.responsive?.undersizedControls?.length ?? 0),
     ],
     [
       "Saved-session switching",
@@ -1438,7 +1477,8 @@ function writeSummary(result, errors) {
     `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
     `- Responsive Page/Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
-    `- Page/Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; compactModel=${restraint.readyModelCompact}; sourceLinksCapped=${restraint.sourceLinksCapped}; cautionExpanded=${restraint.cautionDiagnosticsExpanded}; responsiveClean=${restraint.responsiveClean}`,
+    `- Page/Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; compactModel=${restraint.readyModelCompact}; sourceLinksCapped=${restraint.sourceLinksCapped}; cautionExpanded=${restraint.cautionDiagnosticsExpanded}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
+    `- Page/Web interaction accessibility: unnamed=${result.success.responsive?.unnamedInteractive?.length ?? "(missing)"}; undersizedControls=${result.success.responsive?.undersizedControls?.length ?? "(missing)"}`,
     `- Saved-page switcher: ${(result.success.switcher?.display?.sessionCount || 0)} sessions / activation restored=${result.success.switcher?.activated?.selectionDisabled === false}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
     `- Current-region target: ${result.success.pointTarget?.targetKind || "(missing)"} / ${result.success.pointTarget?.advisorStatus || "(missing)"}`,
