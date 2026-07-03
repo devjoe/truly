@@ -8,6 +8,32 @@ import process from "node:process";
 const DEFAULT_CDP_PORT = 9222;
 const DEFAULT_TIMEOUT_MS = 20_000;
 const OUTPUT_ROOT = "tmp/general-page-product-quality";
+const PUBLIC_SUMMARY_FORBIDDEN_KEYS = new Set([
+  "url",
+  "finalUrl",
+  "title",
+  "excerpt",
+  "preview",
+  "mainText",
+  "textContent",
+  "html",
+  "rawHtml",
+  "sourceHtml",
+  "screenshot",
+  "dataUrl",
+]);
+const PUBLIC_SUMMARY_FORBIDDEN_STRING_PATTERNS = [
+  /https?:\/\//i,
+  /<!doctype/i,
+  /<html/i,
+];
+
+if (isDirectRun()) {
+  main().catch((error) => {
+    console.error(error?.stack || String(error));
+    process.exit(1);
+  });
+}
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
@@ -81,14 +107,21 @@ function parseArgs(argv) {
     maxReadyCount: optionalNumericArg(argv, "--max-ready-count", { min: 0, max: 30 }),
     allOpen: argv.includes("--all-open"),
     urlPattern: stringArg(argv, "--url-pattern"),
-    category: stringArg(argv, "--category") ?? "current-browser-smoke",
-    pageType: stringArg(argv, "--page-type") ?? "unknown",
+    category: safeLabelArg(argv, "--category", "current-browser-smoke"),
+    pageType: safeLabelArg(argv, "--page-type", "unknown"),
   };
 }
 
 function stringArg(argv, name) {
   const index = argv.indexOf(name);
   return index >= 0 ? argv[index + 1] : undefined;
+}
+
+function safeLabelArg(argv, name, fallback) {
+  const value = stringArg(argv, name) ?? fallback;
+  if (!/^[a-z0-9._:-]{1,80}$/i.test(value))
+    throw new Error(`${name} must be a short public-safe label using letters, numbers, dot, underscore, colon, or dash.`);
+  return value;
 }
 
 function optionalNumericArg(argv, name, { min, max }) {
@@ -268,8 +301,29 @@ function safeHost(url) {
 }
 
 function writeSmokeSummary(summary, args) {
+  assertPublicSmokeSummary(summary);
   fs.writeFileSync(summary.artifact.summaryJsonPath, `${JSON.stringify(summary, null, 2)}\n`);
   fs.writeFileSync(summary.artifact.summaryMarkdownPath, renderSmokeSummaryMarkdown(summary, args));
+}
+
+function assertPublicSmokeSummary(value, pathLabel = "summary") {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertPublicSmokeSummary(item, `${pathLabel}[${index}]`));
+    return;
+  }
+  if (value && typeof value === "object") {
+    for (const [key, nested] of Object.entries(value)) {
+      if (PUBLIC_SUMMARY_FORBIDDEN_KEYS.has(key))
+        throw new Error(`Public smoke summary must not include private field ${pathLabel}.${key}`);
+      assertPublicSmokeSummary(nested, `${pathLabel}.${key}`);
+    }
+    return;
+  }
+  if (typeof value !== "string") return;
+  for (const pattern of PUBLIC_SUMMARY_FORBIDDEN_STRING_PATTERNS) {
+    if (pattern.test(value))
+      throw new Error(`Public smoke summary must not include private-looking string at ${pathLabel}`);
+  }
 }
 
 function renderSmokeSummaryMarkdown(summary, args) {
@@ -334,7 +388,12 @@ function formatExtraction(extraction) {
   return `${method}/${status}${warnings}`;
 }
 
-main().catch((error) => {
-  console.error(error?.stack || String(error));
-  process.exit(1);
-});
+function isDirectRun() {
+  return process.argv[1] && import.meta.url === new URL(process.argv[1], "file:").href;
+}
+
+export {
+  assertPublicSmokeSummary,
+  parseArgs as parseCurrentBrowserSmokeArgs,
+  renderSmokeSummaryMarkdown,
+};

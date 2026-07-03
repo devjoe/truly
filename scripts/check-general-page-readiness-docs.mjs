@@ -20,6 +20,9 @@ const REQUIRED_SNIPPETS = [
       "Uploadable: no",
       "current-browser-smoke-summary.md",
       "omit real URLs",
+      "rejects unsafe summary fields",
+      "`mainText`",
+      "`http(s)` strings",
     ],
   },
   {
