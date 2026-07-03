@@ -60,9 +60,9 @@ npm run cws:package:local-smoke
 - `npm run cws:package`: currently stops before packaging because `codex/general-page-reader-contract` has no configured upstream. This is expected until the branch is pushed or an upstream remote branch is configured; no uploadable package artifact was produced by this attempt.
 - `npm run cws:package:local-smoke`: available for pre-push ZIP creation, package-boundary audit, and `cws:preflight`. Its artifacts live under `artifacts/cws-local-smoke/`, are explicitly non-uploadable, and do not satisfy the upstream-sync or release-tag upload gates.
 
-## Latest Local Verification
+## Recent Local Verification Evidence
 
-Run on 2026-07-03 from this worktree after the non-uploadable local-smoke package path was added:
+Representative runs from this worktree on 2026-07-03, after the non-uploadable local-smoke package path was added. Re-run the Reviewer Gate Checklist from the current HEAD before merge or upload:
 
 ```bash
 npm run check:public
