@@ -144,6 +144,14 @@ Results:
   ask reviewers to inspect Page/Web current-page reading, optional all-sites
   access, screenshot-assisted recovery, user confirmation, visible preview,
   vision-gated use, session-only handling, and absence from storage/logs.
+- `cws:review:local-limited-context` and the security half of
+  `release:review:local-limited-context` now include narrowly scoped runtime
+  source/test evidence for Page/Web screenshot handling, General Page all-sites
+  permission handling, model payload scoping, and session-only behavior. The CWS
+  prompt also includes the latest formal CWS package report when available, or
+  the latest explicitly non-uploadable local-smoke package report otherwise.
+  This lets advisory review validate release/privacy claims without requiring a
+  full repository read or exposing private `tmp/` review artifacts.
 - `audit:general-page-reader`: passed from clean HEAD after the supply-chain
   hardening commit. Expected and live build IDs matched
   `1783103572127-f5bb5e8`; QA matrix rows passed for popup activation,

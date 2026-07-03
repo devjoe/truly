@@ -103,6 +103,10 @@ function buildContext(reviewKind) {
   const untrackedFiles = git(["ls-files", "--others", "--exclude-standard"], "").trim().split("\n").filter(Boolean);
   const untrackedTextFiles = untrackedFiles.filter(isPublicSafeTextFile);
   const latestCwsReport = reviewKind === "cws" ? latestFile("artifacts/cws", "cws-package-report.md") : null;
+  const latestCwsLocalSmokeReport = reviewKind === "cws"
+    ? latestFile("artifacts/cws-local-smoke", "cws-local-smoke-report.md")
+    : null;
+  const includeRuntimePrivacyEvidence = reviewKind === "security" || reviewKind === "cws";
 
   return {
     reviewKind,
@@ -139,12 +143,18 @@ function buildContext(reviewKind) {
       permissionJustification: reviewKind !== "functional" ? readText("docs/release/permission-justification.md", 30000) : "",
       privacyPolicy: reviewKind !== "functional" ? readText("docs/release/privacy-policy.md", 30000) : "",
       cwsPackageReport: latestCwsReport ? readFile(latestCwsReport, 20000) : "",
+      cwsLocalSmokeReport: latestCwsLocalSmokeReport ? readFile(latestCwsLocalSmokeReport, 20000) : "",
+      pageReadingRuntime: includeRuntimePrivacyEvidence ? readText("src/sidepanel/page-reading-runtime.ts", 90000) : "",
+      generalPageHostPermission: includeRuntimePrivacyEvidence ? readText("src/lib/general-page-host-permission.ts", 12000) : "",
+      generalPageModelIntegrationAudit: includeRuntimePrivacyEvidence ? readText("tests/audit/general-page-model-integration-audit.test.ts", 20000) : "",
+      pageReadingRuntimeTests: includeRuntimePrivacyEvidence ? readText("tests/unit/page-reading-runtime.test.ts", 70000) : "",
+      generalPageHostPermissionTests: includeRuntimePrivacyEvidence ? readText("tests/unit/general-page-host-permission.test.ts", 12000) : "",
     },
     limits: {
       diffCapChars: 70000,
       generatedAndPrivateMaterialExcluded: [
         "dist/",
-        "artifacts/ release binaries except selected CWS report",
+        "artifacts/ release binaries except selected CWS/package-smoke reports",
         ".env*",
         "node_modules/",
         "browser profiles",
