@@ -1274,6 +1274,28 @@ function escapeTableCell(value) {
   return String(value).replace(/\|/g, "\\|");
 }
 
+function designRestraint(result) {
+  const readyDiagnosticsCollapsed = result.success.ready.extractionDiagnosticsOpen === false &&
+    result.success.ready.modelContext?.diagnosticsOpen === false &&
+    result.success.ready.advisor?.diagnosticsOpen === false;
+  const readyModelCompact = /is-compact/.test(result.success.ready.modelContext?.className || "");
+  const sourceLinksCapped = (result.success.ready.sourceLinks?.length ?? 0) <= 6;
+  const cautionDiagnosticsExpanded = result.noisy.ready.extractionDiagnosticsOpen === true &&
+    result.noisy.ready.modelContext?.diagnosticsOpen === true &&
+    result.noisy.ready.advisor?.diagnosticsOpen === true;
+  const responsiveClean = result.success.responsive?.horizontalOverflow === false &&
+    (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
+    (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0;
+  return {
+    pass: readyDiagnosticsCollapsed && readyModelCompact && sourceLinksCapped && cautionDiagnosticsExpanded && responsiveClean,
+    readyDiagnosticsCollapsed,
+    readyModelCompact,
+    sourceLinksCapped,
+    cautionDiagnosticsExpanded,
+    responsiveClean,
+  };
+}
+
 function qaMatrixRows(result) {
   const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
@@ -1281,6 +1303,7 @@ function qaMatrixRows(result) {
   const noisyUse = noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
   const candidateDecision = candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
   const candidateUse = candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  const restraint = designRestraint(result);
   return [
     [
       "Popup activation",
@@ -1312,6 +1335,15 @@ function qaMatrixRows(result) {
       "430px horizontalOverflow=" + result.success.responsive?.horizontalOverflow +
         "; clippedInteractive=" + (result.success.responsive?.interactiveOverflows?.length ?? 0) +
         "; offscreenCards=" + (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0),
+    ],
+    [
+      "Page/Web design restraint",
+      restraint.pass,
+      "readyCollapsed=" + restraint.readyDiagnosticsCollapsed +
+        "; compactModel=" + restraint.readyModelCompact +
+        "; sourceLinksCapped=" + restraint.sourceLinksCapped +
+        "; cautionExpanded=" + restraint.cautionDiagnosticsExpanded +
+        "; responsiveClean=" + restraint.responsiveClean,
     ],
     [
       "Saved-session switching",
@@ -1368,6 +1400,7 @@ function qaMatrixRows(result) {
 }
 
 function writeSummary(result, errors) {
+  const restraint = designRestraint(result);
   const lines = [
     "# General Page Reader CDP Audit",
     "",
@@ -1391,6 +1424,7 @@ function writeSummary(result, errors) {
     `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
     `- Responsive Page/Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
+    `- Page/Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; compactModel=${restraint.readyModelCompact}; sourceLinksCapped=${restraint.sourceLinksCapped}; cautionExpanded=${restraint.cautionDiagnosticsExpanded}; responsiveClean=${restraint.responsiveClean}`,
     `- Saved-page switcher: ${(result.success.switcher?.display?.sessionCount || 0)} sessions / activation restored=${result.success.switcher?.activated?.selectionDisabled === false}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
     `- Current-region target: ${result.success.pointTarget?.targetKind || "(missing)"} / ${result.success.pointTarget?.advisorStatus || "(missing)"}`,

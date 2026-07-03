@@ -504,9 +504,9 @@ artifacts. It should cover:
 - Add browser QA against a small manually selected page matrix. The
   `audit:general-page-reader` CDP report now writes a QA Matrix section covering
   popup activation, ordinary article reads, model brief generation, saved-tab
-  switching, 430px Page/Web responsive overflow, selection targeting,
-  current-region targeting, URL stale handling, noisy fallback caution,
-  candidate block recovery, and no-grant guidance.
+  switching, 430px Page/Web responsive overflow, Page/Web design restraint,
+  selection targeting, current-region targeting, URL stale handling, noisy
+  fallback caution, candidate block recovery, and no-grant guidance.
 - Keep Page/Web diagnostics visible but compact. Extraction metadata,
   model-context rows, and parser-advisor rows use progressive disclosure by
   default, expanding automatically for caution, blocked, error, overview-only,

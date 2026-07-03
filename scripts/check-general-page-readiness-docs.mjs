@@ -7,6 +7,7 @@ const REQUIRED_SNIPPETS = [
     path: "docs/plans/general-page-reader-merge-readiness.md",
     snippets: [
       "430px Page/Web responsive overflow",
+      "Page/Web design restraint",
       "smoke:general-page-current -- --all-open",
       "P24 dashboard/data-surface",
       "Real-web observation and 200-target live-DOM product-quality reviews stay under `tmp/` or private repos.",
@@ -16,6 +17,7 @@ const REQUIRED_SNIPPETS = [
     path: "docs/plans/general-page-reader-fable5-validation.md",
     snippets: [
       "430px Page/Web responsive",
+      "Page/Web design restraint audit",
       "smoke:general-page-current -- --all-open",
       "P24 `semantic-main-dashboard-table` / `semantic-main-short-leaderboard`",
       "--source cdp",
