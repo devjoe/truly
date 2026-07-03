@@ -54,8 +54,8 @@ service.
 
 For Page/Web reading, Truly normally uses the one-time page access granted when
 you click the toolbar action. If you explicitly enable General Page all-sites
-access in Settings, the side panel can read the current page on supported
-websites when you press a read/analyze action. This opt-in does not enable
+access in Settings, the side panel can read the current page on ordinary HTTP/HTTPS sites you visit
+when you press a read/analyze action. This opt-in does not enable
 background crawling or persistent full-page history.
 
 Page/Web screenshot-assisted recovery is off by default and not automatic. If

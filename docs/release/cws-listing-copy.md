@@ -186,7 +186,8 @@ facts intact:
   surface.
 - Page/Web normally uses one-time toolbar access. If the user explicitly enables
   General Page all-sites access in Settings, the side panel can read the current
-  page on supported websites when the user presses a read/analyze action; this
+  page on ordinary HTTP/HTTPS sites the user visits when the user presses a
+  read/analyze action; this
   does not enable background crawling or persistent full-page history.
 - Page/Web screenshot-assisted recovery can process a visible-tab screenshot
   only when text extraction is insufficient, the selected model source supports

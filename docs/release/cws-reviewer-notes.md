@@ -61,8 +61,8 @@ context and decide what to verify.
 9. To review Page/Web, open an ordinary public web page, click the Truly toolbar
    action / popup to grant current-tab access, then use the Page/Web side-panel
    reader. The Settings all-sites opt-in can also be enabled for reviewers who
-   want the side panel read action to work across sites without repeating the
-   toolbar activation on each site.
+   want the side panel read action to work on ordinary HTTP/HTTPS sites they visit
+   without repeating the toolbar activation on each site.
 10. Optional: after Page/Web has read the active page, use Alt+Shift+R to test
    the user-triggered current-region command for the paragraph or region near
    the pointer.
