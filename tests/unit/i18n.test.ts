@@ -57,6 +57,16 @@ describe("i18n runtime layer", () => {
     expect(resolveLanguage("auto", () => "en")).toBe("en");
   });
 
+  it("keeps General Page unsupported-action copy aligned with shipped target flows", () => {
+    const zh = t("sidepanel.page.error.unsupportedAction", "zh-TW");
+    const en = t("sidepanel.page.error.unsupportedAction", "en");
+
+    expect(zh).toContain("使用選取文字");
+    expect(en).toContain("Use selection");
+    expect(en).not.toMatch(/selected-text analysis will come in a later version/i);
+    expect(zh).not.toContain("選取文字分析會在後續版本加入");
+  });
+
   it("has matching key sets in both catalogs (bidirectional — no half-translated key)", () => {
     // Rule 9: a key added to one language but not the other must fail here.
     // Bidirectional on purpose: zh-first development tends to add a `zh-TW` key
