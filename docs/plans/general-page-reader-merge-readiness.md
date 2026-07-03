@@ -157,6 +157,30 @@ Results:
   tile. `cws:preflight` uses the same shared asset evidence, so binary CWS
   assets can stay out of advisory-review prompt context while their required
   dimensions remain reviewable from the text report.
+- `cws:package:local-smoke`: passed from clean HEAD `234582f` after CWS asset
+  evidence was added to package reports. It wrote an explicitly non-uploadable
+  local package report at
+  `artifacts/cws-local-smoke/0.1.2-234582f2df0c-2026-07-03T20-05-51-672Z/cws-local-smoke-report.md`,
+  audited the generated ZIP, ran `check:public`, ran `cws:preflight`, recorded
+  build ID `1783109150798-234582f`, and listed all selected CWS screenshots and
+  promo tile as `status=ok` with expected/actual dimensions.
+- `audit:general-page-reader`: passed from clean HEAD `234582f`. Expected and
+  live build IDs matched `1783109150798-234582f`; QA matrix rows passed for
+  popup activation, ordinary article read, model brief generation, 430px
+  responsive layout, Page/Web design restraint, interaction accessibility,
+  saved-session switching, selection target, current-region shortcut, URL
+  identity/stale scrub, noisy fallback caution, candidate block recovery,
+  teaser-hub overview, and no-grant guidance. A Bencium-guided visual check of
+  `page-analysis-ready.png` confirmed the ready path remains compact,
+  low-noise, diagnostic-collapsed, and aligned with the existing Feed side-panel
+  style. Private CDP artifact:
+  `tmp/general-page-reader-audit-2026-07-03T20-06-29-787Z`.
+- `smoke:general-page-current --all-open --min-page-count 4 --max-error-count
+  0`: passed from clean HEAD against four currently open HTTP(S) tabs through
+  live CDP. Sanitized aggregate: 3 extracted caution pages, 1 blocked/empty
+  page, 0 fetch/runtime errors, threshold `pass`, and no pages marked ready;
+  public-safe summary:
+  `tmp/general-page-product-quality/current-browser-review-2026-07-03T20-03-11-542Z/current-browser-smoke-summary.md`.
 - `audit:general-page-reader`: passed from clean HEAD after the supply-chain
   hardening commit. Expected and live build IDs matched
   `1783103572127-f5bb5e8`; QA matrix rows passed for popup activation,
