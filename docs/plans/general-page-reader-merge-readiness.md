@@ -35,7 +35,11 @@ This document is the current public-safe readiness index for the General Page Re
 - F2 Facebook MAIN to isolated bridge nonce: explicitly out of scope for this pass per product direction.
 - F3 screenshot data URL format assertion: accepted in runtime. The Page/Web screenshot flow rejects non-image data URLs before preview and before sending.
 - F4 link scheme allowlist at normalization boundary: accepted in runtime. `normalizeHref` returns only `http:` and `https:` links for extracted page links and images, with contract coverage for `javascript:`, `data:`, `mailto:`, and `tel:` inputs.
-- F5 GitHub Actions SHA pinning: not required for Page/Web merge readiness. Treat as repository supply-chain hardening that needs a separate maintenance decision because it changes workflow-update operations and should be paired with Dependabot or an equivalent update path.
+- F5 GitHub Actions SHA pinning: completed as repository supply-chain
+  hardening. CI and artifact workflows pin third-party actions to commit SHAs,
+  Dependabot is configured for `npm` and `github-actions`, and
+  `check:public-boundary` rejects external workflow actions that are not pinned
+  to a 40-character commit SHA.
 
 ## Reviewer Gate Checklist
 
@@ -95,6 +99,9 @@ npm run cluster:general-page-quality-followups -- --review tmp/general-page-prod
 Results:
 
 - `check:public`: passed. This included public-boundary, release metadata, General Page readiness-docs check, General Page corpus, parser spikes, parser-advisor spike, model integration audit, typecheck, public contract tests, public unit tests, production build, and release bundle audit.
+- `check:public`: passed again from clean HEAD after the advisory-review and
+  supply-chain hardening commits. The production build recorded build ID
+  `1783103572127-f5bb5e8`, with no dirty suffix.
 - `cws:preflight`: passed for `0.1.1 Preview 11` / `v0.1.1-preview.11`.
 - `cws:package:local-smoke`: passed from a clean tree. It wrote an explicitly non-uploadable local package report under `artifacts/cws-local-smoke/`, audited the generated ZIP, ran `cws:preflight`, and recorded `Uploadable: no`.
 - `audit:general-page-reader`: passed after adding the 430px Page/Web responsive overflow gate. The QA matrix also records Page/Web design restraint and interaction accessibility: ready-path diagnostics stay collapsed, model context remains compact, source links stay capped, caution diagnostics expand, the 430px layout remains clean, and visible controls keep accessible names without undersized primary buttons/tabs. The no-grant guidance path now verifies that toolbar/all-sites guidance appears in the primary status detail without generic retry text or a duplicate error block. Clean-HEAD private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T15-31-42-943Z` (`1783092670025-fe854b6`).
@@ -117,13 +124,32 @@ Results:
 - `general-page-ui-readiness-review.md`: added after visual inspection of clean CDP screenshots. It records that ready pages stay quiet, caution/recovery pages expand diagnostics, source links remain capped, and Page/Web keeps the compact Feed-aligned side-panel style. The CDP screenshot set now includes `page-teaser-hub-overview.png` for the P26 overview-only path.
 - `review:general-page-product-quality --source cdp --limit 200`: reran against the balanced v2 private target list after the P25/P26 fixes. Sanitized aggregate: 199/200 extracted, 1 empty-or-blocked, 0 fetch errors, readiness `ready: 100`, `caution: 99`, `blocked: 1`; private artifact: `tmp/general-page-product-quality/review-2026-07-03T17-54-47-256Z`. The public-safe follow-up plan for that run reported 13 items: 4 `covered_by_existing_fixture` and 9 `needs_private_review`; it did not produce a new automatic fixture candidate without manual labels.
 - `review:general-page-product-quality --progress-every`: added after the 200-target CDP refresh exposed that long live-DOM runs were too quiet. Progress output is public-safe aggregate only (`completed/total`, extracted, empty-or-blocked, fetch errors, elapsed seconds, readiness counts) and was smoke-tested against synthetic local fixtures with `--progress-every 1`.
+- `release:review:local-limited-context -- --dry-run` and
+  `cws:review:local-limited-context -- --dry-run`: passed again after the
+  advisory-review focus update. The generated ignored prompts now explicitly
+  ask reviewers to inspect Page/Web current-page reading, optional all-sites
+  access, screenshot-assisted recovery, user confirmation, visible preview,
+  vision-gated use, session-only handling, and absence from storage/logs.
+- `audit:general-page-reader`: passed from clean HEAD after the supply-chain
+  hardening commit. Expected and live build IDs matched
+  `1783103572127-f5bb5e8`; QA matrix rows passed for popup activation,
+  ordinary read, model brief, 430px responsive layout, design restraint,
+  interaction accessibility, saved-session switching, selection,
+  current-region, URL stale handling, noisy fallback, candidate recovery,
+  teaser-hub overview, and no-grant guidance. Private CDP artifact:
+  `tmp/general-page-reader-audit-2026-07-03T18-33-55-219Z`.
+- `smoke:general-page-current --all-open --min-page-count 4 --max-error-count
+  0`: passed from clean HEAD against four currently open HTTP(S) tabs through
+  live CDP. Sanitized aggregate: 3 extracted caution pages, 1 blocked/empty
+  page, 0 fetch/runtime errors, threshold `pass`, and no pages marked ready;
+  public-safe summary:
+  `tmp/general-page-product-quality/current-browser-review-2026-07-03T18-35-20-959Z/current-browser-smoke-summary.md`.
 
 ## Non-Blocking Follow-Ups
 
 - Durable Page/Web history remains deferred to a separate privacy and storage review.
 - In-page selected-text buttons, context-menu entries, and click-hold current-region gestures remain separate UI and permission decisions.
 - Third-party parser runtime adoption remains gated by bundle size, MV3 CSP behavior, execution context, license notices, sanitized rendering, and release-bundle audits.
-- GitHub Actions SHA pinning remains a repository-level hardening task, not a General Page Reader runtime blocker.
 
 ## Current Conclusion
 
