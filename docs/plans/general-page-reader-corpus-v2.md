@@ -61,6 +61,7 @@ Synthetic fixtures can combine multiple patterns.
 | P21-breaking-ticker-lead | Breaking-news ticker and player boilerplate precede the article body | Unrelated ticker headlines contaminate the extracted body and model briefs | `ticker-lead-article` |
 | P22-dated-report-list | Dated report/list hub inside a content-like layout | Repeated dated list items pass as a ready single article | `dated-list-hub-ready-trap` |
 | P23-member-zone-teaser | Short member-zone teaser with real intro text | Truncated member content is rated complete/ready | `member-teaser-short` |
+| P24-dashboard-data-surface | Dashboard, leaderboard, or table surface in semantic `main` | Parser treats a data surface as a single complete article | `semantic-main-dashboard-table`, `semantic-main-short-leaderboard` |
 
 ### 3. Synthetic Fixtures
 
@@ -231,7 +232,9 @@ The current live-DOM review follow-up added focused regression pressure for:
 - JavaScript-disabled instruction pages that use semantic `main` landmarks but
   are dynamic app messages, not readable articles;
 - access-checking preview pages that include article metadata and preview text
-  but should remain paywall-like partial context until access is confirmed.
+  but should remain paywall-like partial context until access is confirmed;
+- dashboard, leaderboard, and metric/table pages that use semantic `main`
+  landmarks but are data surfaces rather than complete articles.
 
 ## Private Real-World Evaluation Runner
 

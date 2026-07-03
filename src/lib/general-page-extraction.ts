@@ -590,6 +590,9 @@ function nonArticlePageWarnings(
   const linkCount = root.querySelectorAll("a[href]").length;
   const imageCount = root.querySelectorAll("img").length;
   const sectionCount = root.querySelectorAll("section").length;
+  const tableRowCount = root.querySelectorAll("tr, [role=\"row\"]").length;
+  const controlCount = root.querySelectorAll("button, input, select, [role=\"button\"], [role=\"tab\"]").length;
+  const dashboardPanelCount = root.querySelectorAll("[class*=\"dashboard\" i], [class*=\"leaderboard\" i], [class*=\"metric\" i], [class*=\"panel\" i], [class*=\"score\" i], [data-testid*=\"panel\" i]").length;
   const linkDensity = linkedTextLength(root) / Math.max(text.length, 1);
   const documentArticleCount = documentRef.querySelectorAll("article").length;
   const documentParagraphCount = documentRef.querySelectorAll("p").length;
@@ -615,6 +618,21 @@ function nonArticlePageWarnings(
     imageCount,
     sectionCount,
     linkDensity,
+  })) {
+    return ["large-navigation-noise"];
+  }
+
+  if (isLikelyDataDashboardRoot({
+    rootIsArticle,
+    hasArticleMeta,
+    textLength: text.length,
+    paragraphCount,
+    listItemCount,
+    linkCount,
+    tableRowCount,
+    controlCount,
+    dashboardPanelCount,
+    lowerSignals,
   })) {
     return ["large-navigation-noise"];
   }
@@ -778,6 +796,48 @@ function isLikelyStructuredIndexOrFeedRoot(metrics: {
   }
 
   return false;
+}
+
+function isLikelyDataDashboardRoot(metrics: {
+  rootIsArticle: boolean;
+  hasArticleMeta: boolean;
+  textLength: number;
+  paragraphCount: number;
+  listItemCount: number;
+  linkCount: number;
+  tableRowCount: number;
+  controlCount: number;
+  dashboardPanelCount: number;
+  lowerSignals: string;
+}): boolean {
+  if (metrics.rootIsArticle || metrics.hasArticleMeta)
+    return false;
+  if (metrics.paragraphCount > 14)
+    return false;
+  const hasDashboardSignal = /\b(?:dashboard|leaderboard|ranking|rankings|metrics?|overview|scoreboard|time range|filter|filters|query|chart|panel|table)\b/.test(metrics.lowerSignals);
+  if (!hasDashboardSignal)
+    return false;
+
+  const explicitLeaderboard = /\b(?:leaderboard|ranking|rankings|scoreboard)\b/.test(metrics.lowerSignals);
+  const shortLeaderboardShell = metrics.textLength >= 180 &&
+    metrics.textLength < 600 &&
+    explicitLeaderboard &&
+    metrics.paragraphCount <= 6 &&
+    (metrics.linkCount >= 3 || metrics.controlCount >= 2 || metrics.listItemCount >= 4 || metrics.tableRowCount >= 3) &&
+    /\b(?:loading leaderboard|compare models|users|organizations|how to benchmark|powered by|rankings for)\b/.test(metrics.lowerSignals);
+
+  if (shortLeaderboardShell)
+    return true;
+  if (metrics.textLength < 600)
+    return false;
+
+  const tableLike = metrics.tableRowCount >= 6;
+  const panelLike = metrics.dashboardPanelCount >= 4;
+  const controlHeavy = metrics.controlCount >= 6 && (metrics.tableRowCount >= 3 || metrics.dashboardPanelCount >= 2);
+  const listLikeLeaderboard = metrics.listItemCount >= 8 && /\b(?:leaderboard|ranking|rankings|scoreboard)\b/.test(metrics.lowerSignals);
+  const sparseProse = metrics.paragraphCount <= 8 && metrics.linkCount >= 4 && /\b(?:dashboard|metrics?|overview)\b/.test(metrics.lowerSignals);
+
+  return tableLike || panelLike || controlHeavy || listLikeLeaderboard || sparseProse;
 }
 
 function isLikelyDocumentationArticle(lowerSignals: string, text: string, paragraphCount: number): boolean {

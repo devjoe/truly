@@ -578,10 +578,18 @@ For a quick private smoke against the page currently open in Chrome, run:
 npm run smoke:general-page-current -- --page-type news-article
 ```
 
-This command selects the visible HTTP(S) CDP page, writes a private one-target
-manifest under `tmp/general-page-product-quality/`, runs the live-DOM review
-harness, and prints only a sanitized summary. The full URL, extracted previews,
-and review HTML remain in `tmp/` and must not be committed.
+Add `--url-pattern <regex>` when multiple HTTP(S) tabs are open and a specific
+page should be selected. Add `--all-open --limit <n>` to smoke several open
+HTTP(S) tabs in one run:
+
+```bash
+npm run smoke:general-page-current -- --all-open --limit 4 --page-type open-tab
+```
+
+The command writes a private target manifest under
+`tmp/general-page-product-quality/`, runs the live-DOM review harness, and
+prints only a sanitized summary. The full URL, extracted previews, and review
+HTML remain in `tmp/` and must not be committed.
 
 ## Resolved Preview Decisions
 

@@ -576,6 +576,34 @@
       }
     },
     {
+      "id": "semantic-main-dashboard-table",
+      "file": "semantic-main-dashboard-table.html",
+      "url": "https://metrics.example.test/d/overview",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P02-main-role-without-article", "P05-list-or-index-page", "P24-dashboard-data-surface"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["Inference Overview Dashboard Fixture", "data surface rather than a single complete article"],
+        "excludes": [],
+        "status": "partial"
+      }
+    },
+    {
+      "id": "semantic-main-short-leaderboard",
+      "file": "semantic-main-short-leaderboard.html",
+      "url": "https://arena.example.test/leaderboard",
+      "locale": "en",
+      "pageType": "list-index",
+      "patterns": ["P02-main-role-without-article", "P05-list-or-index-page", "P24-dashboard-data-surface"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["LLM Leaderboard", "Loading leaderboard snapshot"],
+        "excludes": [],
+        "status": "partial"
+      }
+    },
+    {
       "id": "article-source-link-noise",
       "file": "article-source-link-noise.html",
       "url": "https://news.example.test/research/source-link-noise",

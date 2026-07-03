@@ -11,19 +11,19 @@ const OUTPUT_ROOT = "tmp/general-page-product-quality";
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const page = await selectCurrentPage(args);
-  if (!page)
+  const pages = await selectPages(args);
+  if (pages.length === 0)
     throw new Error("No reviewable http(s) page is visible in the Chrome CDP session.");
 
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const targetPath = path.join(OUTPUT_ROOT, `current-browser-target-${stamp}.json`);
   const outputDir = path.join(OUTPUT_ROOT, `current-browser-review-${stamp}`);
   fs.mkdirSync(OUTPUT_ROOT, { recursive: true });
-  fs.writeFileSync(targetPath, `${JSON.stringify([{
+  fs.writeFileSync(targetPath, `${JSON.stringify(pages.map((page) => ({
     url: page.url,
     category: args.category,
     pageType: args.pageType,
-  }], null, 2)}\n`);
+  })), null, 2)}\n`);
 
   const result = spawnSync(process.execPath, [
     "scripts/review-general-page-product-quality.mjs",
@@ -31,8 +31,8 @@ async function main() {
     "--allow-network",
     "--source", "cdp",
     "--cdp-port", String(args.cdpPort),
-    "--limit", "1",
-    "--concurrency", "1",
+    "--limit", String(pages.length),
+    "--concurrency", String(Math.min(args.concurrency, pages.length)),
     "--timeout-ms", String(args.timeoutMs),
     "--output-dir", outputDir,
   ], {
@@ -43,35 +43,19 @@ async function main() {
     process.exit(result.status ?? 1);
 
   const report = JSON.parse(fs.readFileSync(path.join(outputDir, "review.json"), "utf8"));
-  const item = report.results[0] ?? {};
+  const safePages = pages.map((page) => ({
+    titleLength: page.title.length,
+    host: safeHost(page.url),
+  }));
   const sanitized = {
-    selectedPage: {
-      titleLength: page.title.length,
-      host: safeHost(page.url),
-    },
+    selectedPages: safePages,
     artifact: {
       targetPath,
       outputDir,
     },
     sourceMode: report.input?.sourceMode,
     aggregate: report.aggregate,
-    result: {
-      ok: item.ok,
-      category: item.category,
-      pageType: item.pageType,
-      textLength: item.surface?.textLength,
-      extraction: item.surface?.extraction,
-      linkCount: item.surface?.linkCount,
-      imageCount: item.surface?.imageCount,
-      modelReadiness: item.modelContext?.modelReadiness,
-      modelEligible: item.modelContext?.modelEligible,
-      qualityIssues: item.modelContext?.qualityIssues,
-      modelTextLength: item.modelContext?.textLength,
-      modelLinkCount: item.modelContext?.links?.length,
-      imageAltCount: item.modelContext?.imageAltText?.length,
-      suggestedVerdict: item.autoReview?.suggestedVerdict,
-      issueTags: item.autoReview?.issueTags,
-    },
+    results: report.results.map((item, index) => sanitizedResult(item, safePages[index])),
   };
   console.log("general-page current-browser smoke summary");
   console.log(JSON.stringify(sanitized, null, 2));
@@ -81,6 +65,9 @@ function parseArgs(argv) {
   return {
     cdpPort: numericArg(argv, "--cdp-port", DEFAULT_CDP_PORT, { min: 1, max: 65535 }),
     timeoutMs: numericArg(argv, "--timeout-ms", DEFAULT_TIMEOUT_MS, { min: 1000, max: 60000 }),
+    concurrency: numericArg(argv, "--concurrency", 2, { min: 1, max: 8 }),
+    limit: numericArg(argv, "--limit", 6, { min: 1, max: 30 }),
+    allOpen: argv.includes("--all-open"),
     urlPattern: stringArg(argv, "--url-pattern"),
     category: stringArg(argv, "--category") ?? "current-browser-smoke",
     pageType: stringArg(argv, "--page-type") ?? "unknown",
@@ -102,7 +89,7 @@ function numericArg(argv, name, fallback, { min, max }) {
   return value;
 }
 
-async function selectCurrentPage(args) {
+async function selectPages(args) {
   const targets = await fetchJson(`http://127.0.0.1:${args.cdpPort}/json`);
   const pages = targets
     .filter((target) =>
@@ -118,14 +105,64 @@ async function selectCurrentPage(args) {
     }));
 
   const pattern = args.urlPattern ? new RegExp(args.urlPattern) : undefined;
-  if (pattern) return pages.find((page) => pattern.test(page.url) || pattern.test(page.title));
+  const matchingPages = pattern
+    ? pages.filter((page) => pattern.test(page.url) || pattern.test(page.title))
+    : pages;
+  if (args.allOpen)
+    return dedupePages(matchingPages).slice(0, args.limit);
 
   const inspected = [];
-  for (const page of pages) {
+  for (const page of matchingPages) {
     const state = await evaluatePageState(page.webSocketDebuggerUrl).catch(() => null);
     inspected.push({ ...page, state });
   }
-  return inspected.find((page) => page.state?.visibilityState === "visible") ?? pages[0];
+  const selected = inspected.find((page) => page.state?.visibilityState === "visible") ?? inspected[0] ?? matchingPages[0];
+  return selected ? [selected] : [];
+}
+
+function dedupePages(pages) {
+  const seen = new Set();
+  const unique = [];
+  for (const page of pages) {
+    const key = canonicalPageKey(page.url);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    unique.push(page);
+  }
+  return unique;
+}
+
+function canonicalPageKey(url) {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    parsed.searchParams.sort();
+    return parsed.href;
+  } catch {
+    return url;
+  }
+}
+
+function sanitizedResult(item, page) {
+  return {
+    host: page?.host ?? safeHost(item.url),
+    ok: item.ok,
+    category: item.category,
+    pageType: item.pageType,
+    textLength: item.surface?.textLength,
+    extraction: item.surface?.extraction,
+    linkCount: item.surface?.linkCount,
+    imageCount: item.surface?.imageCount,
+    modelReadiness: item.modelContext?.modelReadiness,
+    modelEligible: item.modelContext?.modelEligible,
+    qualityIssues: item.modelContext?.qualityIssues,
+    modelTextLength: item.modelContext?.textLength,
+    modelLinkCount: item.modelContext?.links?.length,
+    imageAltCount: item.modelContext?.imageAltText?.length,
+    suggestedVerdict: item.autoReview?.suggestedVerdict,
+    issueTags: item.autoReview?.issueTags,
+    errorKind: item.errorKind,
+  };
 }
 
 async function evaluatePageState(webSocketDebuggerUrl) {

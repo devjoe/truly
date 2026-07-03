@@ -55,6 +55,7 @@ npm run check:public
 npm run cws:preflight
 TRULY_EXTENSION_ID=idcjllbajkejmljompodofmmdmlbendl TRULY_AUDIT_AUTO_RELOAD=1 npm run audit:general-page-reader
 npm run smoke:general-page-current -- --url-pattern 'tw\.news\.yahoo\.com' --category current-browser-smoke --page-type news-article
+npm run smoke:general-page-current -- --all-open --limit 4 --category current-browser-open-tabs --page-type open-tab --timeout-ms 25000 --concurrency 2
 ```
 
 Results:
@@ -63,6 +64,7 @@ Results:
 - `cws:preflight`: passed for `0.1.1 Preview 11` / `v0.1.1-preview.11`.
 - `audit:general-page-reader`: passed after compact ready-path model-context hardening. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T13-51-48-064Z`.
 - `smoke:general-page-current`: passed against the currently open Yahoo Taiwan news page through live CDP. Sanitized result: extracted, semantic HTML, partial/caution, model eligible, 6 model-context links after filtering; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T13-58-47-423Z`.
+- `smoke:general-page-current --all-open`: passed against four open HTTP(S) tabs through live CDP after adding P24 dashboard/data-surface coverage. Sanitized result: 3 extracted / 1 blocked-or-empty, readiness `caution: 3`, `blocked: 1`, and no dashboard or leaderboard data surface marked ready/good; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T14-11-11-512Z`.
 
 ## Non-Blocking Follow-Ups
 

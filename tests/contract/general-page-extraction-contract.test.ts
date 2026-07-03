@@ -775,6 +775,38 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).toContain("collection page rather than one complete article");
   });
 
+  it("downgrades semantic dashboard tables as data surfaces instead of articles", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "semantic-main-dashboard-table.html",
+        "https://metrics.example.test/d/overview",
+      ),
+      url: "https://metrics.example.test/d/overview",
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("Inference Overview Dashboard Fixture");
+    expect(surface.mainText).toContain("data surface rather than a single complete article");
+  });
+
+  it("downgrades short leaderboard app shells as data surfaces instead of articles", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "semantic-main-short-leaderboard.html",
+        "https://arena.example.test/leaderboard",
+      ),
+      url: "https://arena.example.test/leaderboard",
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("LLM Leaderboard");
+    expect(surface.mainText).toContain("Loading leaderboard snapshot");
+  });
+
   it("selects an article-like fallback block over magazine recirculation rails", () => {
     const surface = extractGeneralPageSurface({
       document: jsdomFixtureDocument(
