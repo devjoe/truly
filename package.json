@@ -32,6 +32,7 @@
     "cws:review:local-repo-read": "node scripts/claude-release-review.mjs --kind cws --source local-repo-read",
     "cws:review:local-read": "node scripts/claude-release-review.mjs --kind cws --source local-read",
     "cws:package": "node scripts/cws-package.mjs",
+    "cws:package:local-smoke": "node scripts/cws-package-local-smoke.mjs",
     "cws:preflight": "node scripts/cws-preflight.mjs",
     "render:social-preview": "node scripts/render-social-preview.mjs",
     "render:cws-assets": "node scripts/render-cws-assets.mjs",

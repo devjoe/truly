@@ -13,7 +13,10 @@ const REQUIRED_SNIPPETS = [
       "P24 dashboard/data-surface",
       "Real-web observation and 200-target live-DOM product-quality reviews stay under `tmp/` or private repos.",
       "no configured upstream",
-      "no package artifact was produced",
+      "no uploadable package artifact was produced",
+      "cws:package:local-smoke",
+      "artifacts/cws-local-smoke/",
+      "explicitly non-uploadable",
     ],
   },
   {

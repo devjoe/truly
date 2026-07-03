@@ -328,6 +328,14 @@ collision only after verifying that the tag is the current commit. It writes a
 CWS-specific package report under `artifacts/cws/` with the extension ZIP path,
 SHA-256, commit, build ID, and submission input paths.
 
+`npm run cws:package:local-smoke` is a non-uploadable pre-push smoke path. It
+builds and audits a local extension ZIP under `artifacts/cws-local-smoke/`, runs
+`check:public` and `cws:preflight`, and writes a report that says
+`Uploadable: no`. It intentionally does not prove upstream sync or release-tag
+state, so its ZIP must never be uploaded to Chrome Web Store. Use the official
+`npm run cws:package` command after the branch is pushed and the release tag is
+at `HEAD`.
+
 `npm run cws:preflight` is intentionally deterministic and local. It verifies
 that the CWS docs mention the current version, version name, and recommended
 Preview tag, and that the selected CWS screenshots and promo tile exist at the
