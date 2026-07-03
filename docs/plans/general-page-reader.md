@@ -4,7 +4,9 @@ Status: implementation in progress; Slices 1-4, 6a selection, 6b
 current-region targeting, screenshot confirmation, live-DOM review mode, and
 session-only multi-page switching are implemented on this branch. The
 200-target product-quality gate passed its first external validation run (see
-`general-page-reader-fable5-validation.md`).
+`general-page-reader-fable5-validation.md`), and a follow-up 200-target
+live-DOM review has been summarized in
+`general-page-reader-quality-findings-2026-07-03-live-dom.md`.
 Last updated: 2026-07-03
 
 ## Decision

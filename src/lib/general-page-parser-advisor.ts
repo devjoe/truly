@@ -299,8 +299,14 @@ export function resolveGeneralPageParserEscalation(
     reasons.push("candidate_block_ambiguous");
 
   const uniqueReasons = uniqueRiskTags(reasons);
+  const failClosedReasons = new Set<GeneralPageParserAdvisorRiskTag>([
+    "dynamic_content",
+    "login_or_paywall",
+  ]);
   const allowedDecisions: GeneralPageParserAdvisorDecision[] = ["accept_current"];
-  if (selectableCandidateBlocks.length > 0)
+  const canPreferCandidate = selectableCandidateBlocks.length > 0 &&
+    !uniqueReasons.some((reason) => failClosedReasons.has(reason));
+  if (canPreferCandidate)
     allowedDecisions.push("prefer_candidate_block");
   allowedDecisions.push("downgrade_to_index_or_feed", "mark_blocked_or_empty", "request_user_selection");
   if (options.allowScreenshot)
@@ -511,6 +517,10 @@ export function buildRuleBasedGeneralPageParserAdvice(
     return advice("login_or_paywall", "mark_blocked_or_empty", "high", request.escalation.reasons, "Extraction appears blocked, empty, or login/paywall-like.");
   }
 
+  if (reasons.has("dynamic_content")) {
+    return advice("app_shell", "request_user_selection", "medium", uniqueRiskTags([...request.escalation.reasons, "needs_user_attention"]), "Current text appears to be a dynamic app shell or browser instruction page.");
+  }
+
   if (bestCandidate && request.escalation.allowedDecisions.includes("prefer_candidate_block") && request.modelReadiness !== "ready") {
     return {
       ...advice("article", "prefer_candidate_block", "medium", uniqueRiskTags([...request.escalation.reasons, "candidate_block_ambiguous"]), "A candidate block is denser and cleaner than the current fallback extraction."),
@@ -518,7 +528,7 @@ export function buildRuleBasedGeneralPageParserAdvice(
     };
   }
 
-  if (reasons.has("short_text") || reasons.has("dynamic_content")) {
+  if (reasons.has("short_text")) {
     return advice("unknown", "request_user_selection", "medium", uniqueRiskTags([...request.escalation.reasons, "needs_user_attention"]), "Current text is weak; user-selected text is the safest recovery path.");
   }
 

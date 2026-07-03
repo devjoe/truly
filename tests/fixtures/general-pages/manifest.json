@@ -629,6 +629,34 @@
         "excludes": [],
         "status": "partial"
       }
+    },
+    {
+      "id": "javascript-disabled-instruction",
+      "file": "javascript-disabled-instruction.html",
+      "url": "https://app.example.test/search",
+      "locale": "en",
+      "pageType": "bad-page",
+      "patterns": ["P14-client-rendered-empty-shell"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["Enable JavaScript to continue", "not a readable article"],
+        "excludes": ["actual workspace content"],
+        "status": "partial"
+      }
+    },
+    {
+      "id": "access-checking-preview",
+      "file": "access-checking-preview.html",
+      "url": "https://news.example.test/member/access-preview",
+      "locale": "en",
+      "pageType": "blocked",
+      "patterns": ["P11-paywall-or-membership", "P12-login-wall"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["preview view while checking access", "full article content will load after access is confirmed"],
+        "excludes": [],
+        "status": "partial"
+      }
     }
   ]
 }

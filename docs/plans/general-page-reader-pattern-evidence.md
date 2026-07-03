@@ -87,7 +87,7 @@ Evaluation v2 is complete enough for parser-candidate comparison when:
 
 - the target list contains 60-80 public observation targets;
 - the pattern catalog has 15-25 patterns;
-- the synthetic fixture corpus contains 25-35 public-safe fixtures;
+- the synthetic fixture corpus contains 25-56 public-safe fixtures;
 - every pattern has at least one synthetic fixture;
 - every fixture is explicitly `synthetic: true`;
 - every committed fixture URL and embedded URL uses `example.test` or a

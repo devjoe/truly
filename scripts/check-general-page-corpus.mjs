@@ -9,7 +9,7 @@ const MANIFEST_PATH = path.join(FIXTURE_DIR, "manifest.json");
 const CORPUS_DOC_PATH = "docs/plans/general-page-reader-corpus-v2.md";
 const EVIDENCE_DOC_PATH = "docs/plans/general-page-reader-pattern-evidence.md";
 const MIN_SYNTHETIC_FIXTURES = 25;
-const MAX_SYNTHETIC_FIXTURES = 48;
+const MAX_SYNTHETIC_FIXTURES = 56;
 const EXPECTED_OBSERVATION_TARGETS = 72;
 
 const manifest = JSON.parse(fs.readFileSync(MANIFEST_PATH, "utf8"));

@@ -57,6 +57,24 @@ const STRONG_PAYWALL_OR_LOGIN_PATTERNS = [
   /付費.{0,24}(全文|完整|閱讀)/,
 ] as const;
 
+const ACCESS_CHECKING_OR_PREVIEW_PATTERNS = [
+  /\bchecking (?:your )?(?:access|subscription|membership)\b/i,
+  /\bpreview (?:view|mode).{0,80}\b(?:checking|confirming|verifying).{0,80}\b(?:access|subscription|membership)\b/i,
+  /\bfull article content will load\b/i,
+  /\bcontinue reading after (?:access|subscription|membership) (?:is )?(?:confirmed|verified)\b/i,
+  /檢查.{0,24}(存取|訂閱|會員)/,
+  /(全文|完整文章).{0,24}(載入|顯示).{0,24}(確認|驗證)/,
+] as const;
+
+const DYNAMIC_CONTENT_PARTIAL_PATTERNS = [
+  /\b(?:enable|turn on)\s+javascript\b/i,
+  /\bjavascript (?:is )?(?:disabled|required)\b/i,
+  /\bthis (?:site|page|application).{0,80}\bjavascript\b/i,
+  /\bloading (?:article|page|story|workspace)\b/i,
+  /請.{0,12}(?:啟用|開啟).{0,12}JavaScript/i,
+  /JavaScript.{0,12}(?:停用|關閉|未啟用|未開啟)/i,
+] as const;
+
 const NON_READING_TEXT_SELECTORS = [
   "script",
   "style",
@@ -271,6 +289,10 @@ export function extractGeneralPageSurface(
 
   if (looksBlockedOrPaywalled(input.document, extractionSignalRoot, title, mainText, minMainTextLength)) {
     warnings.push("login-or-paywall-like");
+  }
+
+  if (looksDynamicContentPartial(title, mainText)) {
+    warnings.push("dynamic-content-partial");
   }
 
   if (!selectedTextIsUseful && mainText) {
@@ -866,6 +888,8 @@ function looksBlockedOrPaywalled(
 ): boolean {
   const root = extractionRoot ?? documentRef.body ?? documentRef.documentElement;
   const signals = `${title ?? ""} ${text}`;
+  if (ACCESS_CHECKING_OR_PREVIEW_PATTERNS.some((pattern) => pattern.test(signals)))
+    return true;
   const weakMatch = WEAK_PAYWALL_OR_LOGIN_PATTERNS.some((pattern) => pattern.test(signals));
   if (!weakMatch)
     return false;
@@ -884,6 +908,11 @@ function looksBlockedOrPaywalled(
   if (root.querySelector("input[type=\"password\"], input[type=\"email\"], form"))
     return true;
   return false;
+}
+
+function looksDynamicContentPartial(title: string | undefined, text: string): boolean {
+  const signals = `${title ?? ""} ${text}`;
+  return DYNAMIC_CONTENT_PARTIAL_PATTERNS.some((pattern) => pattern.test(signals));
 }
 
 function buildExcerpt(text: string): string | undefined {

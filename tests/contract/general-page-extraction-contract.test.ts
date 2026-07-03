@@ -469,6 +469,34 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).toContain("虛構的電池材料量產計畫");
   });
 
+  it("marks JavaScript instruction pages as dynamic partial content", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "javascript-disabled-instruction.html",
+        "https://app.example.test/search",
+      ),
+      url: "https://app.example.test/search",
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("dynamic-content-partial");
+    expect(surface.mainText).toContain("Enable JavaScript to continue");
+  });
+
+  it("marks access-checking preview pages as paywall-like partial content", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "access-checking-preview.html",
+        "https://news.example.test/member/access-preview",
+      ),
+      url: "https://news.example.test/member/access-preview",
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("login-or-paywall-like");
+    expect(surface.mainText).toContain("preview view while checking access");
+  });
+
   it("marks dense homepage-like roots as partial without article metadata", () => {
     const links = Array.from({ length: 120 }, (_, index) =>
       `<a href="/story-${index}">Synthetic story ${index}</a>`,

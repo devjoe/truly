@@ -170,9 +170,9 @@ observation only; do not archive or commit source content.
 
 ## Fixture Roadmap
 
-The current v4 fixture corpus contains 35 public-safe synthetic HTML fixtures.
+The current fixture corpus contains 49 public-safe synthetic HTML fixtures.
 It covers every pattern in this catalog at least once and stays within the
-planned 25-35 fixture range.
+planned 25-56 fixture range.
 
 The first v2 fixture batch added coverage for:
 
@@ -211,7 +211,7 @@ The v4 fixture batch added focused regression pressure for:
 - malformed mixed-language pages with uneven markup.
 
 The corpus moved beyond the original 35-fixture upper bound after the first
-200-target private product-quality reviews. The checker now allows up to 48
+200-target private product-quality reviews. The checker now allows up to 56
 fixtures so high-signal manual-review findings can be converted into public
 synthetic regressions without removing still-useful earlier coverage.
 
@@ -225,6 +225,13 @@ The v5 fixture batch added focused regression pressure for:
   pages rather than trusted as complete articles;
 - article footer links where source context should filter utility navigation,
   sharing, comment, newsletter, and recirculation links.
+
+The current live-DOM review follow-up added focused regression pressure for:
+
+- JavaScript-disabled instruction pages that use semantic `main` landmarks but
+  are dynamic app messages, not readable articles;
+- access-checking preview pages that include article metadata and preview text
+  but should remain paywall-like partial context until access is confirmed.
 
 ## Private Real-World Evaluation Runner
 

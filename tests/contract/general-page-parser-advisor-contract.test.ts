@@ -106,6 +106,40 @@ describe("General Page Parser Advisor contract", () => {
     expect(withScreenshot.allowedDecisions).toContain("request_screenshot_region");
   });
 
+  it("does not let dynamic app-shell pages recover through candidate blocks", () => {
+    const dom = new JSDOM(`<!doctype html>
+      <title>Enable JavaScript to Continue</title>
+      <main>
+        <h1>Enable JavaScript to continue</h1>
+        <p>This synthetic app shell says JavaScript is required before the readable article can render. It is long enough to trip candidate-block recovery if dynamic content is not fail-closed first.</p>
+        <p>Loading page content should not be treated as an article body just because it sits inside a semantic main landmark.</p>
+      </main>`, {
+      url: "https://app.example.test/search",
+    });
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: "https://app.example.test/search",
+    });
+    const context = buildGeneralPageModelContext(surface);
+    const request = buildGeneralPageParserAdvisorRequest(context, {
+      candidateBlocks: [{
+        id: "block-main",
+        label: "main",
+        role: "semantic-root",
+        textPreview: surface.mainText,
+        textLength: surface.mainText.length,
+        linkCount: 0,
+        imageCount: 0,
+      }],
+    });
+    const advice = buildRuleBasedGeneralPageParserAdvice(request);
+
+    expect(request.escalation.reasons).toContain("dynamic_content");
+    expect(request.escalation.allowedDecisions).not.toContain("prefer_candidate_block");
+    expect(advice.pageType).toBe("app_shell");
+    expect(advice.decision).toBe("request_user_selection");
+  });
+
   it("parses compact JSON advice and rejects prose or forbidden decisions", () => {
     const request = requestFixture();
     const good = parseGeneralPageParserAdvisorAdvice(JSON.stringify({
