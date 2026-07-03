@@ -94,10 +94,11 @@ Completed in the dev/test spike layer:
 
 Remaining adapter-boundary work:
 
-1. Add bundle/CSP/offscreen TODO gates as explicit acceptance criteria before
-   runtime adoption.
-2. Keep `src/lib/general-page-extraction.ts` as the runtime baseline until a
+1. Keep `src/lib/general-page-extraction.ts` as the runtime baseline until a
    separate runtime-integration decision accepts a parser dependency.
+2. Before any parser dependency moves into extension runtime, produce evidence
+   for the concrete gates below: bundle delta, MV3 CSP compatibility, execution
+   context, license notices, sanitized rendering, and release-package audit.
 
 ## Runtime Non-Goals For This Decision
 
@@ -114,9 +115,18 @@ A later parser-runtime decision must prove:
 
 - parser adapter output maps cleanly to `ReadingSurface`;
 - blocked/list/social/shell pages produce correct status/warnings;
-- bundle delta is acceptable in release artifacts;
-- MV3 CSP and execution context are verified;
-- license notices are handled;
-- fallback heuristic behavior remains available;
-- parser result rendering is text-first or sanitized;
-- current-region targeting remains independent.
+- bundle delta is acceptable in release artifacts, with before/after values from
+  `npm run build` and `npm run audit:release-bundle`;
+- MV3 CSP compatibility is verified against `src/manifest.json` and
+  `docs/release/mv3-compliance.md`;
+- execution context is explicit: content script only if the dependency is small
+  and CSP-safe, otherwise service worker or offscreen document with a documented
+  message boundary;
+- license notices are handled in `THIRD_PARTY_NOTICES.md` and release docs;
+- fallback heuristic behavior remains available and covered by
+  `npm run check:general-page`;
+- parser result rendering is text-first or sanitized before reaching the Side
+  Panel;
+- current-region targeting remains independent of whole-page parser choice;
+- `npm run check:public`, `npm run cws:preflight`, and, for runtime UI
+  changes, `npm run audit:general-page-reader` pass after integration.
