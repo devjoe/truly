@@ -107,12 +107,12 @@ Results:
 - `check:public`: passed again from clean HEAD after the advisory-review and
   supply-chain hardening commits. The production build recorded build ID
   `1783103572127-f5bb5e8`, with no dirty suffix.
-- `check:public`: passed for the dirty `0.1.2 Preview 12` working tree after
+- `check:public`: passed for clean HEAD `80a0e9a` after
   the CWS preview bump, privacy disclosure alignment, CWS checklist gate, and
   preflight guard update. The production build recorded build ID
-  `1783105172867-ed11944-dirty`; rerun after commit for clean-HEAD evidence.
+  `1783105704368-80a0e9a`, with no dirty suffix.
 - `cws:preflight`: passed for `0.1.2 Preview 12` / `v0.1.2-preview.12`.
-- `cws:package:local-smoke`: passed from a clean tree. It wrote an explicitly non-uploadable local package report under `artifacts/cws-local-smoke/`, audited the generated ZIP, ran `cws:preflight`, and recorded `Uploadable: no`.
+- `cws:package:local-smoke`: passed from clean HEAD `80a0e9a`. It wrote an explicitly non-uploadable local package report at `artifacts/cws-local-smoke/0.1.2-80a0e9a45df2-2026-07-03T19-08-43-110Z/cws-local-smoke-report.md`, audited the generated ZIP, ran `cws:preflight`, and recorded `Uploadable: no`.
 - `audit:general-page-reader`: passed after adding the 430px Page/Web responsive overflow gate. The QA matrix also records Page/Web design restraint and interaction accessibility: ready-path diagnostics stay collapsed, model context remains compact, source links stay capped, caution diagnostics expand, the 430px layout remains clean, and visible controls keep accessible names without undersized primary buttons/tabs. The no-grant guidance path now verifies that toolbar/all-sites guidance appears in the primary status detail without generic retry text or a duplicate error block. Clean-HEAD private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T15-31-42-943Z` (`1783092670025-fe854b6`).
 - `smoke:general-page-current`: passed against the currently open Yahoo Taiwan news page through live CDP. Sanitized result: extracted, semantic HTML, partial/caution, model eligible, 6 model-context links after filtering; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T13-58-47-423Z`.
 - `smoke:general-page-current --all-open --max-ready-count 0`: passed against four open HTTP(S) tabs through live CDP after adding P24 dashboard/data-surface coverage. Sanitized result: 3 extracted / 1 blocked-or-empty, readiness `caution: 3`, `blocked: 1`, threshold `readyCount: 0`, and no dashboard or leaderboard data surface marked ready/good; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T15-16-22-109Z`.
