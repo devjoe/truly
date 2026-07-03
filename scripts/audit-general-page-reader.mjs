@@ -1045,6 +1045,9 @@ async function auditNoGrantGuidance(extensionId, noGrantBase) {
       status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
       error: document.querySelector('#page-pane .page-reader-error')?.textContent?.trim(),
+      errorBlockPresent: Boolean(document.querySelector('#page-pane .page-reader-error')),
+      detailHasGuidance: /工具列圖示|toolbar icon/.test(document.querySelector('#page-pane .page-reader-status-detail')?.textContent || ''),
+      detailHasGenericRetry: /請重新讀取|Try again after the page finishes loading/.test(document.querySelector('#page-pane .page-reader-status-detail')?.textContent || ''),
       hasGuidance: /工具列圖示|toolbar icon/.test(document.querySelector('#page-pane')?.innerText || ''),
       hasAllSitesGuidance: /所有網站存取權|all-sites access/.test(document.querySelector('#page-pane')?.innerText || '')
     }))()`);
@@ -1254,6 +1257,9 @@ function assertAudit(result) {
   }
   if (!result.noGrant.hasGuidance) errors.push("no-grant sidepanel path did not show toolbar activation guidance");
   if (!result.noGrant.hasAllSitesGuidance) errors.push("no-grant sidepanel path did not mention all-sites settings access");
+  if (!result.noGrant.detailHasGuidance) errors.push("no-grant primary status detail did not show toolbar activation guidance");
+  if (result.noGrant.detailHasGenericRetry) errors.push("no-grant primary status detail still shows generic retry guidance");
+  if (result.noGrant.errorBlockPresent) errors.push("no-grant toolbar guidance is duplicated in a separate error block");
   for (const [label, pass, evidence] of qaMatrixRows(result)) {
     if (!pass) errors.push(`QA matrix failed: ${label}: ${evidence}`);
   }
@@ -1393,8 +1399,16 @@ function qaMatrixRows(result) {
     ],
     [
       "No-grant guidance",
-      result.noGrant.hasGuidance === true && result.noGrant.hasAllSitesGuidance === true,
-      "toolbarGuidance=" + result.noGrant.hasGuidance + "; allSitesGuidance=" + result.noGrant.hasAllSitesGuidance,
+      result.noGrant.hasGuidance === true &&
+        result.noGrant.hasAllSitesGuidance === true &&
+        result.noGrant.detailHasGuidance === true &&
+        result.noGrant.detailHasGenericRetry === false &&
+        result.noGrant.errorBlockPresent === false,
+      "toolbarGuidance=" + result.noGrant.hasGuidance +
+        "; allSitesGuidance=" + result.noGrant.hasAllSitesGuidance +
+        "; primaryDetail=" + result.noGrant.detailHasGuidance +
+        "; genericRetry=" + result.noGrant.detailHasGenericRetry +
+        "; duplicateErrorBlock=" + result.noGrant.errorBlockPresent,
     ],
   ];
 }
@@ -1440,6 +1454,7 @@ function writeSummary(result, errors) {
     `- Copy metadata title/url/excerpt: ${result.success.copy.hasTitle}/${result.success.copy.hasUrl}/${result.success.copy.hasExcerpt}`,
     `- No-grant guidance: ${result.noGrant.hasGuidance}`,
     `- No-grant all-sites settings guidance: ${result.noGrant.hasAllSitesGuidance}`,
+    `- No-grant primary status guidance: ${result.noGrant.detailHasGuidance}; genericRetry=${result.noGrant.detailHasGenericRetry}; duplicateErrorBlock=${result.noGrant.errorBlockPresent}`,
     "",
     "## Artifacts",
     "",
