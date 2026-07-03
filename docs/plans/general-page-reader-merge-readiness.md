@@ -12,7 +12,7 @@ This document is the current public-safe readiness index for the General Page Re
 - Page/Web model integration uses a single Tier B `GeneralPageBrief` request over the effective reading context, not the raw full DOM or hidden private artifacts.
 - Screenshot-assisted recovery is user-confirmed only, vision-gated, session-only, and never stored in `chrome.storage` or logs.
 - Multi-tab Page/Web sessions can be viewed and activated without implicitly switching the active Chrome tab.
-- Diagnostics remain inspectable for early users but are compact by default on ordinary ready pages.
+- Diagnostics remain inspectable for early users; ordinary ready pages keep model context as a compact one-line inspection row while caution/recovery states keep expanded diagnostics.
 
 ## Accepted Evaluation Scope
 
@@ -60,7 +60,7 @@ Results:
 
 - `check:public`: passed. This included public-boundary, release metadata, General Page corpus, parser spikes, parser-advisor spike, model integration audit, typecheck, public contract tests, public unit tests, production build, and release bundle audit.
 - `cws:preflight`: passed for `0.1.1 Preview 11` / `v0.1.1-preview.11`.
-- `audit:general-page-reader`: passed. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T13-43-20-055Z`.
+- `audit:general-page-reader`: passed after compact ready-path model-context hardening. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T13-51-48-064Z`.
 
 ## Non-Blocking Follow-Ups
 

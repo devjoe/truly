@@ -376,13 +376,14 @@ function modelContextHtml(
     [tr("sidepanel.page.model.target"), context.targetKind],
   ];
   const detailsOpen = context.modelReadiness !== "ready";
+  const compactReady = context.modelReadiness === "ready";
   return `
-    <section class="page-reader-model-context is-${context.modelReadiness}">
+    <section class="page-reader-model-context is-${context.modelReadiness}${compactReady ? " is-compact" : ""}">
       <div class="page-reader-model-context-header">
         <h3>${escapeHtml(tr("sidepanel.page.model.title"))}</h3>
         <span>${escapeHtml(statusText)}</span>
       </div>
-      <p>${escapeHtml(context.modelReadiness === "ready" ? tr("sidepanel.page.model.readyDetail") : reason)}</p>
+      ${compactReady ? "" : `<p>${escapeHtml(reason)}</p>`}
       <details class="page-reader-diagnostics"${detailsOpen ? " open" : ""}>
         <summary>${escapeHtml(tr("sidepanel.page.diagnostics.details"))}</summary>
         <dl>

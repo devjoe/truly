@@ -443,6 +443,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
             title: el.querySelector('h3')?.textContent?.trim(),
             status: el.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
             detail: el.querySelector('p')?.textContent?.trim(),
+            className: el.className,
             rows: [...el.querySelectorAll('dl div')].map((row) => ({
               label: row.querySelector('dt')?.textContent?.trim(),
               value: row.querySelector('dd')?.textContent?.trim()
@@ -1034,6 +1035,9 @@ function assertAudit(result) {
   if (result.success.ready.modelContext?.diagnosticsOpen !== false) {
     errors.push("successful read should keep model diagnostics collapsed by default");
   }
+  if (!/is-compact/.test(result.success.ready.modelContext?.className || "")) {
+    errors.push("successful read should render model context as a compact row");
+  }
   if (result.success.ready.advisor?.diagnosticsOpen !== false) {
     errors.push("successful read should keep advisor diagnostics collapsed by default");
   }
@@ -1101,6 +1105,9 @@ function assertAudit(result) {
   if (result.noisy.ready.modelContext?.diagnosticsOpen !== true) {
     errors.push("noisy fallback should expand model diagnostics");
   }
+  if (/is-compact/.test(result.noisy.ready.modelContext?.className || "")) {
+    errors.push("noisy fallback should not compact model context warnings");
+  }
   if (result.noisy.ready.advisor?.diagnosticsOpen !== true) {
     errors.push("noisy fallback should expand advisor diagnostics");
   }
@@ -1148,6 +1155,9 @@ function assertAudit(result) {
   }
   if (result.candidate.ready.modelContext?.diagnosticsOpen !== true) {
     errors.push("candidate block recovery should expand model diagnostics");
+  }
+  if (/is-compact/.test(result.candidate.ready.modelContext?.className || "")) {
+    errors.push("candidate block recovery should not compact model context warnings");
   }
   if (result.candidate.ready.advisor?.diagnosticsOpen !== true) {
     errors.push("candidate block recovery should expand advisor diagnostics");
@@ -1197,6 +1207,7 @@ function qaMatrixRows(result) {
         !result.success.ready.fullTailVisible &&
         result.success.ready.extractionDiagnosticsOpen === false &&
         result.success.ready.modelContext?.diagnosticsOpen === false &&
+        /is-compact/.test(result.success.ready.modelContext?.className || "") &&
         result.success.ready.advisor?.diagnosticsOpen === false &&
         (result.success.ready.sourceLinks?.length ?? 0) <= 6,
       "title=" + result.success.ready.title + "; links=" + (result.success.ready.sourceLinks?.length ?? 0) + "; diagnosticsCollapsed=" + (result.success.ready.extractionDiagnosticsOpen === false),

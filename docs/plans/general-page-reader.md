@@ -512,6 +512,9 @@ artifacts. It should cover:
   user-target-required, fallback, partial, or warning states. This preserves
   early quality inspection without making ordinary article reads feel like a
   developer console.
+- Keep successful ready-path model context as a compact, one-line inspection row
+  while preserving expanded diagnostics for caution, blocked, overview-only,
+  fallback, and candidate-recovery states.
 - Defer selected-text mini-actions for this preview. Selection analysis is
   available through the explicit Side Panel button; contextual in-page buttons
   or context-menu entries require a separate UI/permission decision.

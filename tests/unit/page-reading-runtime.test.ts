@@ -139,6 +139,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
     expect(pagePaneEl.textContent).toContain("模型脈絡");
     expect(pagePaneEl.textContent).toContain("可送模型（尚未送出）");
+    expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(true);
     expect(pagePaneEl.textContent).toContain("文字門檻");
     expect(pagePaneEl.textContent).toContain("來源連結");
     expect(pagePaneEl.textContent).toContain("Synthetic source");
@@ -260,6 +261,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("Reading context");
     expect(pagePaneEl.textContent).toContain("本地通過");
     expect(pagePaneEl.textContent).toContain("accept_current");
+    expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(true);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(false);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-advisor details")?.open).toBe(false);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(false);
@@ -373,6 +375,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("模型脈絡");
     expect(pagePaneEl.textContent).toContain("暫不送模型");
     expect(pagePaneEl.textContent).toContain("可讀文字低於目前門檻");
+    expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(false);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(true);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(true);
   });
@@ -426,6 +429,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("需改善抽取（尚未送出）");
     expect(pagePaneEl.textContent).toContain("目前使用 fallback 抽取");
     expect(pagePaneEl.textContent).toContain("偵測到大量導覽噪音");
+    expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(false);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(true);
     expect(pagePaneEl.textContent).toContain("Article source");
     expect(pagePaneEl.textContent).not.toContain("請至 Edge 官網下載");
