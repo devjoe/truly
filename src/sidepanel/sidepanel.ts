@@ -121,6 +121,12 @@ const pageReadingRuntime = createSidepanelPageReadingRuntime({
   getVisionSupported: () => generalPageVisionSupported,
 });
 
+if (new URLSearchParams(location.search).has("generalPageReaderAudit")) {
+  (globalThis as typeof globalThis & {
+    __trulyPageReadingRuntime?: typeof pageReadingRuntime;
+  }).__trulyPageReadingRuntime = pageReadingRuntime;
+}
+
 const postRuntimeController = createSidepanelPostRuntimeController({
   runtimeState,
   panelState,

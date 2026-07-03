@@ -533,11 +533,10 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     // Slice 6b: current-region hotkey flow. Simulate pointer movement over a
     // paragraph, then set the same session marker the SW command handler
     // writes; the panel consumes it and requests a point target.
-    const pointerTab = await side.evaluateJson(`(() => new Promise((resolveQuery) => {
-      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        resolveQuery({ id: tabs?.[0]?.id ?? null });
-      });
-    }))()`);
+    const pointerTab = await side.evaluateJson(`(() => globalThis.__trulyPageReadingRuntime?.auditState?.() || { activeTabId: null })()`);
+    if (typeof pointerTab.activeTabId !== "number") {
+      throw new Error("Unable to resolve synthetic article tab id for current-region audit");
+    }
     await article.evaluate(`(() => {
       const paragraph = document.querySelector('article p:nth-of-type(2)');
       const rect = paragraph.getBoundingClientRect();
@@ -548,7 +547,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       }));
       return undefined;
     })()`);
-    await side.evaluate(`chrome.storage.session.set({ pendingCurrentRegionRead: { tabId: ${JSON.stringify(pointerTab.id)}, ts: Date.now() } }); undefined`);
+    await side.evaluate(`chrome.storage.session.set({ pendingCurrentRegionRead: { tabId: ${JSON.stringify(pointerTab.activeTabId)}, ts: Date.now() } })`);
     await waitFor(side, `(() => {
       const model = document.querySelector('#page-pane .page-reader-model-context');
       const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
@@ -562,8 +561,14 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     });
     const pointTarget = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const model = pane?.querySelector('.page-reader-model-context');
       const advisor = pane?.querySelector('.page-reader-advisor');
+      const modelRows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
+        label: row.querySelector('dt')?.textContent?.trim(),
+        value: row.querySelector('dd')?.textContent?.trim()
+      }));
       return {
+        targetKind: modelRows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.value,
         advisorStatus: advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
       };
@@ -987,7 +992,7 @@ function writeSummary(result, errors) {
     `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
-    `- Current-region target: ${result.success.pointTarget?.advisorStatus || "(missing)"}`,
+    `- Current-region target: ${result.success.pointTarget?.targetKind || "(missing)"} / ${result.success.pointTarget?.advisorStatus || "(missing)"}`,
     `- Source links visible: ${result.success.ready.sourceLinks?.length || 0}`,
     `- Noisy fallback model context: ${result.noisy.ready.modelContext?.status || "(missing)"}`,
     `- Noisy fallback reading context: ${result.noisy.ready.advisor?.status || "(missing)"}`,

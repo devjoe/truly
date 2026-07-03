@@ -155,6 +155,7 @@ export interface SidepanelPageReadingRuntime {
   install(): void;
   requestReadCurrentPage(source?: PageActivationSource): Promise<void>;
   requestPointTarget(tabId: number): Promise<void>;
+  auditState(): { activeTabId: number | null };
   handlePageReadingResult(message: PageReadingResultMsg): void;
   handlePageReadingError(message: PageReadingErrorMsg): void;
 }
@@ -1539,6 +1540,7 @@ export function createSidepanelPageReadingRuntime({
     install,
     requestReadCurrentPage,
     requestPointTarget,
+    auditState: () => ({ activeTabId }),
     handlePageReadingResult,
     handlePageReadingError,
   };
