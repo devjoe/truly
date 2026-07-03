@@ -83,17 +83,14 @@ async function main() {
     },
     sourceMode: report.input?.sourceMode,
     aggregate: report.aggregate,
-    threshold: args.maxReadyCount === undefined ? undefined : {
-      maxReadyCount: args.maxReadyCount,
-      readyCount: readyCount(report),
-    },
+    threshold: evaluateSmokeThreshold(report, args),
     results: report.results.map((item, index) => sanitizedResult(item, safePages[index])),
   };
   writeSmokeSummary(sanitized, args);
   console.log("general-page current-browser smoke summary");
   console.log(JSON.stringify(sanitized, null, 2));
-  if (args.maxReadyCount !== undefined && readyCount(report) > args.maxReadyCount) {
-    console.error(`general-page current-browser smoke failed: readyCount=${readyCount(report)} > maxReadyCount=${args.maxReadyCount}`);
+  if (sanitized.threshold && !sanitized.threshold.pass) {
+    console.error(`general-page current-browser smoke failed: ${sanitized.threshold.failures.join("; ")}`);
     process.exit(1);
   }
 }
@@ -104,7 +101,13 @@ function parseArgs(argv) {
     timeoutMs: numericArg(argv, "--timeout-ms", DEFAULT_TIMEOUT_MS, { min: 1000, max: 60000 }),
     concurrency: numericArg(argv, "--concurrency", 2, { min: 1, max: 8 }),
     limit: numericArg(argv, "--limit", 6, { min: 1, max: 30 }),
+    minPageCount: optionalNumericArg(argv, "--min-page-count", { min: 1, max: 30 }),
     maxReadyCount: optionalNumericArg(argv, "--max-ready-count", { min: 0, max: 30 }),
+    maxErrorCount: optionalNumericArg(argv, "--max-error-count", { min: 0, max: 30 }),
+    maxEmptyOrBlockedCount: optionalNumericArg(argv, "--max-empty-or-blocked-count", { min: 0, max: 30 }),
+    failOnIssueTags: repeatedStringArg(argv, "--fail-on-issue-tag").flatMap((value) =>
+      value.split(",").map((tag) => tag.trim()).filter(Boolean)
+    ).map((tag) => safeIssueTag(tag, "--fail-on-issue-tag")),
     allOpen: argv.includes("--all-open"),
     urlPattern: stringArg(argv, "--url-pattern"),
     category: safeLabelArg(argv, "--category", "current-browser-smoke"),
@@ -114,13 +117,35 @@ function parseArgs(argv) {
 
 function stringArg(argv, name) {
   const index = argv.indexOf(name);
-  return index >= 0 ? argv[index + 1] : undefined;
+  if (index < 0) return undefined;
+  if (argv[index + 1] === undefined || argv[index + 1].startsWith("--"))
+    throw new Error(`${name} requires a value.`);
+  return argv[index + 1];
+}
+
+function repeatedStringArg(argv, name) {
+  const values = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === name && argv[index + 1] !== undefined) {
+      if (argv[index + 1].startsWith("--"))
+        throw new Error(`${name} requires a value.`);
+      values.push(argv[index + 1]);
+      index += 1;
+    }
+  }
+  return values;
 }
 
 function safeLabelArg(argv, name, fallback) {
   const value = stringArg(argv, name) ?? fallback;
   if (!/^[a-z0-9._:-]{1,80}$/i.test(value))
     throw new Error(`${name} must be a short public-safe label using letters, numbers, dot, underscore, colon, or dash.`);
+  return value;
+}
+
+function safeIssueTag(value, name) {
+  if (!/^[a-z0-9._:-]{1,120}$/i.test(value))
+    throw new Error(`${name} must use public-safe issue tags with letters, numbers, dot, underscore, colon, or dash.`);
   return value;
 }
 
@@ -146,6 +171,63 @@ function numericArg(argv, name, fallback, { min, max }) {
 
 function readyCount(report) {
   return report.results.filter((item) => item.modelContext?.modelReadiness === "ready").length;
+}
+
+function evaluateSmokeThreshold(report, args) {
+  const thresholds = {
+    minPageCount: args.minPageCount,
+    maxReadyCount: args.maxReadyCount,
+    maxErrorCount: args.maxErrorCount,
+    maxEmptyOrBlockedCount: args.maxEmptyOrBlockedCount,
+    failOnIssueTags: args.failOnIssueTags?.length ? args.failOnIssueTags : undefined,
+  };
+  const enabled = Object.values(thresholds).some((value) =>
+    Array.isArray(value) ? value.length > 0 : value !== undefined
+  );
+  if (!enabled) return undefined;
+
+  const issueTagHits = countIssueTagHits(report, thresholds.failOnIssueTags ?? []);
+  const pageCount = Array.isArray(report.results) ? report.results.length : 0;
+  const counts = {
+    pageCount,
+    readyCount: readyCount(report),
+    errorCount: report.aggregate?.errorCount ?? report.results.filter((item) => item.errorKind).length,
+    emptyOrBlockedCount: report.aggregate?.emptyOrBlockedCount ?? report.results.filter((item) => !item.ok && item.surface).length,
+    issueTagHits,
+  };
+  const failures = [];
+  if (thresholds.minPageCount !== undefined && counts.pageCount < thresholds.minPageCount)
+    failures.push(`pageCount=${counts.pageCount} < minPageCount=${thresholds.minPageCount}`);
+  if (thresholds.maxReadyCount !== undefined && counts.readyCount > thresholds.maxReadyCount)
+    failures.push(`readyCount=${counts.readyCount} > maxReadyCount=${thresholds.maxReadyCount}`);
+  if (thresholds.maxErrorCount !== undefined && counts.errorCount > thresholds.maxErrorCount)
+    failures.push(`errorCount=${counts.errorCount} > maxErrorCount=${thresholds.maxErrorCount}`);
+  if (thresholds.maxEmptyOrBlockedCount !== undefined && counts.emptyOrBlockedCount > thresholds.maxEmptyOrBlockedCount)
+    failures.push(`emptyOrBlockedCount=${counts.emptyOrBlockedCount} > maxEmptyOrBlockedCount=${thresholds.maxEmptyOrBlockedCount}`);
+  for (const tag of Object.keys(issueTagHits)) {
+    if (issueTagHits[tag] > 0)
+      failures.push(`issueTag=${tag} hit ${issueTagHits[tag]}`);
+  }
+
+  return {
+    pass: failures.length === 0,
+    failures,
+    thresholds,
+    counts,
+  };
+}
+
+function countIssueTagHits(report, failOnIssueTags) {
+  const tags = new Set(failOnIssueTags);
+  if (tags.size === 0) return {};
+  const hits = Object.fromEntries([...tags].map((tag) => [tag, 0]));
+  for (const item of report.results ?? []) {
+    for (const tag of item.autoReview?.issueTags ?? []) {
+      if (tags.has(tag))
+        hits[tag] += 1;
+    }
+  }
+  return hits;
 }
 
 async function selectPages(args) {
@@ -343,7 +425,7 @@ function renderSmokeSummaryMarkdown(summary, args) {
 Generated: ${new Date().toISOString()}
 Source mode: ${summary.sourceMode ?? "(unknown)"}
 Page count: ${summary.results.length}
-Threshold: ${summary.threshold ? `readyCount ${summary.threshold.readyCount} <= ${summary.threshold.maxReadyCount}` : "(none)"}
+Threshold: ${summary.threshold ? (summary.threshold.pass ? "pass" : "fail") : "(none)"}
 
 This summary is public-safe metadata derived from a private live-CDP smoke run.
 It intentionally omits real URLs, page titles, copied text, extracted previews,
@@ -358,7 +440,17 @@ screenshots, and per-target notes. The full private artifacts remain under
 - limit: ${args.limit}
 - concurrency: ${args.concurrency}
 - timeoutMs: ${args.timeoutMs}
+- minPageCount: ${args.minPageCount ?? "(none)"}
 - maxReadyCount: ${args.maxReadyCount ?? "(none)"}
+- maxErrorCount: ${args.maxErrorCount ?? "(none)"}
+- maxEmptyOrBlockedCount: ${args.maxEmptyOrBlockedCount ?? "(none)"}
+- failOnIssueTags: ${args.failOnIssueTags?.join(", ") || "(none)"}
+
+## Threshold
+
+\`\`\`json
+${JSON.stringify(summary.threshold ?? null, null, 2)}
+\`\`\`
 
 ## Aggregate
 
@@ -394,6 +486,7 @@ function isDirectRun() {
 
 export {
   assertPublicSmokeSummary,
+  evaluateSmokeThreshold,
   parseArgs as parseCurrentBrowserSmokeArgs,
   renderSmokeSummaryMarkdown,
 };

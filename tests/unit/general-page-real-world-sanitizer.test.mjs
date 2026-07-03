@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { sanitizeEngineResult } from "../../scripts/evaluate-general-page-real-world.mjs";
 import {
   assertPublicSmokeSummary,
+  evaluateSmokeThreshold,
   parseCurrentBrowserSmokeArgs,
   renderSmokeSummaryMarkdown,
 } from "../../scripts/smoke-general-page-current.mjs";
@@ -152,9 +153,100 @@ describe("General Page current-browser smoke summary", () => {
       .toBe("open-tabs:summary_01");
     expect(() => parseCurrentBrowserSmokeArgs(["--category", "https://example.test"]))
       .toThrow(/public-safe label/);
+    expect(parseCurrentBrowserSmokeArgs([
+      "--min-page-count", "4",
+      "--max-error-count", "0",
+      "--max-empty-or-blocked-count", "1",
+      "--fail-on-issue-tag", "quality:large_navigation_noise,warning:no-main-content",
+    ])).toMatchObject({
+      minPageCount: 4,
+      maxErrorCount: 0,
+      maxEmptyOrBlockedCount: 1,
+      failOnIssueTags: ["quality:large_navigation_noise", "warning:no-main-content"],
+    });
+    expect(() => parseCurrentBrowserSmokeArgs(["--fail-on-issue-tag", "https://example.test"]))
+      .toThrow(/public-safe issue tags/);
+    expect(() => parseCurrentBrowserSmokeArgs(["--category", "--all-open"]))
+      .toThrow(/requires a value/);
+    expect(() => parseCurrentBrowserSmokeArgs(["--fail-on-issue-tag", "--all-open"]))
+      .toThrow(/requires a value/);
+  });
+
+  it("evaluates current-browser smoke thresholds without private page data", () => {
+    const report = {
+      aggregate: {
+        errorCount: 1,
+        emptyOrBlockedCount: 1,
+      },
+      results: [
+        {
+          ok: true,
+          modelContext: { modelReadiness: "ready" },
+          autoReview: { issueTags: ["complete"] },
+        },
+        {
+          ok: true,
+          modelContext: { modelReadiness: "caution" },
+          autoReview: { issueTags: ["quality:large_navigation_noise"] },
+        },
+        {
+          ok: false,
+          surface: { extraction: { status: "empty" } },
+          autoReview: { issueTags: ["empty"] },
+        },
+      ],
+    };
+
+    expect(evaluateSmokeThreshold(report, {
+      minPageCount: 3,
+      maxReadyCount: 1,
+      maxErrorCount: 1,
+      maxEmptyOrBlockedCount: 1,
+      failOnIssueTags: [],
+    })).toMatchObject({
+      pass: true,
+      failures: [],
+      counts: {
+        pageCount: 3,
+        readyCount: 1,
+        errorCount: 1,
+        emptyOrBlockedCount: 1,
+      },
+    });
+
+    expect(evaluateSmokeThreshold(report, {
+      minPageCount: 4,
+      maxReadyCount: 0,
+      maxErrorCount: 0,
+      maxEmptyOrBlockedCount: 0,
+      failOnIssueTags: ["quality:large_navigation_noise"],
+    })).toMatchObject({
+      pass: false,
+      failures: [
+        "pageCount=3 < minPageCount=4",
+        "readyCount=1 > maxReadyCount=0",
+        "errorCount=1 > maxErrorCount=0",
+        "emptyOrBlockedCount=1 > maxEmptyOrBlockedCount=0",
+        "issueTag=quality:large_navigation_noise hit 1",
+      ],
+    });
   });
 
   it("renders extraction metadata readably in markdown", () => {
+    const threshold = evaluateSmokeThreshold({
+      aggregate: { errorCount: 0, emptyOrBlockedCount: 0 },
+      results: [
+        {
+          ok: true,
+          modelContext: { modelReadiness: "caution" },
+          autoReview: { issueTags: ["partial"] },
+        },
+      ],
+    }, {
+      minPageCount: 1,
+      maxErrorCount: 0,
+      failOnIssueTags: [],
+    });
     const markdown = renderSmokeSummaryMarkdown(safeSummary, {
       allOpen: true,
       category: "unit-smoke",
@@ -162,10 +254,33 @@ describe("General Page current-browser smoke summary", () => {
       limit: 1,
       concurrency: 1,
       timeoutMs: 1000,
+      minPageCount: 1,
       maxReadyCount: undefined,
+      maxErrorCount: 0,
+      maxEmptyOrBlockedCount: undefined,
+      failOnIssueTags: [],
+    });
+
+    const markdownWithThreshold = renderSmokeSummaryMarkdown({
+      ...safeSummary,
+      threshold,
+    }, {
+      allOpen: true,
+      category: "unit-smoke",
+      pageType: "open-tab",
+      limit: 1,
+      concurrency: 1,
+      timeoutMs: 1000,
+      minPageCount: 1,
+      maxReadyCount: undefined,
+      maxErrorCount: 0,
+      maxEmptyOrBlockedCount: undefined,
+      failOnIssueTags: [],
     });
 
     expect(markdown).toContain("semantic-html/partial (large-navigation-noise)");
+    expect(markdownWithThreshold).toContain("Threshold: pass");
+    expect(markdownWithThreshold).toContain("\"minPageCount\": 1");
     expect(markdown).not.toContain("[object Object]");
     expect(markdown).not.toContain("https://");
   });

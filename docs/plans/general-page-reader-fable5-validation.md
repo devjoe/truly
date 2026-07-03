@@ -59,6 +59,26 @@ parser advisor and model-brief path are implemented.
    host-level readiness and issue-tag evidence without exposing real URLs,
    titles, extracted text, screenshots, or copied page content.
 
+   For a mixed set of currently open real pages, use the smoke thresholds to
+   make harness health fail-fast before manual inspection:
+
+   ```bash
+   npm run smoke:general-page-current -- \
+     --all-open \
+     --limit 6 \
+     --min-page-count 4 \
+     --max-error-count 0 \
+     --category current-browser-open-tabs \
+     --page-type open-tab \
+     --timeout-ms 25000 \
+     --concurrency 2
+   ```
+
+   Optional stricter probes can add `--max-empty-or-blocked-count 0` for an
+   article-only tab set or `--fail-on-issue-tag quality:large_navigation_noise`
+   when the tab set is specifically meant to catch navigation-noise regressions.
+   Threshold results are included in both sanitized smoke summaries.
+
 4. Run a private 200-target review and label it in `review.html`. Prefer the
    live-DOM mode when Chrome CDP has the target pages available:
 
