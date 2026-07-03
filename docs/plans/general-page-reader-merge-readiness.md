@@ -60,11 +60,11 @@ npm run smoke:general-page-current -- --all-open --limit 4 --category current-br
 
 Results:
 
-- `check:public`: passed. This included public-boundary, release metadata, General Page corpus, parser spikes, parser-advisor spike, model integration audit, typecheck, public contract tests, public unit tests, production build, and release bundle audit.
+- `check:public`: passed. This included public-boundary, release metadata, General Page readiness-docs check, General Page corpus, parser spikes, parser-advisor spike, model integration audit, typecheck, public contract tests, public unit tests, production build, and release bundle audit.
 - `cws:preflight`: passed for `0.1.1 Preview 11` / `v0.1.1-preview.11`.
 - `audit:general-page-reader`: passed after adding the 430px Page/Web responsive overflow gate. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T14-21-10-883Z`.
 - `smoke:general-page-current`: passed against the currently open Yahoo Taiwan news page through live CDP. Sanitized result: extracted, semantic HTML, partial/caution, model eligible, 6 model-context links after filtering; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T13-58-47-423Z`.
-- `smoke:general-page-current --all-open`: passed against four open HTTP(S) tabs through live CDP after adding P24 dashboard/data-surface coverage. Sanitized result: 3 extracted / 1 blocked-or-empty, readiness `caution: 3`, `blocked: 1`, and no dashboard or leaderboard data surface marked ready/good; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T14-11-11-512Z`.
+- `smoke:general-page-current --all-open`: passed against four open HTTP(S) tabs through live CDP after adding P24 dashboard/data-surface coverage. Sanitized result: 3 extracted / 1 blocked-or-empty, readiness `caution: 3`, `blocked: 1`, and no dashboard or leaderboard data surface marked ready/good; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T14-27-21-492Z`.
 
 ## Non-Blocking Follow-Ups
 

@@ -23,15 +23,45 @@ parser advisor and model-brief path are implemented.
 ## Suggested Review Flow
 
 1. Run `npm run check:public` to verify the committed public gates.
-2. Run the CDP audit against the loaded unpacked extension:
+2. Run the CDP audit against the loaded unpacked extension. The audit now
+   verifies popup activation, model brief generation, saved-session switching,
+   selection, current-region, no-grant guidance, candidate recovery, and the
+   430px Page/Web responsive layout gate:
 
    ```bash
    TRULY_EXTENSION_ID=... TRULY_AUDIT_AUTO_RELOAD=1 npm run audit:general-page-reader
    ```
 
-3. Run a private 200-target review and label it in `review.html`.
-4. Export `manual-labels.jsonl`.
-5. Run:
+3. Smoke currently open real browser tabs through live CDP before sending the
+   branch to a reviewer. This catches dashboard, leaderboard, and app/list
+   false-ready patterns that synthetic pages may miss:
+
+   Canonical command: `npm run smoke:general-page-current -- --all-open`.
+
+   ```bash
+   npm run smoke:general-page-current -- \
+     --all-open \
+     --limit 4 \
+     --category current-browser-open-tabs \
+     --page-type open-tab \
+     --timeout-ms 25000 \
+     --concurrency 2
+   ```
+
+4. Run a private 200-target review and label it in `review.html`. Prefer the
+   live-DOM mode when Chrome CDP has the target pages available:
+
+   ```bash
+   npm run review:general-page-product-quality -- \
+     --input tmp/general-page-product-quality/targets-200.json \
+     --allow-network \
+     --source cdp \
+     --cdp-port 9222 \
+     --limit 200
+   ```
+
+5. Export `manual-labels.jsonl`.
+6. Run:
 
    ```bash
    npm run score:general-page-product-quality -- \
@@ -40,7 +70,7 @@ parser advisor and model-brief path are implemented.
      --output tmp/general-page-product-quality/review-.../quality-gate.json
    ```
 
-6. Inspect failures by category and issue tag, then decide whether they become
+7. Inspect failures by category and issue tag, then decide whether they become
    new synthetic fixtures, parser heuristic changes, or model-advisor prompt
    changes.
 
@@ -134,3 +164,21 @@ target in the existing Chrome CDP session and scoring the post-JS DOM through
 the same extractor pipeline. Live-DOM runs default to concurrency 2 and
 record `input.sourceMode` in the private report so static and live runs are
 never conflated.
+
+### Validation Refresh (2026-07-03)
+
+Follow-up live-tab and runtime validation added two reviewer-facing gates:
+
+- **P24 `semantic-main-dashboard-table` / `semantic-main-short-leaderboard`**:
+  live CDP smoke against open browser tabs exposed dashboard and leaderboard
+  data surfaces that used semantic `main` but were not complete articles. They
+  are now represented as public synthetic fixtures and downgraded to
+  caution/partial through the runtime baseline.
+- **430px Page/Web responsive audit**: `audit:general-page-reader` now captures
+  a narrow side-panel screenshot and fails when the Page/Web pane has
+  horizontal overflow, clipped interactive controls, or cards outside the
+  viewport.
+
+The latest sanitized live-tab smoke showed 3 extracted caution pages and 1
+blocked/empty page across four open HTTP(S) tabs, with no dashboard or
+leaderboard data surface marked ready/good.
