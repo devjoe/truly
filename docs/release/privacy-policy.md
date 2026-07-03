@@ -45,11 +45,18 @@ Processing depends on your selected model source:
 
 Truly does not send feed or page content to a Truly-owned server.
 
-On supported Facebook pages, Truly may observe Facebook GraphQL responses or
-server-rendered page data in the page context to recover post context and
-sponsorship signals for the current feed surface. This processing stays inside
-the extension/page session and is used to render the supported reading UI; it
-does not enable background crawling or a Truly-owned collection service.
+On supported Facebook pages, Truly may hook in-page Facebook GraphQL/network
+responses or read server-rendered page data in the page context to recover post
+context and sponsorship signals for the current feed surface. This processing
+stays inside the extension/page session and is used to render the supported
+reading UI; it does not enable background crawling or a Truly-owned collection
+service.
+
+For Page/Web reading, Truly normally uses the one-time page access granted when
+you click the toolbar action. If you explicitly enable General Page all-sites
+access in Settings, the side panel can read the current page on supported
+websites when you press a read/analyze action. This opt-in does not enable
+background crawling or persistent full-page history.
 
 Page/Web screenshot-assisted recovery is off by default and not automatic. If
 Truly cannot build enough reading context from visible page text, it may offer a

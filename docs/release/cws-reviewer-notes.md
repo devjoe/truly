@@ -63,6 +63,9 @@ context and decide what to verify.
    reader. The Settings all-sites opt-in can also be enabled for reviewers who
    want the side panel read action to work across sites without repeating the
    toolbar activation on each site.
+10. Optional: after Page/Web has read the active page, use Alt+Shift+R to test
+   the user-triggered current-region command for the paragraph or region near
+   the pointer.
 
 Preview limitations are expected: Facebook layouts change, local/private model
 quality varies, and some posts may not produce a reading brief. The UI should
@@ -112,11 +115,11 @@ paths:
 - Model analysis: content is sent to the model environment selected by the
   user, such as Chrome built-in Gemini Nano, a local endpoint, or a private
   endpoint.
-- Facebook reading surface: on supported Facebook pages, Truly may observe
-  Facebook GraphQL responses or server-rendered page data in the page context to
-  recover post context and sponsorship signals for the current feed surface.
-  This stays inside the extension/page session and does not send feed content to
-  a Truly-owned server.
+- Facebook reading surface: on supported Facebook pages, Truly may hook
+  in-page Facebook GraphQL/network responses or read server-rendered page data
+  in the page context to recover post context and sponsorship signals for the
+  current feed surface. This stays inside the extension/page session and does
+  not send feed content to a Truly-owned server.
 - Page/Web screenshot-assisted recovery: if text extraction is not enough,
   Truly may offer a visible-tab screenshot preview only when the selected Tier B
   model source has passed a vision capability check. The screenshot is sent to
@@ -142,9 +145,9 @@ surfaces:
   the active page.
 - `sidePanel`: provide the user-opened reading side panel.
 - Facebook / FB CDN hosts: inject the reading UI and read post/image context on
-  supported Facebook pages. Facebook page responses may also be observed in the
-  page context to recover post context and sponsorship signals for the current
-  feed surface.
+  supported Facebook pages. In-page Facebook GraphQL/network responses may also
+  be hooked in the page context to recover post context and sponsorship signals
+  for the current feed surface.
 - `localhost` / `127.0.0.1`: support local model endpoints.
 - Optional broad `http://*/*` and `https://*/*`: requested only when the user
   configures a non-default model endpoint that requires that origin, or when
