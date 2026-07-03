@@ -47,7 +47,11 @@ export function readJson(path) {
 
 export function git(args, fallback = "") {
   try {
-    return execFileSync("git", args, { cwd: root, encoding: "utf8" });
+    return execFileSync("git", args, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
   } catch {
     return fallback;
   }
