@@ -18,7 +18,7 @@ permission. It should stay aligned with `src/manifest.json`.
 
 | Host permission | Why Truly needs it | Boundary |
 |---|---|---|
-| `*://*.facebook.com/*` | Inject the reading UI and read supported Facebook post/page structure. | Used only for supported Facebook reading surfaces. |
+| `*://*.facebook.com/*` | Inject the reading UI and read supported Facebook post/page structure. On supported Facebook pages, Truly may also observe Facebook GraphQL responses or server-rendered page data in the page context to recover post context and sponsorship signals for the current feed surface. | Used only for supported Facebook reading surfaces. Does not enable background crawling or a Truly-owned collection service. |
 | `*://*.fbcdn.net/*` | Read Facebook-hosted media or asset context needed for image-aware analysis and display. | Used only as context for the current Facebook reading surface. |
 | `http://localhost/*` | Support local model endpoints when the user chooses a local model source. | User-configured model calls only. |
 | `http://127.0.0.1/*` | Support local model endpoints exposed on loopback. | User-configured model calls only. |

@@ -18,6 +18,9 @@ include product analytics or telemetry.
 When you use Truly on supported pages, the extension may process:
 
 - visible post text, shared-post text, link previews, and image/video context;
+- Facebook page responses and server-rendered page data that contain supported
+  post context or sponsorship signals needed to match the current visible feed
+  surface;
 - visible current-page text and page metadata when you explicitly use Page/Web
   reading;
 - a visible-tab screenshot only when Page/Web offers screenshot-assisted
@@ -41,6 +44,12 @@ Processing depends on your selected model source:
   in Chrome when permission is required.
 
 Truly does not send feed or page content to a Truly-owned server.
+
+On supported Facebook pages, Truly may observe Facebook GraphQL responses or
+server-rendered page data in the page context to recover post context and
+sponsorship signals for the current feed surface. This processing stays inside
+the extension/page session and is used to render the supported reading UI; it
+does not enable background crawling or a Truly-owned collection service.
 
 Page/Web screenshot-assisted recovery is off by default and not automatic. If
 Truly cannot build enough reading context from visible page text, it may offer a

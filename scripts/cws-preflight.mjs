@@ -92,6 +92,8 @@ const contractDocs = [
       "selected model source supports",
       "user confirms the preview",
       "session-only and is not stored",
+      "Facebook page responses",
+      "sponsorship signals",
     ],
   },
 ];

@@ -180,6 +180,9 @@ facts intact:
 - Truly does not operate a project-owned backend for feed or page content.
 - The extension processes visible website content on supported Facebook
   surfaces and user-triggered Page/Web reads to provide reading assistance.
+- On supported Facebook pages, the extension may observe Facebook page
+  responses or server-rendered page data in the page context to recover post
+  context and sponsorship signals for the current feed surface.
 - Page/Web screenshot-assisted recovery can process a visible-tab screenshot
   only when text extraction is insufficient, the selected model source supports
   vision input, and the user confirms the preview. The screenshot is
@@ -203,7 +206,9 @@ dashboard-facing summary:
   the active page.
 - `sidePanel`: provides the reading side panel.
 - Facebook host permissions: injects the supported reading UI and reads visible
-  post context on supported Facebook surfaces.
+  post context on supported Facebook surfaces; Facebook page responses may also
+  be observed in the page context to recover post context and sponsorship
+  signals for the current feed surface.
 - FB CDN host permission: reads Facebook-hosted media context when needed for
   image-aware reading assistance.
 - `localhost` / `127.0.0.1`: supports local model endpoints.
