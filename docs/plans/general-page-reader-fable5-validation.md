@@ -37,6 +37,10 @@ parser advisor and model-brief path are implemented.
    false-ready patterns that synthetic pages may miss:
 
    Canonical command: `npm run smoke:general-page-current -- --all-open`.
+   When the open-tab set is intentionally composed of caution/block pages such
+   as dashboards, search pages, and leaderboards, add `--max-ready-count 0` so
+   false-ready regressions fail the smoke instead of relying on manual summary
+   inspection.
 
    ```bash
    npm run smoke:general-page-current -- \
@@ -45,7 +49,8 @@ parser advisor and model-brief path are implemented.
      --category current-browser-open-tabs \
      --page-type open-tab \
      --timeout-ms 25000 \
-     --concurrency 2
+     --concurrency 2 \
+     --max-ready-count 0
    ```
 
 4. Run a private 200-target review and label it in `review.html`. Prefer the

@@ -590,7 +590,9 @@ npm run smoke:general-page-current -- --all-open --limit 4 --page-type open-tab
 The command writes a private target manifest under
 `tmp/general-page-product-quality/`, runs the live-DOM review harness, and
 prints only a sanitized summary. The full URL, extracted previews, and review
-HTML remain in `tmp/` and must not be committed.
+HTML remain in `tmp/` and must not be committed. For a deliberately
+caution-heavy tab set such as dashboards, search pages, and leaderboards, add
+`--max-ready-count 0` to fail the smoke when any open page is marked ready.
 
 ## Resolved Preview Decisions
 

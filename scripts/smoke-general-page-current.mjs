@@ -55,10 +55,18 @@ async function main() {
     },
     sourceMode: report.input?.sourceMode,
     aggregate: report.aggregate,
+    threshold: args.maxReadyCount === undefined ? undefined : {
+      maxReadyCount: args.maxReadyCount,
+      readyCount: readyCount(report),
+    },
     results: report.results.map((item, index) => sanitizedResult(item, safePages[index])),
   };
   console.log("general-page current-browser smoke summary");
   console.log(JSON.stringify(sanitized, null, 2));
+  if (args.maxReadyCount !== undefined && readyCount(report) > args.maxReadyCount) {
+    console.error(`general-page current-browser smoke failed: readyCount=${readyCount(report)} > maxReadyCount=${args.maxReadyCount}`);
+    process.exit(1);
+  }
 }
 
 function parseArgs(argv) {
@@ -67,6 +75,7 @@ function parseArgs(argv) {
     timeoutMs: numericArg(argv, "--timeout-ms", DEFAULT_TIMEOUT_MS, { min: 1000, max: 60000 }),
     concurrency: numericArg(argv, "--concurrency", 2, { min: 1, max: 8 }),
     limit: numericArg(argv, "--limit", 6, { min: 1, max: 30 }),
+    maxReadyCount: optionalNumericArg(argv, "--max-ready-count", { min: 0, max: 30 }),
     allOpen: argv.includes("--all-open"),
     urlPattern: stringArg(argv, "--url-pattern"),
     category: stringArg(argv, "--category") ?? "current-browser-smoke",
@@ -79,6 +88,16 @@ function stringArg(argv, name) {
   return index >= 0 ? argv[index + 1] : undefined;
 }
 
+function optionalNumericArg(argv, name, { min, max }) {
+  const raw = stringArg(argv, name);
+  if (raw === undefined)
+    return undefined;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < min || value > max)
+    throw new Error(`${name} must be an integer between ${min} and ${max}.`);
+  return value;
+}
+
 function numericArg(argv, name, fallback, { min, max }) {
   const raw = stringArg(argv, name);
   if (raw === undefined)
@@ -87,6 +106,10 @@ function numericArg(argv, name, fallback, { min, max }) {
   if (!Number.isInteger(value) || value < min || value > max)
     throw new Error(`${name} must be an integer between ${min} and ${max}.`);
   return value;
+}
+
+function readyCount(report) {
+  return report.results.filter((item) => item.modelContext?.modelReadiness === "ready").length;
 }
 
 async function selectPages(args) {
