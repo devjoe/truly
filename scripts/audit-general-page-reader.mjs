@@ -22,6 +22,7 @@ const PHASE_TIMEOUT_MS = {
   candidate: 45_000,
   noGrant: 30_000,
 };
+const CDP_COMMAND_TIMEOUT_MS = 15_000;
 const auditPhaseLog = [];
 
 function usage() {
@@ -78,16 +79,23 @@ function connectCdp(webSocketDebuggerUrl) {
   ws.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
     if (!message.id || !pending.has(message.id)) return;
-    const { resolve, reject } = pending.get(message.id);
+    const { resolve, reject, timer } = pending.get(message.id);
     pending.delete(message.id);
+    clearTimeout(timer);
     if (message.error) reject(new Error(message.error.message ?? JSON.stringify(message.error)));
     else resolve(message.result);
   });
 
-  async function send(method, params = {}) {
+  async function send(method, params = {}, timeoutMs = CDP_COMMAND_TIMEOUT_MS) {
     await opened;
     const id = nextId++;
-    const response = new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    const response = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`CDP command timed out: ${method} after ${timeoutMs}ms`));
+      }, timeoutMs);
+      pending.set(id, { resolve, reject, timer });
+    });
     ws.send(JSON.stringify({ id, method, params }));
     return response;
   }
@@ -100,7 +108,7 @@ function connectCdp(webSocketDebuggerUrl) {
         awaitPromise: true,
         returnByValue: true,
         timeout,
-      });
+      }, Math.max(timeout + 1000, 3000));
       if (result.exceptionDetails) {
         throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || "Runtime.evaluate failed");
       }
@@ -1130,9 +1138,22 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
 
   try {
     await sleep(800);
-    await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    await waitFor(side, `(() => {
+      const button = document.querySelector('#pageReadCurrent');
+      return Boolean(button && !button.disabled);
+    })()`, 10000, "teaser hub read button ready");
+    await side.evaluate(`(() => {
+      const button = document.querySelector('#pageReadCurrent');
+      if (!button || button.disabled) return false;
+      return button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    })()`);
     await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "teaser hub page ready").catch(async (error) => {
+      const timeoutState = await capturePageReadTimeoutState(side, teaser, null).catch((captureError) => ({
+        captureError: captureError.message,
+      }));
       await side.screenshot(resolve(OUT_DIR, "page-teaser-hub-timeout.png")).catch(() => {});
+      writeFileSync(resolve(OUT_DIR, "page-teaser-hub-timeout.json"), JSON.stringify(timeoutState, null, 2));
+      error.message = `${error.message}; diagnostics: ${relative(ROOT, resolve(OUT_DIR, "page-teaser-hub-timeout.json"))}`;
       throw error;
     });
     await waitFor(side, `(() => {

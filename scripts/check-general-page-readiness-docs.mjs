@@ -10,6 +10,7 @@ const REQUIRED_SNIPPETS = [
       "Page/Web design restraint",
       "Page/Web interaction accessibility",
       "phase-level timeouts",
+      "Individual CDP commands also have client-side timeouts",
       "audit-progress.json",
       "audit-phase-log.json",
       "smoke:general-page-current -- --all-open",
