@@ -128,5 +128,9 @@ build, and the release-bundle audit all pass. `check:public-boundary`
 (requires git) and the CDP extension audit (requires the loaded extension)
 still need a run on the maintainer's machine before commit.
 
-Finding 4 (live-DOM review mode for the harness) remains open as a tooling
-follow-up.
+Finding 4 is now implemented as a tooling follow-up: the product-quality
+review harness accepts `--source cdp [--cdp-port 9222]`, rendering each
+target in the existing Chrome CDP session and scoring the post-JS DOM through
+the same extractor pipeline. Live-DOM runs default to concurrency 2 and
+record `input.sourceMode` in the private report so static and live runs are
+never conflated.

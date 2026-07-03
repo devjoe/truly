@@ -7,6 +7,7 @@ import { performance } from "node:perf_hooks";
 import ts from "typescript";
 import { JSDOM } from "jsdom";
 import { labelingClientScript } from "./lib/review-labeling-client.mjs";
+import { cdpBaseForPort, fetchRenderedPageHtml } from "./lib/cdp-page-source.mjs";
 
 const OUTPUT_DIR = "tmp/general-page-product-quality";
 const DEFAULT_TIMEOUT_MS = 12_000;
@@ -42,6 +43,7 @@ async function main() {
       timeoutMs: args.timeoutMs,
       concurrency: args.concurrency,
       networkAllowed: args.allowNetwork,
+      sourceMode: args.source,
     },
     aggregate: aggregate(results),
     results,
@@ -64,16 +66,25 @@ async function main() {
 function parseArgs(argv) {
   const input = stringArg(argv, "--input");
   if (!input) {
-    console.error("Usage: node scripts/review-general-page-product-quality.mjs --input tmp/targets.json --allow-network [--limit 200] [--concurrency 8] [--timeout-ms 12000]");
+    console.error("Usage: node scripts/review-general-page-product-quality.mjs --input tmp/targets.json --allow-network [--source static|cdp] [--cdp-port 9222] [--limit 200] [--concurrency 8] [--timeout-ms 12000]");
     process.exit(2);
   }
+  const source = stringArg(argv, "--source") ?? "static";
+  if (!["static", "cdp"].includes(source))
+    throw new Error("--source must be static or cdp");
+  const explicitConcurrency = stringArg(argv, "--concurrency") !== undefined;
+  const concurrency = numericArg(argv, "--concurrency", DEFAULT_CONCURRENCY, { min: 1, max: 24 });
   return {
     input,
     outputDir: stringArg(argv, "--output-dir"),
     allowNetwork: argv.includes("--allow-network"),
     limit: numericArg(argv, "--limit", DEFAULT_LIMIT, { min: 1, max: 1000 }),
-    concurrency: numericArg(argv, "--concurrency", DEFAULT_CONCURRENCY, { min: 1, max: 24 }),
+    // Live-DOM rendering keeps one Chrome target per in-flight review, so
+    // default to a gentle concurrency unless the caller overrides it.
+    concurrency: source === "cdp" && !explicitConcurrency ? 2 : concurrency,
     timeoutMs: numericArg(argv, "--timeout-ms", DEFAULT_TIMEOUT_MS, { min: 1000, max: 60000 }),
+    source,
+    cdpBase: cdpBaseForPort(numericArg(argv, "--cdp-port", 9222, { min: 1, max: 65535 })),
   };
 }
 
@@ -179,6 +190,13 @@ async function reviewTarget(target, args) {
 async function loadHtml(target, args) {
   if (target.htmlPath)
     return fs.readFileSync(target.htmlPath, "utf8");
+  if (args.source === "cdp") {
+    const rendered = await fetchRenderedPageHtml(target.url, {
+      cdpBase: args.cdpBase,
+      timeoutMs: args.timeoutMs,
+    });
+    return rendered.html;
+  }
   const response = await fetch(target.url, {
     redirect: "follow",
     signal: AbortSignal.timeout(args.timeoutMs),
@@ -445,6 +463,8 @@ function topCounts(values, limit) {
 function errorKind(error) {
   if (error instanceof Error && ["AbortError", "TimeoutError"].includes(error.name))
     return "fetch-timeout";
+  if (error instanceof Error && /\bcdp\b/i.test(error.message))
+    return "cdp-error";
   if (error instanceof TypeError)
     return "fetch-error";
   return "target-review-error";

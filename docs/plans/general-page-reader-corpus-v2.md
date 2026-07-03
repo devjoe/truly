@@ -305,6 +305,11 @@ HTML, copied source text, or derived per-target findings into the public repo.
 After manual labeling, run the private aggregate gate:
 
 ```bash
+# Optional live-DOM variant (renders in the existing Chrome CDP session,
+# closing the static-fetch vs live-extension gap on JS-heavy sites):
+#   node scripts/review-general-page-product-quality.mjs --input ... \
+#     --allow-network --source cdp --cdp-port 9222
+
 npm run score:general-page-product-quality -- \
   --review tmp/general-page-product-quality/review-.../review.json \
   --labels tmp/general-page-product-quality/review-.../manual-labels.jsonl \
