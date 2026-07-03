@@ -256,6 +256,34 @@ describe("General Page Reader extraction contract", () => {
     ]);
   });
 
+  it("uses accessible link labels when anchor text is empty", () => {
+    const document = new JSDOM(
+      `<!doctype html>
+      <html>
+        <head><title>Accessible Link Fixture</title></head>
+        <body>
+          <article>
+            <h1>Accessible Link Fixture</h1>
+            <p>This synthetic article body is intentionally long enough for extraction and includes an icon-only source link. The parser should preserve the accessible label so downstream source context does not show a bare URL.</p>
+            <p>A second paragraph keeps the body stable while remaining public-safe and unrelated to any real website.</p>
+            <a href="/source/accessibility" aria-label="Accessible source note"><svg></svg></a>
+          </article>
+        </body>
+      </html>`,
+      { url: "https://example.test/articles/accessible-link-fixture" },
+    ).window.document;
+
+    const surface = extractGeneralPageSurface({
+      document,
+      url: "https://example.test/articles/accessible-link-fixture",
+    });
+
+    expect(surface.links).toContainEqual({
+      href: "https://example.test/source/accessibility",
+      text: "Accessible source note",
+    });
+  });
+
   it("resolves relative canonical URLs against the current page URL", () => {
     const document = new JSDOM(`
       <!doctype html>

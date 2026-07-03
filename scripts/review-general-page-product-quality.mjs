@@ -275,7 +275,7 @@ function autoReviewHints(surface, modelContext, document, target) {
     issueTags.push(`quality:${issue}`);
   if (!surface.title)
     issueTags.push("missing-title");
-  if ((surface.links?.length ?? 0) >= 12)
+  if ((modelContext.links?.length ?? 0) >= 12)
     issueTags.push("many-source-links");
   if (document.linkCount >= 120 && document.articleCount >= 3 && !isDocumentationReviewTarget(target, surface))
     issueTags.push("likely-index-or-feed");

@@ -830,7 +830,12 @@ function firstMetaContent(
 function collectLinks(root: ParentNode, baseUrl: string, limit: number): ReadingSurfaceLink[] {
   const links: ReadingSurfaceLink[] = [];
   for (const element of Array.from(root.querySelectorAll("a[href]"))) {
-    const text = normalizeWhitespace(element.textContent ?? "") ?? undefined;
+    const text = normalizeWhitespace(
+      element.textContent ||
+      element.getAttribute("aria-label") ||
+      element.getAttribute("title") ||
+      "",
+    ) ?? undefined;
     if (isNonReadingSourceLink(text ?? "", element.getAttribute("href") ?? ""))
       continue;
     const href = normalizeHref(element.getAttribute("href") ?? "", baseUrl);

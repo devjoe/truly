@@ -4,7 +4,7 @@ import type { ReadingTarget } from "./reading-target-types";
 
 export const GENERAL_PAGE_MODEL_MIN_MAIN_TEXT_LENGTH = 240;
 export const GENERAL_PAGE_MODEL_MAIN_TEXT_LIMIT = 8192;
-export const GENERAL_PAGE_MODEL_MAX_LINKS = 12;
+export const GENERAL_PAGE_MODEL_MAX_LINKS = 6;
 export const GENERAL_PAGE_MODEL_MAX_IMAGE_ALT_TEXTS = 8;
 
 export type GeneralPageModelIneligibilityReason =
@@ -256,9 +256,15 @@ function isLikelyNavigationOrDownloadLink(link: ReadingSurfaceLink, pageUrl: str
   const lowerText = text.toLowerCase();
   const href = link.href.trim();
   const lowerHref = href.toLowerCase();
-  if (/^(share|comments?|latest|most read|newsletter|popular|recommended|related|more)\b/i.test(text))
+  if (!text)
     return true;
-  if (/(\/share\/|\/comments?(?:\/|$)|\/most-read(?:\/|$)|\/latest(?:\/|$)|\/recommended(?:\/|$)|\/newsletter(?:\/|$))/i.test(lowerHref))
+  if (/^([#\d]+|x)$/i.test(text))
+    return true;
+  if (/^(share|comments?|latest|most read|newsletter|popular|recommended|related|more|read article|copy ?link|subscribe|subscribe here|login|sign in|contact|archive|colophon|sponsorship|submit)\b/i.test(text))
+    return true;
+  if (/^(facebook|x|bluesky|flipboard|pinterest|reddit|hacker news)$/i.test(text))
+    return true;
+  if (/(\/share\/|\/sharer(?:\/|$)|\/intent(?:\/|$)|\/pin(?:\/|$)|\/comments?(?:\/|$)|\/most-read(?:\/|$)|\/latest(?:\/|$)|\/recommended(?:\/|$)|\/newsletter(?:\/|$)|\/subscribe(?:\/|$)|\/subscription(?:\/|$)|\/login(?:\/|$)|\/signin(?:\/|$)|\/sign-in(?:\/|$))/i.test(lowerHref))
     return true;
   if (/(下載|download)/i.test(text) && /(chrome|firefox|edge|google|microsoft|mozilla)/i.test(text))
     return true;

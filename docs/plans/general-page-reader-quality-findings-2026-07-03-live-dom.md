@@ -9,10 +9,10 @@ and must not be committed.
 
 - Review size: 200 public web targets.
 - Source mode: live DOM through CDP, not static HTML fetch.
-- Successful extraction: 199 targets.
+- Successful extraction: 200 targets.
 - Fetch/runtime errors: 0 targets.
-- Readiness distribution: 112 ready, 87 caution, 1 blocked.
-- Extraction status distribution: 112 complete, 87 partial, 1 empty.
+- Readiness distribution after source-link context filtering: 106 ready, 93 caution, 1 blocked.
+- Extraction status distribution after source-link context filtering: 106 complete, 93 partial, 1 blocked.
 - Extraction method distribution: 161 semantic HTML, 39 fallback.
 
 ## Category Findings
@@ -33,6 +33,16 @@ and must not be committed.
 - The most useful next quality work is not broadening parser confidence. It is
   demoting false-ready surfaces before the model brief uses them as ordinary
   article context.
+
+## Source-Link Context Filtering
+
+The live-DOM review also showed that raw page link counts are a poor proxy for
+model context quality: many otherwise useful pages contain share buttons,
+newsletter links, account links, related navigation, or icon-only links. Runtime
+model context now filters utility/social/navigation links, preserves accessible
+labels for icon-only source links, and caps source links at six. In the 200-target
+follow-up, targets with 12 or more links in model context fell from 134 to 0;
+raw DOM link density remains tracked separately as a page-structure signal.
 
 ## Regression Patterns Converted To Fixtures
 

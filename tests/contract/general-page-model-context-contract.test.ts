@@ -104,6 +104,42 @@ describe("general page model context contract", () => {
     expect(context.mainText).toContain("article source link noise fixture");
   });
 
+  it("filters social, unlabeled, and navigation links before model context", () => {
+    const surface = extractGeneralPageSurface({
+      document: fixtureDocument("clean-article.html"),
+      url: "https://example.test/articles/clean-article",
+    });
+    const context = buildGeneralPageModelContext({
+      ...surface,
+      links: [
+        { href: "https://example.test/source/one", text: "Source one" },
+        { href: "https://example.test/source/two", text: "Source two" },
+        { href: "https://example.test/source/three", text: "Source three" },
+        { href: "https://example.test/source/four", text: "Source four" },
+        { href: "https://example.test/source/five", text: "Source five" },
+        { href: "https://example.test/source/six", text: "Source six" },
+        { href: "https://example.test/source/seven", text: "Source seven" },
+        { href: "https://example.test/empty", text: "" },
+        { href: "https://facebook.example.test/share", text: "Facebook" },
+        { href: "https://example.test/share/article", text: "Share" },
+        { href: "https://example.test/subscribe", text: "Subscribe" },
+        { href: "https://example.test/articles/other", text: "Read article" },
+        { href: "https://example.test/contact", text: "Contact" },
+        { href: "https://example.test/copy", text: "CopyLink" },
+        { href: "https://example.test/#comments", text: "#" },
+      ],
+    });
+
+    expect(context.links).toEqual([
+      { href: "https://example.test/source/one", text: "Source one" },
+      { href: "https://example.test/source/two", text: "Source two" },
+      { href: "https://example.test/source/three", text: "Source three" },
+      { href: "https://example.test/source/four", text: "Source four" },
+      { href: "https://example.test/source/five", text: "Source five" },
+      { href: "https://example.test/source/six", text: "Source six" },
+    ]);
+  });
+
   it("allows strong short semantic articles through the model gate as caution", () => {
     const url = "https://briefs.example.test/news/short-semantic-brief";
     const surface = extractGeneralPageSurface({
