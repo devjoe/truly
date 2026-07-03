@@ -284,8 +284,11 @@ export function resolveGeneralPageParserEscalation(
 
   if (issues.has("fallback_extraction"))
     reasons.push("fallback_extraction");
-  if (issues.has("large_navigation_noise") || warnings.has("large-navigation-noise") || isDenseIndexLikeDocument(options.document))
-    reasons.push("large_navigation_noise", "index_or_feed");
+  const hasLargeNavigationNoise = issues.has("large_navigation_noise") || warnings.has("large-navigation-noise");
+  if (hasLargeNavigationNoise)
+    reasons.push("large_navigation_noise");
+  if (isDenseIndexLikeDocument(options.document) || (hasLargeNavigationNoise && isLikelyIndexLikeNoisyDocument(options.document)))
+    reasons.push("index_or_feed");
   if (issues.has("no_main_content") || warnings.has("no-main-content"))
     reasons.push("no_main_content");
   if (issues.has("dynamic_content_partial") || warnings.has("dynamic-content-partial"))
@@ -509,7 +512,7 @@ export function buildRuleBasedGeneralPageParserAdvice(
     return advice("article", "accept_current", "high", request.escalation.reasons, "The user-selected text is the explicit reading target.");
   }
 
-  if (reasons.has("index_or_feed") || reasons.has("large_navigation_noise")) {
+  if (reasons.has("index_or_feed")) {
     return advice("index_or_feed", "downgrade_to_index_or_feed", "high", uniqueRiskTags([...request.escalation.reasons, "index_or_feed"]), "Navigation or list-density signals are too strong to treat as one clean article.");
   }
 
@@ -544,7 +547,6 @@ export function isGeneralPageParserAdvisorAdviceCompatible(
     advisor.decision === "accept_current" &&
     request.targetKind === "page" &&
     (reasons.has("index_or_feed") ||
-      reasons.has("large_navigation_noise") ||
       reasons.has("login_or_paywall") ||
       reasons.has("no_main_content"))
   ) {
@@ -689,6 +691,27 @@ function isDenseIndexLikeDocument(document: GeneralPageParserAdvisorDocumentSign
   if (document.articleCount !== 1 && document.linkCount >= 100 && document.imageCount >= 20)
     return true;
   return document.articleCount >= 3 && document.linkCount >= 40 && document.paragraphCount <= 20;
+}
+
+function isLikelyIndexLikeNoisyDocument(document: GeneralPageParserAdvisorDocumentSignals | undefined): boolean {
+  if (!document || document.hasArticleMeta)
+    return false;
+  const semanticMainCount = document.mainCount + document.roleMainCount;
+  if (document.articleCount >= 2 && document.paragraphCount <= Math.max(8, document.articleCount + 6))
+    return true;
+  if (semanticMainCount > 0 && document.linkCount >= 3 && document.paragraphCount <= 6)
+    return true;
+  if (semanticMainCount > 0 && document.articleCount >= 1 && document.paragraphCount <= 8)
+    return true;
+  if (document.linkCount >= 3 && document.imageCount >= 3)
+    return true;
+  if (document.linkCount >= 20 && document.paragraphCount <= 12)
+    return true;
+  if (document.linkCount >= 5 && document.paragraphCount <= 4)
+    return true;
+  if (document.formCount > 0 && document.linkCount >= 6 && document.paragraphCount <= 8)
+    return true;
+  return false;
 }
 
 function uniqueRiskTags(tags: GeneralPageParserAdvisorRiskTag[]): GeneralPageParserAdvisorRiskTag[] {

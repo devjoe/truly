@@ -469,6 +469,24 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).not.toContain("聽新聞 0:00 / 0:00");
   });
 
+  it("downgrades article roots dominated by utility links and controls", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "article-root-utility-dense-ready-trap.html",
+        "https://wire.example.test/news/utility-dense-ready-trap",
+      ),
+      url: "https://wire.example.test/news/utility-dense-ready-trap",
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("article root utility dense ready trap fixture");
+    expect(surface.mainText).toContain("fictional transit committee reviewed station access plans");
+    expect(surface.mainText).not.toContain("Synthetic market update 08:10");
+    expect(surface.mainText).not.toContain("Search this site");
+  });
+
   it("marks dated report-list hubs as partial instead of ready articles", () => {
     const surface = extractGeneralPageSurface({
       document: jsdomFixtureDocument(

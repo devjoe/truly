@@ -324,4 +324,50 @@ describe("General Page Parser Advisor contract", () => {
       decision: "downgrade_to_index_or_feed",
     });
   });
+
+  it("keeps utility-dense articles as article/caution instead of page overview", () => {
+    const dom = new JSDOM(`<!doctype html>
+      <head>
+        <title>Utility Dense Article</title>
+        <meta property="article:published_time" content="2026-07-03T09:20:00Z">
+      </head>
+      <body>
+        <article>
+          <h1>Utility Dense Article</h1>
+          <form><input name="q"><button>Search</button></form>
+          <p>The useful article body remains the intended reading target even though the semantic root contains many utility controls and links.</p>
+          <p>A second synthetic paragraph keeps the article body useful enough for model context while still requiring a caution state.</p>
+          <ul>${Array.from({ length: 18 }, (_, index) => `<li><a href="/topic-${index}">Topic ${index}</a></li>`).join("")}</ul>
+        </article>
+      </body>`, {
+      url: "https://wire.example.test/news/utility-dense",
+    });
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: "https://wire.example.test/news/utility-dense",
+    });
+    const context = buildGeneralPageModelContext(surface);
+    const request = buildGeneralPageParserAdvisorRequest(context, {
+      document: {
+        articleCount: 1,
+        mainCount: 0,
+        roleMainCount: 0,
+        paragraphCount: 2,
+        linkCount: 18,
+        imageCount: 0,
+        formCount: 1,
+        hasArticleMeta: true,
+        hasOpenGraph: false,
+      },
+    });
+    const advice = buildRuleBasedGeneralPageParserAdvice(request);
+
+    expect(request.escalation.reasons).toContain("large_navigation_noise");
+    expect(request.escalation.reasons).not.toContain("index_or_feed");
+    expect(advice).toMatchObject({
+      pageType: "article",
+      decision: "accept_current",
+      confidence: "medium",
+    });
+  });
 });

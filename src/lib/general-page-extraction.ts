@@ -733,6 +733,20 @@ function nonArticlePageWarnings(
     return ["large-navigation-noise"];
   }
 
+  // P25-article-root-utility-dense: some pages put ticker/search/share/topic
+  // controls inside the same semantic article root. Article metadata alone is
+  // not enough to call these clean-ready when the root is control/link-heavy.
+  if (
+    rootIsArticle &&
+    hasArticleMeta &&
+    text.length < 2200 &&
+    linkCount >= 16 &&
+    controlCount >= 2 &&
+    (linkDensity >= 0.18 || listItemCount >= 12)
+  ) {
+    return ["large-navigation-noise"];
+  }
+
   return [];
 }
 

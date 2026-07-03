@@ -62,6 +62,7 @@ Synthetic fixtures can combine multiple patterns.
 | P22-dated-report-list | Dated report/list hub inside a content-like layout | Repeated dated list items pass as a ready single article | `dated-list-hub-ready-trap` |
 | P23-member-zone-teaser | Short member-zone teaser with real intro text | Truncated member content is rated complete/ready | `member-teaser-short` |
 | P24-dashboard-data-surface | Dashboard, leaderboard, or table surface in semantic `main` | Parser treats a data surface as a single complete article | `semantic-main-dashboard-table`, `semantic-main-short-leaderboard` |
+| P25-article-root-utility-dense | Article root contains search/forms, dense utility links, and ticker controls | Parser trusts semantic `article` and marks a noisy, body-thin page as ready | `article-root-utility-dense-ready-trap` |
 
 ### 3. Synthetic Fixtures
 

@@ -699,6 +699,20 @@
         "excludes": [],
         "status": "partial"
       }
+    },
+    {
+      "id": "article-root-utility-dense-ready-trap",
+      "file": "article-root-utility-dense-ready-trap.html",
+      "url": "https://wire.example.test/news/utility-dense-ready-trap",
+      "locale": "en",
+      "pageType": "article",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P25-article-root-utility-dense"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["article root utility dense ready trap fixture", "fictional transit committee reviewed station access plans"],
+        "excludes": ["Synthetic market update 08:10", "Search this site"],
+        "status": "partial"
+      }
     }
   ]
 }

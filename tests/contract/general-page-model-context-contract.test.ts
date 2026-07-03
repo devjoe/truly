@@ -190,6 +190,25 @@ describe("general page model context contract", () => {
     expect(prompt).toContain("qualityIssues: fallback_extraction, partial_extraction, large_navigation_noise, no_main_content");
   });
 
+  it("keeps utility-dense article roots eligible but not clean-ready", () => {
+    const url = "https://wire.example.test/news/utility-dense-ready-trap";
+    const surface = extractGeneralPageSurface({
+      document: fixtureDocument("article-root-utility-dense-ready-trap.html", url),
+      url,
+    });
+
+    const context = buildGeneralPageModelContext(surface);
+
+    expect(context).toMatchObject({
+      modelEligible: true,
+      modelReadiness: "caution",
+      qualityIssues: ["partial_extraction", "large_navigation_noise"],
+    });
+    expect(context.mainText).toContain("fictional transit committee reviewed station access plans");
+    expect(context.mainText).not.toContain("Synthetic market update 08:10");
+    expect(context.mainText).not.toContain("Search this site");
+  });
+
   it("keeps selected text out of page context unless an explicit target is supplied", () => {
     const url = "https://example.test/articles/selected-text";
     const surface = extractGeneralPageSurface({
