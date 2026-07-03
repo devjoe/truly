@@ -123,6 +123,8 @@ release/security surfaces:
   endpoint behavior;
 - localhost/dev-reload logic, remote-provider handling, or optional host
   permission flows;
+- Page/Web current-page reading, optional all-sites access, screenshot-assisted
+  recovery, or other session-only page-content handling;
 - release scripts, CWS package scripts, privacy policy, CWS declarations, or
   reviewer notes.
 
@@ -156,6 +158,9 @@ Run local repo-read mode when any of these are true:
   may have shifted;
 - the change touches manifest permissions, CSP, optional host permissions,
   storage, diagnostics, model endpoints, or external handoff behavior;
+- the change touches Page/Web screenshot-assisted recovery, user confirmation
+  flows, session-only page-content handling, or public privacy claims for those
+  flows;
 - release/CWS scripts, package contents, public-boundary checks, privacy docs,
   reviewer notes, or source-package rules changed;
 - there is any risk that private fixtures, generated output, secrets, local

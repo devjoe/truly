@@ -275,6 +275,8 @@ function buildPrompt(reviewKind, context) {
     functional: [
       "release regression risk",
       "settings and model-source behavior",
+      "Page/Web current-page reading UX, optional all-sites access, and reviewer-visible failure states",
+      "screenshot-assisted recovery UX claims, including user confirmation and visible preview behavior",
       "manifest/package/release metadata consistency",
       "missing tests or manual checks",
       "Chrome Web Store-visible UX or documentation mismatch",
@@ -286,11 +288,13 @@ function buildPrompt(reviewKind, context) {
       "message passing and postMessage origin validation",
       "DOM injection and attacker-controlled text handling",
       "external endpoint, localhost, and optional permission behavior",
+      "Page/Web screenshot-assisted recovery data flow, including user confirmation, vision-gated use, session-only handling, and absence from storage or logs",
     ],
     cws: [
       "CWS package/report consistency",
       "privacy declarations and listing claims",
       "permission justification mismatch",
+      "Page/Web all-sites opt-in and screenshot-assisted recovery claims in reviewer notes, privacy policy, and permission justifications",
       "remote-code ambiguity",
       "reviewer-note completeness",
       "dashboard upload or review rejection risks",

@@ -123,6 +123,17 @@ const REQUIRED_SNIPPETS = [
       "does not add a separate screenshot permission",
     ],
   },
+  {
+    path: "docs/release/preview-command-contract.md",
+    snippets: [
+      "Page/Web current-page reading",
+      "optional all-sites access",
+      "screenshot-assisted recovery",
+      "session-only page-content handling",
+      "user confirmation",
+      "public privacy claims",
+    ],
+  },
 ];
 
 const errors = [];
