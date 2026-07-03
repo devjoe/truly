@@ -978,6 +978,93 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("Screenshot-grounded synthetic summary.");
   });
 
+  it("rejects non-image screenshot data URLs before preview or model submission", async () => {
+    const pagePaneEl = setupDom();
+    const weakSurface = surface({
+      mainText: "Sparse app-shell text without enough article content for direct analysis on this page.",
+      excerpt: "Sparse app-shell text",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["no-main-content", "dynamic-content-partial"],
+      },
+    });
+    const sentAnalysis: TrulyMessage[] = [];
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return { type: "PAGE_READING_RESULT", tabId: 42, surface: weakSurface } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+        return {
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: 42,
+          ok: true,
+          providerRuntime: { ...message.providerRuntime, mode: "tier-b-short-json" },
+          advice: {
+            schemaVersion: 1,
+            pageType: "app_shell",
+            decision: "request_screenshot_region",
+            confidence: "medium",
+            needsUserSelection: false,
+            needsScreenshot: true,
+            riskTags: ["needs_visual_grounding"],
+            rationale: "Synthetic visual grounding request.",
+          },
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        sentAnalysis.push(message);
+        return {
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: 42,
+          ok: true,
+          brief: {
+            schemaVersion: 1,
+            summary: "Unexpected unsafe screenshot summary.",
+            model: "vision-model",
+            outputLang: "zh-TW",
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const captureVisibleTab = vi.fn(async () => "data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==");
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+          windowId: 7,
+        }]),
+        get: vi.fn(async () => ({ id: 42, url: "https://example.test/article", windowId: 7 })),
+        captureVisibleTab,
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "vision-model",
+      }),
+      now: () => 1_000,
+      getVisionSupported: () => true,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCapture")?.click();
+    await flushMicrotasks();
+
+    expect(pagePaneEl.querySelector(".page-reader-screenshot-preview")).toBeFalsy();
+    expect(pagePaneEl.textContent).toContain("截圖流程失敗");
+    expect(sentAnalysis).toHaveLength(0);
+  });
+
   it("never offers the screenshot card without vision support", async () => {
     const pagePaneEl = setupDom();
     const weakSurface = surface({

@@ -934,7 +934,10 @@ function normalizeHref(value: string, baseUrl: string): string | undefined {
   if (!value.trim() || value.startsWith("#"))
     return undefined;
   try {
-    return new URL(value, baseUrl).href;
+    const url = new URL(value, baseUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:")
+      return undefined;
+    return url.href;
   } catch {
     return undefined;
   }

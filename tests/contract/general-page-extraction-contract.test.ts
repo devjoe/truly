@@ -213,6 +213,49 @@ describe("General Page Reader extraction contract", () => {
     ]);
   });
 
+  it("drops non-web URLs at the extraction normalization boundary", () => {
+    const document = new JSDOM(
+      `<!doctype html>
+      <html>
+        <head><title>Scheme Fixture</title></head>
+        <body>
+          <article>
+            <h1>Scheme Fixture</h1>
+            <p>This synthetic article contains enough body text to exercise link extraction without relying on a real website. The parser should keep normal web links and reject active or private schemes before downstream model-context filtering runs.</p>
+            <p>A second paragraph makes the article root stable and keeps this fixture above the minimum content threshold used by extraction heuristics.</p>
+            <a href="javascript:alert(1)">Unsafe script link</a>
+            <a href="data:text/plain,hello">Unsafe data link</a>
+            <a href="mailto:reporter@example.test">Email link</a>
+            <a href="tel:+15550101">Phone link</a>
+            <a href="/sources/public-report">Public report</a>
+            <img src="data:image/svg+xml;base64,PHN2Zy8+" alt="Inline image">
+            <img src="/images/public-chart.png" alt="Public chart">
+          </article>
+        </body>
+      </html>`,
+      { url: "https://example.test/articles/scheme-fixture" },
+    ).window.document;
+
+    const surface = extractGeneralPageSurface({
+      document,
+      url: "https://example.test/articles/scheme-fixture",
+    });
+
+    expect(surface.links).toEqual([
+      {
+        href: "https://example.test/sources/public-report",
+        text: "Public report",
+      },
+    ]);
+    expect(surface.images).toEqual([
+      {
+        src: "https://example.test/images/public-chart.png",
+        alt: "Public chart",
+        title: undefined,
+      },
+    ]);
+  });
+
   it("resolves relative canonical URLs against the current page URL", () => {
     const document = new JSDOM(`
       <!doctype html>

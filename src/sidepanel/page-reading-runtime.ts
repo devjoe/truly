@@ -859,7 +859,7 @@ export function createSidepanelPageReadingRuntime({
       const windowId = typeof tab?.windowId === "number" ? tab.windowId : undefined;
       if (typeof windowId !== "number") throw new Error("window_unavailable");
       const dataUrl = await tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 80 });
-      if (!dataUrl) throw new Error("capture_empty");
+      if (!isSupportedScreenshotDataUrl(dataUrl)) throw new Error("capture_invalid_data_url");
       setScreenshot(tabId, { status: "preview", dataUrl, updatedAt: now() });
     } catch {
       setScreenshot(tabId, {
@@ -876,7 +876,7 @@ export function createSidepanelPageReadingRuntime({
     const effective = session?.advisor?.effectiveModelContext;
     const providerRuntime = session?.advisor?.providerRuntime;
     if (!session?.surface || session.status === "stale") return;
-    if (!shot?.dataUrl || !effective || !providerRuntime) return;
+    if (!shot?.dataUrl || !isSupportedScreenshotDataUrl(shot.dataUrl) || !effective || !providerRuntime) return;
     if (!providerRuntime.canUseModel || !providerRuntime.endpoint || !providerRuntime.model) return;
 
     const analysisContext = analysisContextForEffectiveSession(session, session.surface, effective);
@@ -925,6 +925,10 @@ export function createSidepanelPageReadingRuntime({
       setScreenshot(tabId, { status: "error", error: errorMessage(error), updatedAt: now() });
       setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse);
     }
+  }
+
+  function isSupportedScreenshotDataUrl(value: string): boolean {
+    return /^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(value.trim());
   }
 
   function setAdvisor(tabId: number, advisor: PageReadingAdvisorSession): void {

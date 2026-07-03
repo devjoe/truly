@@ -47,6 +47,11 @@ import { DashboardRuntimeState } from "./dashboard-state";
 import { createTierBCaptureBuffer, maybeCaptureTierB } from "./tier-b-capture";
 import { classifyTierAPosts } from "./tier-a-classification";
 import { debugLog } from "../lib/logger";
+import {
+  resolveTrustedTierARuntime,
+  resolveTrustedTierBProviderRuntime,
+  type StoredModelRuntimeInput,
+} from "./trusted-model-runtime";
 
 // Capture console output for the debug snapshot bundle. Idempotent — if
 // the SW wakes from suspension this is a no-op. See lib/log-buffer.ts.
@@ -72,22 +77,26 @@ async function storedSecretString(keys: string[]): Promise<string | undefined> {
   return undefined;
 }
 
-async function tierAApiKeyForMessage(
-  message: Extract<TrulyMessage, { type: "OLLAMA_CLASSIFY" }>,
+async function storedModelRuntimeInput(): Promise<StoredModelRuntimeInput> {
+  const [syncStored, localStored] = await Promise.all([
+    chrome.storage.sync.get("settings"),
+    chrome.storage.local.get(["ollamaEndpoint", "ollamaModel"]),
+  ]);
+  return {
+    settings: syncStored.settings,
+    ollamaEndpoint: localStored.ollamaEndpoint,
+    ollamaModel: localStored.ollamaModel,
+  };
+}
+
+async function tierAApiKeyForProvider(
+  provider: TierAProvider | undefined,
+  endpointKind: string | undefined,
 ): Promise<string | undefined> {
-  if (message.apiKey?.trim()) return message.apiKey.trim();
-  if (message.endpointKind !== OPENAI_COMPAT_PROVIDER && message.provider !== OPENAI_COMPAT_PROVIDER) {
+  if (endpointKind !== OPENAI_COMPAT_PROVIDER && provider !== OPENAI_COMPAT_PROVIDER) {
     return undefined;
   }
   return storedSecretString(["tierAApiKey", "apiKey"]);
-}
-
-async function tierBApiKeyForMessage(
-  message: Extract<TrulyMessage, { type: "DEEP_CLASSIFY" | "READING_BRIEF_REQUEST" }>,
-): Promise<string | undefined> {
-  if (message.apiKey?.trim()) return message.apiKey.trim();
-  if (message.provider !== OPENAI_COMPAT_PROVIDER) return undefined;
-  return storedSecretString(["tierBApiKey"]);
 }
 
 async function tierBApiKeyForProvider(
@@ -341,13 +350,18 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
     (async () => {
       let modelAttempted = false;
+      let trustedRuntime = message.providerRuntime;
       try {
-        if (message.providerRuntime.canUseModel && message.providerRuntime.endpoint && message.providerRuntime.model) {
+        trustedRuntime = resolveTrustedTierBProviderRuntime(
+          "ai_analysis",
+          await storedModelRuntimeInput(),
+        );
+        if (trustedRuntime.canUseModel && trustedRuntime.endpoint && trustedRuntime.model) {
           modelAttempted = true;
           const modelResult = await callTierBGeneralPageParserAdvisor({
-            endpoint: message.providerRuntime.endpoint,
-            model: message.providerRuntime.model,
-            apiKey: await tierBApiKeyForProvider(message.providerRuntime.effectiveProvider),
+            endpoint: trustedRuntime.endpoint,
+            model: trustedRuntime.model,
+            apiKey: await tierBApiKeyForProvider(trustedRuntime.effectiveProvider),
             request: message.request,
             outputLang: message.outputLang,
           });
@@ -362,7 +376,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
               ok: true,
               advice: modelResult.advice,
               providerRuntime: {
-                ...message.providerRuntime,
+                ...trustedRuntime,
                 mode: "tier-b-short-json",
               },
             } satisfies GeneralPageParserAdvisorResultMsg);
@@ -381,7 +395,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           ok: true,
           advice,
           providerRuntime: {
-            ...message.providerRuntime,
+            ...trustedRuntime,
             mode: modelAttempted ? "tier-b-short-json-fallback" : "rule-based-runtime-baseline",
           },
         } satisfies GeneralPageParserAdvisorResultMsg);
@@ -391,7 +405,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           tabId: message.tabId,
           ok: false,
           providerRuntime: {
-            ...message.providerRuntime,
+            ...trustedRuntime,
             mode: modelAttempted ? "tier-b-short-json-fallback" : "rule-based-runtime-baseline",
           },
           error: error instanceof Error ? error.message.slice(0, 200) : "parser_advisor_failed",
@@ -404,14 +418,18 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
     (async () => {
       try {
-        if (!message.providerRuntime.canUseModel || !message.providerRuntime.endpoint || !message.providerRuntime.model) {
-          throw new Error(message.providerRuntime.blockedReason || "general_page_brief_provider_unavailable");
+        const trustedRuntime = resolveTrustedTierBProviderRuntime(
+          "ai_analysis",
+          await storedModelRuntimeInput(),
+        );
+        if (!trustedRuntime.canUseModel || !trustedRuntime.endpoint || !trustedRuntime.model) {
+          throw new Error(trustedRuntime.blockedReason || "general_page_brief_provider_unavailable");
         }
         const startedAt = Date.now();
         const result = await callTierBGeneralPageBrief({
-          endpoint: message.providerRuntime.endpoint,
-          model: message.providerRuntime.model,
-          apiKey: await tierBApiKeyForProvider(message.providerRuntime.effectiveProvider),
+          endpoint: trustedRuntime.endpoint,
+          model: trustedRuntime.model,
+          apiKey: await tierBApiKeyForProvider(trustedRuntime.effectiveProvider),
           context: message.context,
           allowedUse: message.allowedUse,
           outputLang: message.outputLang,
@@ -650,23 +668,38 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   }
 
   if (message.type === "DEEP_CLASSIFY") {
-    const { postId, text, imageUrls, filteredImageCount, endpoint, model } = message;
+    const { postId, text, imageUrls, filteredImageCount } = message;
     const outputLang = message.outputLang ?? "zh-TW";
-    if (message.provider !== GEMINI_NANO_PROVIDER) {
-      try {
-        maybeCaptureTierB(__trulyTierBCapture, message);
-      } catch (e) {
-        console.warn("[Truly BG] Tier B capture failed:", e);
-      }
-    }
     (async () => {
       try {
-        const result = message.provider === GEMINI_NANO_PROVIDER
+        const trustedRuntime = resolveTrustedTierBProviderRuntime(
+          "ai_analysis",
+          await storedModelRuntimeInput(),
+        );
+        const provider = trustedRuntime.effectiveProvider;
+        if (provider !== GEMINI_NANO_PROVIDER) {
+          try {
+            maybeCaptureTierB(__trulyTierBCapture, {
+              ...message,
+              endpoint: trustedRuntime.endpoint,
+              model: trustedRuntime.model,
+            });
+          } catch (e) {
+            console.warn("[Truly BG] Tier B capture failed:", e);
+          }
+        }
+        if (!trustedRuntime.canUseModel) {
+          throw new Error(trustedRuntime.blockedReason || "tier_b_provider_unavailable");
+        }
+        if (provider !== GEMINI_NANO_PROVIDER && (!trustedRuntime.endpoint || !trustedRuntime.model)) {
+          throw new Error("tier_b_endpoint_model_unavailable");
+        }
+        const result = provider === GEMINI_NANO_PROVIDER
           ? await callGeminiNanoTierB({ text, imageUrls, filteredImageCount, outputLang })
           : await callTierBDeepDetailed({
-              endpoint,
-              model,
-              apiKey: await tierBApiKeyForMessage(message),
+              endpoint: trustedRuntime.endpoint,
+              model: trustedRuntime.model,
+              apiKey: await tierBApiKeyForProvider(provider),
               text,
               imageUrls,
               filteredImageCount,
@@ -691,24 +724,32 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   }
 
   if (message.type === "READING_BRIEF_REQUEST") {
-    const { postId, endpoint, model, event } = message;
+    const { postId, event } = message;
     const outputLang = message.outputLang ?? "zh-TW";
     (async () => {
       try {
-        if (message.provider && !providerCanRunTierBFeature("reading_brief", message.provider)) {
-          throw new Error(`${message.provider}_reading_brief_unsupported`);
+        const trustedRuntime = resolveTrustedTierBProviderRuntime(
+          "reading_brief",
+          await storedModelRuntimeInput(),
+        );
+        const provider = trustedRuntime.effectiveProvider;
+        if (!trustedRuntime.canUseModel || !providerCanRunTierBFeature("reading_brief", provider)) {
+          throw new Error(trustedRuntime.blockedReason || `${provider}_reading_brief_unsupported`);
+        }
+        if (provider !== GEMINI_NANO_PROVIDER && (!trustedRuntime.endpoint || !trustedRuntime.model)) {
+          throw new Error("reading_brief_endpoint_model_unavailable");
         }
         dashboardState.patchEvent(postId, {
           readingBriefPending: true,
           readingBriefError: undefined,
         });
         const startedAt = Date.now();
-        const brief = message.provider === GEMINI_NANO_PROVIDER
+        const brief = provider === GEMINI_NANO_PROVIDER
           ? await callGeminiNanoReadingBrief({ event, outputLang })
           : await callTierBReadingBrief({
-              endpoint,
-              model,
-              apiKey: await tierBApiKeyForMessage(message),
+              endpoint: trustedRuntime.endpoint,
+              model: trustedRuntime.model,
+              apiKey: await tierBApiKeyForProvider(provider),
               event,
               outputLang,
             });
@@ -783,9 +824,11 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
 
     (async () => {
       try {
+        const trustedRuntime = resolveTrustedTierARuntime(await storedModelRuntimeInput());
         const { requestedIds, results } = await classifyTierAPosts({
           ...message,
-          apiKey: await tierAApiKeyForMessage(message),
+          ...trustedRuntime,
+          apiKey: await tierAApiKeyForProvider(trustedRuntime.provider, trustedRuntime.endpointKind),
         });
         debugLog(`[Truly BG] Ollama done: ${Object.keys(results).length} results (rules=${message.customRules?.length ?? 0})`);
         if (typeof tabId === "number") {
