@@ -51,6 +51,7 @@
     "summarize:general-page-observations": "node scripts/summarize-general-page-observations.mjs",
     "summarize:general-page-quality-findings": "node scripts/summarize-general-page-quality-findings.mjs",
     "plan:general-page-quality-followups": "node scripts/plan-general-page-quality-followups.mjs",
+    "cluster:general-page-quality-followups": "node scripts/cluster-general-page-quality-followups.mjs",
     "check:general-page-corpus": "node scripts/check-general-page-corpus.mjs",
     "check:general-page-readiness-docs": "node scripts/check-general-page-readiness-docs.mjs",
     "check:general-page": "npm run check:general-page-readiness-docs && npm run check:general-page-corpus && npm run spike:general-page-parsers && npm run spike:general-page-parser-advisor && npm run audit:general-page-model-integration",

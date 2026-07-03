@@ -20,6 +20,12 @@ import {
   parseQualityFollowupArgs,
   renderQualityFollowupMarkdown,
 } from "../../scripts/plan-general-page-quality-followups.mjs";
+import {
+  assertPublicClusterReport,
+  buildQualityFollowupClusters,
+  parseQualityFollowupClusterArgs,
+  renderQualityFollowupClustersMarkdown,
+} from "../../scripts/cluster-general-page-quality-followups.mjs";
 
 describe("General Page real-world eval sanitizer", () => {
   it("does not serialize private URLs, raw text, previews, excerpts, or expected snippets", () => {
@@ -653,6 +659,239 @@ describe("General Page quality follow-up planner", () => {
       url: "https://private-source.example.test/story",
     })).toThrow(/private field/);
     expect(() => assertPublicFollowupPlan({
+      ok: true,
+      label: "https://private-source.example.test/story",
+    })).toThrow(/private-looking string/);
+  });
+});
+
+describe("General Page quality follow-up clusters", () => {
+  const review = {
+    input: {
+      sourceMode: "cdp",
+    },
+    results: [
+      {
+        targetId: "target-101",
+        url: "https://private-source.example.test/story-a",
+        category: "taiwan_news",
+        pageType: "news",
+        document: {
+          linkCount: 210,
+          paragraphCount: 12,
+          articleCount: 0,
+          mainCount: 1,
+          roleMainCount: 0,
+          formCount: 0,
+          dialogCount: 0,
+          imageCount: 8,
+          htmlLength: 100000,
+          bodyTextLength: 24000,
+          titlePresent: true,
+          hasCanonical: true,
+          hasArticleMeta: true,
+          hasOpenGraph: true,
+        },
+        surface: {
+          title: "Private Story A",
+          textLength: 1400,
+          preview: "Sensitive copied preview A",
+          extraction: {
+            method: "semantic-html",
+            status: "complete",
+            warnings: [],
+          },
+          linkCount: 24,
+          imageCount: 8,
+        },
+        modelContext: {
+          modelReadiness: "ready",
+          textLength: 1400,
+          qualityIssues: [],
+        },
+        autoReview: {
+          suggestedVerdict: "good",
+          issueTags: ["many-source-links", "leading-ticker-noise"],
+        },
+      },
+      {
+        targetId: "target-102",
+        url: "https://private-source.example.test/story-b",
+        category: "taiwan_news",
+        pageType: "news",
+        document: {
+          linkCount: 240,
+          paragraphCount: 11,
+          articleCount: 0,
+          mainCount: 1,
+          roleMainCount: 0,
+          formCount: 0,
+          dialogCount: 0,
+          imageCount: 10,
+          htmlLength: 110000,
+          bodyTextLength: 20000,
+          titlePresent: true,
+          hasCanonical: true,
+          hasArticleMeta: true,
+          hasOpenGraph: true,
+        },
+        surface: {
+          title: "Private Story B",
+          textLength: 1200,
+          preview: "Sensitive copied preview B",
+          extraction: {
+            method: "semantic-html",
+            status: "complete",
+            warnings: [],
+          },
+          linkCount: 28,
+          imageCount: 10,
+        },
+        modelContext: {
+          modelReadiness: "ready",
+          textLength: 1200,
+          qualityIssues: [],
+        },
+        autoReview: {
+          suggestedVerdict: "good",
+          issueTags: ["many-source-links", "leading-ticker-noise"],
+        },
+      },
+      {
+        targetId: "target-103",
+        url: "https://private-source.example.test/story-c",
+        category: "blog_medium_personal",
+        pageType: "blog",
+        document: {
+          linkCount: 36,
+          paragraphCount: 3,
+          articleCount: 0,
+          mainCount: 0,
+          roleMainCount: 0,
+          formCount: 1,
+          dialogCount: 0,
+          imageCount: 2,
+          htmlLength: 50000,
+          bodyTextLength: 18000,
+          titlePresent: true,
+          hasCanonical: false,
+          hasArticleMeta: false,
+          hasOpenGraph: false,
+        },
+        surface: {
+          title: "Private Story C",
+          textLength: 180,
+          preview: "Sensitive copied preview C",
+          extraction: {
+            method: "fallback",
+            status: "partial",
+            warnings: ["no-main-content"],
+          },
+          linkCount: 4,
+          imageCount: 2,
+        },
+        modelContext: {
+          modelReadiness: "caution",
+          textLength: 180,
+          qualityIssues: ["fallback_extraction", "partial_extraction", "no_main_content"],
+        },
+        autoReview: {
+          suggestedVerdict: "usable_with_caution",
+          issueTags: ["fallback", "partial", "quality:fallback_extraction", "quality:partial_extraction", "quality:no_main_content"],
+        },
+      },
+    ],
+  };
+
+  const labels = new Map([
+    ["target-101", { verdict: "usable_with_caution", issueTags: ["truncated-body"] }],
+    ["target-102", { verdict: "usable_with_caution", issueTags: ["truncated-body"] }],
+    ["target-103", { verdict: "usable_with_caution", issueTags: ["js-rendered-site"] }],
+  ]);
+
+  const followupPlan = {
+    items: [
+      {
+        key: "auto:overconfident-good",
+        kind: "auto-overconfident-good",
+        status: "needs_private_review",
+        count: 2,
+        reviewedCount: 2,
+      },
+      {
+        key: "manual:usable-with-caution",
+        kind: "manual-caution-pattern",
+        status: "needs_private_review",
+        count: 3,
+        reviewedCount: 3,
+      },
+      {
+        key: "issue:many-source-links",
+        kind: "issue-tag-cluster",
+        status: "covered_by_existing_fixture",
+        count: 2,
+        reviewedCount: 2,
+      },
+    ],
+  };
+
+  it("clusters needs-private-review items by structural signatures without private fields", () => {
+    const clusterReport = buildQualityFollowupClusters(review, labels, followupPlan, {
+      topClusters: 4,
+      minClusterCount: 2,
+    });
+    const markdown = renderQualityFollowupClustersMarkdown(clusterReport);
+    const serialized = JSON.stringify(clusterReport);
+    const overconfident = clusterReport.items.find((item) => item.key === "auto:overconfident-good");
+
+    expect(() => assertPublicClusterReport(clusterReport)).not.toThrow();
+    expect(clusterReport.counts.byAction).toMatchObject({
+      fixture_candidate: expect.any(Number),
+    });
+    expect(overconfident.clusters[0]).toMatchObject({
+      count: 2,
+      recommendedAction: "fixture_candidate",
+      signature: expect.objectContaining({
+        extraction: "semantic-html/complete",
+        readiness: "ready",
+      }),
+    });
+    expect(markdown).toContain("General Page Quality Follow-Up Clusters");
+    expect(markdown).toContain("fixture_candidate");
+    expect(serialized).not.toContain("https://private-source.example.test");
+    expect(serialized).not.toContain("Private Story");
+    expect(serialized).not.toContain("Sensitive copied preview");
+    expect(serialized).not.toContain("target-10");
+  });
+
+  it("keeps cluster CLI arguments strict", () => {
+    expect(parseQualityFollowupClusterArgs([
+      "--review", "tmp/general-page-product-quality/review-test/review.json",
+      "--labels", "tmp/general-page-product-quality/review-test/manual-labels.jsonl",
+      "--plan", "tmp/general-page-product-quality/review-test/quality-followups-plan.json",
+      "--top-clusters", "4",
+      "--min-cluster-count", "2",
+    ])).toMatchObject({
+      review: "tmp/general-page-product-quality/review-test/review.json",
+      labels: "tmp/general-page-product-quality/review-test/manual-labels.jsonl",
+      plan: "tmp/general-page-product-quality/review-test/quality-followups-plan.json",
+      topClusters: 4,
+      minClusterCount: 2,
+    });
+    expect(() => parseQualityFollowupClusterArgs([
+      "--review", "tmp/review.json",
+      "--labels", "tmp/labels.jsonl",
+      "--plan", "tmp/plan.json",
+      "--top-clusters", "0",
+    ])).toThrow(/between 1 and 24/);
+  });
+
+  it("rejects private-looking cluster report fields and strings", () => {
+    expect(() => assertPublicClusterReport({
+      ok: true,
+      targetId: "target-001",
+    })).toThrow(/private field/);
+    expect(() => assertPublicClusterReport({
       ok: true,
       label: "https://private-source.example.test/story",
     })).toThrow(/private-looking string/);

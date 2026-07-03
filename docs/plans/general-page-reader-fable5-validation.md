@@ -124,8 +124,20 @@ parser advisor and model-brief path are implemented.
      --summary tmp/general-page-product-quality/review-.../quality-findings-summary.json
    ```
 
-9. Inspect `quality-gate.json`, `quality-findings-summary.md`, and
-   `quality-followups-plan.md`, then decide
+9. Cluster the `needs_private_review` follow-ups by structural, content-free
+   signals. This reads the same private review and labels, but writes only
+   public-safe counts, document-shape buckets, extraction/readiness states, and
+   issue-tag clusters:
+
+   ```bash
+   npm run cluster:general-page-quality-followups -- \
+     --review tmp/general-page-product-quality/review-.../review.json \
+     --labels tmp/general-page-product-quality/review-.../manual-labels.jsonl \
+     --plan tmp/general-page-product-quality/review-.../quality-followups-plan.json
+   ```
+
+10. Inspect `quality-gate.json`, `quality-findings-summary.md`,
+   `quality-followups-plan.md`, and `quality-followups-clusters.md`, then decide
    whether each cluster becomes a new synthetic fixture, parser heuristic
    change, model-advisor prompt change, or private-only observation.
 

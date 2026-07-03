@@ -26,6 +26,7 @@ This document is the current public-safe readiness index for the General Page Re
 - Current-browser smoke can now fail on reviewer-shaped thresholds without manual JSON inspection: minimum page count, maximum ready count, maximum fetch/runtime errors, maximum empty-or-blocked pages, and selected public-safe issue tags.
 - `summarize:general-page-quality-findings` converts a private 200-target `review.json` plus optional `manual-labels.jsonl` into `quality-findings-summary.json` and `.md` aggregate follow-up candidates. It groups bad labels, auto-overconfident good suggestions, auto-underconfident blocked suggestions, caution clusters, and issue-tag clusters while omitting real URLs, titles, excerpts, previews, notes, screenshots, target ids, seed ids, and source content.
 - `plan:general-page-quality-followups` converts `quality-findings-summary.json` into `quality-followups-plan.json` and `quality-followups-plan.md`. It validates existing synthetic fixture coverage against `tests/fixtures/general-pages/manifest.json`, marks covered clusters such as source-link noise and index-like semantic-main traps, and keeps broad symptoms such as partial/fallback extraction in `needs_private_review` until repeated private DOM shapes can be rewritten as synthetic fixtures.
+- `cluster:general-page-quality-followups` reads the private review, labels, and `quality-followups-plan.json`, then writes `quality-followups-clusters.json` and `quality-followups-clusters.md`. It clusters only structural signals such as document-shape buckets, extraction/readiness state, issue tags, and count medians, so reviewer handoff can name `fixture_candidate`, `heuristic_review`, or `private_review_only` work without exposing targets or copied page content.
 
 ## Security Review Follow-Up State
 
@@ -79,6 +80,7 @@ npm run smoke:general-page-current -- --all-open --limit 4 --category current-br
 npm run smoke:general-page-current -- --all-open --limit 6 --min-page-count 4 --max-error-count 0 --category current-browser-open-tabs --page-type open-tab --timeout-ms 25000 --concurrency 2
 npm run summarize:general-page-quality-findings -- --review tmp/general-page-product-quality/review-.../review.json --labels tmp/general-page-product-quality/review-.../manual-labels.jsonl
 npm run plan:general-page-quality-followups -- --summary tmp/general-page-product-quality/review-.../quality-findings-summary.json
+npm run cluster:general-page-quality-followups -- --review tmp/general-page-product-quality/review-.../review.json --labels tmp/general-page-product-quality/review-.../manual-labels.jsonl --plan tmp/general-page-product-quality/review-.../quality-followups-plan.json
 ```
 
 Results:
@@ -96,6 +98,7 @@ Results:
 - Product-quality finding summaries are intended for reviewer handoff after manual labeling: copy only aggregate clusters and recommendations from `quality-findings-summary.md`; keep the source `review.json`, labels, review HTML, screenshots, URLs, copied page text, and per-target notes private.
 - `summarize:general-page-quality-findings`: passed against an existing 200-target labeled private review as a tooling validation. It wrote `quality-findings-summary.json` and `.md`, reported `193/200` reviewed and 20 follow-up candidates, and an automated check found no URL-like strings, raw HTML markers, or target ids in the JSON. Treat those candidate counts as historical validation data, not the current runtime quality baseline.
 - `plan:general-page-quality-followups`: passed against the same existing 200-target labeled private review after the findings summary. It wrote `quality-followups-plan.json` and `quality-followups-plan.md`, verified referenced fixture ids against the public synthetic corpus, and produced 20 public-safe follow-up items: 11 `needs_private_review`, 8 `covered_by_existing_fixture`, and 1 `harness_condition`.
+- `cluster:general-page-quality-followups`: passed against the same existing 200-target labeled private review after the follow-up plan. It wrote `quality-followups-clusters.json` and `quality-followups-clusters.md`, reported 284 key-row matches from 63 unique rows across 11 follow-up keys, and separated cluster next actions into 22 `fixture_candidate`, 24 `heuristic_review`, and 7 `private_review_only` clusters. The output passed a URL/raw-HTML/target-id scan.
 - `smoke:general-page-current --all-open --min-page-count 4 --max-error-count 0`: passed after adding the follow-up planner. Sanitized result: 5 pages, 4 caution, 1 blocked, 0 errors, threshold `pass`; source-link host redaction still reduced local/private tabs to `localhost` and `private-host`; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T16-56-56-594Z`.
 
 ## Non-Blocking Follow-Ups
