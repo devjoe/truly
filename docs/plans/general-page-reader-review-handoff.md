@@ -1,7 +1,15 @@
 # General Page Reader Review Handoff
 
-Status: ready for branch review before runtime UI work
+Status: superseded by later runtime slices
 Date: 2026-06-30
+
+This handoff records the contract/evaluation state before Page/Web runtime UI,
+model integration, current-region targeting, screenshot confirmation, and
+live-DOM review mode landed. Keep it for historical review context only. The
+current branch state is tracked in `general-page-reader.md`,
+`general-page-model-integration.md`,
+`general-page-6b-screenshot-livedom-handoff.md`, and the live-DOM quality
+finding summaries.
 
 ## Branch Scope
 
@@ -78,16 +86,20 @@ runtimeSuitabilityFailures: {}
 The remaining two private target failures are pages where all parser candidates
 returned empty output. They do not justify adding more public fixtures yet.
 
-## Runtime Non-Goals Still In Force
+## Runtime Non-Goals At This Earlier Slice
 
-Before a separate parser-runtime adoption decision, the branch must continue to
-avoid:
+At this earlier slice, before Page/Web runtime/model integration, the branch was
+still avoiding:
 
 - importing `@mozilla/readability` or `defuddle` into `src/`;
-- changing model prompts or model routing for page reading;
 - adding broad install-time host permissions;
 - adding inline current-region UI;
 - adding Threads-specific DOM support.
+
+The parser dependency, broad install-time host-permission, inline UI, and
+Threads boundaries remain in force. Page/Web model routing is no longer a
+non-goal; it is implemented as session-only Slice 4 behavior through
+`effectiveModelContext`.
 
 ## Runtime Slice 1 Status
 

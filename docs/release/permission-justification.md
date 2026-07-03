@@ -12,7 +12,7 @@ permission. It should stay aligned with `src/manifest.json`.
 | `storage` | Persist extension settings, readiness state, theme/language choices, model configuration, and user preferences. | Options, Popup, Heads-up, and Side Panel stay in sync across sessions. |
 | `activeTab` | Use temporary access after a user gesture when the extension needs to interact with the current tab. | Popup and user-triggered actions can operate on the active page without broad tab history permissions. |
 | `scripting` | Inject the general page reader content script only after a user action on the active tab. | The user can explicitly read the current web page without broad install-time page injection. |
-| `sidePanel` | Render the reading side panel through Chrome's Side Panel API. | The user can open a dedicated reading panel for the current post. |
+| `sidePanel` | Render the reading side panel through Chrome's Side Panel API. | The user can open a dedicated reading panel for the current post or current web page. |
 
 ## Static Host Permissions
 
@@ -42,7 +42,7 @@ crawling, automatic model submission, or persistent full-article storage.
 |---|---|---|
 | `script-src 'self' 'wasm-unsafe-eval'` | Allows the bundled zhtw-mcp WASM language-convention checker to run locally in the extension. | Extension logic remains bundled; model output is data, not executable code. |
 
-For Preview 9, `wasm-unsafe-eval` is intentionally retained because the bundled
+For Preview 11, `wasm-unsafe-eval` is intentionally retained because the bundled
 zhtw-mcp WASM loader still requires it. Remove the directive only after the
 bundled WASM loader no longer needs it and `docs/release/mv3-compliance.md` has
 been updated to match.

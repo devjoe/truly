@@ -81,10 +81,15 @@ The side panel should show:
 - manual external-tool actions;
 - Markdown copy/download.
 
+Implemented on this branch:
+
+- selected-text analysis action from the side panel;
+- one-key trigger for the paragraph or element under the mouse after an
+  existing Page/Web session is available;
+- optional screenshot confirmation for user-targeted recovery;
+
 Planned follow-up:
 
-- current mouse-region or selected-text action;
-- one-key trigger for the paragraph or element under the mouse;
 - optional small in-page progress/result anchor;
 - side-panel handoff for durable analysis and export.
 
@@ -95,7 +100,7 @@ Do not include these in the first version:
 - automatic injection into all web pages;
 - always-on background page scanning;
 - in-page floating widgets;
-- current-region hotkeys;
+- ambient current-region analysis without an explicit user trigger;
 - comment-section analysis;
 - account automation;
 - automatic fact-check verdicts;

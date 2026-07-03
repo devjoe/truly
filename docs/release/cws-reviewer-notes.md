@@ -1,14 +1,14 @@
 # Chrome Web Store Reviewer Notes
 
-Last updated: 2026-06-27
+Last updated: 2026-07-03
 
-Status: Preview 9 reviewer-notes reference
+Status: Preview 11 reviewer-notes reference
 
 ## Submission Build
 
 - Version: `0.1.1`
-- Version name: `0.1.1 Preview 9`
-- Recommended tag: `v0.1.1-preview.9`
+- Version name: `0.1.1 Preview 11`
+- Recommended tag: `v0.1.1-preview.11`
 - Commit: use the commit recorded in the latest `npm run cws:package`
   report.
 - Extension ZIP: use the `truly-cws-extension-0.1.1-<commit>.zip` path from the
@@ -23,16 +23,17 @@ production build, packaged ZIP audit, and CWS preflight. CWS preflight also
 checks the recorded published package version so a submitted package does not
 reuse the numeric `manifest.version` from the currently published item.
 
-Preview 9 fixes model endpoint settings behavior and hardens release packaging
-so development-only reload hooks are excluded from the submitted package.
+Preview 11 includes the user-triggered Page/Web reader path while preserving
+the existing Facebook reading surface and release-package boundary.
 
 ## Product Summary
 
 Truly is a Chrome MV3 extension for privacy-conscious reading assistance in
-social feeds and web pages. The first release starts with supported Facebook
-reading surfaces. It adds a compact reading hint near supported posts and a
-user-opened reading side panel with summary, context, follow-up questions,
-language-convention checks, claim signals, and manual external-tool handoff.
+social feeds and web pages. The preview supports Facebook reading surfaces and
+explicit Page/Web reads for the current tab. It adds a compact reading hint near
+supported posts and a user-opened reading side panel with summary, context,
+follow-up questions, language-convention checks, claim signals, and manual
+external-tool handoff.
 
 Truly is not an ad blocker, automatic fact-checker, moderation bot, account
 automation tool, or scraping service. The extension helps the reader notice
@@ -53,6 +54,11 @@ context and decide what to verify.
 7. Expand the hint to inspect the one-sentence summary and reading reminders.
 8. Open the reading side panel from the extension UI to inspect summary,
    context, follow-up questions, and external-tool actions.
+9. To review Page/Web, open an ordinary public web page, click the Truly toolbar
+   action / popup to grant current-tab access, then use the Page/Web side-panel
+   reader. The Settings all-sites opt-in can also be enabled for reviewers who
+   want the side panel read action to work across sites without repeating the
+   toolbar activation on each site.
 
 Preview limitations are expected: Facebook layouts change, local/private model
 quality varies, and some posts may not produce a reading brief. The UI should
@@ -66,8 +72,8 @@ surface failures instead of silently claiming analysis is complete.
   model endpoint for reviewers.
 - A supported Facebook page state is required to review the full in-page reading
   UI. If the reviewer does not have an available Facebook test account, the
-  Options page, Popup, and Side Panel shell can still be inspected, but the
-  post-adjacent reading flow may not fully activate.
+  Options page, Popup, Side Panel shell, and Page/Web flow can still be
+  inspected, but the post-adjacent reading flow may not fully activate.
 - Chrome built-in Gemini Nano availability depends on the review browser,
   platform, model availability, Chrome AI feature status, model download state,
   and device capability. First-run setup can be slow because Chrome may need to
@@ -79,7 +85,8 @@ surface failures instead of silently claiming analysis is complete.
   usually means Chrome is preparing, downloading, or running the browser-managed
   model locally.
 - The extension may request optional host permission only when the reviewer
-  saves or tests a non-default model endpoint that requires that origin.
+  saves or tests a non-default model endpoint that requires that origin, or
+  explicitly enables General Page all-sites access in Settings.
 
 ## Single Purpose Boundary
 
@@ -92,8 +99,8 @@ following, moderation, ad blocking, or scraping.
 
 ## Data Flow Summary
 
-Truly does not send feed content to a project-owned server and does not include
-product analytics or telemetry.
+Truly does not send feed or page content to a project-owned server and does not
+include product analytics or telemetry.
 
 Content can leave the browser only through user-selected or user-triggered
 paths:
@@ -123,7 +130,8 @@ surfaces:
   supported Facebook pages.
 - `localhost` / `127.0.0.1`: support local model endpoints.
 - Optional broad `http://*/*` and `https://*/*`: requested only when the user
-  configures a non-default model endpoint that requires that origin.
+  configures a non-default model endpoint that requires that origin, or when
+  the user explicitly enables General Page all-sites access from Settings.
 
 See `docs/release/permission-justification.md` for the detailed table.
 
@@ -161,6 +169,9 @@ Truly-owned backend.
 
 Some users configure their own private model endpoint outside localhost. Truly
 should request access only when a configured endpoint requires that origin.
+General Page all-sites access uses the same optional permission surface only
+after an explicit Settings opt-in; it reads the current page after a user action
+and does not enable background crawling or persistent page history.
 
 ### Does model output count as remote code?
 

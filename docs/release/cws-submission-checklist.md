@@ -1,9 +1,9 @@
 # Chrome Web Store Submission Checklist
 
-Status: Preview 9 submission checklist
-Last updated: 2026-06-27
+Status: Preview 11 submission checklist
+Last updated: 2026-07-03
 
-Use this checklist when submitting the Preview 9 build to Chrome Web
+Use this checklist when submitting the Preview 11 build to Chrome Web
 Store. The dashboard copy should still come from
 `docs/release/cws-listing-copy.md`; this file is the operational checklist.
 
@@ -30,8 +30,8 @@ Store. The dashboard copy should still come from
 - [ ] Keep the CWS package report open while filling the dashboard.
 - [ ] Confirm package metadata:
   - Version: `0.1.1`
-  - Version name: `0.1.1 Preview 9`
-  - Recommended tag: `v0.1.1-preview.9`
+  - Version name: `0.1.1 Preview 11`
+  - Recommended tag: `v0.1.1-preview.11`
   - Commit: use the commit recorded in the CWS package report.
 - [ ] Confirm the packaged manifest does not include
   `commands.reload-extension`.
@@ -48,6 +48,7 @@ Store. The dashboard copy should still come from
   - reading assistance;
   - reading signals;
   - context and summary;
+  - user-triggered Page/Web reading;
   - user-triggered handoff.
 - [ ] Avoid unsupported claims:
   - authoritative truth;
@@ -86,7 +87,9 @@ Store. The dashboard copy should still come from
 - [ ] Use `docs/release/permission-justification.md` for permission
   justifications.
 - [ ] Confirm optional broad host permissions are described as endpoint-driven
-  and user-triggered.
+  and user-triggered. If General Page all-sites access is mentioned, it must be
+  described as a separate Settings opt-in for reading the current page only
+  after a user action.
 
 ## Reviewer Notes
 
@@ -96,6 +99,8 @@ Store. The dashboard copy should still come from
   - no Truly-operated backend is required;
   - no dedicated Facebook test account or hosted model endpoint is provided;
   - a supported Facebook page state is required for the full in-page flow;
+  - Page/Web review can be tested on ordinary public pages through explicit
+    toolbar/popup activation or the Settings all-sites opt-in;
   - Gemini Nano availability and speed depend on Chrome, device capability,
     model availability, feature status, and first-run model setup;
   - reviewers can use a local/private model endpoint if Gemini Nano is

@@ -1,9 +1,9 @@
 # Chrome Web Store Listing Copy
 
-Status: Preview 9 listing reference
-Last updated: 2026-06-27
+Status: Preview 11 listing reference
+Last updated: 2026-07-03
 
-This copy is used for the Preview 9 Unlisted Chrome Web Store submission. It
+This copy is used for the Preview 11 Unlisted Chrome Web Store submission. It
 should stay aligned with `README.md`,
 `src/manifest.json`, `src/_locales/*/messages.json`, and
 https://trulyreader.org/.
@@ -51,13 +51,17 @@ Privacy-conscious reading assistance for social feeds and web pages.
 Truly is a privacy-conscious Chrome extension that helps readers improve
 information quality in social feeds and web pages.
 
-It starts beside the post you are reading. Truly can show a compact reading
-hint, expand into a short explanation, and open a side panel with summary,
-context, follow-up questions, claim signals, and manual handoff actions.
+It starts beside the content you are reading. On supported social feed
+surfaces, Truly can show a compact reading hint near the post and expand into a
+short explanation. On normal web pages, the user can explicitly open the
+Page/Web side-panel reader for the current tab. The side panel can show
+summary, context, follow-up questions, claim signals, and manual handoff
+actions.
 
-Truly currently focuses on supported Facebook reading surfaces. The longer
-roadmap is to support more social feeds, normal web pages, mobile apps, desktop
-apps, and community features.
+Truly currently focuses on supported Facebook reading surfaces and
+user-triggered Page/Web reads. The longer roadmap is to support more social
+feeds, broader web-page quality, mobile apps, desktop apps, and community
+features.
 
 Reading analysis runs in the model environment selected by the user: Chrome
 built-in Gemini Nano when available, a local model endpoint such as Ollama, or a
@@ -70,6 +74,9 @@ Markdown download happen only when the user chooses the relevant action.
 Preview limitations:
 
 - Supported social feed surfaces may change as websites update their layout.
+- Page/Web quality varies by website structure. Truly should surface partial,
+  blocked, or ambiguous extraction states instead of pretending every page is a
+  clean article.
 - Model quality and speed depend on the selected model source.
 - Truly provides reading assistance, not authoritative truth.
 
@@ -83,7 +90,7 @@ Preview limitations:
 
 Truly 是一個重視隱私、提高閱讀資訊品質的 Chrome 擴充功能。它協助你在資訊亂流中，從提醒、摘要，到釐清脈絡與快速查證。
 
-Truly 目前以瀏覽器擴充功能做為起點，作用於支援的社群貼文旁。閱讀時，它可以顯示簡短的閱讀前提示；需要更深入時，你可以展開提示，查看貼文摘要、閱讀提醒、脈絡分析、需查證的主張，以及手動交給外部工具的操作。
+Truly 目前以瀏覽器擴充功能做為起點，作用於支援的社群貼文旁，也可以在使用者明確觸發後讀取目前的一般網頁。閱讀時，它可以顯示簡短的閱讀前提示；需要更深入時，你可以展開提示或開啟 Page/Web 側邊欄，查看摘要、閱讀提醒、脈絡分析、需查證的主張，以及手動交給外部工具的操作。
 
 Truly 的分析會送到你選擇的模型環境：可用時使用 Chrome 內建的 Gemini Nano，也可以使用本機模型端點，例如 Ollama，或你自行設定的私有端點。Truly 不經營接收資訊流內容的專案後端，也不包含產品分析或遙測。
 
@@ -92,6 +99,7 @@ Truly 的分析會送到你選擇的模型環境：可用時使用 Chrome 內建
 預覽版限制：
 
 - 支援的社群頁面可能隨網站版面調整而變動。
+- 一般網頁品質會受網站結構影響；Truly 會標示部分抽取、封鎖或不確定狀態，而不是假裝每個頁面都是乾淨文章。
 - 模型品質與速度取決於你選擇的模型來源。
 - Truly 提供的是閱讀輔助，不是權威事實判定。
 
@@ -116,13 +124,13 @@ Use the selected first Unlisted review assets in
 
 ## Dashboard Submission Packet
 
-Use this packet for the Preview 9 Unlisted Chrome Web Store submission.
+Use this packet for the Preview 11 Unlisted Chrome Web Store submission.
 
 ### Package
 
 - Version: `0.1.1`
-- Version name: `0.1.1 Preview 9`
-- Recommended tag: `v0.1.1-preview.9`
+- Version name: `0.1.1 Preview 11`
+- Recommended tag: `v0.1.1-preview.11`
 - Extension ZIP: use the `truly-cws-extension-0.1.1-<commit>.zip` path from the
   latest `npm run cws:package` report.
 - Commit: use the commit recorded in the latest `npm run cws:package` report.
@@ -158,7 +166,8 @@ Use this packet for the Preview 9 Unlisted Chrome Web Store submission.
 
 Truly helps readers understand information more carefully by showing reading
 signals, summaries, contextual notes, follow-up questions, and user-triggered
-handoff actions beside supported social feed content.
+handoff actions beside supported social feed content and in explicit Page/Web
+side-panel reads.
 
 ### Privacy Practices Fill-In Basis
 
@@ -168,9 +177,9 @@ facts intact:
 - Truly does not sell user data.
 - Truly does not use data for unrelated purposes.
 - Truly does not include product analytics or telemetry.
-- Truly does not operate a project-owned backend for feed content.
+- Truly does not operate a project-owned backend for feed or page content.
 - The extension processes visible website content on supported Facebook
-  surfaces to provide reading assistance.
+  surfaces and user-triggered Page/Web reads to provide reading assistance.
 - The extension stores settings and readiness state in Chrome extension
   storage, including model endpoint configuration chosen by the user.
 - Content can be sent to Chrome built-in Gemini Nano, a local model endpoint, or
@@ -194,4 +203,5 @@ dashboard-facing summary:
   image-aware reading assistance.
 - `localhost` / `127.0.0.1`: supports local model endpoints.
 - Optional `http://*/*` / `https://*/*`: requested only when a user-configured
-  private endpoint requires that origin.
+  private endpoint requires that origin, or when the user explicitly enables
+  General Page all-sites access from Settings.

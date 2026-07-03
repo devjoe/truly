@@ -27,6 +27,8 @@ Signals first. Context when needed. Handoff only by choice.
 
 - Shows compact reading hints above supported posts.
 - Expands hints into a one-sentence summary and reading risk cues.
+- Reads the current web page from the side panel after a user action, using
+  `activeTab` or an explicit all-sites opt-in.
 - Opens a side panel with context analysis, claims to check, follow-up
   questions, and handoff tools.
 - Checks Traditional Chinese wording with bundled zhtw-mcp when
@@ -64,12 +66,14 @@ After installation:
 
 **Now**
 
-- Browser extension preview for supported social feed surfaces.
+- Browser extension preview for supported social feed surfaces and
+  user-triggered Page/Web reading.
 - Public feedback, bug fixes, and stability.
 
 **Next**
 
-- More supported social feed surfaces and regular web pages.
+- More supported social feed surfaces.
+- More Page/Web quality hardening across real websites.
 - Mobile reading workflows.
 - Desktop reading workflows.
 
@@ -81,7 +85,8 @@ After installation:
 
 - Chrome Manifest V3.
 - Browser-local, local, or private model sources.
-- UI support currently focuses on Facebook reading surfaces.
+- UI support currently focuses on Facebook reading surfaces and explicit
+  Page/Web reads from the side panel.
 - Public tests use synthetic fixtures.
 
 ## Model Sources
@@ -102,6 +107,8 @@ See [Model Setup](docs/model-setup.md).
 - Truly is not a fact-checking authority.
 - Model output can be wrong, incomplete, or biased.
 - Site support is limited.
+- Page/Web reading is user-triggered; Truly does not crawl pages in the
+  background or store full-page history.
 - Some features depend on model availability.
 
 ## Privacy At A Glance

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-06-28
+Last updated: 2026-07-03
 
 Canonical URL: https://trulyreader.org/privacy/
 
@@ -18,6 +18,8 @@ include product analytics or telemetry.
 When you use Truly on supported pages, the extension may process:
 
 - visible post text, shared-post text, link previews, and image/video context;
+- visible current-page text and page metadata when you explicitly use Page/Web
+  reading;
 - page-hosted media URLs or image alt text when needed for reading
   assistance;
 - model analysis generated from the selected model source;
@@ -35,7 +37,7 @@ Processing depends on your selected model source:
 - Private or remote endpoint: sent to the endpoint you configure and authorize
   in Chrome when permission is required.
 
-Truly does not send feed content to a Truly-owned server.
+Truly does not send feed or page content to a Truly-owned server.
 
 ## User-Triggered External Tools
 
@@ -58,6 +60,10 @@ Truly stores extension settings and readiness state in Chrome extension storage.
 Depending on your settings, this can include model endpoint URLs and model
 names. Chrome extension storage is not a secret vault. Do not store API keys,
 bearer tokens, or other secrets in model endpoint URLs.
+
+Page/Web reading sessions are session-only by default. Truly does not store a
+durable full-page reading history unless a future privacy-reviewed feature
+explicitly changes that behavior.
 
 Markdown notes are saved only when you explicitly download them. Clipboard
 content is written only when you explicitly use a copy action.
