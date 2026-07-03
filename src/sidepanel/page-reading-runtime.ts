@@ -721,6 +721,9 @@ export function createSidepanelPageReadingRuntime({
     const title = session?.surface?.title || session?.title || activeTitle || tr("sidepanel.page.untitled");
     const url = session?.surface?.canonicalUrl || session?.surface?.url || session?.url || activeUrl;
     const source = session?.surface?.sourceName || (url ? hostnameForUrl(url) : "");
+    const statusDetailText = statusDetail(platform, session, displayedSessionIsActive);
+    const errorText = session?.status === "error" ? session.error || tr("sidepanel.page.error.unknown") : "";
+    const showErrorBlock = Boolean(errorText && errorText !== statusDetailText);
     const modelContext = session?.surface
       ? modelContextForSession({ ...session, surface: session.surface })
       : undefined;
@@ -753,10 +756,10 @@ export function createSidepanelPageReadingRuntime({
       </section>
       <section class="page-reader-status${statusClass}">
         <div class="page-reader-status-label">${escapeHtml(statusLabel)}</div>
-        <div class="page-reader-status-detail">${escapeHtml(statusDetail(platform, session, displayedSessionIsActive))}</div>
+        <div class="page-reader-status-detail">${escapeHtml(statusDetailText)}</div>
       </section>
       ${sessionSwitcherHtml(session)}
-      ${session?.status === "error" ? `<section class="page-reader-error">${escapeHtml(session.error || tr("sidepanel.page.error.unknown"))}</section>` : ""}
+      ${showErrorBlock ? `<section class="page-reader-error">${escapeHtml(errorText)}</section>` : ""}
       ${session?.surface ? `
         <article class="page-reader-card">
           <div class="page-reader-card-header">
@@ -935,7 +938,10 @@ export function createSidepanelPageReadingRuntime({
     session: PageReadingSession | undefined,
     displayedSessionIsActive: boolean,
   ): string {
-    if (session?.status === "error") return tr("sidepanel.page.detail.error");
+    if (session?.status === "error") {
+      if (session.error === tr("sidepanel.page.error.needsToolbarActivation")) return session.error;
+      return tr("sidepanel.page.detail.error");
+    }
     if (session?.surface && !displayedSessionIsActive) return tr("sidepanel.page.detail.savedSession");
     if (platform === "facebook") return tr("sidepanel.page.detail.facebook");
     if (platform === "unsupported") return tr("sidepanel.page.detail.unsupported");

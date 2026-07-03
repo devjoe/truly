@@ -73,6 +73,9 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("讀取失敗");
     expect(pagePaneEl.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
     expect(pagePaneEl.textContent).toContain("設定允許一般網頁的所有網站存取權");
+    expect(pagePaneEl.querySelector(".page-reader-status-detail")?.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
+    expect(pagePaneEl.querySelector(".page-reader-status-detail")?.textContent).not.toContain("請重新讀取");
+    expect(pagePaneEl.querySelector(".page-reader-error")).toBeNull();
   });
 
   it("maps page-access errors to a friendly retry explanation", async () => {
@@ -107,6 +110,9 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("讀取失敗");
     expect(pagePaneEl.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
     expect(pagePaneEl.textContent).toContain("設定允許一般網頁的所有網站存取權");
+    expect(pagePaneEl.querySelector(".page-reader-status-detail")?.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
+    expect(pagePaneEl.querySelector(".page-reader-status-detail")?.textContent).not.toContain("請重新讀取");
+    expect(pagePaneEl.querySelector(".page-reader-error")).toBeNull();
   });
 
   it("renders a successful page reading result", async () => {
