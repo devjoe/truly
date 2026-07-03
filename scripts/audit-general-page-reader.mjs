@@ -13,6 +13,7 @@ const AUTO_RELOAD = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_AUTO_RELOAD |
 const EXTENSION_ID = (process.env.TRULY_EXTENSION_ID || "").trim();
 const STAMP = new Date().toISOString().replace(/[:.]/g, "-");
 const OUT_DIR = resolve(ROOT, "tmp", `general-page-reader-audit-${STAMP}`);
+const PHASE_LOG_PATH = resolve(OUT_DIR, "audit-phase-log.json");
 const PHASE_TIMEOUT_MS = {
   popup: 20_000,
   success: 90_000,
@@ -20,6 +21,7 @@ const PHASE_TIMEOUT_MS = {
   candidate: 45_000,
   noGrant: 30_000,
 };
+const auditPhaseLog = [];
 
 function usage() {
   console.log(`Usage: node scripts/audit-general-page-reader.mjs
@@ -141,11 +143,21 @@ function sleep(ms) {
 }
 
 async function runAuditPhase(label, timeoutMs, fn) {
+  const startedAt = new Date().toISOString();
+  const startedMs = Date.now();
+  const entry = {
+    phase: label,
+    status: "running",
+    timeoutMs,
+    startedAt,
+  };
+  auditPhaseLog.push(entry);
   writeFileSync(resolve(OUT_DIR, "audit-progress.json"), JSON.stringify({
     phase: label,
     timeoutMs,
-    startedAt: new Date().toISOString(),
+    startedAt,
   }, null, 2));
+  writeAuditPhaseLog();
   let timer;
   let status = "completed";
   try {
@@ -160,12 +172,24 @@ async function runAuditPhase(label, timeoutMs, fn) {
     throw error;
   } finally {
     clearTimeout(timer);
+    const finishedAt = new Date().toISOString();
+    entry.status = status;
+    entry.finishedAt = finishedAt;
+    entry.durationMs = Date.now() - startedMs;
     writeFileSync(resolve(OUT_DIR, "audit-progress.json"), JSON.stringify({
       phase: label,
       status,
-      finishedAt: new Date().toISOString(),
+      timeoutMs,
+      startedAt,
+      finishedAt,
+      durationMs: entry.durationMs,
     }, null, 2));
+    writeAuditPhaseLog();
   }
+}
+
+function writeAuditPhaseLog() {
+  writeFileSync(PHASE_LOG_PATH, `${JSON.stringify(auditPhaseLog, null, 2)}\n`);
 }
 
 function syntheticHtml(title, body) {
@@ -1534,6 +1558,7 @@ function writeSummary(result, errors) {
     "## Artifacts",
     "",
     `- ${relative(ROOT, resolve(OUT_DIR, "audit.json"))}`,
+    `- ${relative(ROOT, PHASE_LOG_PATH)}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
     result.success.responsive?.screenshot ? `- ${result.success.responsive.screenshot}` : null,
@@ -1606,6 +1631,7 @@ try {
     error: error instanceof Error ? error.message : String(error),
     stack: error instanceof Error ? error.stack : undefined,
     artifactDir: relative(ROOT, OUT_DIR),
+    phaseLog: relative(ROOT, PHASE_LOG_PATH),
   };
   writeFileSync(resolve(OUT_DIR, "audit-failure.json"), JSON.stringify(failure, null, 2));
   console.error(`General Page Reader CDP audit failed: ${failure.error}`);

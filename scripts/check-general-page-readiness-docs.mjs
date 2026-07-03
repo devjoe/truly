@@ -11,6 +11,7 @@ const REQUIRED_SNIPPETS = [
       "Page/Web interaction accessibility",
       "phase-level timeouts",
       "audit-progress.json",
+      "audit-phase-log.json",
       "smoke:general-page-current -- --all-open",
       "--max-ready-count 0",
       "P24 dashboard/data-surface",
