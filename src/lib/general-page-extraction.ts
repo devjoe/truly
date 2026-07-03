@@ -733,6 +733,20 @@ function nonArticlePageWarnings(
     return ["large-navigation-noise"];
   }
 
+  // P26-teaser-hub-page: some news/category hubs use repeated short `article`
+  // cards without a semantic main container. If the selected root is just one
+  // short card from a repeated card list, keep it caution/overview-only.
+  if (
+    rootIsArticle &&
+    !hasArticleMeta &&
+    text.length < 900 &&
+    documentArticleCount >= 3 &&
+    documentParagraphCount <= Math.max(8, documentArticleCount * 2) &&
+    documentLinkCount >= documentArticleCount
+  ) {
+    return ["large-navigation-noise"];
+  }
+
   // P25-article-root-utility-dense: some pages put ticker/search/share/topic
   // controls inside the same semantic article root. Article metadata alone is
   // not enough to call these clean-ready when the root is control/link-heavy.

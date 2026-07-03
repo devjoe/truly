@@ -18,6 +18,7 @@ const PHASE_TIMEOUT_MS = {
   popup: 20_000,
   success: 90_000,
   noisy: 45_000,
+  teaser: 45_000,
   candidate: 45_000,
   noGrant: 30_000,
 };
@@ -278,6 +279,46 @@ function candidateBlockHtml() {
 </html>`;
 }
 
+function teaserHubHtml() {
+  return `<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>Multi Article Teaser Hub Fixture</title>
+  <meta property="og:site_name" content="Synthetic Daily">
+  <link rel="canonical" href="/teaser-hub">
+</head>
+<body>
+  <header>
+    <a href="/latest">Latest</a>
+    <a href="/topics">Topics</a>
+    <a href="/member">Member Area</a>
+  </header>
+  <div class="teaser-hub-shell">
+    <article class="teaser-card">
+      <h2>First synthetic teaser</h2>
+      <p>The multi article teaser hub fixture contains short cards that describe fictional civic notices. This first card is a preview, not a complete article body.</p>
+      <a href="/briefs/first">Read first item</a>
+    </article>
+    <article class="teaser-card">
+      <h2>Second synthetic teaser</h2>
+      <p>A second synthetic teaser mentions an imaginary library schedule and a public archive counter. It exists to model a hub card rather than a full article.</p>
+      <a href="/briefs/second">Read second item</a>
+    </article>
+    <article class="teaser-card">
+      <h2>Third synthetic teaser</h2>
+      <p>The third synthetic teaser is deliberately short so the reader should see a caution state instead of a clean article-ready state.</p>
+      <a href="/briefs/third">Read third item</a>
+    </article>
+  </div>
+  <aside>
+    <a href="/newsletter">Newsletter</a>
+    <a href="/rankings">Popular briefings</a>
+  </aside>
+</body>
+</html>`;
+}
+
 async function startSyntheticServer() {
   const server = createServer((req, res) => {
     res.setHeader("content-type", "text/html; charset=utf-8");
@@ -287,6 +328,10 @@ async function startSyntheticServer() {
     }
     if (req.url?.startsWith("/candidate")) {
       res.end(candidateBlockHtml());
+      return;
+    }
+    if (req.url?.startsWith("/teaser-hub")) {
+      res.end(teaserHubHtml());
       return;
     }
     if (req.url?.startsWith("/article2")) {
@@ -1077,6 +1122,73 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
   }
 }
 
+async function auditTeaserHubOverview(extensionId, allowedBase) {
+  const teaserTarget = await createTarget(`${allowedBase}/teaser-hub`);
+  const sideTarget = await openSidePanelTestPage(extensionId, teaserTarget, "teaser");
+  const teaser = connectCdp(teaserTarget.webSocketDebuggerUrl);
+  const side = connectCdp(sideTarget.webSocketDebuggerUrl);
+
+  try {
+    await sleep(800);
+    await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "teaser hub page ready").catch(async (error) => {
+      await side.screenshot(resolve(OUT_DIR, "page-teaser-hub-timeout.png")).catch(() => {});
+      throw error;
+    });
+    await waitFor(side, `(() => {
+      const advisor = document.querySelector('#page-pane .page-reader-advisor');
+      const text = advisor?.textContent || '';
+      const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
+      return /downgrade_to_index_or_feed/.test(text) && !/檢查中|Checking/.test(status);
+    })()`, 26000, "teaser hub advisor decision").catch(async (error) => {
+      await side.screenshot(resolve(OUT_DIR, "page-teaser-hub-advisor-timeout.png")).catch(() => {});
+      throw error;
+    });
+
+    const ready = await side.evaluateJson(`(() => {
+      const pane = document.querySelector('#page-pane');
+      const model = pane?.querySelector('.page-reader-model-context');
+      const advisor = pane?.querySelector('.page-reader-advisor');
+      return {
+        status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
+        excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
+        extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
+        modelContext: model ? {
+          status: model.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
+          detail: model.querySelector('p')?.textContent?.trim(),
+          className: model.className,
+          diagnosticsOpen: model.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : null,
+        advisor: advisor ? {
+          title: advisor.querySelector('h3')?.textContent?.trim(),
+          status: advisor.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
+          detail: advisor.querySelector('p')?.textContent?.trim(),
+          rows: [...advisor.querySelectorAll('dl div')].map((row) => ({
+            label: row.querySelector('dt')?.textContent?.trim(),
+            value: row.querySelector('dd')?.textContent?.trim()
+          })),
+          note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
+          className: advisor.className,
+          diagnosticsOpen: advisor.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : null,
+        sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
+          label: el.textContent?.trim(),
+          href: el.href
+        })),
+        hasMemberArea: /Member Area/.test(pane?.innerText || ''),
+        hasNewsletter: /Newsletter/.test(pane?.innerText || '')
+      };
+    })()`);
+    await side.screenshot(resolve(OUT_DIR, "page-teaser-hub-overview.png"));
+    return { ready };
+  } finally {
+    await side.closeTarget().catch(() => {});
+    await teaser.closeTarget().catch(() => {});
+    side.close();
+    teaser.close();
+  }
+}
+
 async function capturePageReadTimeoutState(side, article, initial) {
   const sideState = await side.evaluateJson(`(() => ({
     url: location.href,
@@ -1342,6 +1454,33 @@ function assertAudit(result) {
   if ((result.candidate.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("candidate block recovery exposes more than six source links");
   }
+  if (result.teaser.ready.status !== "已讀取" && result.teaser.ready.status !== "Ready") {
+    errors.push(`teaser hub did not reach ready status: ${result.teaser.ready.status}`);
+  }
+  const teaserAdvisorRows = result.teaser.ready.advisor?.rows || [];
+  const teaserDecision = teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
+  const teaserUse = teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  if (teaserDecision !== "downgrade_to_index_or_feed") {
+    errors.push(`teaser hub advisor did not downgrade to index/feed: ${teaserDecision || "(missing)"}`);
+  }
+  if (teaserUse !== "page_overview_only") {
+    errors.push(`teaser hub effective context was not page overview only: ${teaserUse || "(missing)"}`);
+  }
+  if (result.teaser.ready.extractionDiagnosticsOpen !== true) {
+    errors.push("teaser hub should expand extraction diagnostics");
+  }
+  if (result.teaser.ready.modelContext?.diagnosticsOpen !== true) {
+    errors.push("teaser hub should expand model diagnostics");
+  }
+  if (result.teaser.ready.advisor?.diagnosticsOpen !== true) {
+    errors.push("teaser hub should expand advisor diagnostics");
+  }
+  if ((result.teaser.ready.sourceLinks?.length ?? 0) > 6) {
+    errors.push("teaser hub exposes more than six source links");
+  }
+  if (result.teaser.ready.hasMemberArea || result.teaser.ready.hasNewsletter) {
+    errors.push("teaser hub still exposes header/sidebar utility links as source context");
+  }
   if (!result.noGrant.hasGuidance) errors.push("no-grant sidepanel path did not show toolbar activation guidance");
   if (!result.noGrant.hasAllSitesGuidance) errors.push("no-grant sidepanel path did not mention all-sites settings access");
   if (!result.noGrant.detailHasGuidance) errors.push("no-grant primary status detail did not show toolbar activation guidance");
@@ -1395,10 +1534,13 @@ function designRestraint(result) {
 function qaMatrixRows(result) {
   const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
+  const teaserAdvisorRows = result.teaser.ready.advisor?.rows || [];
   const noisyDecision = noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
   const noisyUse = noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
   const candidateDecision = candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
   const candidateUse = candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  const teaserDecision = teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
+  const teaserUse = teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
   const restraint = designRestraint(result);
   return [
     [
@@ -1496,6 +1638,17 @@ function qaMatrixRows(result) {
       "decision=" + (candidateDecision || "missing") + "; use=" + (candidateUse || "missing"),
     ],
     [
+      "Teaser hub overview",
+      teaserDecision === "downgrade_to_index_or_feed" &&
+        teaserUse === "page_overview_only" &&
+        result.teaser.ready.extractionDiagnosticsOpen === true &&
+        result.teaser.ready.modelContext?.diagnosticsOpen === true &&
+        result.teaser.ready.advisor?.diagnosticsOpen === true &&
+        result.teaser.ready.hasMemberArea === false &&
+        result.teaser.ready.hasNewsletter === false,
+      "decision=" + (teaserDecision || "missing") + "; use=" + (teaserUse || "missing"),
+    ],
+    [
       "No-grant guidance",
       result.noGrant.hasGuidance === true &&
         result.noGrant.hasAllSitesGuidance === true &&
@@ -1546,6 +1699,7 @@ function writeSummary(result, errors) {
     `- Noisy fallback reading context: ${result.noisy.ready.advisor?.status || "(missing)"}`,
     `- Noisy fallback source links: ${(result.noisy.ready.sourceLinks || []).map((link) => link.label).join(", ") || "(none)"}`,
     `- Candidate block recovery: ${result.candidate.ready.advisor?.status || "(missing)"}`,
+    `- Teaser hub overview: ${result.teaser.ready.advisor?.status || "(missing)"}`,
     `- Hash-only stale: ${result.success.afterHash.stale}`,
     `- Tracking-only stale: ${result.success.afterTracking.stale}`,
     `- Meaningful URL stale: ${result.success.afterMeaningful.stale}`,
@@ -1567,6 +1721,7 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "page-point-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-candidate-block.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-teaser-hub-overview.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-no-grant.png"))}`,
     "",
     "## Public Repo Boundary",
@@ -1610,6 +1765,8 @@ try {
       auditNoisyFallbackRead(extensionId, server.allowedBase)),
     candidate: await runAuditPhase("candidate", PHASE_TIMEOUT_MS.candidate, () =>
       auditCandidateBlockRecovery(extensionId, server.allowedBase)),
+    teaser: await runAuditPhase("teaser", PHASE_TIMEOUT_MS.teaser, () =>
+      auditTeaserHubOverview(extensionId, server.allowedBase)),
     noGrant: await runAuditPhase("no-grant", PHASE_TIMEOUT_MS.noGrant, () =>
       auditNoGrantGuidance(extensionId, server.noGrantBase)),
     artifactDir: relative(ROOT, OUT_DIR),

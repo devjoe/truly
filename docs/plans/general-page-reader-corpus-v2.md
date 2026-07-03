@@ -63,6 +63,7 @@ Synthetic fixtures can combine multiple patterns.
 | P23-member-zone-teaser | Short member-zone teaser with real intro text | Truncated member content is rated complete/ready | `member-teaser-short` |
 | P24-dashboard-data-surface | Dashboard, leaderboard, or table surface in semantic `main` | Parser treats a data surface as a single complete article | `semantic-main-dashboard-table`, `semantic-main-short-leaderboard` |
 | P25-article-root-utility-dense | Article root contains search/forms, dense utility links, and ticker controls | Parser trusts semantic `article` and marks a noisy, body-thin page as ready | `article-root-utility-dense-ready-trap` |
+| P26-teaser-hub-page | Multiple short teaser cards appear without a semantic `main` | Parser promotes a hub/list preview as a clean complete article | `multi-article-teaser-hub` |
 
 ### 3. Synthetic Fixtures
 

@@ -82,6 +82,7 @@ Not allowed in this file:
 | P23-member-zone-teaser | observed-category | Member-zone tech/finance sites with short public teasers (2026-07-02 product-quality review aggregate) | `member-teaser-short` | Short member-zone teasers should be partial/caution, not complete/ready. |
 | P24-dashboard-data-surface | observed-category | Dashboard, leaderboard, and metric/table surfaces found during private live-tab smoke review (2026-07-03 aggregate) | `semantic-main-dashboard-table`, `semantic-main-short-leaderboard` | Semantic `main` should not make dashboard or leaderboard data surfaces pass as complete articles. |
 | P25-article-root-utility-dense | observed-category | `cluster:general-page-quality-followups` found repeated false-ready article roots with dense links, forms, ticker/tool UI, and low body coverage (2026-07-03 aggregate) | `article-root-utility-dense-ready-trap` | Semantic `article` still needs a caution signal when the article root is dominated by utility controls rather than body prose. |
+| P26-teaser-hub-page | observed-category | `cluster:general-page-quality-followups` found repeated multi-article teaser hubs with short body coverage and very-short-content warnings (2026-07-03 aggregate) | `multi-article-teaser-hub` | Short teaser hubs should remain partial/caution or overview-only, not clean article-ready context. |
 
 ## Evaluation V2 Exit Criteria
 

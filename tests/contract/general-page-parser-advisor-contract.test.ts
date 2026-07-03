@@ -371,6 +371,47 @@ describe("General Page Parser Advisor contract", () => {
     });
   });
 
+  it("downgrades multi-article teaser hubs to page overview", () => {
+    const dom = new JSDOM(`<!doctype html>
+      <head><title>Teaser Hub</title></head>
+      <body>
+        <article><h2>First teaser</h2><p>The first synthetic teaser card is short and does not represent a complete article body.</p><a href="/one">Read one</a></article>
+        <article><h2>Second teaser</h2><p>The second synthetic teaser card repeats the same preview pattern for a fictional public notice.</p><a href="/two">Read two</a></article>
+        <article><h2>Third teaser</h2><p>The third synthetic teaser card confirms this is a hub of previews rather than one readable story.</p><a href="/three">Read three</a></article>
+      </body>`, {
+      url: "https://daily.example.test/briefs/teaser-hub",
+    });
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: "https://daily.example.test/briefs/teaser-hub",
+    });
+    const context = buildGeneralPageModelContext(surface);
+    const request = buildGeneralPageParserAdvisorRequest(context, {
+      document: {
+        articleCount: 3,
+        mainCount: 0,
+        roleMainCount: 0,
+        paragraphCount: 3,
+        linkCount: 3,
+        imageCount: 0,
+        formCount: 0,
+        hasArticleMeta: false,
+        hasOpenGraph: false,
+      },
+    });
+    const advice = buildRuleBasedGeneralPageParserAdvice(request);
+
+    expect(request.escalation.reasons).toEqual(expect.arrayContaining([
+      "large_navigation_noise",
+      "index_or_feed",
+    ]));
+    expect(advice).toMatchObject({
+      pageType: "index_or_feed",
+      decision: "downgrade_to_index_or_feed",
+      confidence: "high",
+    });
+  });
+
   it("keeps noisy fallback shells downgraded to page overview", () => {
     const context = buildGeneralPageModelContext({
       id: "general:https://example.test/noisy",

@@ -487,6 +487,24 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).not.toContain("Search this site");
   });
 
+  it("downgrades multi-article teaser hubs instead of accepting one teaser as an article", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "multi-article-teaser-hub.html",
+        "https://daily.example.test/briefs/teaser-hub",
+      ),
+      url: "https://daily.example.test/briefs/teaser-hub",
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("multi article teaser hub fixture");
+    expect(surface.mainText).toContain("short cards that describe fictional civic notices");
+    expect(surface.mainText).not.toContain("Member Area");
+    expect(surface.mainText).not.toContain("Newsletter");
+  });
+
   it("marks dated report-list hubs as partial instead of ready articles", () => {
     const surface = extractGeneralPageSurface({
       document: jsdomFixtureDocument(

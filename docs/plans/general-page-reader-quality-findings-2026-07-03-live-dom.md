@@ -51,6 +51,7 @@ raw DOM link density remains tracked separately as a page-structure signal.
 | JavaScript-disabled semantic main | Browser/app instruction pages can exceed the text threshold and look like complete articles. | `javascript-disabled-instruction` |
 | Access-checking article preview | Pages with article metadata and preview paragraphs can pass as ready while full content is gated. | `access-checking-preview` |
 | Gated continue-reading preview | Pages with article metadata, account forms, many site links, and "continue/full article" copy can pass as ready even though the visible text is only preview context. | `gated-continue-reading-preview` |
+| Multi-article teaser hub | Several short `article` cards can make one teaser look like an article body even though the page is a hub/list preview. | `multi-article-teaser-hub` |
 
 The gated continue-reading regression was checked against the five private
 blocked-page false-ready targets that motivated it. After the heuristic change,

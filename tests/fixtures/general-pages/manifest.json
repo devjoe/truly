@@ -713,6 +713,20 @@
         "excludes": ["Synthetic market update 08:10", "Search this site"],
         "status": "partial"
       }
+    },
+    {
+      "id": "multi-article-teaser-hub",
+      "file": "multi-article-teaser-hub.html",
+      "url": "https://daily.example.test/briefs/teaser-hub",
+      "locale": "zh-TW",
+      "pageType": "list-index",
+      "patterns": ["P05-list-or-index-page", "P26-teaser-hub-page"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["multi article teaser hub fixture", "short cards that describe fictional civic notices"],
+        "excludes": ["Member Area", "Newsletter"],
+        "status": "partial"
+      }
     }
   ]
 }
