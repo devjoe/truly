@@ -21,6 +21,7 @@ This document is the current public-safe readiness index for the General Page Re
 - `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, model brief generation, 430px Page/Web responsive overflow, Page/Web design restraint, session switching, selection, current-region, URL stale handling, noisy fallback, candidate recovery, and no-grant guidance.
 - `audit:general-page-model-integration` is included in `check:general-page` and verifies model payload scoping, overview guards, and session-only storage behavior with a local mock endpoint.
 - The live-DOM 200-target review proved the harness is useful for finding false-ready page patterns; public follow-up is represented only as aggregate findings plus synthetic fixtures.
+- `smoke:general-page-current` writes a public-safe `current-browser-smoke-summary.json` and `current-browser-smoke-summary.md` next to the private review artifacts. These summaries omit real URLs, titles, extracted text, screenshots, copied page content, and per-target notes while preserving readiness counts, issue tags, and sanitized host-level evidence.
 
 ## Security Review Follow-Up State
 
@@ -81,6 +82,7 @@ Results:
 - `audit:general-page-reader`: passed after adding the 430px Page/Web responsive overflow gate. The QA matrix also records Page/Web design restraint: ready-path diagnostics stay collapsed, model context remains compact, source links stay capped, caution diagnostics expand, and the 430px layout remains clean. The no-grant guidance path now verifies that toolbar/all-sites guidance appears in the primary status detail without generic retry text or a duplicate error block. Clean-HEAD private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T15-31-42-943Z` (`1783092670025-fe854b6`).
 - `smoke:general-page-current`: passed against the currently open Yahoo Taiwan news page through live CDP. Sanitized result: extracted, semantic HTML, partial/caution, model eligible, 6 model-context links after filtering; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T13-58-47-423Z`.
 - `smoke:general-page-current --all-open --max-ready-count 0`: passed against four open HTTP(S) tabs through live CDP after adding P24 dashboard/data-surface coverage. Sanitized result: 3 extracted / 1 blocked-or-empty, readiness `caution: 3`, `blocked: 1`, threshold `readyCount: 0`, and no dashboard or leaderboard data surface marked ready/good; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T15-16-22-109Z`.
+- New smoke runs also persist `current-browser-smoke-summary.md` and `.json` inside the same ignored output directory so reviewers can cite sanitized live-CDP evidence without copying terminal output or exposing private target data.
 
 ## Non-Blocking Follow-Ups
 

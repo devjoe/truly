@@ -18,6 +18,8 @@ const REQUIRED_SNIPPETS = [
       "artifacts/cws-local-smoke/",
       "explicitly non-uploadable",
       "Uploadable: no",
+      "current-browser-smoke-summary.md",
+      "omit real URLs",
     ],
   },
   {
@@ -27,6 +29,8 @@ const REQUIRED_SNIPPETS = [
       "Page/Web design restraint audit",
       "smoke:general-page-current -- --all-open",
       "--max-ready-count 0",
+      "current-browser-smoke-summary.md",
+      "without exposing real URLs",
       "P24 `semantic-main-dashboard-table` / `semantic-main-short-leaderboard`",
       "--source cdp",
       "Do not attach or commit real URLs",

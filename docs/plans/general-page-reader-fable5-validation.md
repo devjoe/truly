@@ -53,6 +53,12 @@ parser advisor and model-brief path are implemented.
      --max-ready-count 0
    ```
 
+   The smoke command writes `current-browser-smoke-summary.md` and
+   `current-browser-smoke-summary.json` inside the ignored review output
+   directory. Use those summaries for reviewer handoff because they preserve
+   host-level readiness and issue-tag evidence without exposing real URLs,
+   titles, extracted text, screenshots, or copied page content.
+
 4. Run a private 200-target review and label it in `review.html`. Prefer the
    live-DOM mode when Chrome CDP has the target pages available:
 

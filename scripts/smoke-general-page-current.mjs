@@ -52,6 +52,8 @@ async function main() {
     artifact: {
       targetPath,
       outputDir,
+      summaryJsonPath: path.join(outputDir, "current-browser-smoke-summary.json"),
+      summaryMarkdownPath: path.join(outputDir, "current-browser-smoke-summary.md"),
     },
     sourceMode: report.input?.sourceMode,
     aggregate: report.aggregate,
@@ -61,6 +63,7 @@ async function main() {
     },
     results: report.results.map((item, index) => sanitizedResult(item, safePages[index])),
   };
+  writeSmokeSummary(sanitized, args);
   console.log("general-page current-browser smoke summary");
   console.log(JSON.stringify(sanitized, null, 2));
   if (args.maxReadyCount !== undefined && readyCount(report) > args.maxReadyCount) {
@@ -262,6 +265,73 @@ function safeHost(url) {
   } catch {
     return "";
   }
+}
+
+function writeSmokeSummary(summary, args) {
+  fs.writeFileSync(summary.artifact.summaryJsonPath, `${JSON.stringify(summary, null, 2)}\n`);
+  fs.writeFileSync(summary.artifact.summaryMarkdownPath, renderSmokeSummaryMarkdown(summary, args));
+}
+
+function renderSmokeSummaryMarkdown(summary, args) {
+  const rows = summary.results.map((item, index) => [
+    index + 1,
+    item.host || "(unknown)",
+    formatExtraction(item.extraction),
+    item.modelReadiness ?? "(none)",
+    item.suggestedVerdict ?? "(none)",
+    item.modelTextLength ?? 0,
+    item.modelLinkCount ?? 0,
+    (item.issueTags ?? []).join(", ") || "(none)",
+  ].map(markdownCell));
+
+  return `# General Page Current-Browser Smoke Summary
+
+Generated: ${new Date().toISOString()}
+Source mode: ${summary.sourceMode ?? "(unknown)"}
+Page count: ${summary.results.length}
+Threshold: ${summary.threshold ? `readyCount ${summary.threshold.readyCount} <= ${summary.threshold.maxReadyCount}` : "(none)"}
+
+This summary is public-safe metadata derived from a private live-CDP smoke run.
+It intentionally omits real URLs, page titles, copied text, extracted previews,
+screenshots, and per-target notes. The full private artifacts remain under
+\`${summary.artifact.outputDir}\` and must not be committed.
+
+## Command Shape
+
+- allOpen: ${args.allOpen}
+- category: ${args.category}
+- pageType: ${args.pageType}
+- limit: ${args.limit}
+- concurrency: ${args.concurrency}
+- timeoutMs: ${args.timeoutMs}
+- maxReadyCount: ${args.maxReadyCount ?? "(none)"}
+
+## Aggregate
+
+\`\`\`json
+${JSON.stringify(summary.aggregate ?? {}, null, 2)}
+\`\`\`
+
+## Results
+
+| # | Host | Extraction | Model readiness | Suggested verdict | Model chars | Model links | Issue tags |
+| --- | --- | --- | --- | --- | ---: | ---: | --- |
+${rows.map((row) => `| ${row.join(" | ")} |`).join("\n")}
+`;
+}
+
+function markdownCell(value) {
+  return String(value).replace(/\|/g, "\\|").replace(/\n/g, " ");
+}
+
+function formatExtraction(extraction) {
+  if (!extraction) return "(none)";
+  const method = extraction.method ?? "unknown-method";
+  const status = extraction.status ?? "unknown-status";
+  const warnings = Array.isArray(extraction.warnings) && extraction.warnings.length > 0
+    ? ` (${extraction.warnings.join(", ")})`
+    : "";
+  return `${method}/${status}${warnings}`;
 }
 
 main().catch((error) => {
