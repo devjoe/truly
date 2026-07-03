@@ -497,6 +497,13 @@ artifacts. It should cover:
 
 ### Slice 6: Current Region Interaction Spike
 
+- Status: 6a selection flow shipped earlier; 6b point-target spike implemented
+  (pointer tracking, paragraph resolution via `current-region-targeting.ts`,
+  `truly-read-current-region` command, session-marker handoff to the panel).
+  Hotkey point reads require an existing page-reader session because plain
+  commands do not grant `activeTab`; without one the panel shows the
+  toolbar-activation guidance. Click-hold gestures and in-page anchors remain
+  future work.
 - Add `ReadingTarget` contract tests.
 - Reuse the shared `ReadingActivation` action vocabulary.
 - Track mouse point and selection snapshots in a content script.

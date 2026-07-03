@@ -5,10 +5,12 @@ import { describe, expect, it } from "vitest";
 import {
   collectGeneralPageCandidateBlocks,
   extractCurrentPageReadingSurface,
+  extractCurrentPointTarget,
   extractCurrentSelectionTarget,
   handleCandidateBlockTextMessage,
   handlePageReadingMessage,
   handleReadingTargetMessage,
+  installPointerTracking,
 } from "@src/content_scripts/page-reader";
 import type { TrulyMessage } from "@src/lib/messages";
 
@@ -236,6 +238,75 @@ describe("page-reader content script", () => {
     } as Selection);
 
     expect(extractCurrentSelectionTarget(documentRef, url, "surface:stale")).toEqual({
+      type: "READING_TARGET_ERROR",
+      error: "target_stale",
+    });
+  });
+
+  it("resolves a hotkey current-region request from the tracked pointer", () => {
+    const url = "https://example.test/articles/clean-article";
+    const documentRef = fixtureDocument("clean-article.html", url);
+    const paragraph = documentRef.querySelector("article p");
+    expect(paragraph).toBeTruthy();
+    (documentRef as unknown as { elementFromPoint?: (x: number, y: number) => Element | null }).elementFromPoint =
+      () => paragraph;
+
+    const tracker = installPointerTracking(documentRef);
+    documentRef.dispatchEvent(new (documentRef.defaultView as typeof globalThis & Window).MouseEvent("mousemove", {
+      clientX: 40,
+      clientY: 60,
+    }));
+    expect(tracker.point?.x).toBe(40);
+    expect(tracker.point?.y).toBe(60);
+
+    const surfaceId = extractCurrentPageReadingSurface(documentRef, url).surface.id;
+    const response = handleReadingTargetMessage(
+      {
+        type: "READING_TARGET_REQUEST",
+        tabId: 1,
+        trigger: "hotkey",
+        surfaceId,
+        activation: { source: "hotkey", targetKind: "current-region", action: "read" },
+      } satisfies TrulyMessage,
+      documentRef,
+      url,
+      tracker,
+    );
+
+    expect(response?.type).toBe("READING_TARGET_RESULT");
+    if (response?.type === "READING_TARGET_RESULT") {
+      expect(response.target.kind).toBe("paragraph");
+      expect(response.target.extraction.method).toBe("point-target");
+      expect(response.target.surfaceId).toBe(surfaceId);
+    }
+  });
+
+  it("returns typed point-target errors for stale pointers and stale surfaces", () => {
+    const url = "https://example.test/articles/clean-article";
+    const documentRef = fixtureDocument("clean-article.html", url);
+    const paragraph = documentRef.querySelector("article p");
+    (documentRef as unknown as { elementFromPoint?: (x: number, y: number) => Element | null }).elementFromPoint =
+      () => paragraph;
+
+    // No pointer movement at all → no_pointer_target.
+    const neverMoved = extractCurrentPointTarget(documentRef, url, undefined, { point: undefined });
+    expect(neverMoved).toEqual({
+      type: "READING_TARGET_ERROR",
+      error: "no_pointer_target",
+    });
+
+    // Stale pointer → no_pointer_target.
+    const staleTracker = { point: { x: 5, y: 5, ts: 0 } };
+    const stalePointer = extractCurrentPointTarget(documentRef, url, undefined, staleTracker, () => 10_000_000);
+    expect(stalePointer).toEqual({
+      type: "READING_TARGET_ERROR",
+      error: "no_pointer_target",
+    });
+
+    // Fresh pointer but stale surface binding → target_stale.
+    const freshTracker = { point: { x: 5, y: 5, ts: 9_999_999 } };
+    const staleSurface = extractCurrentPointTarget(documentRef, url, "surface:stale", freshTracker, () => 10_000_000);
+    expect(staleSurface).toEqual({
       type: "READING_TARGET_ERROR",
       error: "target_stale",
     });

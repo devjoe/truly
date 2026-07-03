@@ -20,6 +20,11 @@ import { isTrulyMessage } from "../lib/messages";
 import type { GeneralPageParserAdvisorCandidateBlock } from "../lib/general-page-parser-advisor";
 import type { ReadingActivation } from "../lib/reading-action-types";
 import type { ReadingTarget, ReadingTargetRect } from "../lib/reading-target-types";
+import {
+  buildPointReadingTarget,
+  isPointerPointFresh,
+  type TrackedPointerPoint,
+} from "../lib/current-region-targeting";
 
 type PageReadingResponse = PageReadingResultMsg | PageReadingErrorMsg;
 type ReadingTargetResponse = ReadingTargetResultMsg | ReadingTargetErrorMsg;
@@ -244,28 +249,104 @@ export function handlePageReadingMessage(
   }
 }
 
+/**
+ * Slice 6b: the content script keeps the last meaningful pointer position in
+ * memory only. It is never transmitted or stored; it is consumed solely when
+ * the user explicitly triggers a current-region read.
+ */
+export interface PointerTracker {
+  point: TrackedPointerPoint | undefined;
+}
+
+export function installPointerTracking(
+  documentRef: Document,
+  now: () => number = Date.now,
+): PointerTracker {
+  const tracker: PointerTracker = { point: undefined };
+  documentRef.addEventListener?.("mousemove", (event) => {
+    const mouseEvent = event as MouseEvent;
+    tracker.point = { x: mouseEvent.clientX, y: mouseEvent.clientY, ts: now() };
+  }, { passive: true });
+  return tracker;
+}
+
+export function extractCurrentPointTarget(
+  documentRef: Document,
+  url: string,
+  surfaceId: string | undefined,
+  tracker: PointerTracker,
+  now: () => number = Date.now,
+): ReadingTargetResponse {
+  if (!isPointerPointFresh(tracker.point, now())) {
+    return {
+      type: "READING_TARGET_ERROR",
+      error: "no_pointer_target",
+    };
+  }
+  const point = tracker.point as TrackedPointerPoint;
+  const elementAtPoint = documentRef.elementFromPoint?.(point.x, point.y) ?? null;
+  const surface = extractGeneralPageSurface({ document: documentRef, url });
+  if (surfaceId && surface.id !== surfaceId) {
+    return {
+      type: "READING_TARGET_ERROR",
+      error: "target_stale",
+    };
+  }
+  const resolution = buildPointReadingTarget({
+    surfaceId: surface.id,
+    elementAtPoint,
+  });
+  if (!resolution.ok) {
+    return {
+      type: "READING_TARGET_ERROR",
+      error: resolution.error,
+    };
+  }
+  return {
+    type: "READING_TARGET_RESULT",
+    target: resolution.target,
+  };
+}
+
 export function handleReadingTargetMessage(
   message: TrulyMessage,
   documentRef: Document,
   url: string,
+  tracker?: PointerTracker,
 ): ReadingTargetResponse | undefined {
   if (message.type !== "READING_TARGET_REQUEST") {
     return undefined;
   }
-  if (message.trigger !== "selection" || message.activation?.targetKind !== "selection") {
-    return {
-      type: "READING_TARGET_ERROR",
-      error: "reading_target_unsupported",
-    };
+  if (message.trigger === "selection" && message.activation?.targetKind === "selection") {
+    try {
+      return extractCurrentSelectionTarget(documentRef, url, message.surfaceId);
+    } catch {
+      return {
+        type: "READING_TARGET_ERROR",
+        error: "target_extraction_failed",
+      };
+    }
   }
-  try {
-    return extractCurrentSelectionTarget(documentRef, url, message.surfaceId);
-  } catch {
-    return {
-      type: "READING_TARGET_ERROR",
-      error: "target_extraction_failed",
-    };
+  if (message.trigger === "hotkey" && message.activation?.targetKind === "current-region") {
+    if (!tracker) {
+      return {
+        type: "READING_TARGET_ERROR",
+        error: "no_pointer_target",
+      };
+    }
+    try {
+      return extractCurrentPointTarget(documentRef, url, message.surfaceId, tracker);
+    } catch {
+      return {
+        type: "READING_TARGET_ERROR",
+        error: "target_extraction_failed",
+      };
+    }
   }
+  return {
+    type: "READING_TARGET_ERROR",
+    error: "reading_target_unsupported",
+  };
 }
 
 export function handleCandidateBlockTextMessage(
@@ -317,6 +398,7 @@ export function installPageReaderRuntime(
   urlProvider: () => string,
   buildId: string,
 ): void {
+  const pointerTracker = installPointerTracking(documentRef);
   runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
     if (!isTrulyMessage(message))
       return false;
@@ -332,7 +414,7 @@ export function installPageReaderRuntime(
 
     const url = urlProvider();
     const response = handlePageReadingMessage(message, documentRef, url) ??
-      handleReadingTargetMessage(message, documentRef, url) ??
+      handleReadingTargetMessage(message, documentRef, url, pointerTracker) ??
       handleCandidateBlockTextMessage(message, documentRef, url);
     if (!response)
       return false;

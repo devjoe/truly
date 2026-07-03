@@ -18,6 +18,7 @@ export type ReadingTargetExtractionMethod =
 export type ReadingTargetErrorReason =
   | "reading_target_unsupported"
   | "no_meaningful_selection"
+  | "no_pointer_target"
   | "page_grant_missing"
   | "target_stale"
   | "target_extraction_failed";

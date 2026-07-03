@@ -530,6 +530,46 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     await side.screenshot(resolve(OUT_DIR, "page-selection-target.png"));
 
+    // Slice 6b: current-region hotkey flow. Simulate pointer movement over a
+    // paragraph, then set the same session marker the SW command handler
+    // writes; the panel consumes it and requests a point target.
+    const pointerTab = await side.evaluateJson(`(() => new Promise((resolveQuery) => {
+      chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        resolveQuery({ id: tabs?.[0]?.id ?? null });
+      });
+    }))()`);
+    await article.evaluate(`(() => {
+      const paragraph = document.querySelector('article p:nth-of-type(2)');
+      const rect = paragraph.getBoundingClientRect();
+      document.dispatchEvent(new MouseEvent('mousemove', {
+        clientX: rect.x + Math.min(rect.width / 2, 200),
+        clientY: rect.y + Math.min(rect.height / 2, 12),
+        bubbles: true
+      }));
+      return undefined;
+    })()`);
+    await side.evaluate(`chrome.storage.session.set({ pendingCurrentRegionRead: { tabId: ${JSON.stringify(pointerTab.id)}, ts: Date.now() } }); undefined`);
+    await waitFor(side, `(() => {
+      const model = document.querySelector('#page-pane .page-reader-model-context');
+      const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
+        label: row.querySelector('dt')?.textContent?.trim(),
+        value: row.querySelector('dd')?.textContent?.trim()
+      }));
+      return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && row.value === 'current-region');
+    })()`, 10000, "Page/Web current-region target").catch(async (error) => {
+      await side.screenshot(resolve(OUT_DIR, "page-point-target-timeout.png")).catch(() => {});
+      throw error;
+    });
+    const pointTarget = await side.evaluateJson(`(() => {
+      const pane = document.querySelector('#page-pane');
+      const advisor = pane?.querySelector('.page-reader-advisor');
+      return {
+        advisorStatus: advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
+        excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
+      };
+    })()`);
+    await side.screenshot(resolve(OUT_DIR, "page-point-target.png"));
+
     await article.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article#comments`)}; undefined`);
     await sleep(500);
     const afterHash = await side.evaluateJson(`(() => ({
@@ -556,7 +596,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
 
     await side.screenshot(resolve(OUT_DIR, "page-ready-and-stale.png"));
 
-    return { initial, ready, pageBrief, copy, selection: { selectedText, ...selection }, afterHash, afterTracking, afterMeaningful };
+    return { initial, ready, pageBrief, copy, selection: { selectedText, ...selection }, pointTarget, afterHash, afterTracking, afterMeaningful };
   } finally {
     await side.closeTarget().catch(() => {});
     await article.closeTarget().catch(() => {});
@@ -947,6 +987,7 @@ function writeSummary(result, errors) {
     `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
+    `- Current-region target: ${result.success.pointTarget?.advisorStatus || "(missing)"}`,
     `- Source links visible: ${result.success.ready.sourceLinks?.length || 0}`,
     `- Noisy fallback model context: ${result.noisy.ready.modelContext?.status || "(missing)"}`,
     `- Noisy fallback reading context: ${result.noisy.ready.advisor?.status || "(missing)"}`,
@@ -966,6 +1007,7 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-point-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-candidate-block.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-no-grant.png"))}`,

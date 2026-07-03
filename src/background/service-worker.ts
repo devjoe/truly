@@ -259,7 +259,10 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   }
 
   if (message.type === "READING_TARGET_REQUEST") {
-    if (message.trigger !== "selection" || message.activation?.targetKind !== "selection") {
+    const supportedTargetRequest =
+      (message.trigger === "selection" && message.activation?.targetKind === "selection") ||
+      (message.trigger === "hotkey" && message.activation?.targetKind === "current-region");
+    if (!supportedTargetRequest) {
       try {
         sendResponse({
           type: "READING_TARGET_ERROR",
@@ -825,6 +828,33 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   }
 
   return false;
+});
+
+// Slice 6b: current-region hotkey. The command opens the side panel and
+// leaves a session-storage marker the panel consumes on bootstrap or via the
+// storage listener. A plain command does NOT grant activeTab, so this only
+// works when the page-reader content script is already injected (the user
+// has read the page in this session); otherwise the panel shows the existing
+// toolbar-activation guidance.
+export const PENDING_CURRENT_REGION_READ_KEY = "pendingCurrentRegionRead";
+
+export function handleReadCurrentRegionCommand(
+  tab: { id?: number; windowId?: number } | undefined,
+  now = Date.now(),
+): void {
+  if (typeof tab?.id !== "number") return;
+  chrome.storage.session
+    .set({ [PENDING_CURRENT_REGION_READ_KEY]: { tabId: tab.id, ts: now } })
+    .catch(() => {});
+  if (typeof tab.windowId === "number" && chrome.sidePanel?.open) {
+    chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+  }
+}
+
+chrome.commands?.onCommand.addListener((command, tab) => {
+  if (command === "truly-read-current-region") {
+    handleReadCurrentRegionCommand(tab ?? undefined);
+  }
 });
 
 // Per-tab selector-health state. Unhealthy tabs show a red "!" action badge.

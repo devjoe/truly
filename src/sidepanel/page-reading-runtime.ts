@@ -121,9 +121,24 @@ interface RuntimeApi {
   sendMessage(message: TrulyMessage): Promise<unknown>;
 }
 
+/** chrome.storage.session subset used to consume hotkey read markers. */
+export interface PageReadingSessionStore {
+  get(key: string): Promise<Record<string, unknown>>;
+  remove(key: string): Promise<unknown>;
+  onChanged?: {
+    addListener(
+      listener: (changes: Record<string, { newValue?: unknown }>, areaName: string) => void,
+    ): void;
+  };
+}
+
+export const PENDING_CURRENT_REGION_READ_KEY = "pendingCurrentRegionRead";
+const PENDING_CURRENT_REGION_READ_MAX_AGE_MS = 30_000;
+
 export interface SidepanelPageReadingRuntime {
   install(): void;
   requestReadCurrentPage(source?: PageActivationSource): Promise<void>;
+  requestPointTarget(tabId: number): Promise<void>;
   handlePageReadingResult(message: PageReadingResultMsg): void;
   handlePageReadingError(message: PageReadingErrorMsg): void;
 }
@@ -138,6 +153,7 @@ export interface CreateSidepanelPageReadingRuntimeOptions {
   getTierAEndpoint?(): string | undefined;
   getTierAModel?(): string | undefined;
   now(): number;
+  sessionStore?: PageReadingSessionStore;
 }
 
 function escapeHtml(input: string): string {
@@ -528,6 +544,7 @@ export function createSidepanelPageReadingRuntime({
   getTierAEndpoint = () => undefined,
   getTierAModel = () => undefined,
   now,
+  sessionStore,
 }: CreateSidepanelPageReadingRuntimeOptions): SidepanelPageReadingRuntime {
   const sessions = new Map<number, PageReadingSession>();
   let activeTabId: number | null = null;
@@ -740,6 +757,8 @@ export function createSidepanelPageReadingRuntime({
   function friendlyTargetError(error: ReadingTargetErrorReason): string {
     if (error === "no_meaningful_selection")
       return tr("sidepanel.page.target.error.noSelection");
+    if (error === "no_pointer_target")
+      return tr("sidepanel.page.target.error.noPointerTarget");
     if (error === "page_grant_missing")
       return tr("sidepanel.page.error.needsToolbarActivation");
     if (error === "target_stale")
@@ -1082,6 +1101,81 @@ export function createSidepanelPageReadingRuntime({
     }
   }
 
+  async function requestPointTarget(tabId: number): Promise<void> {
+    try {
+      const session = sessions.get(tabId);
+      if (!session?.surface || session.status === "stale") {
+        // Hotkey without a live read session: no activeTab grant is implied,
+        // so show the existing toolbar-activation guidance.
+        if (sessions.get(tabId)) {
+          handleReadingTargetError({
+            type: "READING_TARGET_ERROR",
+            tabId,
+            error: "page_grant_missing",
+          });
+        }
+        render();
+        return;
+      }
+      setAdvisor(tabId, {
+        status: "checking",
+        providerRuntime: resolveAdvisorProviderRuntime(getSettings(), getTierAEndpoint(), getTierAModel()),
+        updatedAt: now(),
+      });
+      const response = await runtime.sendMessage({
+        type: "READING_TARGET_REQUEST",
+        tabId,
+        trigger: "hotkey",
+        surfaceId: session.surface.id,
+        activation: {
+          source: "hotkey",
+          targetKind: "current-region",
+          action: "read",
+        },
+      } satisfies TrulyMessage);
+      if (!response || typeof response !== "object" || !("type" in response)) return;
+      if (response.type === "READING_TARGET_RESULT") {
+        handleReadingTargetResult(response as ReadingTargetResultMsg);
+      } else if (response.type === "READING_TARGET_ERROR") {
+        handleReadingTargetError(response as ReadingTargetErrorMsg);
+      }
+    } catch {
+      handleReadingTargetError({
+        type: "READING_TARGET_ERROR",
+        tabId,
+        error: "target_extraction_failed",
+      });
+    }
+  }
+
+  function pendingCurrentRegionValue(raw: unknown): { tabId: number } | undefined {
+    if (!raw || typeof raw !== "object") return undefined;
+    const candidate = raw as { tabId?: unknown; ts?: unknown };
+    if (typeof candidate.tabId !== "number" || typeof candidate.ts !== "number") return undefined;
+    if (now() - candidate.ts > PENDING_CURRENT_REGION_READ_MAX_AGE_MS) return undefined;
+    return { tabId: candidate.tabId };
+  }
+
+  function consumePendingCurrentRegionRead(raw: unknown): void {
+    const pending = pendingCurrentRegionValue(raw);
+    void sessionStore?.remove(PENDING_CURRENT_REGION_READ_KEY);
+    if (!pending) return;
+    void requestPointTarget(pending.tabId);
+  }
+
+  function installPendingCurrentRegionListener(): void {
+    if (!sessionStore) return;
+    void sessionStore.get(PENDING_CURRENT_REGION_READ_KEY).then((result) => {
+      consumePendingCurrentRegionRead(result?.[PENDING_CURRENT_REGION_READ_KEY]);
+    }).catch(() => {});
+    sessionStore.onChanged?.addListener((changes, areaName) => {
+      if (areaName !== "session") return;
+      const change = changes[PENDING_CURRENT_REGION_READ_KEY];
+      if (!change || change.newValue === undefined) return;
+      consumePendingCurrentRegionRead(change.newValue);
+    });
+  }
+
   async function requestReadCurrentPage(source: PageActivationSource = "sidepanel"): Promise<void> {
     try {
       const tab = await refreshActiveTab(false);
@@ -1273,12 +1367,14 @@ export function createSidepanelPageReadingRuntime({
       sessions.delete(tabId);
       if (tabId === activeTabId) render();
     });
+    installPendingCurrentRegionListener();
     render();
   }
 
   return {
     install,
     requestReadCurrentPage,
+    requestPointTarget,
     handlePageReadingResult,
     handlePageReadingError,
   };

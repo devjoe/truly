@@ -101,6 +101,11 @@ const pageReadingRuntime = createSidepanelPageReadingRuntime({
   getTierAEndpoint: () => panelState.cachedTierAEndpoint,
   getTierAModel: () => panelState.cachedTierAModel,
   now: Date.now,
+  sessionStore: {
+    get: (key) => chrome.storage.session.get(key),
+    remove: (key) => chrome.storage.session.remove(key),
+    onChanged: chrome.storage.onChanged,
+  },
 });
 
 const postRuntimeController = createSidepanelPostRuntimeController({
