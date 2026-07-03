@@ -1157,6 +1157,9 @@ function assertAudit(result) {
   }
   if (!result.noGrant.hasGuidance) errors.push("no-grant sidepanel path did not show toolbar activation guidance");
   if (!result.noGrant.hasAllSitesGuidance) errors.push("no-grant sidepanel path did not mention all-sites settings access");
+  for (const [label, pass, evidence] of qaMatrixRows(result)) {
+    if (!pass) errors.push(`QA matrix failed: ${label}: ${evidence}`);
+  }
   return errors;
 }
 
@@ -1164,6 +1167,97 @@ function hasPassingTextThresholdRow(rows) {
   const row = rows?.find((item) => /文字門檻|Text threshold/.test(item.label || ""));
   const match = String(row?.value ?? "").match(/^(\d+)\/240$/);
   return Boolean(match && Number(match[1]) >= 240);
+}
+
+function qaPass(value) {
+  return value ? "PASS" : "FAIL";
+}
+
+function escapeTableCell(value) {
+  return String(value).replace(/\|/g, "\\|");
+}
+
+function qaMatrixRows(result) {
+  const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
+  const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
+  const noisyDecision = noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
+  const noisyUse = noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  const candidateDecision = candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
+  const candidateUse = candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  return [
+    [
+      "Popup activation",
+      result.popup.general.button === "讀取此頁" && result.popup.general.disabled === false && result.popup.unsupported.disabled === true,
+      "general=" + result.popup.general.button + "/disabled=" + result.popup.general.disabled + "; unsupportedDisabled=" + result.popup.unsupported.disabled,
+    ],
+    [
+      "Ordinary article read",
+      result.success.ready.status === "已讀取" &&
+        result.success.ready.title === "Synthetic General Page Reader Article" &&
+        !result.success.ready.fullTailVisible &&
+        result.success.ready.extractionDiagnosticsOpen === false &&
+        result.success.ready.modelContext?.diagnosticsOpen === false &&
+        result.success.ready.advisor?.diagnosticsOpen === false &&
+        (result.success.ready.sourceLinks?.length ?? 0) <= 6,
+      "title=" + result.success.ready.title + "; links=" + (result.success.ready.sourceLinks?.length ?? 0) + "; diagnosticsCollapsed=" + (result.success.ready.extractionDiagnosticsOpen === false),
+    ],
+    [
+      "Model brief generation",
+      result.success.pageBrief?.status === "ready",
+      "status=" + (result.success.pageBrief?.status || "missing"),
+    ],
+    [
+      "Saved-session switching",
+      (result.success.switcher?.display?.sessionCount ?? 0) >= 2 &&
+        result.success.switcher?.display?.selectionDisabled === true &&
+        result.success.switcher?.activated?.selectionDisabled === false,
+      "sessions=" + (result.success.switcher?.display?.sessionCount ?? 0) + "; restored=" + (result.success.switcher?.activated?.selectionDisabled === false),
+    ],
+    [
+      "Selection target",
+      Boolean(result.success.selection?.selectedText) &&
+        result.success.selection?.modelRows?.some((row) => /目標|Target/.test(row.label || "") && row.value === "selection") &&
+        result.success.selection?.advisorRows?.some((row) => /判斷|Decision/.test(row.label || "") && row.value === "accept_current"),
+      "selectedChars=" + (result.success.selection?.selectedText?.length ?? 0),
+    ],
+    [
+      "Current-region shortcut",
+      result.success.pointTarget?.targetKind === "current-region",
+      "target=" + (result.success.pointTarget?.targetKind || "missing") + "; advisor=" + (result.success.pointTarget?.advisorStatus || "missing"),
+    ],
+    [
+      "URL identity and stale scrub",
+      !result.success.afterHash.stale &&
+        !result.success.afterTracking.stale &&
+        result.success.afterMeaningful.stale &&
+        !result.success.afterMeaningful.oldExcerptVisible &&
+        !result.success.afterMeaningful.sourceLinkVisible,
+      "hash=" + result.success.afterHash.stale + "; tracking=" + result.success.afterTracking.stale + "; meaningful=" + result.success.afterMeaningful.stale,
+    ],
+    [
+      "Noisy fallback caution",
+      /需改善抽取|Extraction needs improvement/.test(result.noisy.ready.modelContext?.status || "") &&
+        noisyDecision === "downgrade_to_index_or_feed" &&
+        noisyUse === "page_overview_only" &&
+        result.noisy.ready.extractionDiagnosticsOpen === true &&
+        result.noisy.ready.modelContext?.diagnosticsOpen === true &&
+        result.noisy.ready.advisor?.diagnosticsOpen === true,
+      "decision=" + (noisyDecision || "missing") + "; use=" + (noisyUse || "missing"),
+    ],
+    [
+      "Candidate block recovery",
+      candidateDecision === "prefer_candidate_block" &&
+        candidateUse === "article_or_selection_analysis" &&
+        result.candidate.ready.hasFullCandidateContinuation === true &&
+        result.candidate.ready.hasCandidateSource === true,
+      "decision=" + (candidateDecision || "missing") + "; use=" + (candidateUse || "missing"),
+    ],
+    [
+      "No-grant guidance",
+      result.noGrant.hasGuidance === true && result.noGrant.hasAllSitesGuidance === true,
+      "toolbarGuidance=" + result.noGrant.hasGuidance + "; allSitesGuidance=" + result.noGrant.hasAllSitesGuidance,
+    ],
+  ];
 }
 
 function writeSummary(result, errors) {
@@ -1174,6 +1268,12 @@ function writeSummary(result, errors) {
     `- Expected buildId: ${result.expectedBuildId}`,
     `- Live buildId: ${result.version?.buildId || "(missing)"}`,
     `- Verdict: ${errors.length === 0 ? "PASS" : "FAIL"}`,
+    "",
+    "## QA Matrix",
+    "",
+    "| Case | Result | Evidence |",
+    "|---|---|---|",
+    ...qaMatrixRows(result).map(([label, pass, evidence]) => `| ${label} | ${qaPass(pass)} | ${escapeTableCell(evidence)} |`),
     "",
     "## Checks",
     "",
