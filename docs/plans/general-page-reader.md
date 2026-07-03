@@ -563,7 +563,8 @@ npm run audit:general-page-model-integration
 synthetic local HTML only, and writes screenshots/JSON under `tmp/`. Do not
 commit those artifacts. `audit:general-page-model-integration` runs a local
 OpenAI-compatible mock endpoint and verifies payload scoping plus overview
-post-guards without storing page analysis content.
+post-guards without storing page analysis content; it is now included in
+`check:general-page` and therefore in `check:public`.
 
 ## Open Questions
 
