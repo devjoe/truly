@@ -142,6 +142,8 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("文字門檻");
     expect(pagePaneEl.textContent).toContain("來源連結");
     expect(pagePaneEl.textContent).toContain("Synthetic source");
+    expect(pagePaneEl.textContent).toContain("檢視抽取細節");
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(false);
   });
 
   it("switches among saved page sessions without implicitly activating Chrome tabs", async () => {
@@ -260,6 +262,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("accept_current");
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(false);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-advisor details")?.open).toBe(false);
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(false);
   });
 
   it("auto-generates a session-only General Page brief when Tier B is available", async () => {
@@ -371,6 +374,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("暫不送模型");
     expect(pagePaneEl.textContent).toContain("可讀文字低於目前門檻");
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(true);
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(true);
   });
 
   it("downgrades noisy fallback extraction and hides navigation download links from source context", async () => {

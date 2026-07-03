@@ -501,11 +501,12 @@ artifacts. It should cover:
 - Update popup activation wording.
 - Update CWS reviewer notes and permission justification.
 - Add browser QA against a small manually selected page matrix.
-- Keep Page/Web diagnostics visible but compact. Model-context and parser
-  advisor detail rows should use progressive disclosure by default, expanding
-  automatically only for caution, blocked, error, overview-only, or
-  user-target-required states. This preserves early quality inspection without
-  making ordinary article reads feel like a developer console.
+- Keep Page/Web diagnostics visible but compact. Extraction metadata,
+  model-context rows, and parser-advisor rows use progressive disclosure by
+  default, expanding automatically for caution, blocked, error, overview-only,
+  user-target-required, fallback, partial, or warning states. This preserves
+  early quality inspection without making ordinary article reads feel like a
+  developer console.
 - Decide whether selected-text mini-actions belong in the next preview.
 
 ### Slice 6: Current Region Interaction Spike

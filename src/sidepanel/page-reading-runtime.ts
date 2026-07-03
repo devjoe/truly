@@ -334,6 +334,26 @@ function sourceLinksHtml(links: GeneralPageModelSourceLink[], title: string): st
   `;
 }
 
+function extractionDiagnosticsHtml(
+  surface: ReadingSurface,
+  rows: string[][],
+  context: GeneralPageModelContext | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const detailsOpen = context?.modelReadiness !== "ready" ||
+    surface.extraction.status !== "complete" ||
+    surface.extraction.method !== "semantic-html" ||
+    surface.extraction.warnings.length > 0;
+  return `
+    <details class="page-reader-diagnostics page-reader-extraction-diagnostics"${detailsOpen ? " open" : ""}>
+      <summary>${escapeHtml(tr("sidepanel.page.diagnostics.extraction"))}</summary>
+      <dl class="page-reader-meta">
+        ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+      </dl>
+    </details>
+  `;
+}
+
 function modelContextHtml(
   context: GeneralPageModelContext | undefined,
   tr: (key: string, params?: Record<string, string | number>) => string,
@@ -750,9 +770,7 @@ export function createSidepanelPageReadingRuntime({
             </div>
           </div>
           ${excerpt ? `<p class="page-reader-excerpt">${escapeHtml(excerpt)}</p>` : `<p class="page-reader-empty">${escapeHtml(tr("sidepanel.page.noExcerpt"))}</p>`}
-          <dl class="page-reader-meta">
-            ${metadataRows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
-          </dl>
+          ${session.surface ? extractionDiagnosticsHtml(session.surface, metadataRows, modelContext, tr) : ""}
           ${modelContextHtml(modelContext, tr)}
           ${advisorHtml(session.advisor, tr)}
           ${displayedSessionIsActive ? screenshotHtml(session, tr) : ""}
