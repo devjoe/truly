@@ -511,7 +511,9 @@ artifacts. It should cover:
   user-target-required, fallback, partial, or warning states. This preserves
   early quality inspection without making ordinary article reads feel like a
   developer console.
-- Decide whether selected-text mini-actions belong in the next preview.
+- Defer selected-text mini-actions for this preview. Selection analysis is
+  available through the explicit Side Panel button; contextual in-page buttons
+  or context-menu entries require a separate UI/permission decision.
 
 ### Slice 6: Current Region Interaction Spike
 
@@ -566,12 +568,20 @@ OpenAI-compatible mock endpoint and verifies payload scoping plus overview
 post-guards without storing page analysis content; it is now included in
 `check:general-page` and therefore in `check:public`.
 
+## Resolved Preview Decisions
+
+- Selected-text analysis is explicit and side-panel-first for this preview. Do
+  not add an in-page selection button or context-menu permission until a separate
+  UI/permission decision is made.
+- Page/Web source links stay visible for early inspection, but runtime model
+  context and UI exposure are filtered and capped at six links. The CDP QA
+  Matrix fails if ordinary, noisy, or candidate-recovery reads expose more than
+  six source links.
+- Page/Web analysis remains session-only. Durable Page/Web history is deferred
+  to a future privacy/storage review.
+
 ## Open Questions
 
-- What should the final selected-text affordance look like: a contextual Truly
-  button, a menu item, a hotkey-only action, or a combination?
-- How many extracted source links should remain visible once Page/Web moves from
-  early debugging into normal user-facing UI?
 - Should a future privacy-reviewed version offer durable Page/Web history, and
   if so, which fields may be stored?
 
