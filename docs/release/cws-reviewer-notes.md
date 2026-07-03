@@ -20,12 +20,13 @@ Do not use `artifacts/cws-local-smoke/` ZIPs or reports for Chrome Web Store
 submission. Those artifacts are local packaging smoke evidence only and are
 explicitly non-uploadable.
 
-The CWS package checks pass through `npm run cws:package`, including clean-tree
-and upstream checks, release-tag-to-commit verification, public-boundary checks,
-release metadata, typecheck, public contract tests, public unit tests,
-production build, packaged ZIP audit, and CWS preflight. CWS preflight also
-checks the recorded published package version so a submitted package does not
-reuse the numeric `manifest.version` from the currently published item.
+The CWS package checks pass through `npm run cws:package`, including clean-tree,
+upstream sync, `origin/main` caught-up checks, release-tag-to-commit
+verification, public-boundary checks, release metadata, typecheck, public
+contract tests, public unit tests, production build, packaged ZIP audit, and
+CWS preflight. CWS preflight also checks the recorded published package version
+so a submitted package does not reuse the numeric `manifest.version` from the
+currently published item.
 
 Preview 12 includes the user-triggered Page/Web reader path while preserving
 the existing Facebook reading surface and release-package boundary.

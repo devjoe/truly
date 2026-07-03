@@ -134,6 +134,41 @@ export function assertUpstreamSynced({ allowUnpushedEnv }) {
   return { upstream, ahead, behind };
 }
 
+export function readMainlineState(baseRef = process.env.TRULY_MERGE_BASE_REF || "origin/main") {
+  const baseCommit = git(["rev-parse", "--verify", `${baseRef}^{commit}`], "").trim();
+  if (!baseCommit) return { baseRef, ahead: null, behind: null, ancestor: false, status: "missing" };
+
+  const ancestor = spawnGit(["merge-base", "--is-ancestor", baseRef, "HEAD"]).status === 0;
+  const [behindRaw, aheadRaw] = git(["rev-list", "--left-right", "--count", `${baseRef}...HEAD`], "0\t0")
+    .trim()
+    .split(/\s+/);
+  const behind = Number(behindRaw);
+  const ahead = Number(aheadRaw);
+  return {
+    baseRef,
+    ahead,
+    behind,
+    ancestor,
+    status: ancestor && behind === 0 ? "caught_up" : "behind_or_diverged",
+  };
+}
+
+export function assertMainlineCaughtUp({ baseRef = process.env.TRULY_MERGE_BASE_REF || "origin/main" } = {}) {
+  const state = readMainlineState(baseRef);
+  if (state.status === "missing") {
+    console.error(`Refusing to package for CWS because the mainline base ref is missing: ${state.baseRef}`);
+    console.error("Fetch the remote mainline first, for example `git fetch origin main`.");
+    process.exit(1);
+  }
+  if (state.status !== "caught_up") {
+    console.error(`Refusing to package for CWS because HEAD is not caught up with ${state.baseRef}.`);
+    console.error(`- ${state.baseRef}...HEAD: behind=${state.behind}, ahead=${state.ahead}`);
+    console.error(`- ancestor=${state.ancestor}`);
+    process.exit(1);
+  }
+  return state;
+}
+
 export function assertTagMatchesHead(tag) {
   const head = git(["rev-parse", "HEAD"], "").trim();
   const tagCommit = git(["rev-list", "-n", "1", tag], "").trim();
@@ -256,6 +291,24 @@ function isAlive(pid) {
     return true;
   } catch {
     return false;
+  }
+}
+
+function spawnGit(args) {
+  try {
+    return {
+      status: 0,
+      stdout: execFileSync("git", args, {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    };
+  } catch (error) {
+    return {
+      status: typeof error.status === "number" ? error.status : 1,
+      stdout: typeof error.stdout === "string" ? error.stdout : "",
+    };
   }
 }
 

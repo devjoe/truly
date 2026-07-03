@@ -25,6 +25,9 @@ This document is the current public-safe readiness index for the General Page Re
   its upstream, and caught up with `origin/main`, so reviewer validation does
   not depend on a stale local `main` checkout or a visually inspected
   ahead/behind count.
+- The uploadable `cws:package` gate also requires the package commit to be
+  caught up with `origin/main`; `cws:package:local-smoke` records the same
+  mainline state for reviewer context but remains explicitly non-uploadable.
 - `audit:general-page-model-integration` is included in `check:general-page` and verifies model payload scoping, overview guards, and session-only storage behavior with a local mock endpoint.
 - The live-DOM 200-target review proved the harness is useful for finding false-ready page patterns; public follow-up is represented only as aggregate findings plus synthetic fixtures.
 - `smoke:general-page-current` writes a public-safe `current-browser-smoke-summary.json` and `current-browser-smoke-summary.md` next to the private review artifacts. These summaries omit real URLs, titles, extracted text, screenshots, copied page content, and per-target notes while preserving readiness counts, issue tags, threshold results, and sanitized host-level evidence. Localhost and private/internal hosts are reduced to `localhost` or `private-host`. The smoke script rejects unsafe summary fields such as `url`, `title`, `mainText`, `textContent`, raw HTML, screenshots, data URLs, and `http(s)` strings before writing the public-safe summary.
@@ -92,6 +95,10 @@ npm run cws:package:local-smoke
   Store dashboard state for the earlier `0.1.1 Preview 9` submission must be
   confirmed before uploading.
 - `npm run cws:package:local-smoke`: available for pre-push ZIP creation, package-boundary audit, and `cws:preflight`. Its artifacts live under `artifacts/cws-local-smoke/`, are explicitly non-uploadable, and do not satisfy the upstream-sync or release-tag upload gates.
+- Formal `npm run cws:package` now also refuses to build an uploadable package
+  unless the package commit is caught up with `origin/main`. Local-smoke reports
+  include `Mainline:` evidence but still mark mainline freshness as an omitted
+  upload gate.
 
 ## Recent Local Verification Evidence
 
@@ -118,6 +125,11 @@ Results:
   ancestor=true, and `origin/codex/general-page-reader-contract` ahead=0 /
   behind=0. A pre-push strict run correctly failed on one unpushed commit,
   proving the gate catches local-only reviewer state before merge validation.
+- Uploadable CWS package mainline gate: added after the merge-readiness gate so
+  formal `cws:package` cannot produce a Chrome Web Store ZIP from a feature
+  branch that is synced to its own upstream but stale relative to `origin/main`.
+  The non-uploadable local-smoke report records the same `Mainline:` state while
+  continuing to list mainline freshness under omitted upload gates.
 - `check:public`: passed from clean HEAD `94eae34`. This included
   public-boundary, release metadata, General Page readiness-docs check, General
   Page corpus, parser spikes, parser-advisor spike, model integration audit,

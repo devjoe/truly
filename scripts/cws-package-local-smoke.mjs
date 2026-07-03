@@ -10,6 +10,7 @@ import {
   collectCwsAssetEvidence,
   createReleaseLock,
   readDistBuildId,
+  readMainlineState,
   readProjectMetadata,
   root,
   run,
@@ -33,6 +34,7 @@ const dirtyFiles = assertCleanTree({
 });
 const dirty = dirtyFiles.length > 0;
 const upstream = readUpstreamState();
+const mainline = readMainlineState();
 const releaseTag = readReleaseTagState(recommendedTag);
 
 assertNoDevProcesses();
@@ -65,10 +67,12 @@ try {
     uploadBlockers: [
       "local smoke artifact only",
       "does not require or prove upstream sync",
+      "does not require or prove mainline freshness",
       "does not require or prove release tag at HEAD",
       "must not be uploaded to Chrome Web Store",
     ],
     upstream,
+    mainline,
     releaseTag,
     dirty,
     dirtyFiles,
@@ -88,6 +92,7 @@ try {
     ],
     omittedUploadGates: [
       "branch synced with upstream",
+      "branch caught up with origin/main",
       "release tag points at HEAD",
     ],
     cwsInputs: {
@@ -151,6 +156,7 @@ function renderReport(report) {
   const releaseTagLine = report.releaseTag.commit
     ? `${report.releaseTag.tag} (${report.releaseTag.status}; ${report.releaseTag.commit})`
     : `${report.releaseTag.tag} (${report.releaseTag.status})`;
+  const mainlineLine = `${report.mainline.baseRef} (${report.mainline.status}; ahead=${report.mainline.ahead}, behind=${report.mainline.behind}, ancestor=${report.mainline.ancestor})`;
   return [
     "# Truly CWS Local Smoke Package Report",
     "",
@@ -163,6 +169,7 @@ function renderReport(report) {
     `- Branch: ${report.branch}`,
     `- Uploadable: ${report.uploadable ? "yes" : "no"}`,
     `- Upstream: ${upstreamLine}`,
+    `- Mainline: ${mainlineLine}`,
     `- Release tag: ${releaseTagLine}`,
     `- Dirty tree: ${dirtyLine}`,
     `- Build ID: ${report.buildId ?? "not found"}`,

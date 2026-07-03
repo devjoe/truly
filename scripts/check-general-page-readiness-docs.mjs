@@ -48,6 +48,8 @@ const REQUIRED_SNIPPETS = [
       "git fetch origin main",
       "npm run check:merge-readiness",
       "`origin/main` is an ancestor",
+      "uploadable `cws:package` gate",
+      "Mainline:",
       "general-page-ui-readiness-review.md",
       "P25 `article-root-utility-dense-ready-trap`",
       "P26 `multi-article-teaser-hub`",
@@ -135,6 +137,20 @@ const REQUIRED_SNIPPETS = [
       "session-only page-content handling",
       "user confirmation",
       "public privacy claims",
+      "caught up with `origin/main`",
+      "mainline state",
+    ],
+  },
+  {
+    path: "docs/release/cws-submission-checklist.md",
+    snippets: [
+      "`origin/main` is `caught_up`",
+    ],
+  },
+  {
+    path: "docs/release/cws-reviewer-notes.md",
+    snippets: [
+      "`origin/main` caught-up checks",
     ],
   },
 ];

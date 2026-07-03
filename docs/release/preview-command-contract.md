@@ -327,21 +327,24 @@ extension ZIP, source ZIP, and build report that can later become a GitHub
 Release, but it does not itself create the GitHub Release.
 
 `npm run cws:package` is the Chrome Web Store upload-package entrypoint. It
-requires a clean tree, a branch that is not behind its upstream, no repo-local
-dev processes, the current Preview release tag pointing at `HEAD`,
-`check:public`, a packaged ZIP audit, and `cws:preflight`. Since CWS packaging
-happens after the GitHub Release tag exists, it allows the release metadata tag
-collision only after verifying that the tag is the current commit. It writes a
-CWS-specific package report under `artifacts/cws/` with the extension ZIP path,
-SHA-256, commit, build ID, and submission input paths.
+requires a clean tree, a branch that is not behind its upstream, a branch that
+is caught up with `origin/main`, no repo-local dev processes, the current
+Preview release tag pointing at `HEAD`, `check:public`, a packaged ZIP audit,
+and `cws:preflight`. Since CWS packaging happens after the GitHub Release tag
+exists, it allows the release metadata tag collision only after verifying that
+the tag is the current commit. It writes a CWS-specific package report under
+`artifacts/cws/` with the extension ZIP path, SHA-256, commit, build ID,
+mainline state, and submission input paths.
 
 `npm run cws:package:local-smoke` is a non-uploadable pre-push smoke path. It
 builds and audits a local extension ZIP under `artifacts/cws-local-smoke/`, runs
 `check:public` and `cws:preflight`, and writes a report that says
-`Uploadable: no`. It intentionally does not prove upstream sync or release-tag
-state, so its ZIP must never be uploaded to Chrome Web Store. Use the official
-`npm run cws:package` command after the branch is pushed and the release tag is
-at `HEAD`.
+`Uploadable: no`. It records upstream and `origin/main` state for reviewer
+context, but intentionally does not enforce upload gates such as upstream sync,
+mainline freshness, or release-tag state, so its ZIP must never be uploaded to
+Chrome Web Store. Use the official `npm run cws:package` command after the
+branch is pushed, caught up with `origin/main`, and the release tag is at
+`HEAD`.
 
 `npm run cws:preflight` is intentionally deterministic and local. It verifies
 that the CWS docs mention the current version, version name, and recommended

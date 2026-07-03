@@ -4,6 +4,7 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import {
   assertCleanTree,
+  assertMainlineCaughtUp,
   assertNoDevProcesses,
   assertTagMatchesHead,
   assertUpstreamSynced,
@@ -36,6 +37,7 @@ const dirty = dirtyFiles.length > 0;
 const upstream = assertUpstreamSynced({
   allowUnpushedEnv: "TRULY_ALLOW_UNPUSHED_CWS_PACKAGE",
 });
+const mainline = assertMainlineCaughtUp();
 const releaseTag = assertTagMatchesHead(recommendedTag);
 
 assertNoDevProcesses();
@@ -65,6 +67,7 @@ try {
     commit,
     branch,
     upstream,
+    mainline,
     releaseTag,
     dirty,
     dirtyFiles,
@@ -77,6 +80,7 @@ try {
     checks: [
       dirty ? "dirty tree allowed for local smoke package" : "git tree clean",
       "branch synced with upstream",
+      "branch caught up with origin/main",
       "release tag points at HEAD",
       "no repo-local dev processes",
       "npm run check:public with verified release tag collision",
@@ -114,6 +118,7 @@ function renderReport(report) {
     `- Commit: ${report.commit}`,
     `- Branch: ${report.branch}`,
     `- Upstream: ${report.upstream.upstream}`,
+    `- Mainline: ${report.mainline.baseRef} (${report.mainline.status}; ahead=${report.mainline.ahead}, behind=${report.mainline.behind}, ancestor=${report.mainline.ancestor})`,
     `- Release tag: ${report.releaseTag.tag}`,
     `- Dirty tree: ${dirtyLine}`,
     `- Build ID: ${report.buildId ?? "not found"}`,
