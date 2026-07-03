@@ -13,6 +13,13 @@ const AUTO_RELOAD = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_AUTO_RELOAD |
 const EXTENSION_ID = (process.env.TRULY_EXTENSION_ID || "").trim();
 const STAMP = new Date().toISOString().replace(/[:.]/g, "-");
 const OUT_DIR = resolve(ROOT, "tmp", `general-page-reader-audit-${STAMP}`);
+const PHASE_TIMEOUT_MS = {
+  popup: 20_000,
+  success: 90_000,
+  noisy: 45_000,
+  candidate: 45_000,
+  noGrant: 30_000,
+};
 
 function usage() {
   console.log(`Usage: node scripts/audit-general-page-reader.mjs
@@ -131,6 +138,34 @@ function connectCdp(webSocketDebuggerUrl) {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function runAuditPhase(label, timeoutMs, fn) {
+  writeFileSync(resolve(OUT_DIR, "audit-progress.json"), JSON.stringify({
+    phase: label,
+    timeoutMs,
+    startedAt: new Date().toISOString(),
+  }, null, 2));
+  let timer;
+  let status = "completed";
+  try {
+    return await Promise.race([
+      fn(),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`Audit phase timed out: ${label} after ${timeoutMs}ms`)), timeoutMs);
+      }),
+    ]);
+  } catch (error) {
+    status = "failed";
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    writeFileSync(resolve(OUT_DIR, "audit-progress.json"), JSON.stringify({
+      phase: label,
+      status,
+      finishedAt: new Date().toISOString(),
+    }, null, 2));
+  }
 }
 
 function syntheticHtml(title, body) {
@@ -1542,11 +1577,16 @@ try {
       allowed: `${server.allowedBase}/article`,
       noGrant: `${server.noGrantBase}/article`,
     },
-    popup: await auditPopup(extensionId, `${server.allowedBase}/article`),
-    success: await auditSuccessfulRead(extensionId, server.allowedBase),
-    noisy: await auditNoisyFallbackRead(extensionId, server.allowedBase),
-    candidate: await auditCandidateBlockRecovery(extensionId, server.allowedBase),
-    noGrant: await auditNoGrantGuidance(extensionId, server.noGrantBase),
+    popup: await runAuditPhase("popup", PHASE_TIMEOUT_MS.popup, () =>
+      auditPopup(extensionId, `${server.allowedBase}/article`)),
+    success: await runAuditPhase("success", PHASE_TIMEOUT_MS.success, () =>
+      auditSuccessfulRead(extensionId, server.allowedBase)),
+    noisy: await runAuditPhase("noisy", PHASE_TIMEOUT_MS.noisy, () =>
+      auditNoisyFallbackRead(extensionId, server.allowedBase)),
+    candidate: await runAuditPhase("candidate", PHASE_TIMEOUT_MS.candidate, () =>
+      auditCandidateBlockRecovery(extensionId, server.allowedBase)),
+    noGrant: await runAuditPhase("no-grant", PHASE_TIMEOUT_MS.noGrant, () =>
+      auditNoGrantGuidance(extensionId, server.noGrantBase)),
     artifactDir: relative(ROOT, OUT_DIR),
   };
 

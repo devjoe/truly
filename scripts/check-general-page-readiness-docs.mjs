@@ -9,6 +9,8 @@ const REQUIRED_SNIPPETS = [
       "430px Page/Web responsive overflow",
       "Page/Web design restraint",
       "Page/Web interaction accessibility",
+      "phase-level timeouts",
+      "audit-progress.json",
       "smoke:general-page-current -- --all-open",
       "--max-ready-count 0",
       "P24 dashboard/data-surface",
