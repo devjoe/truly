@@ -1,40 +1,13 @@
 # Slice 6b + Screenshot Flow + Live-DOM Harness: Acceptance Handoff
 
-Status: implemented by Claude Fable 5, awaiting Codex acceptance review
+Status: accepted by Codex review on 2026-07-03; no branch-finalization action remains
 Date: 2026-07-03
 
-## Branch Finalize First (Important)
+## Acceptance Resolution
 
-These three commits were created from a sandbox that cannot delete files
-inside `.git`, so the branch pointer was NOT moved for the last two and stale
-lock files remain. Before anything else, run on the host:
+Codex acceptance review has verified that the branch now points at the final commit chain and the worktree is clean. The earlier sandbox lock-file warning is historical only; do not run the old update-ref recovery procedure unless a future git status explicitly reports a lock problem.
 
-```bash
-# From the main repo checkout (the worktree's git-common-dir):
-GIT_COMMON=$(git -C ../truly rev-parse --git-common-dir 2>/dev/null || echo ../truly/.git)
-rm -f "$GIT_COMMON/worktrees/truly-general-page-reader/HEAD.lock" \
-      "$GIT_COMMON/worktrees/truly-general-page-reader/index.lock" \
-      "$GIT_COMMON/objects/maintenance.lock"
-find "$GIT_COMMON/objects" -name 'tmp_obj_*' -delete
-# Then from this worktree:
-git update-ref HEAD <final-hash-from-session-summary>
-git status   # worktree must be clean afterwards
-```
-
-The final hash is the "docs handoff" commit on top of this chain; it is
-printed in the session summary that accompanies this handoff.
-
-Commit chain (each verified green before creation):
-
-1. `21506d9` Add Slice 6b current-region point-target spike
-2. `83abbed` Add user-confirmed screenshot analysis gated on vision probe
-3. `2e30756` Add live-DOM source mode to the product-quality review harness
-4. docs handoff commit (this file)
-
-The worktree files already match the final commit; `update-ref` only moves
-the branch pointer. All trees pass: typecheck, contract 87, unit 97, corpus
-47/47, both parser spikes, build, release-bundle audit, and the
-public-boundary check (run per-commit from the sandbox).
+Acceptance evidence is now tracked in `docs/plans/general-page-reader-merge-readiness.md`. Keep this file as the implementation handoff for Slice 6b, screenshot confirmation, and live-DOM harness mode.
 
 ## Item 1: Slice 6b Current-Region Point Target
 

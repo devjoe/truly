@@ -6,7 +6,8 @@ session-only multi-page switching are implemented on this branch. The
 200-target product-quality gate passed its first external validation run (see
 `general-page-reader-fable5-validation.md`), and a follow-up 200-target
 live-DOM review has been summarized in
-`general-page-reader-quality-findings-2026-07-03-live-dom.md`.
+`general-page-reader-quality-findings-2026-07-03-live-dom.md`. Merge-readiness evidence is indexed in
+`general-page-reader-merge-readiness.md`.
 Last updated: 2026-07-03
 
 ## Decision
