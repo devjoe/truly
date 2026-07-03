@@ -108,9 +108,10 @@ npm run cluster:general-page-quality-followups -- --review tmp/general-page-prod
 
 Results:
 
-- Branch-base sanity check from clean HEAD `9df983b`: `main` is an ancestor of
-  the feature branch and `main...HEAD` reported `0 115`, so reviewer validation
-  is not blocked by the feature worktree lagging behind `main`.
+- Branch-base sanity check from clean HEAD `dc2497b` after `git fetch origin
+  main`: `origin/main` is an ancestor of the feature branch and
+  `origin/main...HEAD` reported `0 116`, so reviewer validation is not blocked
+  by the feature worktree lagging behind the remote mainline.
 - `check:public`: passed from clean HEAD `9df983b`. This included
   public-boundary, release metadata, General Page readiness-docs check, General
   Page corpus, parser spikes, parser-advisor spike, model integration audit,
