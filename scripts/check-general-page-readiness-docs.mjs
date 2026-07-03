@@ -12,6 +12,8 @@ const REQUIRED_SNIPPETS = [
       "--max-ready-count 0",
       "P24 dashboard/data-surface",
       "Real-web observation and 200-target live-DOM product-quality reviews stay under `tmp/` or private repos.",
+      "no configured upstream",
+      "no package artifact was produced",
     ],
   },
   {
