@@ -17,6 +17,7 @@ const REQUIRED_SNIPPETS = [
       "cws:package:local-smoke",
       "artifacts/cws-local-smoke/",
       "explicitly non-uploadable",
+      "Uploadable: no",
     ],
   },
   {

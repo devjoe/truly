@@ -39,6 +39,16 @@ const expectedSnippets = [
   versionName,
   recommendedTag,
 ];
+const contractDocs = [
+  {
+    path: "docs/release/preview-command-contract.md",
+    snippets: [
+      "cws:package:local-smoke",
+      "Uploadable: no",
+      "must never be uploaded to Chrome Web Store",
+    ],
+  },
+];
 const errors = [];
 
 for (const path of requiredFiles) {
@@ -73,6 +83,17 @@ for (const path of versionedDocs) {
   const stalePreview = text.match(new RegExp(`${escapeRegExp(version)} Preview (?!${escapeRegExp(versionName.split(" Preview ")[1] ?? "")})\\d+`));
   if (stalePreview) {
     errors.push(`${path} appears to mention stale preview label: ${stalePreview[0]}`);
+  }
+}
+
+for (const entry of contractDocs) {
+  const absolutePath = resolve(root, entry.path);
+  if (!existsSync(absolutePath)) continue;
+  const text = readFileSync(absolutePath, "utf8");
+  for (const snippet of entry.snippets) {
+    if (!text.includes(snippet)) {
+      errors.push(`${entry.path} does not mention required CWS contract snippet: ${snippet}`);
+    }
   }
 }
 
