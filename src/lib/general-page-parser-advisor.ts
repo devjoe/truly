@@ -516,6 +516,10 @@ export function buildRuleBasedGeneralPageParserAdvice(
     return advice("index_or_feed", "downgrade_to_index_or_feed", "high", uniqueRiskTags([...request.escalation.reasons, "index_or_feed"]), "Navigation or list-density signals are too strong to treat as one clean article.");
   }
 
+  if (reasons.has("large_navigation_noise") && reasons.has("no_main_content")) {
+    return advice("index_or_feed", "downgrade_to_index_or_feed", "medium", uniqueRiskTags([...request.escalation.reasons, "index_or_feed"]), "Fallback extraction came from a noisy page shell, so only page overview is safe.");
+  }
+
   if (reasons.has("login_or_paywall")) {
     return advice("login_or_paywall", "mark_blocked_or_empty", "high", request.escalation.reasons, "Extraction appears blocked, empty, or login/paywall-like.");
   }

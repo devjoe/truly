@@ -370,4 +370,42 @@ describe("General Page Parser Advisor contract", () => {
       confidence: "medium",
     });
   });
+
+  it("keeps noisy fallback shells downgraded to page overview", () => {
+    const context = buildGeneralPageModelContext({
+      id: "general:https://example.test/noisy",
+      kind: "web-page",
+      source: "general",
+      url: "https://example.test/noisy",
+      mainText: "Noisy fallback shell contains browser download text, navigation labels, and a short synthetic report body that is useful only as a cautious page overview.",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["no-main-content", "large-navigation-noise"],
+      },
+    });
+    const request = buildGeneralPageParserAdvisorRequest(context, {
+      candidateBlocks: [{
+        id: "block-shell",
+        label: "layout shell",
+        role: "fallback-block",
+        textPreview: context.mainText,
+        textLength: context.mainText.length,
+        linkCount: 4,
+        imageCount: 0,
+      }],
+    });
+    const advice = buildRuleBasedGeneralPageParserAdvice(request);
+
+    expect(request.escalation.reasons).toEqual(expect.arrayContaining([
+      "fallback_extraction",
+      "large_navigation_noise",
+      "no_main_content",
+    ]));
+    expect(advice).toMatchObject({
+      pageType: "index_or_feed",
+      decision: "downgrade_to_index_or_feed",
+      confidence: "medium",
+    });
+  });
 });
