@@ -372,6 +372,8 @@ export interface TierBGeneralPageBriefRequest {
   allowedUse: GeneralPageEffectiveModelContextUse;
   timeoutMs?: number;
   outputLang?: Lang;
+  /** User-confirmed visible-tab screenshot as a data URL (vision providers only). */
+  screenshotDataUrl?: string;
 }
 
 export interface TierBGeneralPageBriefResult {
@@ -674,11 +676,18 @@ export function buildGeneralPageBriefPrompt(
 }
 
 export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefRequest): TierBChatBody {
+  const userText = buildGeneralPageBriefPrompt(req.context, req.outputLang);
+  const userContent: string | ChatContent[] = req.screenshotDataUrl
+    ? [
+        { type: "text", text: userText },
+        { type: "image_url", image_url: { url: req.screenshotDataUrl } },
+      ]
+    : userText;
   const body: TierBChatBody = {
     model: req.model,
     messages: [
       { role: "system", content: generalPageBriefSystemPrompt(req.outputLang, req.allowedUse) },
-      { role: "user", content: buildGeneralPageBriefPrompt(req.context, req.outputLang) },
+      { role: "user", content: userContent },
     ],
     temperature: 0,
     max_tokens: 1400,

@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   applyGeneralPageBriefPostGuards,
+  canOfferGeneralPageScreenshot,
   generalPageBriefEligibility,
   normalizeGeneralPageBrief,
   parseGeneralPageBriefContent,
 } from "@src/lib/general-page-analysis";
+import { buildTierBGeneralPageBriefChatBody } from "@src/lib/tier-b-client";
 import { buildGeneralPageModelUserPrompt } from "@src/lib/general-page-model-context";
 import type { GeneralPageModelContext } from "@src/lib/general-page-model-context";
 
@@ -101,6 +103,59 @@ describe("General Page analysis contract", () => {
     expect(generalPageBriefEligibility({ ...base, allowedUse: "requires_user_target" })).toMatchObject({ ok: false, reason: "requires_user_target" });
     expect(generalPageBriefEligibility({ ...base, allowedUse: "blocked" })).toMatchObject({ ok: false, reason: "blocked" });
     expect(generalPageBriefEligibility({ ...base, provider: "none" })).toMatchObject({ ok: false, reason: "provider_not_ready" });
+  });
+
+  it("allows requires_user_target only after an explicit screenshot confirmation", () => {
+    const base = {
+      sessionReady: true,
+      surfaceCurrent: true,
+      context: { modelEligible: false },
+      allowedUse: "requires_user_target" as const,
+      provider: "openai-compatible" as const,
+    };
+
+    expect(generalPageBriefEligibility(base)).toMatchObject({ ok: false });
+    expect(generalPageBriefEligibility({ ...base, screenshotConfirmed: true })).toEqual({ ok: true });
+    // blocked stays blocked even with a confirmed screenshot
+    expect(generalPageBriefEligibility({ ...base, allowedUse: "blocked", screenshotConfirmed: true }))
+      .toMatchObject({ ok: false, reason: "blocked" });
+  });
+
+  it("offers the screenshot flow only for vision-capable providers and explicit advisor requests", () => {
+    expect(canOfferGeneralPageScreenshot({ visionSupported: true, decision: "request_screenshot_region" })).toBe(true);
+    expect(canOfferGeneralPageScreenshot({ visionSupported: true, needsScreenshot: true })).toBe(true);
+    expect(canOfferGeneralPageScreenshot({ visionSupported: false, decision: "request_screenshot_region" })).toBe(false);
+    expect(canOfferGeneralPageScreenshot({ visionSupported: true, decision: "accept_current" })).toBe(false);
+    expect(canOfferGeneralPageScreenshot({ visionSupported: true })).toBe(false);
+  });
+
+  it("attaches a confirmed screenshot as an image part without replacing the text prompt", () => {
+    const context = modelContext();
+    const withoutShot = buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://127.0.0.1:4999/v1/chat/completions",
+      model: "vision-model",
+      context,
+      allowedUse: "article_or_selection_analysis",
+    });
+    expect(typeof withoutShot.messages[1]?.content).toBe("string");
+
+    const withShot = buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://127.0.0.1:4999/v1/chat/completions",
+      model: "vision-model",
+      context,
+      allowedUse: "article_or_selection_analysis",
+      screenshotDataUrl: "data:image/jpeg;base64,c3ludGhldGljLXNjcmVlbnNob3Q=",
+    });
+    const content = withShot.messages[1]?.content;
+    expect(Array.isArray(content)).toBe(true);
+    if (Array.isArray(content)) {
+      expect(content[0]).toMatchObject({ type: "text" });
+      expect(content[1]).toMatchObject({
+        type: "image_url",
+        image_url: { url: expect.stringContaining("data:image/jpeg;base64") },
+      });
+      expect(String(content[0]?.text)).toContain(context.mainText.slice(0, 24));
+    }
   });
 
   it("selection prompts include selection context without the full page body", () => {

@@ -100,6 +100,13 @@ permission and should be treated as a separate permission decision.
 
 ## Question 2: User-Confirmed Screenshot And Auto-Screenshot Setting
 
+> Status update (2026-07-03): the confirmation-first flow is implemented.
+> `allowScreenshot` is gated on the Tier B vision probe result; the panel
+> shows an offer → capture preview → confirm/cancel card; confirmed
+> screenshots ride the analysis request as a session-only data URL and are
+> attached as an `image_url` part. The auto-screenshot setting is
+> intentionally NOT shipped, per the resolved sequencing decision.
+
 ### Current State
 
 - Policy contract already encodes the decision:

@@ -415,6 +415,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           context: message.context,
           allowedUse: message.allowedUse,
           outputLang: message.outputLang,
+          screenshotDataUrl: message.screenshotDataUrl,
         });
         if (result.ok && result.brief) {
           sendResponse({

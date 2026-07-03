@@ -34,6 +34,8 @@ export type GeneralPageAnalysisEligibilityReason =
   | "provider_not_ready";
 
 export interface GeneralPageAnalysisEligibilityInput {
+  /** True only after the user explicitly confirmed sending a screenshot. */
+  screenshotConfirmed?: boolean;
   sessionReady: boolean;
   surfaceCurrent: boolean;
   context: Pick<GeneralPageModelContext, "modelEligible">;
@@ -57,13 +59,30 @@ export function generalPageBriefEligibility(
 ): GeneralPageAnalysisEligibility {
   if (!input.sessionReady) return { ok: false, reason: "session_not_ready" };
   if (!input.surfaceCurrent) return { ok: false, reason: "stale_surface" };
-  if (!input.context.modelEligible) return { ok: false, reason: "model_ineligible" };
-  if (input.allowedUse === "requires_user_target") return { ok: false, reason: "requires_user_target" };
+  if (!input.context.modelEligible && !input.screenshotConfirmed) return { ok: false, reason: "model_ineligible" };
+  if (input.allowedUse === "requires_user_target" && !input.screenshotConfirmed) {
+    return { ok: false, reason: "requires_user_target" };
+  }
   if (input.allowedUse === "blocked") return { ok: false, reason: "blocked" };
   if (!providerCanRunTierBFeature("reading_brief", input.provider)) {
     return { ok: false, reason: "provider_not_ready" };
   }
   return { ok: true };
+}
+
+/**
+ * Screenshot recovery is offered only when the advisor explicitly asked for
+ * visual grounding AND the configured Tier B provider passed the vision
+ * probe. Sending always requires a fresh user confirmation in the panel;
+ * there is intentionally no automatic-screenshot setting yet.
+ */
+export function canOfferGeneralPageScreenshot(input: {
+  visionSupported: boolean;
+  decision?: string;
+  needsScreenshot?: boolean;
+}): boolean {
+  if (!input.visionSupported) return false;
+  return input.decision === "request_screenshot_region" || input.needsScreenshot === true;
 }
 
 export function normalizeGeneralPageBrief(

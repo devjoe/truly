@@ -23,6 +23,7 @@ import { createSidepanelStorageRuntimeController } from "./storage-runtime-contr
 import { createSidepanelDashboardHistoryRuntime } from "./dashboard-history-runtime";
 import { createSidepanelTabActivationRuntime } from "./tab-activation-runtime-controller";
 import { createSidepanelPageReadingRuntime } from "./page-reading-runtime";
+import { loadReadinessSnapshot, READINESS_STORAGE_KEY } from "../lib/readiness-storage";
 import { initializeSidepanelBootstrap } from "./bootstrap-lifecycle";
 import type { FeedExpandedRenderOptions } from "./feed-expanded-renderer";
 import { createExtensionThemeController } from "../lib/theme-mode";
@@ -91,6 +92,17 @@ const readingSurface = createSidepanelReadingSurface({
   getLang: () => languageController.current(),
 });
 
+let generalPageVisionSupported = false;
+void loadReadinessSnapshot(chrome.storage.local as never).then((snapshot) => {
+  generalPageVisionSupported = snapshot?.ai_analysis?.capabilities?.vision === "supported";
+}).catch(() => {});
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes[READINESS_STORAGE_KEY]) return;
+  void loadReadinessSnapshot(chrome.storage.local as never).then((snapshot) => {
+    generalPageVisionSupported = snapshot?.ai_analysis?.capabilities?.vision === "supported";
+  }).catch(() => {});
+});
+
 const pageReadingRuntime = createSidepanelPageReadingRuntime({
   pagePaneEl,
   runtime: chrome.runtime,
@@ -106,6 +118,7 @@ const pageReadingRuntime = createSidepanelPageReadingRuntime({
     remove: (key) => chrome.storage.session.remove(key),
     onChanged: chrome.storage.onChanged,
   },
+  getVisionSupported: () => generalPageVisionSupported,
 });
 
 const postRuntimeController = createSidepanelPostRuntimeController({

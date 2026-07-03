@@ -19,6 +19,7 @@ import {
   type GeneralPageParserAdvisorRequest,
 } from "../lib/general-page-parser-advisor";
 import {
+  canOfferGeneralPageScreenshot,
   generalPageBriefEligibility,
   type GeneralPageAnalysisEligibilityReason,
   type GeneralPageBrief,
@@ -72,6 +73,19 @@ interface PageReadingSession {
   activationSource: PageActivationSource;
   advisor?: PageReadingAdvisorSession;
   analysis?: PageReadingAnalysisSession;
+  screenshot?: PageReadingScreenshotSession;
+}
+
+/**
+ * Session-only screenshot confirmation state. The data URL lives in memory
+ * for the confirmation preview only; it is never persisted, logged, or kept
+ * after the analysis request is sent or cancelled.
+ */
+interface PageReadingScreenshotSession {
+  status: "offer" | "preview" | "sending" | "sent" | "error";
+  dataUrl?: string;
+  error?: string;
+  updatedAt: number;
 }
 
 type PageReadingAdvisorStatus = "not_needed" | "checking" | "ready" | "error";
@@ -101,6 +115,7 @@ interface BrowserTab {
   url?: string;
   title?: string;
   active?: boolean;
+  windowId?: number;
 }
 
 interface TabsApi {
@@ -115,6 +130,7 @@ interface TabsApi {
     addListener(listener: (tabId: number, removeInfo: { windowId: number; isWindowClosing: boolean }) => void): void;
   };
   get?(tabId: number): Promise<BrowserTab>;
+  captureVisibleTab?(windowId: number, options: { format?: "jpeg" | "png"; quality?: number }): Promise<string>;
 }
 
 interface RuntimeApi {
@@ -154,6 +170,8 @@ export interface CreateSidepanelPageReadingRuntimeOptions {
   getTierAModel?(): string | undefined;
   now(): number;
   sessionStore?: PageReadingSessionStore;
+  /** True when the configured Tier B provider passed the vision probe. */
+  getVisionSupported?(): boolean;
 }
 
 function escapeHtml(input: string): string {
@@ -545,6 +563,7 @@ export function createSidepanelPageReadingRuntime({
   getTierAModel = () => undefined,
   now,
   sessionStore,
+  getVisionSupported = () => false,
 }: CreateSidepanelPageReadingRuntimeOptions): SidepanelPageReadingRuntime {
   const sessions = new Map<number, PageReadingSession>();
   let activeTabId: number | null = null;
@@ -609,6 +628,7 @@ export function createSidepanelPageReadingRuntime({
       candidateBlocks: undefined,
       advisor: undefined,
       analysis: undefined,
+      screenshot: undefined,
       status: "stale",
       updatedAt: now(),
     });
@@ -689,6 +709,7 @@ export function createSidepanelPageReadingRuntime({
           </dl>
           ${modelContextHtml(modelContext, tr)}
           ${advisorHtml(session.advisor, tr)}
+          ${screenshotHtml(session, tr)}
           ${analysisHtml(session.analysis, tr)}
           ${sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"))}
           ${warningText ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(warningText)}</div>` : ""}
@@ -734,6 +755,18 @@ export function createSidepanelPageReadingRuntime({
       if (!latest || typeof activeTabId !== "number") return;
       runGeneralPageAnalysisIfEligible(activeTabId, latest, true);
     });
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCapture")?.addEventListener("click", () => {
+      if (typeof activeTabId !== "number") return;
+      void captureScreenshotPreview(activeTabId);
+    });
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotConfirm")?.addEventListener("click", () => {
+      if (typeof activeTabId !== "number") return;
+      void sendConfirmedScreenshotAnalysis(activeTabId);
+    });
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCancel")?.addEventListener("click", () => {
+      if (typeof activeTabId !== "number") return;
+      setScreenshot(activeTabId, undefined);
+    });
   }
 
   function statusDetail(platform: PagePlatform, session: PageReadingSession | undefined): string {
@@ -766,6 +799,131 @@ export function createSidepanelPageReadingRuntime({
     if (error === "reading_target_unsupported")
       return tr("sidepanel.page.error.unsupportedAction");
     return tr("sidepanel.page.target.error.failed");
+  }
+
+  function screenshotHtml(session: PageReadingSession, translate: typeof tr): string {
+    const offerAllowed = canOfferGeneralPageScreenshot({
+      visionSupported: getVisionSupported(),
+      decision: session.advisor?.advice?.decision,
+      needsScreenshot: session.advisor?.advice?.needsScreenshot,
+    });
+    const shot = session.screenshot;
+    if (!offerAllowed && !shot) return "";
+    if (shot?.status === "sent") return "";
+    const title = escapeHtml(translate("sidepanel.page.screenshot.title"));
+    if (shot?.status === "preview" && shot.dataUrl) {
+      return `
+        <section class="page-reader-screenshot" data-state="preview">
+          <h3>${title}</h3>
+          <p>${escapeHtml(translate("sidepanel.page.screenshot.previewExplain"))}</p>
+          <img class="page-reader-screenshot-preview" alt="${escapeHtml(translate("sidepanel.page.screenshot.previewAlt"))}" src="${shot.dataUrl}">
+          <div class="page-reader-screenshot-actions">
+            <button id="pageScreenshotConfirm" class="btn-investigation-secondary" type="button">${escapeHtml(translate("sidepanel.page.screenshot.confirm"))}</button>
+            <button id="pageScreenshotCancel" class="btn-investigation-secondary" type="button">${escapeHtml(translate("sidepanel.page.screenshot.cancel"))}</button>
+          </div>
+        </section>`;
+    }
+    if (shot?.status === "sending") {
+      return `
+        <section class="page-reader-screenshot" data-state="sending">
+          <h3>${title}</h3>
+          <p>${escapeHtml(translate("sidepanel.page.screenshot.sending"))}</p>
+        </section>`;
+    }
+    const errorLine = shot?.status === "error"
+      ? `<p class="page-reader-screenshot-error">${escapeHtml(shot.error || translate("sidepanel.page.screenshot.error"))}</p>`
+      : "";
+    if (!offerAllowed) return "";
+    return `
+      <section class="page-reader-screenshot" data-state="offer">
+        <h3>${title}</h3>
+        <p>${escapeHtml(translate("sidepanel.page.screenshot.offerExplain"))}</p>
+        ${errorLine}
+        <button id="pageScreenshotCapture" class="btn-investigation-secondary" type="button">${escapeHtml(translate("sidepanel.page.screenshot.capture"))}</button>
+      </section>`;
+  }
+
+  function setScreenshot(tabId: number, screenshot: PageReadingScreenshotSession | undefined): void {
+    const session = sessions.get(tabId);
+    if (!session || session.status === "stale") return;
+    sessions.set(tabId, { ...session, screenshot, updatedAt: session.updatedAt });
+    if (tabId === activeTabId) render();
+  }
+
+  async function captureScreenshotPreview(tabId: number): Promise<void> {
+    const session = sessions.get(tabId);
+    if (!session?.surface || session.status === "stale" || !tabs.captureVisibleTab) return;
+    try {
+      const tab = tabs.get ? await tabs.get(tabId) : undefined;
+      const windowId = typeof tab?.windowId === "number" ? tab.windowId : undefined;
+      if (typeof windowId !== "number") throw new Error("window_unavailable");
+      const dataUrl = await tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 80 });
+      if (!dataUrl) throw new Error("capture_empty");
+      setScreenshot(tabId, { status: "preview", dataUrl, updatedAt: now() });
+    } catch {
+      setScreenshot(tabId, {
+        status: "error",
+        error: tr("sidepanel.page.screenshot.error"),
+        updatedAt: now(),
+      });
+    }
+  }
+
+  async function sendConfirmedScreenshotAnalysis(tabId: number): Promise<void> {
+    const session = sessions.get(tabId);
+    const shot = session?.screenshot;
+    const effective = session?.advisor?.effectiveModelContext;
+    const providerRuntime = session?.advisor?.providerRuntime;
+    if (!session?.surface || session.status === "stale") return;
+    if (!shot?.dataUrl || !effective || !providerRuntime) return;
+    if (!providerRuntime.canUseModel || !providerRuntime.endpoint || !providerRuntime.model) return;
+
+    const analysisContext = analysisContextForEffectiveSession(session, session.surface, effective);
+    const eligibility = generalPageBriefEligibility({
+      sessionReady: session.status === "ready",
+      surfaceCurrent: tabId !== activeTabId || !activeUrl || isMeaningfullySamePage(session.identity, activeUrl),
+      context: analysisContext,
+      allowedUse: effective.allowedUse,
+      provider: providerRuntime.effectiveProvider,
+      screenshotConfirmed: true,
+    });
+    if (!eligibility.ok) {
+      setScreenshot(tabId, { status: "error", error: analysisEligibilityMessage(eligibility.reason ?? "provider_not_ready"), updatedAt: now() });
+      return;
+    }
+    const key = `${generalPageAnalysisKey(effective, providerRuntime)}|screenshot`;
+    const dataUrl = shot.dataUrl;
+    setScreenshot(tabId, { status: "sending", updatedAt: now() });
+    setAnalysis(tabId, { status: "running", key, allowedUse: effective.allowedUse, updatedAt: now() });
+    try {
+      const response = await runtime.sendMessage({
+        type: "GENERAL_PAGE_ANALYSIS_REQUEST",
+        tabId,
+        context: analysisContext,
+        allowedUse: effective.allowedUse,
+        providerRuntime,
+        outputLang: getLang(),
+        screenshotDataUrl: dataUrl,
+      } satisfies TrulyMessage);
+      const current = sessions.get(tabId);
+      if (!current || current.status === "stale" || current.analysis?.key !== key) return;
+      if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_ANALYSIS_RESULT") {
+        setScreenshot(tabId, { status: "error", error: tr("sidepanel.page.screenshot.error"), updatedAt: now() });
+        setAnalysisError(tabId, "general_page_brief_no_response", key, effective.allowedUse);
+        return;
+      }
+      const result = response as GeneralPageAnalysisResultMsg;
+      if (!result.ok || !result.brief) {
+        setScreenshot(tabId, { status: "error", error: result.error || tr("sidepanel.page.screenshot.error"), updatedAt: now() });
+        setAnalysisError(tabId, result.error || "general_page_brief_failed", key, effective.allowedUse);
+        return;
+      }
+      setScreenshot(tabId, { status: "sent", updatedAt: now() });
+      setAnalysis(tabId, { status: "ready", key, brief: result.brief, allowedUse: effective.allowedUse, updatedAt: now() });
+    } catch (error) {
+      setScreenshot(tabId, { status: "error", error: errorMessage(error), updatedAt: now() });
+      setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse);
+    }
   }
 
   function setAdvisor(tabId: number, advisor: PageReadingAdvisorSession): void {
@@ -922,7 +1080,7 @@ export function createSidepanelPageReadingRuntime({
       : buildGeneralPageModelContext(surface, { targetKind: "page" });
     const request = buildGeneralPageParserAdvisorRequest(context, {
       candidateBlocks: target ? [] : options.candidateBlocks ?? [],
-      allowScreenshot: false,
+      allowScreenshot: getVisionSupported(),
     });
     const providerRuntime = resolveAdvisorProviderRuntime(
       getSettings(),
@@ -1061,6 +1219,7 @@ export function createSidepanelPageReadingRuntime({
           candidateBlocks: undefined,
           advisor: undefined,
           analysis: undefined,
+      screenshot: undefined,
           status: "stale",
           url: tab?.url ?? session.url,
           updatedAt: now(),
@@ -1218,6 +1377,7 @@ export function createSidepanelPageReadingRuntime({
         target: undefined,
         advisor: undefined,
         analysis: undefined,
+      screenshot: undefined,
         updatedAt: now(),
         activationSource: source,
       });
@@ -1268,6 +1428,7 @@ export function createSidepanelPageReadingRuntime({
       updatedAt: now(),
       activationSource: "sidepanel",
       analysis: undefined,
+      screenshot: undefined,
     });
     if (tabId === activeTabId) render();
     startParserAdvisor(tabId, message.surface, {
@@ -1294,6 +1455,7 @@ export function createSidepanelPageReadingRuntime({
       status: "ready",
       updatedAt: now(),
       analysis: undefined,
+      screenshot: undefined,
     });
     copyState = "idle";
     downloadState = "idle";
@@ -1318,6 +1480,7 @@ export function createSidepanelPageReadingRuntime({
         updatedAt: now(),
       },
       analysis: undefined,
+      screenshot: undefined,
       updatedAt: now(),
     });
     if (tabId === activeTabId) render();
@@ -1337,6 +1500,7 @@ export function createSidepanelPageReadingRuntime({
       candidateBlocks: existing?.candidateBlocks,
       advisor: undefined,
       analysis: undefined,
+      screenshot: undefined,
       status: "error",
       error: friendlyPageReadingError(message.error),
       updatedAt: now(),

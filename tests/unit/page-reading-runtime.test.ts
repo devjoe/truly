@@ -879,6 +879,163 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).not.toContain("Sensitive stale runtime fixture text.");
   });
 
+  it("offers, previews, and sends a user-confirmed screenshot analysis when vision is supported", async () => {
+    const pagePaneEl = setupDom();
+    const weakSurface = surface({
+      mainText: "Sparse app-shell text without enough article content for direct analysis on this page.",
+      excerpt: "Sparse app-shell text",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["no-main-content", "dynamic-content-partial"],
+      },
+    });
+    const sentAnalysis: TrulyMessage[] = [];
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return { type: "PAGE_READING_RESULT", tabId: 42, surface: weakSurface } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+        expect(message.request.escalation.allowedDecisions).toContain("request_screenshot_region");
+        return {
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: 42,
+          ok: true,
+          providerRuntime: { ...message.providerRuntime, mode: "tier-b-short-json" },
+          advice: {
+            schemaVersion: 1,
+            pageType: "app_shell",
+            decision: "request_screenshot_region",
+            confidence: "medium",
+            needsUserSelection: false,
+            needsScreenshot: true,
+            riskTags: ["needs_visual_grounding"],
+            rationale: "Synthetic visual grounding request.",
+          },
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        sentAnalysis.push(message);
+        return {
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: 42,
+          ok: true,
+          brief: {
+            schemaVersion: 1,
+            summary: "Screenshot-grounded synthetic summary.",
+            model: "vision-model",
+            outputLang: "zh-TW",
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const captureVisibleTab = vi.fn(async () => "data:image/jpeg;base64,c3ludGhldGljLXNjcmVlbnNob3Q=");
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+          windowId: 7,
+        }]),
+        get: vi.fn(async () => ({ id: 42, url: "https://example.test/article", windowId: 7 })),
+        captureVisibleTab,
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "vision-model",
+      }),
+      now: () => 1_000,
+      getVisionSupported: () => true,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    // Offer card renders; nothing was auto-sent because the advisor demands a user target.
+    expect(pagePaneEl.textContent).toContain("截圖輔助分析");
+    expect(sentAnalysis).toHaveLength(0);
+
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCapture")?.click();
+    await flushMicrotasks();
+    expect(captureVisibleTab).toHaveBeenCalledWith(7, { format: "jpeg", quality: 80 });
+    expect(pagePaneEl.querySelector(".page-reader-screenshot-preview")).toBeTruthy();
+
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotConfirm")?.click();
+    await flushMicrotasks();
+
+    expect(sentAnalysis).toHaveLength(1);
+    const request = sentAnalysis[0] as Extract<TrulyMessage, { type: "GENERAL_PAGE_ANALYSIS_REQUEST" }>;
+    expect(request.screenshotDataUrl).toContain("data:image/jpeg;base64");
+    expect(pagePaneEl.textContent).toContain("Screenshot-grounded synthetic summary.");
+  });
+
+  it("never offers the screenshot card without vision support", async () => {
+    const pagePaneEl = setupDom();
+    const weakSurface = surface({
+      mainText: "Sparse app-shell text without enough article content for direct analysis on this page.",
+      excerpt: "Sparse app-shell text",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["no-main-content", "dynamic-content-partial"],
+      },
+    });
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return { type: "PAGE_READING_RESULT", tabId: 42, surface: weakSurface } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+        expect(message.request.escalation.allowedDecisions).not.toContain("request_screenshot_region");
+        return {
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: 42,
+          ok: true,
+          providerRuntime: { ...message.providerRuntime, mode: "rule-based-runtime-baseline" },
+          advice: {
+            schemaVersion: 1,
+            pageType: "unknown",
+            decision: "request_user_selection",
+            confidence: "medium",
+            needsUserSelection: true,
+            needsScreenshot: false,
+            riskTags: ["needs_user_attention"],
+            rationale: "Synthetic selection request.",
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    expect(pagePaneEl.textContent).not.toContain("截圖輔助分析");
+    expect(pagePaneEl.querySelector("#pageScreenshotCapture")).toBeNull();
+  });
+
   it("removes tab sessions when Chrome reports the tab closed", async () => {
     const pagePaneEl = setupDom();
     let onRemoved: ((tabId: number, removeInfo: { windowId: number; isWindowClosing: boolean }) => void) | undefined;

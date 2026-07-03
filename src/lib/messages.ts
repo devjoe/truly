@@ -190,6 +190,8 @@ export interface GeneralPageAnalysisRequestMsg {
   allowedUse: GeneralPageEffectiveModelContextUse;
   providerRuntime: GeneralPageParserAdvisorProviderRuntime;
   outputLang?: Lang;
+  /** Session-only, user-confirmed screenshot. Never persisted or logged. */
+  screenshotDataUrl?: string;
 }
 
 export interface GeneralPageAnalysisResultMsg {
