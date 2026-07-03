@@ -152,6 +152,11 @@ Results:
   the latest explicitly non-uploadable local-smoke package report otherwise.
   This lets advisory review validate release/privacy claims without requiring a
   full repository read or exposing private `tmp/` review artifacts.
+- CWS package and local-smoke package reports now include explicit CWS asset
+  dimension evidence for the selected 1280x800 screenshots and 440x280 promo
+  tile. `cws:preflight` uses the same shared asset evidence, so binary CWS
+  assets can stay out of advisory-review prompt context while their required
+  dimensions remain reviewable from the text report.
 - `audit:general-page-reader`: passed from clean HEAD after the supply-chain
   hardening commit. Expected and live build IDs matched
   `1783103572127-f5bb5e8`; QA matrix rows passed for popup activation,

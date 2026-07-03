@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
+  collectCwsAssetEvidence,
   readProjectMetadata,
   root,
 } from "./lib/cws-artifacts.mjs";
@@ -22,12 +23,6 @@ const requiredFiles = [
   "docs/release/store-assets.md",
   "THIRD_PARTY_NOTICES.md",
   "src/icons/icon-128.png",
-];
-const requiredPngs = [
-  ["docs/assets/cws/truly-cws-professional-screenshot-01-feed-signal.png", 1280, 800],
-  ["docs/assets/cws/truly-cws-professional-screenshot-02-expanded-context.png", 1280, 800],
-  ["docs/assets/cws/truly-cws-professional-screenshot-03-side-panel-handoff.png", 1280, 800],
-  ["docs/assets/cws/truly-cws-promo-og-image.png", 440, 280],
 ];
 const versionedDocs = [
   "docs/release/cws-submission-checklist.md",
@@ -105,19 +100,13 @@ for (const path of requiredFiles) {
   if (!existsSync(resolve(root, path))) errors.push(`missing required CWS file: ${path}`);
 }
 
-for (const [path, width, height] of requiredPngs) {
-  const absolutePath = resolve(root, path);
-  if (!existsSync(absolutePath)) {
-    errors.push(`missing required CWS image: ${path}`);
-    continue;
-  }
-  const actual = readPngDimensions(absolutePath);
-  if (!actual) {
-    errors.push(`CWS image is not a readable PNG: ${path}`);
-    continue;
-  }
-  if (actual.width !== width || actual.height !== height) {
-    errors.push(`CWS image size mismatch: ${path} expected ${width}x${height}, got ${actual.width}x${actual.height}`);
+for (const asset of collectCwsAssetEvidence()) {
+  if (!asset.exists) {
+    errors.push(`missing required CWS image: ${asset.path}`);
+  } else if (!asset.actual) {
+    errors.push(`CWS image is not a readable PNG: ${asset.path}`);
+  } else if (asset.status !== "ok") {
+    errors.push(`CWS image size mismatch: ${asset.path} expected ${asset.width}x${asset.height}, got ${asset.actual.width}x${asset.actual.height}`);
   }
 }
 
@@ -165,19 +154,6 @@ if (errors.length > 0) {
 }
 
 console.log(`CWS preflight passed (${versionName} / ${recommendedTag}).`);
-
-function readPngDimensions(path) {
-  const stat = statSync(path);
-  if (!stat.isFile() || stat.size < 24) return null;
-  const data = readFileSync(path);
-  const signature = data.slice(0, 8).toString("hex");
-  if (signature !== "89504e470d0a1a0a") return null;
-  return {
-    width: data.readUInt32BE(16),
-    height: data.readUInt32BE(20),
-    path: relative(root, path),
-  };
-}
 
 function readJsonIfExists(path) {
   const absolutePath = resolve(root, path);

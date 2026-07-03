@@ -15,6 +15,32 @@ import { fileURLToPath } from "node:url";
 export const root = fileURLToPath(new URL("../..", import.meta.url));
 export const releaseLockPath = resolve(root, "tmp/release-preview.lock");
 export const devStatePath = resolve(root, "tmp/dev-singleton.json");
+export const CWS_ASSET_REQUIREMENTS = [
+  {
+    path: "docs/assets/cws/truly-cws-professional-screenshot-01-feed-signal.png",
+    width: 1280,
+    height: 800,
+    role: "screenshot",
+  },
+  {
+    path: "docs/assets/cws/truly-cws-professional-screenshot-02-expanded-context.png",
+    width: 1280,
+    height: 800,
+    role: "screenshot",
+  },
+  {
+    path: "docs/assets/cws/truly-cws-professional-screenshot-03-side-panel-handoff.png",
+    width: 1280,
+    height: 800,
+    role: "screenshot",
+  },
+  {
+    path: "docs/assets/cws/truly-cws-promo-og-image.png",
+    width: 440,
+    height: 280,
+    role: "small_promo_tile",
+  },
+];
 
 const crcTable = Array.from({ length: 256 }, (_, index) => {
   let crc = index;
@@ -191,6 +217,25 @@ export function readDistBuildId() {
   }
 }
 
+export function collectCwsAssetEvidence() {
+  return CWS_ASSET_REQUIREMENTS.map((asset) => {
+    const absolutePath = resolve(root, asset.path);
+    const actual = readPngDimensions(absolutePath);
+    const exists = existsSync(absolutePath);
+    const status = actual && actual.width === asset.width && actual.height === asset.height
+      ? "ok"
+      : exists
+        ? "mismatch_or_unreadable"
+        : "missing";
+    return {
+      ...asset,
+      exists,
+      actual,
+      status,
+    };
+  });
+}
+
 export function parsePreviewNumber(versionName, version) {
   const match = new RegExp(`^${escapeRegExp(version)} Preview ([1-9]\\d*)$`).exec(versionName ?? "");
   return match?.[1] ?? null;
@@ -245,6 +290,23 @@ function repoDevProcesses() {
     }
   }
   return processes;
+}
+
+function readPngDimensions(path) {
+  try {
+    const stat = statSync(path);
+    if (!stat.isFile() || stat.size < 24) return null;
+    const data = readFileSync(path);
+    const signature = data.slice(0, 8).toString("hex");
+    if (signature !== "89504e470d0a1a0a") return null;
+    return {
+      width: data.readUInt32BE(16),
+      height: data.readUInt32BE(20),
+      path: relative(root, path),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function shouldExcludeExtensionPath(path) {

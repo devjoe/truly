@@ -7,6 +7,7 @@ import {
   assertCleanTree,
   assertNoDevProcesses,
   clearReleaseLock,
+  collectCwsAssetEvidence,
   createReleaseLock,
   readDistBuildId,
   readProjectMetadata,
@@ -97,6 +98,7 @@ try {
       permissionJustification: "docs/release/permission-justification.md",
       assets: "docs/assets/cws/",
     },
+    cwsAssetEvidence: collectCwsAssetEvidence(),
   };
 
   writeFileSync(join(outDir, "cws-local-smoke-report.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -186,6 +188,13 @@ function renderReport(report) {
     "## CWS Inputs",
     "",
     ...Object.values(report.cwsInputs).map((path) => `- \`${path}\``),
+    "",
+    "## CWS Asset Evidence",
+    "",
+    ...report.cwsAssetEvidence.map((asset) => {
+      const actual = asset.actual ? `${asset.actual.width}x${asset.actual.height}` : "unreadable";
+      return `- \`${asset.path}\`: expected ${asset.width}x${asset.height}, actual ${actual}, status=${asset.status}`;
+    }),
     "",
   ].join("\n");
 }
