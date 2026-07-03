@@ -26,6 +26,10 @@ import {
   parseQualityFollowupClusterArgs,
   renderQualityFollowupClustersMarkdown,
 } from "../../scripts/cluster-general-page-quality-followups.mjs";
+import {
+  createProductQualityProgressTracker,
+  renderProductQualityProgressLine,
+} from "../../scripts/lib/product-quality-progress.mjs";
 
 describe("General Page real-world eval sanitizer", () => {
   it("does not serialize private URLs, raw text, previews, excerpts, or expected snippets", () => {
@@ -82,6 +86,66 @@ describe("General Page real-world eval sanitizer", () => {
     expect(serialized).not.toContain("Private Source Title");
     expect(serialized).not.toContain("Private Author");
     expect(serialized).not.toContain("Private Site");
+  });
+});
+
+describe("General Page product-quality review progress", () => {
+  it("prints only public-safe aggregate progress for long live-DOM reviews", () => {
+    const privateUrl = "https://private-source.example.test/hidden/story";
+    const privateTitle = "Private Source Title";
+    const privatePreview = "Sensitive extracted preview that must not appear.";
+    const lines = [];
+    const tracker = createProductQualityProgressTracker({
+      total: 2,
+      every: 1,
+      log: (line) => lines.push(line),
+      now: () => 10_000,
+    });
+
+    tracker.record({
+      ok: true,
+      url: privateUrl,
+      surface: {
+        title: privateTitle,
+        preview: privatePreview,
+      },
+      modelContext: {
+        modelReadiness: "ready",
+      },
+    });
+    tracker.record({
+      ok: false,
+      errorKind: "timeout",
+      url: privateUrl,
+      errorMessage: privatePreview,
+    });
+
+    expect(lines).toEqual([
+      expect.stringContaining("progress 1/2"),
+      expect.stringContaining("progress 2/2"),
+    ]);
+    const serialized = lines.join("\n");
+    expect(serialized).toContain("extracted 1");
+    expect(serialized).toContain("fetchErrors 1");
+    expect(serialized).not.toContain(privateUrl);
+    expect(serialized).not.toContain(privateTitle);
+    expect(serialized).not.toContain(privatePreview);
+  });
+
+  it("renders deterministic aggregate progress lines", () => {
+    expect(renderProductQualityProgressLine({
+      completed: 10,
+      total: 200,
+      extracted: 9,
+      emptyOrBlocked: 0,
+      fetchErrors: 1,
+      elapsedMs: 12_345,
+      readiness: {
+        ready: 5,
+        caution: 4,
+        error: 1,
+      },
+    })).toBe("[general-page-review] progress 10/200 extracted 9 emptyOrBlocked 0 fetchErrors 1 elapsed 12s readiness {\"ready\":5,\"caution\":4,\"error\":1}");
   });
 });
 

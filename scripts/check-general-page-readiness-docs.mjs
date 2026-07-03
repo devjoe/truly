@@ -49,6 +49,9 @@ const REQUIRED_SNIPPETS = [
       "P26 `multi-article-teaser-hub`",
       "Teaser hub overview",
       "page-teaser-hub-overview.png",
+      "--progress-every 10",
+      "review-2026-07-03T17-54-47-256Z",
+      "199/200 extracted",
     ],
   },
   {

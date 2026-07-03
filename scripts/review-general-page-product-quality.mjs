@@ -8,6 +8,7 @@ import ts from "typescript";
 import { JSDOM } from "jsdom";
 import { labelingClientScript } from "./lib/review-labeling-client.mjs";
 import { cdpBaseForPort, fetchRenderedPageHtml } from "./lib/cdp-page-source.mjs";
+import { createProductQualityProgressTracker } from "./lib/product-quality-progress.mjs";
 
 const OUTPUT_DIR = "tmp/general-page-product-quality";
 const DEFAULT_TIMEOUT_MS = 12_000;
@@ -31,8 +32,15 @@ async function main() {
   const outDir = args.outputDir ?? path.join(OUTPUT_DIR, `review-${stamp}`);
   fs.mkdirSync(outDir, { recursive: true });
 
-  const results = await mapWithConcurrency(targets, args.concurrency, (target, index) =>
-    reviewTarget(normalizeTarget(target, index), args),
+  const progress = createProductQualityProgressTracker({
+    total: targets.length,
+    every: args.progressEvery,
+  });
+  const results = await mapWithConcurrency(targets, args.concurrency, async (target, index) => {
+    const result = await reviewTarget(normalizeTarget(target, index), args);
+    progress.record(result);
+    return result;
+  },
   );
   const report = {
     generatedAt: new Date().toISOString(),
@@ -66,7 +74,7 @@ async function main() {
 function parseArgs(argv) {
   const input = stringArg(argv, "--input");
   if (!input) {
-    console.error("Usage: node scripts/review-general-page-product-quality.mjs --input tmp/targets.json --allow-network [--source static|cdp] [--cdp-port 9222] [--limit 200] [--concurrency 8] [--timeout-ms 12000]");
+    console.error("Usage: node scripts/review-general-page-product-quality.mjs --input tmp/targets.json --allow-network [--source static|cdp] [--cdp-port 9222] [--limit 200] [--concurrency 8] [--timeout-ms 12000] [--progress-every 10]");
     process.exit(2);
   }
   const source = stringArg(argv, "--source") ?? "static";
@@ -74,6 +82,7 @@ function parseArgs(argv) {
     throw new Error("--source must be static or cdp");
   const explicitConcurrency = stringArg(argv, "--concurrency") !== undefined;
   const concurrency = numericArg(argv, "--concurrency", DEFAULT_CONCURRENCY, { min: 1, max: 24 });
+  const progressEvery = numericArg(argv, "--progress-every", source === "cdp" ? 10 : 50, { min: 0, max: 1000 });
   return {
     input,
     outputDir: stringArg(argv, "--output-dir"),
@@ -83,6 +92,7 @@ function parseArgs(argv) {
     // default to a gentle concurrency unless the caller overrides it.
     concurrency: source === "cdp" && !explicitConcurrency ? 2 : concurrency,
     timeoutMs: numericArg(argv, "--timeout-ms", DEFAULT_TIMEOUT_MS, { min: 1000, max: 60000 }),
+    progressEvery,
     source,
     cdpBase: cdpBaseForPort(numericArg(argv, "--cdp-port", 9222, { min: 1, max: 65535 })),
   };
