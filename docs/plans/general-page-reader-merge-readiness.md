@@ -108,6 +108,39 @@ npm run cluster:general-page-quality-followups -- --review tmp/general-page-prod
 
 Results:
 
+- Branch-base sanity check from clean HEAD `9df983b`: `main` is an ancestor of
+  the feature branch and `main...HEAD` reported `0 115`, so reviewer validation
+  is not blocked by the feature worktree lagging behind `main`.
+- `check:public`: passed from clean HEAD `9df983b`. This included
+  public-boundary, release metadata, General Page readiness-docs check, General
+  Page corpus, parser spikes, parser-advisor spike, model integration audit,
+  typecheck, public contract tests, public unit tests, production build, and
+  release bundle audit. The production build recorded build ID
+  `1783109614050-9df983b`, with no dirty suffix.
+- `audit:general-page-reader`: passed from clean HEAD `9df983b`. Expected and
+  live build IDs matched `1783109614050-9df983b`; QA matrix rows passed for
+  popup activation, ordinary article read, model brief generation, 430px
+  responsive layout, Page/Web design restraint, interaction accessibility,
+  saved-session switching, selection target, current-region shortcut, URL
+  identity/stale scrub, noisy fallback caution, candidate block recovery,
+  teaser-hub overview, and no-grant guidance. A Bencium-guided visual check of
+  `page-analysis-ready.png` and `page-responsive-430.png` confirmed the ready
+  path remains compact, diagnostic-collapsed, Feed-aligned, and free of narrow
+  side-panel overflow or clipped controls. Private CDP artifact:
+  `tmp/general-page-reader-audit-2026-07-03T20-13-45-765Z`.
+- `smoke:general-page-current --all-open --min-page-count 4 --max-error-count
+  0`: passed from clean HEAD against four currently open HTTP(S) tabs through
+  live CDP. Sanitized aggregate: 3 extracted caution pages, 1 blocked/empty
+  page, 0 fetch/runtime errors, threshold `pass`, and no pages marked ready;
+  public-safe summary:
+  `tmp/general-page-product-quality/current-browser-review-2026-07-03T20-14-59-383Z/current-browser-smoke-summary.md`.
+- `cws:package:local-smoke`: passed from clean HEAD `9df983b`. It wrote an
+  explicitly non-uploadable local package report at
+  `artifacts/cws-local-smoke/0.1.2-9df983b451e2-2026-07-03T20-15-28-763Z/cws-local-smoke-report.md`,
+  audited the generated ZIP, ran `check:public`, ran `cws:preflight`, recorded
+  build ID `1783109727874-9df983b`, confirmed branch upstream was synced, kept
+  `Uploadable: no`, and listed all selected CWS screenshots and promo tile as
+  `status=ok` with expected/actual dimensions.
 - `check:public`: passed. This included public-boundary, release metadata, General Page readiness-docs check, General Page corpus, parser spikes, parser-advisor spike, model integration audit, typecheck, public contract tests, public unit tests, production build, and release bundle audit.
 - `check:public`: passed again from clean HEAD after the advisory-review and
   supply-chain hardening commits. The production build recorded build ID
