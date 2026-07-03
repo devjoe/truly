@@ -113,7 +113,19 @@ parser advisor and model-brief path are implemented.
      --labels tmp/general-page-product-quality/review-.../manual-labels.jsonl
    ```
 
-8. Inspect `quality-gate.json` and `quality-findings-summary.md`, then decide
+8. Convert the public-safe aggregate summary into a fixture and heuristic
+   follow-up plan. This validates referenced fixture ids against
+   `tests/fixtures/general-pages/manifest.json` and separates clusters already
+   covered by synthetic fixtures from broad symptoms that still need private
+   review:
+
+   ```bash
+   npm run plan:general-page-quality-followups -- \
+     --summary tmp/general-page-product-quality/review-.../quality-findings-summary.json
+   ```
+
+9. Inspect `quality-gate.json`, `quality-findings-summary.md`, and
+   `quality-followups-plan.md`, then decide
    whether each cluster becomes a new synthetic fixture, parser heuristic
    change, model-advisor prompt change, or private-only observation.
 

@@ -14,6 +14,12 @@ import {
   parseQualityFindingsArgs,
   renderQualityFindingsMarkdown,
 } from "../../scripts/summarize-general-page-quality-findings.mjs";
+import {
+  assertPublicFollowupPlan,
+  buildQualityFollowupPlan,
+  parseQualityFollowupArgs,
+  renderQualityFollowupMarkdown,
+} from "../../scripts/plan-general-page-quality-followups.mjs";
 
 describe("General Page real-world eval sanitizer", () => {
   it("does not serialize private URLs, raw text, previews, excerpts, or expected snippets", () => {
@@ -489,5 +495,166 @@ describe("General Page product-quality findings summary", () => {
       .toThrow(/requires a value/);
     expect(() => parseQualityFindingsArgs(["--review", "tmp/review.json", "--top", "0"]))
       .toThrow(/between 1 and 50/);
+  });
+});
+
+describe("General Page quality follow-up planner", () => {
+  const fixtureManifest = {
+    fixtures: [
+      "blocked-like",
+      "category-list-page",
+      "search-results-index",
+      "nav-sidebar-noise",
+      "news-related-sidebar",
+      "government-no-article",
+      "missing-metadata-blog",
+      "paid-teaser-long",
+      "newsletter-paywall-hybrid",
+      "js-shell-bad-page",
+      "empty-social-shell",
+      "malformed-mixed-language-page",
+      "zhtw-magazine-recirc-trap",
+      "homepage-lead-card-trap",
+      "docs-right-rail-long",
+      "short-semantic-news-brief",
+      "semantic-main-card-index-dense",
+      "article-source-link-noise",
+      "ticker-lead-article",
+      "dated-list-hub-ready-trap",
+      "member-teaser-short",
+      "javascript-disabled-instruction",
+      "access-checking-preview",
+      "gated-continue-reading-preview",
+      "news-homepage-card-grid",
+    ].map((id) => ({ id })),
+  };
+
+  const summary = {
+    input: {
+      sourceMode: "cdp",
+    },
+    counts: {
+      totalCount: 200,
+      reviewedCount: 193,
+    },
+    followUpCandidates: [
+      {
+        key: "issue:many-source-links",
+        kind: "issue-tag-cluster",
+        priority: 55,
+        count: 47,
+        reviewedCount: 47,
+        categories: [{ value: "taiwan_news", count: 30 }],
+        pageTypes: [{ value: "article", count: 47 }],
+        topIssueTags: [
+          { value: "many-source-links", count: 47 },
+          { value: "partial", count: 12 },
+        ],
+        verdicts: { usable_with_caution: 40, good: 7 },
+        readiness: { caution: 47 },
+        extractionStatus: { partial: 47 },
+        extractionMethod: { "semantic-html": 47 },
+      },
+      {
+        key: "issue:partial",
+        kind: "issue-tag-cluster",
+        priority: 55,
+        count: 40,
+        reviewedCount: 40,
+        categories: [{ value: "government_official_ngo_company", count: 14 }],
+        pageTypes: [{ value: "article", count: 33 }],
+        topIssueTags: [
+          { value: "partial", count: 40 },
+          { value: "quality:partial_extraction", count: 32 },
+        ],
+        verdicts: { usable_with_caution: 36, bad: 4 },
+        readiness: { caution: 40 },
+        extractionStatus: { partial: 40 },
+        extractionMethod: { fallback: 20, "semantic-html": 20 },
+      },
+      {
+        key: "auto:overconfident-good",
+        kind: "auto-overconfident-good",
+        priority: 90,
+        count: 15,
+        reviewedCount: 15,
+        categories: [{ value: "taiwan_news", count: 11 }],
+        pageTypes: [{ value: "article", count: 15 }],
+        topIssueTags: [
+          { value: "many-source-links", count: 12 },
+          { value: "leading-ticker-noise", count: 8 },
+          { value: "index-like-ready", count: 3 },
+        ],
+        verdicts: { usable_with_caution: 12, bad: 3 },
+        readiness: { ready: 15 },
+        extractionStatus: { complete: 15 },
+        extractionMethod: { "semantic-html": 15 },
+      },
+    ],
+  };
+
+  it("maps aggregate issue clusters to existing public synthetic fixtures", () => {
+    const plan = buildQualityFollowupPlan(summary, fixtureManifest, { top: 20 });
+    const sourceLinkItem = plan.items.find((item) => item.key === "issue:many-source-links");
+    const partialItem = plan.items.find((item) => item.key === "issue:partial");
+    const overconfidentItem = plan.items.find((item) => item.key === "auto:overconfident-good");
+    const markdown = renderQualityFollowupMarkdown(plan);
+    const serialized = JSON.stringify(plan);
+
+    expect(() => assertPublicFollowupPlan(plan)).not.toThrow();
+    expect(sourceLinkItem).toMatchObject({
+      status: "covered_by_existing_fixture",
+      existingCoverage: expect.arrayContaining(["article-source-link-noise"]),
+    });
+    expect(partialItem).toMatchObject({
+      status: "needs_private_review",
+      existingCoverage: expect.arrayContaining(["zhtw-magazine-recirc-trap"]),
+    });
+    expect(overconfidentItem).toMatchObject({
+      status: "needs_private_review",
+      existingCoverage: expect.arrayContaining([
+        "article-source-link-noise",
+        "ticker-lead-article",
+        "semantic-main-card-index-dense",
+      ]),
+    });
+    expect(markdown).toContain("General Page Quality Follow-Up Plan");
+    expect(markdown).toContain("article-source-link-noise");
+    expect(serialized).not.toContain("https://");
+    expect(serialized).not.toContain("target-");
+    expect(serialized).not.toContain("Sensitive");
+  });
+
+  it("fails fast when coverage references stale fixture ids", () => {
+    expect(() => buildQualityFollowupPlan(summary, {
+      fixtures: fixtureManifest.fixtures.filter((fixture) => fixture.id !== "article-source-link-noise"),
+    })).toThrow(/missing fixture id: article-source-link-noise/);
+  });
+
+  it("keeps follow-up planner CLI arguments strict", () => {
+    expect(parseQualityFollowupArgs([
+      "--summary", "tmp/general-page-product-quality/review-test/quality-findings-summary.json",
+      "--manifest", "tests/fixtures/general-pages/manifest.json",
+      "--top", "6",
+    ])).toMatchObject({
+      summary: "tmp/general-page-product-quality/review-test/quality-findings-summary.json",
+      manifest: "tests/fixtures/general-pages/manifest.json",
+      top: 6,
+    });
+    expect(() => parseQualityFollowupArgs(["--summary", "--manifest"]))
+      .toThrow(/requires a value/);
+    expect(() => parseQualityFollowupArgs(["--summary", "tmp/summary.json", "--top", "0"]))
+      .toThrow(/between 1 and 100/);
+  });
+
+  it("rejects private-looking follow-up plan fields and strings", () => {
+    expect(() => assertPublicFollowupPlan({
+      ok: true,
+      url: "https://private-source.example.test/story",
+    })).toThrow(/private field/);
+    expect(() => assertPublicFollowupPlan({
+      ok: true,
+      label: "https://private-source.example.test/story",
+    })).toThrow(/private-looking string/);
   });
 });
