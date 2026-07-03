@@ -106,7 +106,16 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 const pageReadingRuntime = createSidepanelPageReadingRuntime({
   pagePaneEl,
   runtime: chrome.runtime,
-  tabs: chrome.tabs,
+  tabs: {
+    query: (queryInfo) => chrome.tabs.query(queryInfo),
+    get: (tabId) => chrome.tabs.get(tabId),
+    update: (tabId, updateProperties) => chrome.tabs.update(tabId, updateProperties),
+    focusWindow: (windowId) => chrome.windows.update(windowId, { focused: true }),
+    captureVisibleTab: (windowId, options) => chrome.tabs.captureVisibleTab(windowId, options),
+    onActivated: chrome.tabs.onActivated,
+    onUpdated: chrome.tabs.onUpdated,
+    onRemoved: chrome.tabs.onRemoved,
+  },
   activateTab: tabActivationRuntime.activateTab,
   getLang: () => languageController.current(),
   getSettings: () => panelState.cachedSettings,

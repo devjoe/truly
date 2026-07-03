@@ -118,6 +118,15 @@ interface BrowserTab {
   windowId?: number;
 }
 
+interface PageActivationAuditState {
+  tabId: number;
+  existingTabId?: number;
+  updatedTabId?: number;
+  windowId?: number;
+  focused?: boolean;
+  error?: string;
+}
+
 interface TabsApi {
   query(queryInfo: { active?: boolean; currentWindow?: boolean }): Promise<BrowserTab[]>;
   onActivated?: {
@@ -130,6 +139,8 @@ interface TabsApi {
     addListener(listener: (tabId: number, removeInfo: { windowId: number; isWindowClosing: boolean }) => void): void;
   };
   get?(tabId: number): Promise<BrowserTab>;
+  update?(tabId: number, updateProperties: { active?: boolean }): Promise<BrowserTab | undefined>;
+  focusWindow?(windowId: number): Promise<unknown>;
   captureVisibleTab?(windowId: number, options: { format?: "jpeg" | "png"; quality?: number }): Promise<string>;
 }
 
@@ -155,7 +166,7 @@ export interface SidepanelPageReadingRuntime {
   install(): void;
   requestReadCurrentPage(source?: PageActivationSource): Promise<void>;
   requestPointTarget(tabId: number): Promise<void>;
-  auditState(): { activeTabId: number | null };
+  auditState(): { activeTabId: number | null; displayTabId: number | null; lastActivation?: PageActivationAuditState };
   handlePageReadingResult(message: PageReadingResultMsg): void;
   handlePageReadingError(message: PageReadingErrorMsg): void;
 }
@@ -568,18 +579,21 @@ export function createSidepanelPageReadingRuntime({
 }: CreateSidepanelPageReadingRuntimeOptions): SidepanelPageReadingRuntime {
   const sessions = new Map<number, PageReadingSession>();
   let activeTabId: number | null = null;
+  let displayTabId: number | null = null;
   let activeUrl = "";
   let activeTitle = "";
   let installed = false;
   let copyState: "idle" | "copied" | "failed" = "idle";
   let downloadState: "idle" | "saved" | "cancelled" | "failed" = "idle";
+  let lastActivation: PageActivationAuditState | undefined;
 
   function tr(key: string, params?: Record<string, string | number>): string {
     return t(key, getLang(), params);
   }
 
   function currentSession(): PageReadingSession | undefined {
-    return typeof activeTabId === "number" ? sessions.get(activeTabId) : undefined;
+    const tabId = typeof displayTabId === "number" ? displayTabId : activeTabId;
+    return typeof tabId === "number" ? sessions.get(tabId) : undefined;
   }
 
   function friendlyPageReadingError(error: string): string {
@@ -592,16 +606,28 @@ export function createSidepanelPageReadingRuntime({
     return error;
   }
 
-  function setActiveTab(tab: BrowserTab | undefined, activate = true): void {
+  function setActiveTab(
+    tab: BrowserTab | undefined,
+    activate = true,
+    displaySync: "browser-activation" | "status-update" | "manual-activation" = "browser-activation",
+  ): void {
+    const previousDisplayTabId = displayTabId;
+    const previousDisplayedSession = currentSession();
     if (typeof tab?.id === "number") activeTabId = tab.id;
     activeUrl = tab?.url ?? activeUrl;
     activeTitle = tab?.title ?? activeTitle;
     const platform = platformForUrl(activeUrl);
+    const shouldSyncDisplay = displaySync !== "status-update" ||
+      !previousDisplayedSession ||
+      previousDisplayTabId === tab?.id;
+    if (typeof tab?.id === "number" && shouldSyncDisplay && (platform === "general" || sessions.has(tab.id) || !currentSession())) {
+      displayTabId = tab.id;
+    }
     if (activate) {
       if (platform === "facebook") activateTab("analysis");
       else if (platform === "general") activateTab("page");
     }
-    const session = currentSession();
+    const session = typeof tab?.id === "number" ? sessions.get(tab.id) : undefined;
     if (session && activeUrl && !isMeaningfullySamePage(session.identity, activeUrl)) {
       session.status = "stale";
       session.url = activeUrl;
@@ -633,6 +659,7 @@ export function createSidepanelPageReadingRuntime({
       status: "stale",
       updatedAt: now(),
     });
+    if (tabId === displayTabId) render();
   }
 
   async function refreshActiveTab(activate = true): Promise<BrowserTab | undefined> {
@@ -645,7 +672,10 @@ export function createSidepanelPageReadingRuntime({
     const lang = getLang();
     const platform = platformForUrl(activeUrl);
     const session = currentSession();
+    const displayedTabId = session?.tabId ?? displayTabId;
+    const displayedSessionIsActive = typeof displayedTabId === "number" && displayedTabId === activeTabId;
     const canRead = platform === "general" && typeof activeTabId === "number" && isHttpLikeUrl(activeUrl);
+    const canUseLiveTarget = canRead && displayedSessionIsActive && Boolean(session?.surface);
     const statusClass = session?.status ? ` page-status-${session.status}` : "";
     const statusLabel = session
       ? tr(`sidepanel.page.status.${session.status}`)
@@ -684,13 +714,14 @@ export function createSidepanelPageReadingRuntime({
         </div>
         <div class="page-reader-actions">
           <button id="pageReadCurrent" class="btn-investigation-secondary" type="button" ${canRead ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.readCurrent"))}</button>
-          <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canRead && session?.surface ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.useSelection"))}</button>
+          <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.useSelection"))}</button>
         </div>
       </section>
       <section class="page-reader-status${statusClass}">
         <div class="page-reader-status-label">${escapeHtml(statusLabel)}</div>
-        <div class="page-reader-status-detail">${escapeHtml(statusDetail(platform, session))}</div>
+        <div class="page-reader-status-detail">${escapeHtml(statusDetail(platform, session, displayedSessionIsActive))}</div>
       </section>
+      ${sessionSwitcherHtml(session)}
       ${session?.status === "error" ? `<section class="page-reader-error">${escapeHtml(session.error || tr("sidepanel.page.error.unknown"))}</section>` : ""}
       ${session?.surface ? `
         <article class="page-reader-card">
@@ -700,6 +731,7 @@ export function createSidepanelPageReadingRuntime({
               <div class="page-reader-url">${escapeHtml(source || url)}</div>
             </div>
             <div class="page-reader-card-actions">
+              ${displayedSessionIsActive ? "" : `<button id="pageActivateDisplayedTab" class="btn-investigation-secondary" type="button">${escapeHtml(tr("sidepanel.page.switcher.activate"))}</button>`}
               <button id="pageCopyMetadata" class="btn-investigation-secondary" type="button">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</button>
               <button id="pageDownloadMarkdown" class="btn-investigation-secondary" type="button">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</button>
             </div>
@@ -710,7 +742,7 @@ export function createSidepanelPageReadingRuntime({
           </dl>
           ${modelContextHtml(modelContext, tr)}
           ${advisorHtml(session.advisor, tr)}
-          ${screenshotHtml(session, tr)}
+          ${displayedSessionIsActive ? screenshotHtml(session, tr) : ""}
           ${analysisHtml(session.analysis, tr)}
           ${sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"))}
           ${warningText ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(warningText)}</div>` : ""}
@@ -723,6 +755,21 @@ export function createSidepanelPageReadingRuntime({
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.addEventListener("click", () => {
       void requestSelectionTarget("sidepanel");
+    });
+    pagePaneEl.querySelectorAll<HTMLButtonElement>("[data-page-session-tab-id]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const tabId = Number(button.dataset.pageSessionTabId);
+        if (!Number.isFinite(tabId) || !sessions.has(tabId)) return;
+        displayTabId = tabId;
+        copyState = "idle";
+        downloadState = "idle";
+        activateTab("page");
+        render();
+      });
+    });
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageActivateDisplayedTab")?.addEventListener("click", () => {
+      if (typeof displayedTabId !== "number") return;
+      void activateDisplayedBrowserTab(displayedTabId);
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageCopyMetadata")?.addEventListener("click", async () => {
       const latest = currentSession();
@@ -753,25 +800,111 @@ export function createSidepanelPageReadingRuntime({
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageAnalysisRetry")?.addEventListener("click", () => {
       const latest = currentSession();
-      if (!latest || typeof activeTabId !== "number") return;
-      runGeneralPageAnalysisIfEligible(activeTabId, latest, true);
+      if (!latest) return;
+      runGeneralPageAnalysisIfEligible(latest.tabId, latest, true);
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCapture")?.addEventListener("click", () => {
-      if (typeof activeTabId !== "number") return;
-      void captureScreenshotPreview(activeTabId);
+      if (typeof displayedTabId !== "number" || displayedTabId !== activeTabId) return;
+      void captureScreenshotPreview(displayedTabId);
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotConfirm")?.addEventListener("click", () => {
-      if (typeof activeTabId !== "number") return;
-      void sendConfirmedScreenshotAnalysis(activeTabId);
+      if (typeof displayedTabId !== "number" || displayedTabId !== activeTabId) return;
+      void sendConfirmedScreenshotAnalysis(displayedTabId);
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCancel")?.addEventListener("click", () => {
-      if (typeof activeTabId !== "number") return;
-      setScreenshot(activeTabId, undefined);
+      if (typeof displayedTabId !== "number" || displayedTabId !== activeTabId) return;
+      setScreenshot(displayedTabId, undefined);
     });
   }
 
-  function statusDetail(platform: PagePlatform, session: PageReadingSession | undefined): string {
+  function sessionSwitcherHtml(activeSession: PageReadingSession | undefined): string {
+    const items = Array.from(sessions.values())
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 6);
+    if (items.length <= 1) return "";
+    return `
+      <section class="page-reader-switcher" aria-label="${escapeHtml(tr("sidepanel.page.switcher.label"))}">
+        <div class="page-reader-switcher-title">${escapeHtml(tr("sidepanel.page.switcher.title"))}</div>
+        <div class="page-reader-switcher-list">
+          ${items.map((item) => {
+            const selected = item.tabId === activeSession?.tabId;
+            const live = item.tabId === activeTabId;
+            const label = item.surface?.title || item.title || hostnameForUrl(item.url);
+            const meta = live ? tr("sidepanel.page.switcher.live") : hostnameForUrl(item.surface?.canonicalUrl || item.surface?.url || item.url);
+            return `
+              <button
+                class="page-reader-switcher-item${selected ? " is-selected" : ""}${live ? " is-live" : ""}"
+                type="button"
+                data-page-session-tab-id="${escapeHtml(String(item.tabId))}"
+                aria-pressed="${selected ? "true" : "false"}"
+              >
+                <span>${escapeHtml(label)}</span>
+                <small>${escapeHtml(meta)}</small>
+              </button>
+            `;
+          }).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  async function activateDisplayedBrowserTab(tabId: number): Promise<void> {
+    const activationAudit: PageActivationAuditState = { tabId };
+    lastActivation = activationAudit;
+    try {
+      const existingTab = tabs.get ? await tabs.get(tabId).catch(() => undefined) : undefined;
+      activationAudit.existingTabId = existingTab?.id;
+      const updatedTab = tabs.update
+        ? await tabs.update(tabId, { active: true })
+        : existingTab;
+      activationAudit.updatedTabId = updatedTab?.id;
+      const fallbackSession = sessions.get(tabId);
+      const windowId = typeof updatedTab?.windowId === "number"
+        ? updatedTab.windowId
+        : typeof existingTab?.windowId === "number"
+        ? existingTab.windowId
+        : undefined;
+      activationAudit.windowId = windowId;
+      if (typeof windowId === "number") {
+        await tabs.focusWindow?.(windowId).then(() => {
+          activationAudit.focused = true;
+        }).catch((error) => {
+          activationAudit.error = errorMessage(error);
+        });
+      }
+      const tab = updatedTab
+        ? {
+            ...updatedTab,
+            id: tabId,
+            url: updatedTab.url || fallbackSession?.url,
+            title: updatedTab.title || fallbackSession?.title,
+            active: true,
+          }
+        : fallbackSession
+        ? {
+            id: tabId,
+            url: fallbackSession.url,
+            title: fallbackSession.title,
+            active: true,
+          }
+        : undefined;
+      displayTabId = tabId;
+      if (tab) setActiveTab(tab, true, "manual-activation");
+      else render();
+    } catch (error) {
+      activationAudit.error = errorMessage(error);
+      displayTabId = tabId;
+      render();
+    }
+  }
+
+  function statusDetail(
+    platform: PagePlatform,
+    session: PageReadingSession | undefined,
+    displayedSessionIsActive: boolean,
+  ): string {
     if (session?.status === "error") return tr("sidepanel.page.detail.error");
+    if (session?.surface && !displayedSessionIsActive) return tr("sidepanel.page.detail.savedSession");
     if (platform === "facebook") return tr("sidepanel.page.detail.facebook");
     if (platform === "unsupported") return tr("sidepanel.page.detail.unsupported");
     if (!session) return tr("sidepanel.page.detail.empty");
@@ -848,7 +981,7 @@ export function createSidepanelPageReadingRuntime({
     const session = sessions.get(tabId);
     if (!session || session.status === "stale") return;
     sessions.set(tabId, { ...session, screenshot, updatedAt: session.updatedAt });
-    if (tabId === activeTabId) render();
+    if (tabId === activeTabId || tabId === displayTabId) render();
   }
 
   async function captureScreenshotPreview(tabId: number): Promise<void> {
@@ -941,7 +1074,7 @@ export function createSidepanelPageReadingRuntime({
       updatedAt: session.updatedAt,
     };
     sessions.set(tabId, nextSession);
-    if (tabId === activeTabId) render();
+    if (tabId === activeTabId || tabId === displayTabId) render();
     if (advisor.effectiveModelContext) runGeneralPageAnalysisIfEligible(tabId, nextSession, false);
   }
 
@@ -1371,6 +1504,7 @@ export function createSidepanelPageReadingRuntime({
       copyState = "idle";
       downloadState = "idle";
       activeTabId = tab.id;
+      displayTabId = tab.id;
       activeUrl = tabUrl;
       activeTitle = tab.title ?? "";
       sessions.set(tab.id, {
@@ -1435,7 +1569,10 @@ export function createSidepanelPageReadingRuntime({
       analysis: undefined,
       screenshot: undefined,
     });
-    if (tabId === activeTabId) render();
+    if (tabId === activeTabId || !displayTabId || displayTabId === tabId) {
+      displayTabId = tabId;
+      render();
+    }
     startParserAdvisor(tabId, message.surface, {
       candidateBlocks: message.candidateBlocks ?? [],
     });
@@ -1464,7 +1601,7 @@ export function createSidepanelPageReadingRuntime({
     });
     copyState = "idle";
     downloadState = "idle";
-    if (tabId === activeTabId) render();
+    if (tabId === activeTabId || tabId === displayTabId) render();
     startParserAdvisor(tabId, existing.surface, {
       target: message.target,
       candidateBlocks: existing.candidateBlocks,
@@ -1488,7 +1625,7 @@ export function createSidepanelPageReadingRuntime({
       screenshot: undefined,
       updatedAt: now(),
     });
-    if (tabId === activeTabId) render();
+    if (tabId === activeTabId || tabId === displayTabId) render();
   }
 
   function handlePageReadingError(message: PageReadingErrorMsg): void {
@@ -1511,7 +1648,7 @@ export function createSidepanelPageReadingRuntime({
       updatedAt: now(),
       activationSource: existing?.activationSource || "sidepanel",
     });
-    if (tabId === activeTabId) render();
+    if (tabId === activeTabId || tabId === displayTabId) render();
   }
 
   function install(): void {
@@ -1530,11 +1667,17 @@ export function createSidepanelPageReadingRuntime({
       if (changeInfo.url) markTabSessionStale(tabId, tab);
       if (tabId !== activeTabId) return;
       if (!changeInfo.url && changeInfo.status !== "complete") return;
-      setActiveTab(tab, true);
+      setActiveTab(tab, true, "status-update");
     });
     tabs.onRemoved?.addListener((tabId) => {
+      const wasDisplayed = tabId === displayTabId;
       sessions.delete(tabId);
-      if (tabId === activeTabId) render();
+      if (tabId === displayTabId) {
+        displayTabId = typeof activeTabId === "number" && sessions.has(activeTabId)
+          ? activeTabId
+          : Array.from(sessions.values()).sort((a, b) => b.updatedAt - a.updatedAt)[0]?.tabId ?? null;
+      }
+      if (tabId === activeTabId || wasDisplayed) render();
     });
     installPendingCurrentRegionListener();
     render();
@@ -1544,7 +1687,7 @@ export function createSidepanelPageReadingRuntime({
     install,
     requestReadCurrentPage,
     requestPointTarget,
-    auditState: () => ({ activeTabId }),
+    auditState: () => ({ activeTabId, displayTabId, lastActivation }),
     handlePageReadingResult,
     handlePageReadingError,
   };

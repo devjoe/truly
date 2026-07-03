@@ -144,6 +144,91 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("Synthetic source");
   });
 
+  it("switches among saved page sessions without implicitly activating Chrome tabs", async () => {
+    const pagePaneEl = setupDom();
+    let activeId = 42;
+    let onActivated: ((activeInfo: { tabId: number; windowId: number }) => void) | undefined;
+    const tabsById = new Map<number, { id: number; url: string; title: string; windowId: number }>([
+      [42, { id: 42, url: "https://first.example.test/article", title: "First Article", windowId: 7 }],
+      [43, { id: 43, url: "https://second.example.test/article", title: "Second Article", windowId: 7 }],
+    ]);
+    const update = vi.fn(async (tabId: number, updateProperties: { active?: boolean }) => {
+      if (updateProperties.active) activeId = tabId;
+      return tabsById.get(tabId)!;
+    });
+    const focusWindow = vi.fn(async () => undefined);
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage: vi.fn() },
+      tabs: {
+        query: vi.fn(async () => [tabsById.get(activeId)!]),
+        get: vi.fn(async (tabId: number) => tabsById.get(tabId)!),
+        update,
+        focusWindow,
+        onActivated: {
+          addListener(listener) {
+            onActivated = listener;
+          },
+        },
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    runtime.handlePageReadingResult({
+      type: "PAGE_READING_RESULT",
+      tabId: 42,
+      surface: surface({
+        id: "general:https://first.example.test/article",
+        url: "https://first.example.test/article",
+        canonicalUrl: "https://first.example.test/article",
+        title: "First Article",
+        excerpt: "First saved excerpt.",
+      }),
+    });
+
+    activeId = 43;
+    onActivated?.({ tabId: 43, windowId: 7 });
+    await flushMicrotasks();
+    runtime.handlePageReadingResult({
+      type: "PAGE_READING_RESULT",
+      tabId: 43,
+      surface: surface({
+        id: "general:https://second.example.test/article",
+        url: "https://second.example.test/article",
+        canonicalUrl: "https://second.example.test/article",
+        title: "Second Article",
+        excerpt: "Second saved excerpt.",
+      }),
+    });
+
+    expect(pagePaneEl.textContent).toContain("已讀網頁");
+    expect(pagePaneEl.textContent).toContain("Second saved excerpt.");
+
+    const firstButton = Array.from(pagePaneEl.querySelectorAll<HTMLButtonElement>("[data-page-session-tab-id]"))
+      .find((button) => button.textContent?.includes("First Article"));
+    firstButton?.click();
+
+    expect(pagePaneEl.textContent).toContain("First saved excerpt.");
+    expect(update).not.toHaveBeenCalled();
+    expect(focusWindow).not.toHaveBeenCalled();
+    expect(runtime.auditState().activeTabId).toBe(43);
+    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.disabled).toBe(true);
+    expect(pagePaneEl.textContent).toContain("切到此分頁");
+
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageActivateDisplayedTab")?.click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(update).toHaveBeenCalledWith(42, { active: true });
+    expect(focusWindow).toHaveBeenCalledWith(7);
+    expect(runtime.auditState().activeTabId).toBe(42);
+    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.disabled).toBe(false);
+  });
+
   it("marks clean page readings as current reading context without an advisor request", async () => {
     const pagePaneEl = setupDom();
     const sendMessage = vi.fn(async () => ({

@@ -397,6 +397,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
   const sideTarget = await openSidePanelTestPage(extensionId, articleTarget, "success");
   const article = connectCdp(articleTarget.webSocketDebuggerUrl);
   const side = connectCdp(sideTarget.webSocketDebuggerUrl);
+  let secondArticle;
 
   try {
     await sleep(800);
@@ -489,6 +490,123 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       });
     })()`);
     const copy = JSON.parse(copyRaw);
+
+    const secondArticleTarget = await createTarget(`${allowedBase}/article2?multi=1`);
+    secondArticle = connectCdp(secondArticleTarget.webSocketDebuggerUrl);
+    await secondArticle.send("Page.bringToFront");
+    await sleep(600);
+    await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    await waitFor(side, `(() => /Second Synthetic Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web second session ready").catch(async (error) => {
+      await side.screenshot(resolve(OUT_DIR, "page-session-switcher-second-timeout.png")).catch(() => {});
+      throw error;
+    });
+    const switcherSecond = await side.evaluateJson(`(() => ({
+      text: document.querySelector('#page-pane')?.innerText || '',
+      sessionCount: document.querySelectorAll('[data-page-session-tab-id]').length,
+      selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
+      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null
+    }))()`);
+    const clickedSavedTabId = await side.evaluate(`(() => {
+      const activeTabId = globalThis.__trulyPageReadingRuntime?.auditState?.()?.activeTabId;
+      const button = Array.from(document.querySelectorAll('[data-page-session-tab-id]'))
+        .find((item) => Number(item.dataset.pageSessionTabId) !== activeTabId);
+      button?.click();
+      return button ? Number(button.dataset.pageSessionTabId) : null;
+    })()`);
+    await waitFor(side, `(() => {
+      const title = document.querySelector('#page-pane .page-reader-title-block h2')?.textContent || '';
+      const state = globalThis.__trulyPageReadingRuntime?.auditState?.() || {};
+      const selectedChip = document.querySelector('[data-page-session-tab-id].is-selected');
+      const ready = /Synthetic General Page Reader Article/.test(title) &&
+        Boolean(document.querySelector('#pageActivateDisplayedTab')) &&
+        state.displayTabId === ${JSON.stringify(clickedSavedTabId)} &&
+        state.activeTabId !== state.displayTabId &&
+        selectedChip &&
+        Number(selectedChip.dataset.pageSessionTabId) === state.displayTabId &&
+        !selectedChip.classList.contains('is-live');
+      if (!ready) return false;
+      globalThis.__trulySwitcherDisplayAudit = {
+        text: document.querySelector('#page-pane')?.innerText || '',
+        sessionCount: document.querySelectorAll('[data-page-session-tab-id]').length,
+        pageTitle: title.trim() || null,
+        selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
+        hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
+        chips: Array.from(document.querySelectorAll('[data-page-session-tab-id]')).map((item) => ({
+          tabId: Number(item.dataset.pageSessionTabId),
+          className: item.className,
+          text: item.textContent?.trim() || ''
+        })),
+        activeState: state
+      };
+      document.querySelector('#pageActivateDisplayedTab')?.click();
+      return true;
+    })()`, 8000, "Page/Web saved session display").catch(async (error) => {
+      const timeoutStateRaw = await side.evaluate(`(async () => {
+        const diagnostics = await new Promise((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const activeTab = tabs?.[0] || null;
+            resolve({
+              clickedSavedTabId: ${JSON.stringify(clickedSavedTabId)},
+              runtimeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
+              chromeActiveTab: activeTab ? { id: activeTab.id, url: activeTab.url, title: activeTab.title, active: activeTab.active } : null,
+              pageTitle: document.querySelector('#page-pane .page-reader-title-block h2')?.textContent?.trim() || null,
+              selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
+              hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
+              chips: Array.from(document.querySelectorAll('[data-page-session-tab-id]')).map((item) => ({
+                tabId: Number(item.dataset.pageSessionTabId),
+                className: item.className,
+                text: item.textContent?.trim() || ''
+              }))
+            });
+          });
+        });
+        return JSON.stringify(diagnostics);
+      })()`).catch((captureError) => JSON.stringify({ captureError: captureError.message }));
+      writeFileSync(resolve(OUT_DIR, "page-session-switcher-display-timeout.json"), timeoutStateRaw);
+      await side.screenshot(resolve(OUT_DIR, "page-session-switcher-display-timeout.png")).catch(() => {});
+      throw error;
+    });
+    const switcherDisplay = await side.evaluateJson(`(() => globalThis.__trulySwitcherDisplayAudit || null)()`);
+    writeFileSync(resolve(OUT_DIR, "page-session-switcher-display.json"), JSON.stringify(switcherDisplay, null, 2));
+    await waitFor(side, `(() => {
+      const title = document.querySelector('#page-pane .page-reader-title-block h2')?.textContent || '';
+      const state = globalThis.__trulyPageReadingRuntime?.auditState?.() || {};
+      return /Synthetic General Page Reader Article/.test(title) &&
+        document.querySelector('#pageReadSelection')?.disabled === false &&
+        state.activeTabId === state.displayTabId;
+    })()`, 8000, "Page/Web saved session activation").catch(async (error) => {
+      const timeoutStateRaw = await side.evaluate(`(async () => {
+        const diagnostics = await new Promise((resolve) => {
+          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            const activeTab = tabs?.[0] || null;
+            resolve({
+            clickedSavedTabId: ${JSON.stringify(clickedSavedTabId)},
+            runtimeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
+            chromeActiveTab: activeTab ? { id: activeTab.id, url: activeTab.url, title: activeTab.title, active: activeTab.active } : null,
+            pageTitle: document.querySelector('#page-pane .page-reader-title-block h2')?.textContent?.trim() || null,
+            selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
+            hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
+            chips: Array.from(document.querySelectorAll('[data-page-session-tab-id]')).map((item) => ({
+              tabId: Number(item.dataset.pageSessionTabId),
+              className: item.className,
+              text: item.textContent?.trim() || ''
+            }))
+          });
+        });
+        });
+        return JSON.stringify(diagnostics);
+      })()`).catch((captureError) => JSON.stringify({ captureError: captureError.message }));
+      const timeoutState = JSON.parse(timeoutStateRaw);
+      writeFileSync(resolve(OUT_DIR, "page-session-switcher-activate-timeout.json"), JSON.stringify(timeoutState, null, 2));
+      await side.screenshot(resolve(OUT_DIR, "page-session-switcher-activate-timeout.png")).catch(() => {});
+      throw error;
+    });
+    const switcherActivated = await side.evaluateJson(`(() => ({
+      text: document.querySelector('#page-pane')?.innerText || '',
+      selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
+      hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
+      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null
+    }))()`);
 
     const selectedText = await article.evaluate(`(() => {
       const paragraph = document.querySelector('article p:nth-of-type(3)');
@@ -601,10 +719,23 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
 
     await side.screenshot(resolve(OUT_DIR, "page-ready-and-stale.png"));
 
-    return { initial, ready, pageBrief, copy, selection: { selectedText, ...selection }, pointTarget, afterHash, afterTracking, afterMeaningful };
+    return {
+      initial,
+      ready,
+      pageBrief,
+      copy,
+      switcher: { second: switcherSecond, display: switcherDisplay, activated: switcherActivated },
+      selection: { selectedText, ...selection },
+      pointTarget,
+      afterHash,
+      afterTracking,
+      afterMeaningful,
+    };
   } finally {
+    await secondArticle?.closeTarget().catch(() => {});
     await side.closeTarget().catch(() => {});
     await article.closeTarget().catch(() => {});
+    secondArticle?.close();
     side.close();
     article.close();
   }
@@ -891,6 +1022,22 @@ function assertAudit(result) {
   if (!result.success.copy.hasTitle || !result.success.copy.hasUrl || !result.success.copy.hasExcerpt || result.success.copy.hasFullTail) {
     errors.push("copy metadata boundary failed");
   }
+  if ((result.success.switcher?.second?.sessionCount ?? 0) < 2 || (result.success.switcher?.display?.sessionCount ?? 0) < 2) {
+    errors.push("Page/Web session switcher did not expose multiple saved page sessions");
+  }
+  if (result.success.switcher?.display?.activeState?.activeTabId !== result.success.switcher?.second?.activeState?.activeTabId) {
+    errors.push("Page/Web saved-session display implicitly changed the active Chrome tab");
+  }
+  if (result.success.switcher?.display?.selectionDisabled !== true || result.success.switcher?.display?.hasActivateButton !== true) {
+    errors.push("Page/Web inactive saved-session display did not gate live selection behind explicit tab activation");
+  }
+  if (
+    result.success.switcher?.activated?.selectionDisabled !== false ||
+    result.success.switcher?.activated?.hasActivateButton !== false ||
+    result.success.switcher?.activated?.activeState?.activeTabId === result.success.switcher?.second?.activeState?.activeTabId
+  ) {
+    errors.push("Page/Web explicit saved-session activation did not restore live page controls");
+  }
   if (!result.success.selection?.selectedText || !result.success.selection.excerpt?.includes(result.success.selection.selectedText.slice(0, 60))) {
     errors.push("selection target text was not rendered as the Page/Web preview");
   }
@@ -991,6 +1138,7 @@ function writeSummary(result, errors) {
     `- Model context: ${result.success.ready.modelContext?.status || "(missing)"}`,
     `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
+    `- Saved-page switcher: ${(result.success.switcher?.display?.sessionCount || 0)} sessions / activation restored=${result.success.switcher?.activated?.selectionDisabled === false}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
     `- Current-region target: ${result.success.pointTarget?.targetKind || "(missing)"} / ${result.success.pointTarget?.advisorStatus || "(missing)"}`,
     `- Source links visible: ${result.success.ready.sourceLinks?.length || 0}`,
@@ -1011,6 +1159,7 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "audit.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-session-switcher-display.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-point-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png"))}`,
