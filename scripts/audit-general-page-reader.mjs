@@ -109,6 +109,17 @@ function connectCdp(webSocketDebuggerUrl) {
       });
       writeFileSync(path, Buffer.from(result.data, "base64"));
     },
+    async setViewport(width, height) {
+      await send("Emulation.setDeviceMetricsOverride", {
+        width,
+        height,
+        deviceScaleFactor: 1,
+        mobile: false,
+      });
+    },
+    async clearViewport() {
+      await send("Emulation.clearDeviceMetricsOverride").catch(() => {});
+    },
     async closeTarget() {
       await send("Page.close").catch(() => {});
     },
@@ -472,6 +483,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
 
     const pageBrief = await observePageBrief(side, "page-analysis-ready.png");
+    const responsive = await auditResponsivePageWebLayout(side, "page-responsive-430.png");
 
     const copyRaw = await side.evaluate(`(async () => {
       globalThis.__trulyCopiedText = null;
@@ -727,6 +739,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       initial,
       ready,
       pageBrief,
+      responsive,
       copy,
       switcher: { second: switcherSecond, display: switcherDisplay, activated: switcherActivated },
       selection: { selectedText, ...selection },
@@ -777,6 +790,71 @@ async function observePageBrief(side, readyScreenshotName) {
   await side.screenshot(resolve(OUT_DIR, readyScreenshotName)).catch(() => {});
   observation.screenshot = relative(ROOT, resolve(OUT_DIR, readyScreenshotName));
   return observation;
+}
+
+async function auditResponsivePageWebLayout(side, screenshotName) {
+  const width = 430;
+  const height = 900;
+  try {
+    await side.setViewport(width, height);
+    await sleep(300);
+    const layout = await side.evaluateJson(`(() => {
+      const norm = (value) => (value || "").replace(/\\s+/g, " ").trim();
+      const root = document.documentElement;
+      const interactiveSelectors = [
+        "#page-pane button",
+        "#page-pane a",
+        ".tab",
+      ].join(",");
+      const interactiveOverflows = Array.from(document.querySelectorAll(interactiveSelectors))
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          const textClipped = element.scrollWidth - element.clientWidth > 2 ||
+            element.scrollHeight - element.clientHeight > 2;
+          const viewportClipped = rect.left < -1 || rect.right > window.innerWidth + 1;
+          return {
+            tag: element.tagName,
+            id: element.id || "",
+            className: String(element.className || ""),
+            text: norm(element.textContent).slice(0, 120),
+            rect: { left: rect.left, right: rect.right, width: rect.width, height: rect.height },
+            clientWidth: element.clientWidth,
+            scrollWidth: element.scrollWidth,
+            clientHeight: element.clientHeight,
+            scrollHeight: element.scrollHeight,
+            textClipped,
+            viewportClipped,
+          };
+        })
+        .filter((item) => item.rect.width > 0 && item.rect.height > 0 && (item.textClipped || item.viewportClipped));
+      const visibleCardsOutsideViewport = Array.from(document.querySelectorAll("#page-pane .page-reader-card, #page-pane .page-reader-model-context, #page-pane .page-reader-advisor, #page-pane .page-reader-analysis"))
+        .map((element) => {
+          const rect = element.getBoundingClientRect();
+          return {
+            tag: element.tagName,
+            className: String(element.className || ""),
+            text: norm(element.textContent).slice(0, 120),
+            rect: { left: rect.left, right: rect.right, width: rect.width, height: rect.height },
+          };
+        })
+        .filter((item) => item.rect.width > 0 && item.rect.height > 0 && (item.rect.left < -1 || item.rect.right > window.innerWidth + 1));
+      return {
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        documentWidth: root.scrollWidth,
+        horizontalOverflow: root.scrollWidth > window.innerWidth + 1,
+        interactiveOverflows,
+        visibleCardsOutsideViewport,
+        pageText: norm(document.querySelector("#page-pane")?.innerText || "").slice(0, 2000),
+      };
+    })()`);
+    await side.screenshot(resolve(OUT_DIR, screenshotName));
+    return {
+      ...layout,
+      screenshot: relative(ROOT, resolve(OUT_DIR, screenshotName)),
+    };
+  } finally {
+    await side.clearViewport();
+  }
 }
 
 async function auditNoisyFallbackRead(extensionId, allowedBase) {
@@ -1044,6 +1122,15 @@ function assertAudit(result) {
   if ((result.success.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("successful read exposes more than six source links");
   }
+  if (result.success.responsive?.horizontalOverflow) {
+    errors.push(`Page/Web 430px layout has horizontal overflow: documentWidth=${result.success.responsive.documentWidth}`);
+  }
+  if ((result.success.responsive?.interactiveOverflows?.length ?? 0) > 0) {
+    errors.push(`Page/Web 430px layout clips interactive elements: ${result.success.responsive.interactiveOverflows.map((item) => item.text || item.id || item.className || item.tag).join(", ")}`);
+  }
+  if ((result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) > 0) {
+    errors.push(`Page/Web 430px layout renders cards outside viewport: ${result.success.responsive.visibleCardsOutsideViewport.map((item) => item.className || item.tag).join(", ")}`);
+  }
   if (!result.success.copy.hasTitle || !result.success.copy.hasUrl || !result.success.copy.hasExcerpt || result.success.copy.hasFullTail) {
     errors.push("copy metadata boundary failed");
   }
@@ -1218,6 +1305,15 @@ function qaMatrixRows(result) {
       "status=" + (result.success.pageBrief?.status || "missing"),
     ],
     [
+      "Responsive Page/Web layout",
+      result.success.responsive?.horizontalOverflow === false &&
+        (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
+        (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0,
+      "430px horizontalOverflow=" + result.success.responsive?.horizontalOverflow +
+        "; clippedInteractive=" + (result.success.responsive?.interactiveOverflows?.length ?? 0) +
+        "; offscreenCards=" + (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0),
+    ],
+    [
       "Saved-session switching",
       (result.success.switcher?.display?.sessionCount ?? 0) >= 2 &&
         result.success.switcher?.display?.selectionDisabled === true &&
@@ -1294,6 +1390,7 @@ function writeSummary(result, errors) {
     `- Model context: ${result.success.ready.modelContext?.status || "(missing)"}`,
     `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
+    `- Responsive Page/Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
     `- Saved-page switcher: ${(result.success.switcher?.display?.sessionCount || 0)} sessions / activation restored=${result.success.switcher?.activated?.selectionDisabled === false}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
     `- Current-region target: ${result.success.pointTarget?.targetKind || "(missing)"} / ${result.success.pointTarget?.advisorStatus || "(missing)"}`,
@@ -1315,6 +1412,7 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "audit.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
+    result.success.responsive?.screenshot ? `- ${result.success.responsive.screenshot}` : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-session-switcher-display.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-point-target.png"))}`,

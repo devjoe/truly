@@ -18,7 +18,7 @@ This document is the current public-safe readiness index for the General Page Re
 
 - Public fixtures stay synthetic and anonymous.
 - Real-web observation and 200-target live-DOM product-quality reviews stay under `tmp/` or private repos.
-- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, model brief generation, session switching, selection, current-region, URL stale handling, noisy fallback, candidate recovery, and no-grant guidance.
+- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, model brief generation, 430px Page/Web responsive overflow, session switching, selection, current-region, URL stale handling, noisy fallback, candidate recovery, and no-grant guidance.
 - `audit:general-page-model-integration` is included in `check:general-page` and verifies model payload scoping, overview guards, and session-only storage behavior with a local mock endpoint.
 - The live-DOM 200-target review proved the harness is useful for finding false-ready page patterns; public follow-up is represented only as aggregate findings plus synthetic fixtures.
 
@@ -62,7 +62,7 @@ Results:
 
 - `check:public`: passed. This included public-boundary, release metadata, General Page corpus, parser spikes, parser-advisor spike, model integration audit, typecheck, public contract tests, public unit tests, production build, and release bundle audit.
 - `cws:preflight`: passed for `0.1.1 Preview 11` / `v0.1.1-preview.11`.
-- `audit:general-page-reader`: passed after compact ready-path model-context hardening. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T13-51-48-064Z`.
+- `audit:general-page-reader`: passed after adding the 430px Page/Web responsive overflow gate. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T14-21-10-883Z`.
 - `smoke:general-page-current`: passed against the currently open Yahoo Taiwan news page through live CDP. Sanitized result: extracted, semantic HTML, partial/caution, model eligible, 6 model-context links after filtering; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T13-58-47-423Z`.
 - `smoke:general-page-current --all-open`: passed against four open HTTP(S) tabs through live CDP after adding P24 dashboard/data-surface coverage. Sanitized result: 3 extracted / 1 blocked-or-empty, readiness `caution: 3`, `blocked: 1`, and no dashboard or leaderboard data surface marked ready/good; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T14-11-11-512Z`.
 
