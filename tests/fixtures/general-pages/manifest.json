@@ -727,6 +727,20 @@
         "excludes": ["Member Area", "Newsletter"],
         "status": "partial"
       }
+    },
+    {
+      "id": "zhtw-news-jsonld-recirc",
+      "file": "zhtw-news-jsonld-recirc.html",
+      "url": "https://news.example.test/articles/jsonld-recirc",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P04-related-content-recirc", "P15-rich-metadata", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["合成新聞頁面描述一場虛構的公共服務演練", "模型脈絡應聚焦在正文"],
+        "excludes": ["@context", "script metadata should not appear", "Yahoo提醒您", "飲酒過量", "延伸閱讀", "相關文章一不應進入正文", "更多範例新聞網報導", "尾端站內推薦標題不應進入正文", "檢視留言", "廣告"],
+        "status": "complete"
+      }
     }
   ]
 }

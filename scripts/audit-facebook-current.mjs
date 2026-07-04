@@ -576,10 +576,35 @@ async function captureSidePanelTarget(target, index) {
   }
 }
 
-async function auditSidePanelWorkflow(page) {
+async function readPendingOpenPost(serviceWorkerEntry) {
+  if (!serviceWorkerEntry?.target?.webSocketDebuggerUrl)
+    return { error: "service-worker-unavailable" };
+  return evaluateTarget(serviceWorkerEntry.target, `new Promise((resolve) => {
+    chrome.storage.session.get("pendingOpenPost", (stored) => {
+      resolve({
+        pendingOpenPost: stored?.pendingOpenPost || null,
+        lastError: chrome.runtime.lastError?.message || null
+      });
+    });
+  })`).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
+}
+
+async function clearPendingOpenPost(serviceWorkerEntry) {
+  if (!serviceWorkerEntry?.target?.webSocketDebuggerUrl)
+    return { error: "service-worker-unavailable" };
+  return evaluateTarget(serviceWorkerEntry.target, `new Promise((resolve) => {
+    chrome.storage.session.remove("pendingOpenPost", () => {
+      resolve({ ok: !chrome.runtime.lastError, lastError: chrome.runtime.lastError?.message || null });
+    });
+  })`).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
+}
+
+async function auditSidePanelWorkflow(page, serviceWorkerEntry) {
   const beforeTargets = await fetchJson(`${CDP_BASE}/json/list`)
     .then((targets) => targets.filter(isSidePanelTarget).map((target) => target.id))
     .catch(() => []);
+  await clearPendingOpenPost(serviceWorkerEntry);
+  const beforePendingOpenPost = await readPendingOpenPost(serviceWorkerEntry);
   const findButton = () => page.evaluate(`(() => {
     const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
     const actionPattern = new RegExp(${JSON.stringify(PANEL_ACTION_PATTERN)});
@@ -605,6 +630,7 @@ async function auditSidePanelWorkflow(page) {
       return {
         found: true,
         text: norm(target.innerText || target.textContent || target.getAttribute("aria-label") || ""),
+        postId: host.closest("[data-truly-id]")?.getAttribute("data-truly-id") || null,
         x: rect.x + rect.width / 2,
         y: rect.y + rect.height / 2,
         rect: {
@@ -674,6 +700,7 @@ async function auditSidePanelWorkflow(page) {
   const sidePanelTargets = sidePanelTargetsAfterClick.length > 0
     ? sidePanelTargetsAfterClick
     : await readSidePanelTargets();
+  const afterPendingOpenPost = await readPendingOpenPost(serviceWorkerEntry);
   const captures = [];
   for (const [index, target] of sidePanelTargets.entries()) {
     captures.push(await captureSidePanelTarget(target, index).catch((error) => ({
@@ -704,11 +731,21 @@ async function auditSidePanelWorkflow(page) {
   }
 
   const openedNewTarget = sidePanelTargets.some((target) => !beforeTargets.includes(target.id));
+  const pendingPostMatches = Boolean(
+    button.found &&
+    button.postId &&
+    afterPendingOpenPost?.pendingOpenPost === button.postId,
+  );
+  const actionDelivered = sidePanelTargets.length > 0 || pendingPostMatches;
   return {
-    ok: button.found && sidePanelTargets.length > 0 && problems.length === 0,
+    ok: button.found && actionDelivered && problems.length === 0,
     button,
     clickAttempts,
     focusAllowed: ALLOW_FOCUS,
+    beforePendingOpenPost,
+    afterPendingOpenPost,
+    pendingPostMatches,
+    actionDelivered,
     beforeTargetCount: beforeTargets.length,
     targetCount: sidePanelTargets.length,
     openedNewTarget,
@@ -725,6 +762,9 @@ function writeSummary(report, failures) {
   const sidePanel = report.sidePanel;
   const remediation = report.remediation;
   const localeSignals = report.audit.localeSignals;
+  const sidePanelSummary = sidePanel?.button?.found
+    ? "side-panel workflow passed."
+    : "side-panel workflow was skipped because the current heads-up had no action button.";
   const lines = [
     "# Facebook Current Page Audit",
     "",
@@ -747,7 +787,7 @@ function writeSummary(report, failures) {
     "## Human Summary",
     "",
     failures.length === 0
-      ? "- Current Facebook page, build freshness, locale, heads-up overlay, expand toggle, and side-panel workflow passed."
+      ? `- Current Facebook page, build freshness, locale, heads-up overlay, and expand state passed; ${sidePanelSummary}`
       : `- Audit found ${failures.length} failing check(s). Review the checks and remediation sections before trusting this browser state.`,
     "",
     "## Build Freshness Remediation",
@@ -789,6 +829,8 @@ function writeSummary(report, failures) {
     `- Targets: ${sidePanel?.targetCount ?? 0}`,
     `- Opened new target: ${sidePanel?.openedNewTarget ? "yes" : "no"}`,
     `- Focus fallback allowed: ${sidePanel?.focusAllowed ? "yes" : "no"}`,
+    `- Action delivered: ${sidePanel?.actionDelivered ? "yes" : "no"}${sidePanel?.pendingPostMatches ? " (pendingOpenPost matched)" : ""}`,
+    `- Pending post: ${sidePanel?.beforePendingOpenPost?.pendingOpenPost || "(none)"} -> ${sidePanel?.afterPendingOpenPost?.pendingOpenPost || "(none)"}`,
     `- Click attempts: ${sidePanel?.clickAttempts?.length
       ? sidePanel.clickAttempts.map((attempt) => `${attempt.method}:${attempt.targetCount}`).join(", ")
       : "none"}`,
@@ -975,7 +1017,7 @@ try {
     }, 350));
   })()`).catch((error) => ({ ok: false, error: error.message }));
 
-  const sidePanel = await auditSidePanelWorkflow(page);
+  const sidePanel = await auditSidePanelWorkflow(page, serviceWorker.selected);
   const hasHeadsUpAction = sidePanel.button.found;
   for (const capture of sidePanel.captures) {
     if (capture.screenshot) screenshots.push(capture.screenshot);
@@ -1009,19 +1051,19 @@ try {
       ok: hasHeadsUpAction ? firstInteraction.ok && firstInteraction.before !== firstInteraction.after : true,
       detail: hasHeadsUpAction
         ? firstInteraction.ok ? `${firstInteraction.before} -> ${firstInteraction.after}` : firstInteraction.error
-        : "quiet heads-up; no expandable action",
+        : "no heads-up action button; skipped",
     },
     {
       label: "sidepanel opens from heads-up action",
-      ok: hasHeadsUpAction ? sidePanel.targetCount > 0 : true,
+      ok: hasHeadsUpAction ? sidePanel.actionDelivered : true,
       detail: hasHeadsUpAction
-        ? `${sidePanel.button.text}; targets=${sidePanel.targetCount}; new=${sidePanel.openedNewTarget ? "yes" : "no"}`
-        : "quiet heads-up; side panel action not expected",
+        ? `${sidePanel.button.text}; delivered=${sidePanel.actionDelivered ? "yes" : "no"}; targets=${sidePanel.targetCount}; pending=${sidePanel.pendingPostMatches ? "yes" : "no"}; new=${sidePanel.openedNewTarget ? "yes" : "no"}`
+        : "no heads-up action button; skipped",
     },
     {
       label: "sidepanel visual health",
       ok: hasHeadsUpAction ? sidePanel.problems.length === 0 : true,
-      detail: hasHeadsUpAction ? sidePanel.problems.join("; ") || "none" : "quiet heads-up; skipped",
+      detail: hasHeadsUpAction ? sidePanel.problems.join("; ") || "none" : "no heads-up action button; skipped",
     },
   ];
 

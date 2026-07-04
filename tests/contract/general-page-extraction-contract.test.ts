@@ -867,6 +867,34 @@ describe("General Page Reader extraction contract", () => {
     ]);
   });
 
+  it("removes nested JSON-LD and in-article recirculation from zh-TW news pages", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "zhtw-news-jsonld-recirc.html",
+        "https://news.example.test/articles/jsonld-recirc",
+      ),
+      url: "https://news.example.test/articles/jsonld-recirc",
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.mainText).toContain("合成新聞頁面描述一場虛構的公共服務演練");
+    expect(surface.mainText).toContain("模型脈絡應聚焦在正文");
+    expect(surface.mainText).not.toContain("@context");
+    expect(surface.mainText).not.toContain("script metadata should not appear");
+    expect(surface.mainText).not.toContain("Yahoo提醒您");
+    expect(surface.mainText).not.toContain("飲酒過量");
+    expect(surface.mainText).not.toContain("延伸閱讀");
+    expect(surface.mainText).not.toContain("相關文章一不應進入正文");
+    expect(surface.mainText).not.toContain("更多範例新聞網報導");
+    expect(surface.mainText).not.toContain("尾端站內推薦標題不應進入正文");
+    expect(surface.mainText).not.toContain("檢視留言");
+    expect(surface.mainText).not.toContain("廣告");
+    expect(surface.links ?? []).not.toContainEqual(expect.objectContaining({
+      text: expect.stringContaining("相關文章一不應進入正文"),
+    }));
+  });
+
   it("does not promote homepage lead cards through fallback block scoring", () => {
     const surface = extractGeneralPageSurface({
       document: jsdomFixtureDocument(

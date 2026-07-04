@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="utf-8">
+    <title>繁中新聞 JSON-LD 與推薦區塊假頁</title>
+    <meta property="og:site_name" content="範例新聞網">
+    <meta property="article:published_time" content="2026-07-01T08:00:00Z">
+    <link rel="canonical" href="https://news.example.test/articles/jsonld-recirc">
+  </head>
+  <body>
+    <main class="article-shell">
+      <article id="article-synthetic-jsonld-recirc" class="active article-root">
+        <script type="application/ld+json">
+          {
+            "@context": "https://schema.example.test",
+            "@type": "NewsArticle",
+            "headline": "script metadata should not appear as article text",
+            "description": "hidden structured metadata fixture text"
+          }
+        </script>
+        <h1>繁中新聞 JSON-LD 與推薦區塊假頁</h1>
+        <p>合成記者／綜合報導 2026年7月1日週三 上午8:00</p>
+        <div class="atoms">
+          <p>這個合成新聞頁面描述一場虛構的公共服務演練，讀者可以看到正文段落、圖片說明、時間資訊與來源連結。</p>
+          <p>第二段說明團隊如何整理現場回報、交通動線與民眾提問，讓抽取器保留真正文章內容，而不是把結構化資料當成可讀本文。</p>
+          <figure>
+            <img src="/images/synthetic-training.png" alt="虛構演練照片">
+            <figcaption>虛構演練照片說明應可留在文章脈絡中。</figcaption>
+          </figure>
+          <p>第三段補足長度並描述後續改善項目，包含告示牌、服務窗口與回報流程，所有內容皆為假文字且可公開提交。</p>
+          <p>最後一段確認這是一篇單一新聞，不是首頁、分類頁或社群 feed，模型脈絡應聚焦在正文。</p>
+          <div class="bg-toast-background">
+            <div class="text-center">廣告</div>
+          </div>
+          <p><strong>Yahoo提醒您：</strong> 飲酒過量，害人害己。 未滿十八歲禁止飲酒。</p>
+          <div id="recommendation-contents-synthetic" class="recommendation-contents">
+            <h2>延伸閱讀</h2>
+            <a href="/related/one">相關文章一不應進入正文</a>
+            <a href="/related/two">相關文章二不應進入正文</a>
+            <a href="/related/three">相關文章三不應進入正文</a>
+          </div>
+          <p>更多範例新聞網報導</p>
+          <p>尾端站內推薦標題不應進入正文 第一則假新聞標題 第二則假新聞標題</p>
+          <button type="button">檢視留言(6)</button>
+        </div>
+      </article>
+    </main>
+  </body>
+</html>

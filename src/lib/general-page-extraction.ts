@@ -96,7 +96,9 @@ const NON_READING_BLOCK_SELECTORS = [
   "aside",
   "footer",
   "form",
+  "button",
   "dialog",
+  "[role=\"button\"]",
   "[role=\"navigation\"]",
   "[role=\"complementary\"]",
   "[role=\"contentinfo\"]",
@@ -109,6 +111,8 @@ const NON_READING_BLOCK_SELECTORS = [
   "[class*=\"newsletter\" i]",
   "[class*=\"popup\" i]",
   "[class*=\"promo\" i]",
+  "[class*=\"recommend\" i]",
+  "[class*=\"recirc\" i]",
   "[class*=\"related\" i]",
   "[class*=\"share\" i]",
   "[class*=\"sidebar\" i]",
@@ -118,6 +122,8 @@ const NON_READING_BLOCK_SELECTORS = [
   "[id*=\"cookie\" i]",
   "[id*=\"consent\" i]",
   "[id*=\"newsletter\" i]",
+  "[id*=\"recommend\" i]",
+  "[id*=\"recirc\" i]",
   "[id*=\"related\" i]",
   "[id*=\"sidebar\" i]",
 ] as const;
@@ -128,6 +134,7 @@ const NOISY_BLOCK_TEXT_PATTERNS = [
   /For best viewing[^.!?]*(?:Chrome|Firefox|Edge)[^.!?]*(?:browser|download)/i,
   /^Advertising$/i,
   /^Advertisement$/i,
+  /^廣告$/,
   /^(?:(?:\S+)\s*〉\s*)?(?:即時\s+)?(?:熱門\s+)?(?:政治|財富自由|軍武|社會|生活|健康|國際|地方|蒐奇|影音|財經|娛樂|汽車|時尚|體育|3\s*C|3C|評論|藝文|玩咖|食譜|地產|搜尋|會員|專區|服務|求職|自由電子報|自由影音|TAIPEI TIMES)(?:\s+(?:即時|熱門|政治|財富自由|軍武|社會|生活|健康|國際|地方|蒐奇|影音|財經|娛樂|汽車|時尚|體育|3\s*C|3C|評論|藝文|玩咖|食譜|地產|搜尋|會員|專區|服務|求職|自由電子報|自由影音|TAIPEI TIMES)){3,}\s*[。.]?$/i,
   // P21-breaking-ticker-lead: ticker strips are short blocks that start with a
   // breaking-news marker and carry two or more clock stamps.
@@ -135,6 +142,8 @@ const NOISY_BLOCK_TEXT_PATTERNS = [
   // P21: inline audio-player shells around news bodies.
   /Your browser does not support (?:the )?HTML5 Audio/i,
   /聽新聞\s*0:00\s*\/\s*0:00/,
+  /^(?:Yahoo|媒體|網站)?提醒您[：:]?\s*(?:飲酒過量|未滿十八歲|禁止酒駕)[\s\S]{0,120}$/i,
+  /^(?:飲酒過量，?害人害己。?\s*)?(?:未滿十八歲禁止飲酒。?|禁止酒駕。?)$/i,
 ] as const;
 
 const NOISY_BLOCK_CANDIDATE_SELECTOR = [
@@ -147,6 +156,26 @@ const NOISY_BLOCK_CANDIDATE_SELECTOR = [
   "figure",
   "figcaption",
 ].join(",");
+
+const RECIRCULATION_TAIL_HEADING_SELECTOR = [
+  "div",
+  "p",
+  "section",
+  "h2",
+  "h3",
+  "h4",
+].join(",");
+
+const RECIRCULATION_TAIL_HEADING_PATTERNS = [
+  /^延伸閱讀$/,
+  /^相關(?:文章|報導|閱讀)$/,
+  /^更多.{0,24}(?:報導|文章|新聞)$/,
+  /^其他人也在看$/,
+  /^你可能也(?:喜歡|想看)$/,
+  /^more from\b/i,
+  /^related (?:articles|coverage|stories|reading)$/i,
+  /^read more$/i,
+] as const;
 
 const FALLBACK_CONTENT_CANDIDATE_SELECTOR = [
   "article",
@@ -309,8 +338,9 @@ export function extractGeneralPageSurface(
 
   const status = resolveExtractionStatus(mainText, warnings, minMainTextLength);
   const linkRoot = extractionRoot ?? fallbackRoot ?? input.document.body ?? input.document.documentElement;
-  const links = collectLinks(linkRoot, sourceUrl, maxLinks);
-  const images = collectImages(linkRoot, sourceUrl, maxImages);
+  const metadataRoot = clonePrunedReadingRoot(linkRoot);
+  const links = collectLinks(metadataRoot, sourceUrl, maxLinks);
+  const images = collectImages(metadataRoot, sourceUrl, maxImages);
 
   return {
     id: stableSurfaceId(sourceUrl),
@@ -499,6 +529,17 @@ function readableText(root: Element): string | undefined {
   return normalizeWhitespace(cleanCommonPageNoise(clone.textContent ?? ""));
 }
 
+function clonePrunedReadingRoot(root: Element): Element {
+  const clone = root.cloneNode(true) as Element;
+  for (const selector of NON_READING_TEXT_SELECTORS) {
+    for (const element of Array.from(clone.querySelectorAll(selector))) {
+      element.remove();
+    }
+  }
+  pruneNonReadingBlocks(clone);
+  return clone;
+}
+
 function pruneNonReadingBlocks(root: Element): void {
   for (const selector of NON_READING_BLOCK_SELECTORS) {
     for (const element of Array.from(root.querySelectorAll(selector))) {
@@ -508,12 +549,31 @@ function pruneNonReadingBlocks(root: Element): void {
     }
   }
 
+  pruneRecirculationTailBlocks(root);
+
   for (const element of Array.from(root.querySelectorAll(NOISY_BLOCK_CANDIDATE_SELECTOR))) {
     const text = normalizeWhitespace(element.textContent ?? "") ?? "";
     if (!text)
       continue;
     if (text.length <= 420 && NOISY_BLOCK_TEXT_PATTERNS.some((pattern) => pattern.test(text)))
       element.remove();
+  }
+}
+
+function pruneRecirculationTailBlocks(root: Element): void {
+  for (const element of Array.from(root.querySelectorAll(RECIRCULATION_TAIL_HEADING_SELECTOR))) {
+    const text = normalizeWhitespace(element.textContent ?? "") ?? "";
+    if (!text || text.length > 80)
+      continue;
+    if (!RECIRCULATION_TAIL_HEADING_PATTERNS.some((pattern) => pattern.test(text)))
+      continue;
+    let sibling = element.nextElementSibling;
+    while (sibling) {
+      const next = sibling.nextElementSibling;
+      sibling.remove();
+      sibling = next;
+    }
+    element.remove();
   }
 }
 
@@ -1107,7 +1167,7 @@ function isNonReadingSourceLink(text: string, href: string): boolean {
     return true;
   if (/^(即時|熱門|政治|軍武|社會|生活|健康|國際|地方|財經|娛樂|體育|3C|評論|藝文|玩咖|食譜|地產|專區|搜尋|會員)$/i.test(cleanText))
     return true;
-  if (/^(comments?|share|related|more|recommended|popular|latest|most read|newsletter)\b/i.test(cleanText) || /相關文章/.test(cleanText))
+  if (/^(comments?|share|related|more|recommended|popular|latest|most read|newsletter)\b/i.test(cleanText) || /相關文章|分享至/i.test(cleanText))
     return true;
   if (/(下載|\bdownload\b)/i.test(cleanText))
     return true;
