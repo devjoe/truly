@@ -103,12 +103,14 @@ export interface PageReadingResultMsg {
   surface: ReadingSurface;
   candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
   tabId?: number;
+  elapsedMs?: number;
 }
 
 export interface PageReadingErrorMsg {
   type: "PAGE_READING_ERROR";
   error: string;
   tabId?: number;
+  elapsedMs?: number;
 }
 
 export interface ReadingTargetRequestMsg {

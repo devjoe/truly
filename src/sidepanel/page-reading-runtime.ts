@@ -59,6 +59,7 @@ import type { TabId } from "./tabs";
 type PagePlatform = "facebook" | "general" | "unsupported";
 type PageSessionStatus = "idle" | "loading" | "ready" | "error" | "stale";
 type PageActivationSource = "toolbar" | "popup" | "sidepanel" | "hotkey";
+const LOADING_ELAPSED_VISIBLE_THRESHOLD_MS = 2_000;
 
 interface PageReadingSession {
   tabId: number;
@@ -71,6 +72,9 @@ interface PageReadingSession {
   status: PageSessionStatus;
   error?: string;
   updatedAt: number;
+  startedAt?: number;
+  completedAt?: number;
+  elapsedMs?: number;
   activationSource: PageActivationSource;
   advisor?: PageReadingAdvisorSession;
   analysis?: PageReadingAnalysisSession;
@@ -210,6 +214,29 @@ function formatUpdatedAt(timestamp: number, lang: Lang): string {
   } catch {
     return new Date(timestamp).toLocaleTimeString();
   }
+}
+
+function formatElapsedSeconds(ms: number, lang: Lang): string {
+  const seconds = ms < 10_000
+    ? Math.round(ms / 100) / 10
+    : Math.round(ms / 1000);
+  return lang === "zh-TW" ? `${seconds} 秒` : `${seconds}s`;
+}
+
+function visibleLoadingElapsedMs(session: PageReadingSession | undefined, nowMs: number): number | undefined {
+  if (!session?.startedAt || session.status !== "loading") return undefined;
+  const elapsedMs = Math.max(0, nowMs - session.startedAt);
+  return elapsedMs >= LOADING_ELAPSED_VISIBLE_THRESHOLD_MS ? elapsedMs : undefined;
+}
+
+function stableElapsedMs(session: PageReadingSession | undefined): number | undefined {
+  if (typeof session?.elapsedMs === "number" && Number.isFinite(session.elapsedMs)) {
+    return Math.max(0, session.elapsedMs);
+  }
+  if (typeof session?.startedAt === "number" && typeof session.completedAt === "number") {
+    return Math.max(0, session.completedAt - session.startedAt);
+  }
+  return undefined;
 }
 
 function isHttpLikeUrl(rawUrl: string | undefined): boolean {
@@ -682,6 +709,7 @@ export function createSidepanelPageReadingRuntime({
   let copyState: "idle" | "copied" | "failed" = "idle";
   let downloadState: "idle" | "saved" | "cancelled" | "failed" = "idle";
   let lastActivation: PageActivationAuditState | undefined;
+  let loadingTicker: ReturnType<typeof setInterval> | undefined;
 
   function tr(key: string, params?: Record<string, string | number>): string {
     return t(key, getLang(), params);
@@ -700,6 +728,52 @@ export function createSidepanelPageReadingRuntime({
       return tr("sidepanel.page.error.unsupportedAction");
     }
     return error;
+  }
+
+  function syncLoadingTicker(active: boolean): void {
+    if (active && !loadingTicker) {
+      loadingTicker = setInterval(() => {
+        if (currentSession()?.status === "loading") render();
+        else syncLoadingTicker(false);
+      }, 1_000);
+      return;
+    }
+    if (!active && loadingTicker) {
+      clearInterval(loadingTicker);
+      loadingTicker = undefined;
+    }
+  }
+
+  function pageStatusLabel(session: PageReadingSession | undefined, fallback: string): string {
+    if (!session) return fallback;
+    const base = tr(`sidepanel.page.status.${session.status}`);
+    const loadingElapsed = visibleLoadingElapsedMs(session, now());
+    if (session.status === "loading" && typeof loadingElapsed === "number") {
+      return tr("sidepanel.page.status.loadingWithElapsed", {
+        elapsed: formatElapsedSeconds(loadingElapsed, getLang()),
+      });
+    }
+    if (session.status === "error") {
+      const elapsed = stableElapsedMs(session);
+      if (typeof elapsed === "number") {
+        return tr("sidepanel.page.status.errorWithElapsed", {
+          elapsed: formatElapsedSeconds(elapsed, getLang()),
+        });
+      }
+    }
+    return base;
+  }
+
+  function pageStatusTitle(session: PageReadingSession | undefined, updatedAt: string): string {
+    const elapsed = stableElapsedMs(session);
+    if (typeof elapsed !== "number" || !updatedAt) return "";
+    const key = session?.status === "error"
+      ? "sidepanel.page.status.tooltipFailed"
+      : "sidepanel.page.status.tooltip";
+    return tr(key, {
+      elapsed: formatElapsedSeconds(elapsed, getLang()),
+      updatedAt,
+    });
   }
 
   function setActiveTab(
@@ -773,13 +847,12 @@ export function createSidepanelPageReadingRuntime({
     const canRead = platform === "general" && typeof activeTabId === "number" && isHttpLikeUrl(activeUrl);
     const canUseLiveTarget = canRead && displayedSessionIsActive && Boolean(session?.surface);
     const statusClass = session?.status ? ` page-status-${session.status}` : "";
-    const statusLabel = session
-      ? tr(`sidepanel.page.status.${session.status}`)
-      : platform === "facebook"
+    const fallbackStatusLabel = platform === "facebook"
       ? tr("sidepanel.page.status.facebook")
       : platform === "unsupported"
       ? tr("sidepanel.page.status.unsupported")
       : tr("sidepanel.page.status.idle");
+    const statusLabel = pageStatusLabel(session, fallbackStatusLabel);
     const title = session?.surface?.title || session?.title || activeTitle || tr("sidepanel.page.untitled");
     const url = session?.surface?.canonicalUrl || session?.surface?.url || session?.url || activeUrl;
     const source = session?.surface?.sourceName || (url ? hostnameForUrl(url) : "");
@@ -794,6 +867,7 @@ export function createSidepanelPageReadingRuntime({
       : "";
     const warningText = session?.surface?.extraction.warnings.join(", ") || "";
     const updatedAt = session ? formatUpdatedAt(session.updatedAt, lang) : "";
+    const statusTitle = pageStatusTitle(session, updatedAt);
     const metadataRows = session?.surface
       ? [
           [tr("sidepanel.page.meta.method"), session.surface.extraction.method],
@@ -816,7 +890,7 @@ export function createSidepanelPageReadingRuntime({
           <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.useSelection"))}</button>
         </div>
       </section>
-      <section class="page-reader-status${statusClass}">
+      <section class="page-reader-status${statusClass}"${statusTitle ? ` title="${escapeHtml(statusTitle)}" aria-label="${escapeHtml(statusTitle)}"` : ""}>
         <div class="page-reader-status-label">${escapeHtml(statusLabel)}</div>
         <div class="page-reader-status-detail">${escapeHtml(statusDetailText)}</div>
       </section>
@@ -846,6 +920,7 @@ export function createSidepanelPageReadingRuntime({
         </article>
       ` : emptyBody(platform, canRead)}
     `;
+    syncLoadingTicker(session?.status === "loading");
 
     pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.addEventListener("click", () => {
       void requestReadCurrentPage("sidepanel");
@@ -1603,6 +1678,7 @@ export function createSidepanelPageReadingRuntime({
       displayTabId = tab.id;
       activeUrl = tabUrl;
       activeTitle = tab.title ?? "";
+      const startedAt = now();
       sessions.set(tab.id, {
         tabId: tab.id,
         url: activeUrl,
@@ -1612,8 +1688,9 @@ export function createSidepanelPageReadingRuntime({
         target: undefined,
         advisor: undefined,
         analysis: undefined,
-      screenshot: undefined,
-        updatedAt: now(),
+        screenshot: undefined,
+        startedAt,
+        updatedAt: startedAt,
         activationSource: source,
       });
       activateTab("page");
@@ -1649,6 +1726,13 @@ export function createSidepanelPageReadingRuntime({
   function handlePageReadingResult(message: PageReadingResultMsg): void {
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
+    const existing = sessions.get(tabId);
+    const completedAt = now();
+    const elapsedMs = typeof message.elapsedMs === "number" && Number.isFinite(message.elapsedMs)
+      ? Math.max(0, message.elapsedMs)
+      : typeof existing?.startedAt === "number"
+      ? Math.max(0, completedAt - existing.startedAt)
+      : undefined;
     copyState = "idle";
     downloadState = "idle";
     sessions.set(tabId, {
@@ -1660,8 +1744,11 @@ export function createSidepanelPageReadingRuntime({
       target: undefined,
       candidateBlocks: message.candidateBlocks ?? [],
       status: "ready",
-      updatedAt: now(),
-      activationSource: "sidepanel",
+      updatedAt: completedAt,
+      startedAt: existing?.startedAt ?? (typeof elapsedMs === "number" ? completedAt - elapsedMs : undefined),
+      completedAt,
+      elapsedMs,
+      activationSource: existing?.activationSource ?? "toolbar",
       analysis: undefined,
       screenshot: undefined,
     });
@@ -1728,6 +1815,12 @@ export function createSidepanelPageReadingRuntime({
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
     const existing = sessions.get(tabId);
+    const completedAt = now();
+    const elapsedMs = typeof message.elapsedMs === "number" && Number.isFinite(message.elapsedMs)
+      ? Math.max(0, message.elapsedMs)
+      : typeof existing?.startedAt === "number"
+      ? Math.max(0, completedAt - existing.startedAt)
+      : undefined;
     sessions.set(tabId, {
       tabId,
       url: existing?.url || activeUrl,
@@ -1741,8 +1834,11 @@ export function createSidepanelPageReadingRuntime({
       screenshot: undefined,
       status: "error",
       error: friendlyPageReadingError(message.error),
-      updatedAt: now(),
-      activationSource: existing?.activationSource || "sidepanel",
+      updatedAt: completedAt,
+      startedAt: existing?.startedAt ?? (typeof elapsedMs === "number" ? completedAt - elapsedMs : undefined),
+      completedAt,
+      elapsedMs,
+      activationSource: existing?.activationSource || "toolbar",
     });
     if (tabId === activeTabId || tabId === displayTabId) render();
   }

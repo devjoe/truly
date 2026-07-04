@@ -60,6 +60,55 @@ function diagnosticRawValue(root: ParentNode, labelPattern: RegExp): string | un
 }
 
 describe("sidepanel page reading runtime", () => {
+  it("shows elapsed seconds only after a page read takes long enough", async () => {
+    vi.useFakeTimers();
+    try {
+      const pagePaneEl = setupDom();
+      let nowMs = 1_000;
+      let resolveRead: ((message: TrulyMessage) => void) | undefined;
+      const readPromise = new Promise<TrulyMessage>((resolve) => {
+        resolveRead = resolve;
+      });
+      const runtime = createSidepanelPageReadingRuntime({
+        pagePaneEl,
+        runtime: {
+          sendMessage: vi.fn(() => readPromise),
+        },
+        tabs: {
+          query: vi.fn(async () => [{
+            id: 42,
+            url: "https://example.test/article",
+            title: "Runtime Fixture",
+          }]),
+        },
+        activateTab: vi.fn(),
+        getLang: () => "zh-TW",
+        now: () => nowMs,
+      });
+
+      const pendingRead = runtime.requestReadCurrentPage("sidepanel");
+      await flushMicrotasks();
+
+      expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中");
+
+      nowMs = 3_500;
+      vi.advanceTimersByTime(2_500);
+      await flushMicrotasks();
+
+      expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中 · 2.5 秒");
+
+      resolveRead?.({
+        type: "PAGE_READING_RESULT",
+        tabId: 42,
+        surface: surface(),
+        elapsedMs: 2_500,
+      } satisfies TrulyMessage);
+      await pendingRead;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows toolbar activation guidance when the active tab URL is hidden", async () => {
     const pagePaneEl = setupDom();
     const runtime = createSidepanelPageReadingRuntime({
@@ -91,6 +140,7 @@ describe("sidepanel page reading runtime", () => {
       type: "PAGE_READING_ERROR",
       tabId: 42,
       error: "page_grant_missing",
+      elapsedMs: 4_200,
     } satisfies TrulyMessage));
     const runtime = createSidepanelPageReadingRuntime({
       pagePaneEl,
@@ -115,6 +165,8 @@ describe("sidepanel page reading runtime", () => {
       inject: true,
     }));
     expect(pagePaneEl.textContent).toContain("讀取失敗");
+    expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toContain("讀取失敗 · 4.2 秒");
+    expect(pagePaneEl.querySelector(".page-reader-status")?.getAttribute("title")).toContain("耗時 4.2 秒");
     expect(pagePaneEl.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
     expect(pagePaneEl.textContent).toContain("設定允許一般網頁的所有網站存取權");
     expect(pagePaneEl.querySelector(".page-reader-status-detail")?.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
@@ -131,6 +183,7 @@ describe("sidepanel page reading runtime", () => {
           type: "PAGE_READING_RESULT",
           tabId: 42,
           surface: surface(),
+          elapsedMs: 1_800,
         } satisfies TrulyMessage)),
       },
       tabs: {
@@ -148,6 +201,8 @@ describe("sidepanel page reading runtime", () => {
     await runtime.requestReadCurrentPage("sidepanel");
 
     expect(pagePaneEl.textContent).toContain("已讀取");
+    expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("已讀取");
+    expect(pagePaneEl.querySelector(".page-reader-status")?.getAttribute("title")).toContain("讀取耗時 1.8 秒");
     expect(pagePaneEl.textContent).toContain("Runtime Fixture");
     expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
     expect(pagePaneEl.textContent).toContain("分析準備");

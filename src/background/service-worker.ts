@@ -483,6 +483,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
 
     const tabId = message.tabId;
     (async () => {
+      const startedAt = Date.now();
       try {
         if (message.inject === true) {
           await chrome.scripting.executeScript({
@@ -495,7 +496,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           activation: message.activation,
         } satisfies TrulyMessage);
         const routedReply = isPageReadingReply(reply)
-          ? { ...reply, tabId }
+          ? { ...reply, tabId, elapsedMs: Date.now() - startedAt }
           : reply;
         try {
           sendResponse(routedReply);
@@ -508,6 +509,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
         const reply = {
           type: "PAGE_READING_ERROR",
           tabId,
+          elapsedMs: Date.now() - startedAt,
           error: errorText.includes("Cannot access contents of the page")
             ? "page_grant_missing"
             : errorText.slice(0, 200) || "page_reader_unavailable",
