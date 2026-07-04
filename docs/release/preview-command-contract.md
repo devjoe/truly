@@ -341,10 +341,10 @@ builds and audits a local extension ZIP under `artifacts/cws-local-smoke/`, runs
 `check:public` and `cws:preflight`, and writes a report that says
 `Uploadable: no`. It records upstream and `origin/main` state for reviewer
 context, but intentionally does not enforce upload gates such as upstream sync,
-mainline freshness, or release-tag state, so its ZIP must never be uploaded to
-Chrome Web Store. Use the official `npm run cws:package` command after the
-branch is pushed, caught up with `origin/main`, and the release tag is at
-`HEAD`.
+mainline freshness, or release-tag state.
+Its ZIP must never be uploaded to Chrome Web Store. Use the official
+`npm run cws:package` command after the branch is pushed, caught up with
+`origin/main`, and the release tag is at `HEAD`.
 
 `npm run cws:preflight` is intentionally deterministic and local. It verifies
 that the CWS docs mention the current version, version name, and recommended
