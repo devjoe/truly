@@ -47,6 +47,7 @@ import { providerRuntimeEndpoint, providerRuntimeModel } from "../lib/model-prov
 import { providerCapabilities, providerNeedsEndpoint } from "../lib/provider-capabilities";
 import type { ReadingSurface } from "../lib/reading-surface-types";
 import type { ReadingTarget, ReadingTargetErrorReason } from "../lib/reading-target-types";
+import { isSupportedScreenshotDataUrl } from "../lib/screenshot-data-url";
 import {
   isMeaningfullySamePage,
   pageUrlIdentity,
@@ -1096,10 +1097,6 @@ export function createSidepanelPageReadingRuntime({
       setScreenshot(tabId, { status: "error", error: errorMessage(error), updatedAt: now() });
       setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse);
     }
-  }
-
-  function isSupportedScreenshotDataUrl(value: string): boolean {
-    return /^data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+$/i.test(value.trim());
   }
 
   function setAdvisor(tabId: number, advisor: PageReadingAdvisorSession): void {

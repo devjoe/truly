@@ -30,6 +30,8 @@ Store. The dashboard copy should still come from
   finish or withdraw it before uploading Preview 12. If it was rejected or
   withdrawn, record that result in this checklist or the release notes.
 - [ ] Run `npm run cws:package` from a clean, pushed branch.
+- [ ] Confirm the package report says `Uploadable: yes`.
+- [ ] Confirm the package report says `Dirty tree: no`.
 - [ ] Confirm the package report says `origin/main` is `caught_up` for the
   package commit.
 - [ ] Confirm the package report says the current Preview release tag points at

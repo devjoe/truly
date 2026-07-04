@@ -37,6 +37,7 @@ const dirty = dirtyFiles.length > 0;
 const upstream = assertUpstreamSynced({
   allowUnpushedEnv: "TRULY_ALLOW_UNPUSHED_CWS_PACKAGE",
 });
+const uploadable = !dirty && upstream.ahead === 0;
 const mainline = assertMainlineCaughtUp();
 const releaseTag = assertTagMatchesHead(recommendedTag);
 
@@ -69,6 +70,7 @@ try {
     upstream,
     mainline,
     releaseTag,
+    uploadable,
     dirty,
     dirtyFiles,
     buildId: readDistBuildId(),
@@ -78,8 +80,10 @@ try {
       sha256: sha256File(extensionZip),
     },
     checks: [
-      dirty ? "dirty tree allowed for local smoke package" : "git tree clean",
-      "branch synced with upstream",
+      dirty ? "dirty tree escape hatch used; package must not be uploaded" : "git tree clean",
+      upstream.ahead > 0
+        ? "unpushed branch escape hatch used; package must not be uploaded"
+        : "branch synced with upstream",
       "branch caught up with origin/main",
       "release tag points at HEAD",
       "no repo-local dev processes",
@@ -120,6 +124,7 @@ function renderReport(report) {
     `- Upstream: ${report.upstream.upstream}`,
     `- Mainline: ${report.mainline.baseRef} (${report.mainline.status}; ahead=${report.mainline.ahead}, behind=${report.mainline.behind}, ancestor=${report.mainline.ancestor})`,
     `- Release tag: ${report.releaseTag.tag}`,
+    `- Uploadable: ${report.uploadable ? "yes" : "no"}`,
     `- Dirty tree: ${dirtyLine}`,
     `- Build ID: ${report.buildId ?? "not found"}`,
     `- Built at: ${report.builtAt}`,

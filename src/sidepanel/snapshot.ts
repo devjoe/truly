@@ -64,7 +64,9 @@ export interface SnapshotBundle {
 
 declare const __TRULY_BUILD_ID__: string;
 const REDACTED_SECRET = "[redacted]";
+const REDACTED_SCREENSHOT_DATA_URL = "[redacted screenshot data URL]";
 const SECRET_KEY_RE = /api[-_]?key$/i;
+const IMAGE_DATA_URL_RE = /data:image\/(?:png|jpe?g|webp);base64,[a-z0-9+/=\s]+/gi;
 
 async function fetchSwLogs(): Promise<ComponentLogs | { error: string }> {
   try {
@@ -149,6 +151,29 @@ function redactNestedValue(value: unknown): unknown {
   return value;
 }
 
+function containsImageDataUrl(value: string): boolean {
+  IMAGE_DATA_URL_RE.lastIndex = 0;
+  return IMAGE_DATA_URL_RE.test(value);
+}
+
+function redactSidepanelDomHtml(body: HTMLElement): string {
+  const clone = body.cloneNode(true) as HTMLElement;
+  clone.querySelectorAll(".page-reader-screenshot").forEach((node) => {
+    node.setAttribute("data-snapshot-redacted", "screenshot-preview");
+  });
+  clone.querySelectorAll("img").forEach((img) => {
+    const src = img.getAttribute("src");
+    if (src && containsImageDataUrl(src)) {
+      img.setAttribute("src", REDACTED_SCREENSHOT_DATA_URL);
+    }
+    const srcset = img.getAttribute("srcset");
+    if (srcset && containsImageDataUrl(srcset)) {
+      img.setAttribute("srcset", REDACTED_SCREENSHOT_DATA_URL);
+    }
+  });
+  return clone.outerHTML.replace(IMAGE_DATA_URL_RE, REDACTED_SCREENSHOT_DATA_URL);
+}
+
 export async function buildSnapshotBundle(
   dashboardEvents: DashboardPostEvent[]
 ): Promise<SnapshotBundle> {
@@ -194,7 +219,7 @@ export async function buildSnapshotBundle(
     sidepanel: {
       buildId: __TRULY_BUILD_ID__,
       entries: sidepanelEntries,
-      domHtml: document.body.outerHTML,
+      domHtml: redactSidepanelDomHtml(document.body),
       activeTab: activeTabUrl,
     },
     serviceWorker: swResult,
@@ -243,6 +268,8 @@ export async function probeBuildIds(): Promise<{
 
 export const __snapshotInternals = {
   REDACTED_SECRET,
+  REDACTED_SCREENSHOT_DATA_URL,
   readStorage,
+  redactSidepanelDomHtml,
   redactStorageSecrets,
 };

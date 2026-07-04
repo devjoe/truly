@@ -52,6 +52,7 @@ import {
   resolveTrustedTierBProviderRuntime,
   type StoredModelRuntimeInput,
 } from "./trusted-model-runtime";
+import { isSupportedScreenshotDataUrl } from "../lib/screenshot-data-url";
 
 // Capture console output for the debug snapshot bundle. Idempotent — if
 // the SW wakes from suspension this is a no-op. See lib/log-buffer.ts.
@@ -425,6 +426,10 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
         if (!trustedRuntime.canUseModel || !trustedRuntime.endpoint || !trustedRuntime.model) {
           throw new Error(trustedRuntime.blockedReason || "general_page_brief_provider_unavailable");
         }
+        const screenshotDataUrl = message.screenshotDataUrl;
+        if (screenshotDataUrl !== undefined && !isSupportedScreenshotDataUrl(screenshotDataUrl)) {
+          throw new Error("general_page_brief_invalid_screenshot_data_url");
+        }
         const startedAt = Date.now();
         const result = await callTierBGeneralPageBrief({
           endpoint: trustedRuntime.endpoint,
@@ -433,7 +438,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           context: message.context,
           allowedUse: message.allowedUse,
           outputLang: message.outputLang,
-          screenshotDataUrl: message.screenshotDataUrl,
+          screenshotDataUrl,
         });
         if (result.ok && result.brief) {
           sendResponse({

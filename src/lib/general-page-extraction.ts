@@ -227,7 +227,7 @@ export function extractGeneralPageSurface(
     "link[rel=\"Canonical\"]",
   ], "href");
   const canonicalUrl = rawCanonicalUrl
-    ? normalizeHref(rawCanonicalUrl, currentUrl) ?? rawCanonicalUrl
+    ? normalizeHref(rawCanonicalUrl, currentUrl) ?? undefined
     : undefined;
   const sourceUrl = canonicalUrl ?? currentUrl;
   const sourceName = firstMetaContent(input.document, [
