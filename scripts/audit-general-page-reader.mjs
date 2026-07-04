@@ -497,6 +497,7 @@ async function auditPopup(extensionId, allowedUrl) {
     const general = await popup.evaluateJson(`(() => ({
       title: document.querySelector('#readinessTitle')?.textContent?.trim(),
       detail: document.querySelector('#readinessDetail')?.textContent?.trim(),
+      dotClass: document.querySelector('#pageDot')?.className || '',
       button: document.querySelector('#dashboardLabel')?.textContent?.trim(),
       disabled: document.querySelector('#dashboardLink')?.disabled ?? null
     }))()`);
@@ -505,6 +506,7 @@ async function auditPopup(extensionId, allowedUrl) {
     const unsupported = await popup.evaluateJson(`(() => ({
       title: document.querySelector('#readinessTitle')?.textContent?.trim(),
       detail: document.querySelector('#readinessDetail')?.textContent?.trim(),
+      dotClass: document.querySelector('#pageDot')?.className || '',
       button: document.querySelector('#dashboardLabel')?.textContent?.trim(),
       disabled: document.querySelector('#dashboardLink')?.disabled ?? null
     }))()`);
@@ -1306,6 +1308,9 @@ function assertAudit(result) {
   if (result.popup.general.button !== "讀取此頁" || result.popup.general.disabled !== false) {
     errors.push("popup general-page state is not enabled with 讀取此頁");
   }
+  if (!/\bok\b/.test(result.popup.general.dotClass || "") || /\bchecking\b/.test(result.popup.general.dotClass || "")) {
+    errors.push(`popup general-page state should be stable, not checking: ${result.popup.general.dotClass || "(missing)"}`);
+  }
   if (result.popup.unsupported.disabled !== true) {
     errors.push("popup unsupported state is not disabled");
   }
@@ -1585,8 +1590,12 @@ function qaMatrixRows(result) {
   return [
     [
       "Popup activation",
-      result.popup.general.button === "讀取此頁" && result.popup.general.disabled === false && result.popup.unsupported.disabled === true,
-      "general=" + result.popup.general.button + "/disabled=" + result.popup.general.disabled + "; unsupportedDisabled=" + result.popup.unsupported.disabled,
+      result.popup.general.button === "讀取此頁" &&
+        result.popup.general.disabled === false &&
+        /\bok\b/.test(result.popup.general.dotClass || "") &&
+        !/\bchecking\b/.test(result.popup.general.dotClass || "") &&
+        result.popup.unsupported.disabled === true,
+      "general=" + result.popup.general.button + "/disabled=" + result.popup.general.disabled + "; dot=" + (result.popup.general.dotClass || "missing") + "; unsupportedDisabled=" + result.popup.unsupported.disabled,
     ],
     [
       "Ordinary article read",

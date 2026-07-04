@@ -234,7 +234,7 @@ async function init() {
       if (generalPageSupported) {
         readinessTitle.textContent = t("popup.generalPage.title", lang);
         readinessDetail.textContent = t("popup.generalPage.detail", lang);
-        pageDot.className = "status-dot checking";
+        pageDot.className = "status-dot ok";
         hideExpandable();
         return;
       }
