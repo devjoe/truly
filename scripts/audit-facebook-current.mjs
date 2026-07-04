@@ -10,6 +10,7 @@ const CDP_PORT = Number(process.env.CDP_PORT || 9222);
 const CDP_BASE = `http://127.0.0.1:${CDP_PORT}`;
 const EXPECT_LOCALE = (process.env.TRULY_AUDIT_EXPECT_LOCALE || "").trim();
 const REQUESTED_TARGET_ID = (process.env.TRULY_AUDIT_TARGET_ID || "").trim();
+const EXTENSION_ID = (process.env.TRULY_EXTENSION_ID || "").trim();
 const AUTO_RELOAD = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_AUTO_RELOAD || "");
 const ALLOW_FOCUS = /^(1|true|yes)$/i.test(process.env.CDP_ALLOW_FOCUS || "");
 const STAMP = new Date().toISOString().replace(/[:.]/g, "-");
@@ -64,6 +65,7 @@ Environment:
   CDP_PORT=9222
   TRULY_AUDIT_EXPECT_LOCALE=zh|en|zh-Hant|zh-TW
   TRULY_AUDIT_TARGET_ID=<Chrome-CDP-target-id>
+  TRULY_EXTENSION_ID=<loaded-extension-id>
   TRULY_AUDIT_AUTO_RELOAD=1   reload stale Truly extension + Facebook tab, then audit
   TRULY_AUDIT_READY_TIMEOUT_MS=25000
   CDP_ALLOW_FOCUS=1            allow focus-required side-panel click fallback
@@ -120,7 +122,22 @@ function connectCdp(webSocketDebuggerUrl) {
   async function send(method, params = {}) {
     await opened;
     const id = nextId++;
-    const response = new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    const response = new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        reject(new Error(`${method} timed out`));
+      }, 10_000);
+      pending.set(id, {
+        resolve: (value) => {
+          clearTimeout(timer);
+          resolve(value);
+        },
+        reject: (error) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      });
+    });
     ws.send(JSON.stringify({ id, method, params }));
     return response;
   }
@@ -288,7 +305,10 @@ async function findTrulyServiceWorker(targets, expectedBuildId) {
     }
   }
 
-  const truly = found.find((entry) => entry.meta.buildId === expectedBuildId) || found[0] || null;
+  const requested = EXTENSION_ID
+    ? found.find((entry) => entry.meta.id === EXTENSION_ID)
+    : null;
+  const truly = requested || found.find((entry) => entry.meta.buildId === expectedBuildId) || found[0] || null;
   return { found: found.map((entry) => entry.meta), selected: truly };
 }
 

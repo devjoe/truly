@@ -1291,7 +1291,14 @@ function repairMissingHeadsUpPanels(): void {
 
     const decision = postIdToTierA.get(stableId);
     const post = postFromArticle(el) || postIdToData.get(stableId);
-    if (!decision || !post) continue;
+    if (!post) continue;
+
+    if (!decision) {
+      reserveHeadsUpSlot(post.element === el ? post : { ...post, element: el }, currentContentLang());
+      repaired += 1;
+      if (repaired >= 8) break;
+      continue;
+    }
 
     const repairedPost = post.element === el ? post : { ...post, element: el };
     rememberPostData(stableId, repairedPost);
@@ -1676,11 +1683,11 @@ async function init() {
   });
 
   startFeedInterception(handleNewPost);
+  resetStats();
   startSurfaceCollapseObserver();
   installLocationRescanMonitor();
   window.setInterval(scanCollapsibleSurfaces, 2000);
   window.setInterval(repairMissingHeadsUpPanels, 1500);
-  resetStats();
 }
 
 init();

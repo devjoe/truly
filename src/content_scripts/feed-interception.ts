@@ -16,11 +16,30 @@ import {
 } from "../lib/facebook-ui-contract";
 
 const SCAN_INTERVAL = 2000;
+const PROCESS_POST_FALLBACK_MS = 750;
+const PROCESS_POST_STALE_MS = 3000;
+const MAX_PROCESS_POST_RETRIES = 3;
 
 let onNewPost: ((post: PostData) => void) | null = null;
 let postCounter = 0;
 let scanTimer: ReturnType<typeof setInterval> | null = null;
 let processedElements = new WeakSet<HTMLElement>();
+
+function currentExtensionOwner(): string {
+  try {
+    return chrome.runtime?.id || "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
+function markOwnedPost(el: HTMLElement): void {
+  el.dataset.trulyOwner = currentExtensionOwner();
+}
+
+function isOwnedByCurrentExtension(el: HTMLElement): boolean {
+  return el.dataset.trulyOwner === currentExtensionOwner();
+}
 
 // When the extension is reloaded or its service worker dies during dev,
 // chrome.runtime.id goes undefined and any chrome.* call throws
@@ -75,6 +94,7 @@ function clearInjectedSurfaces(el: HTMLElement): void {
 function clearTrulyPostState(el: HTMLElement): void {
   clearInjectedSurfaces(el);
   delete el.dataset.trulyId;
+  delete el.dataset.trulyOwner;
   delete el.dataset.trulyStableId;
   delete el.dataset.trulySponsored;
   delete el.dataset.trulyRecommended;
@@ -913,6 +933,10 @@ export function findPostContainers(): HTMLElement[] {
       continue;
     }
     const wasRecycled = resetRecycledPostContainer(container);
+    if (container.dataset.trulyId && !isOwnedByCurrentExtension(container)) {
+      clearTrulyPostState(container);
+      processedElements.delete(container);
+    }
     if (seen.has(container) || (!wasRecycled && processedElements.has(container)) || container.dataset.trulyId) continue;
 
     if (isMixedFeedContainer(container)) {
@@ -1126,6 +1150,7 @@ function markSkippedContainer(el: HTMLElement, reason: string) {
   processedElements.add(el);
   delete el.dataset.trulyId;
   delete el.dataset.trulyStableId;
+  markOwnedPost(el);
   el.dataset.trulySkipReason = reason;
 }
 
@@ -1213,12 +1238,25 @@ function scanForNewPosts() {
   let emittedThisTick = 0;
 
   for (const el of containers) {
-    if (processedElements.has(el) || el.dataset.trulyId) continue;
+    if (el.dataset.trulyId && !isOwnedByCurrentExtension(el)) {
+      clearTrulyPostState(el);
+      processedElements.delete(el);
+    }
+
+    const existingId = el.dataset.trulyId;
+    if (existingId) {
+      if (shouldRetryUnclassifiedPost(el)) {
+        schedulePostProcessing(el, existingId);
+      }
+      continue;
+    }
+    if (processedElements.has(el)) continue;
     processedElements.add(el);
     emittedThisTick++;
 
     const id = generatePostId();
     el.dataset.trulyId = id;
+    markOwnedPost(el);
 
     // Pre-check: if this post's author or text is already known to be
     // sponsored (from a previous scan in this session), immediately
@@ -1237,16 +1275,54 @@ function scanForNewPosts() {
       }
     }
 
-    // Double-rAF ensures at least one paint cycle happens before heavy
-    // processing starts.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        processNewPost(el, id);
-      });
-    });
+    schedulePostProcessing(el, id);
   }
 
   recordHealthTick(emittedThisTick);
+}
+
+function shouldRetryUnclassifiedPost(el: HTMLElement): boolean {
+  if (el.dataset.trulyStableId || el.dataset.trulyClassifiedLen || el.dataset.trulySkipReason) return false;
+  if (el.querySelector(".truly-headsup-host,.truly-collapse-bar,.truly-overlay")) return false;
+  const processingStartedAt = Number(el.dataset.trulyProcessingStartedAt || "0");
+  if (!processingStartedAt) return true;
+  return Date.now() - processingStartedAt > PROCESS_POST_STALE_MS;
+}
+
+function schedulePostProcessing(el: HTMLElement, id: string): void {
+  if (el.dataset.trulyProcessingStartedAt && !shouldRetryUnclassifiedPost(el)) return;
+
+  let done = false;
+  el.dataset.trulyProcessingStartedAt = String(Date.now());
+
+  const run = () => {
+    if (done) return;
+    done = true;
+    delete el.dataset.trulyProcessingStartedAt;
+    try {
+      processNewPost(el, id);
+      delete el.dataset.trulyProcessRetryCount;
+    } catch (error) {
+      const retries = Number(el.dataset.trulyProcessRetryCount || "0") + 1;
+      console.warn("[Truly] Post processing failed; will retry on next scan:", error);
+      if (retries >= MAX_PROCESS_POST_RETRIES) {
+        markSkippedContainer(el, "process-error");
+        return;
+      }
+      el.dataset.trulyProcessRetryCount = String(retries);
+      delete el.dataset.trulyId;
+      processedElements.delete(el);
+    }
+  };
+
+  // Double-rAF gives Facebook one paint cycle before heavier post extraction.
+  // Some freshly reloaded tabs never deliver that rAF chain before the post is
+  // marked processed, so keep a timeout fallback to avoid permanently stuck
+  // `data-truly-id` elements with no heads-up panel.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(run);
+  });
+  window.setTimeout(run, PROCESS_POST_FALLBACK_MS);
 }
 
 export function rescanVisiblePosts(): void {
@@ -2105,6 +2181,7 @@ export function markSponsoredInFeed() {
             processedElements.add(container);
             const id = generatePostId();
             container.dataset.trulyId = id;
+            markOwnedPost(container);
             container.dataset.trulySponsored = "true";
 
             const identity = extractPostIdentity(container);
