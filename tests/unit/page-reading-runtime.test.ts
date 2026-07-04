@@ -52,6 +52,13 @@ async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
 }
 
+function diagnosticRawValue(root: ParentNode, labelPattern: RegExp): string | undefined {
+  const rows = Array.from(root.querySelectorAll("dl div"));
+  const row = rows.find((item) => labelPattern.test(item.querySelector("dt")?.textContent?.trim() ?? ""));
+  const dd = row?.querySelector("dd");
+  return dd?.getAttribute("data-raw-value") ?? dd?.textContent?.trim();
+}
+
 describe("sidepanel page reading runtime", () => {
   it("shows toolbar activation guidance when the active tab URL is hidden", async () => {
     const pagePaneEl = setupDom();
@@ -143,8 +150,8 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("已讀取");
     expect(pagePaneEl.textContent).toContain("Runtime Fixture");
     expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
-    expect(pagePaneEl.textContent).toContain("模型脈絡");
-    expect(pagePaneEl.textContent).toContain("可送模型（尚未送出）");
+    expect(pagePaneEl.textContent).toContain("分析準備");
+    expect(pagePaneEl.textContent).toContain("可分析（尚未送出）");
     expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(true);
     expect(pagePaneEl.textContent).toContain("文字門檻");
     expect(pagePaneEl.textContent).toContain("來源連結");
@@ -264,9 +271,10 @@ describe("sidepanel page reading runtime", () => {
     await flushMicrotasks();
 
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(pagePaneEl.textContent).toContain("Reading context");
-    expect(pagePaneEl.textContent).toContain("本地通過");
-    expect(pagePaneEl.textContent).toContain("accept_current");
+    expect(pagePaneEl.textContent).toContain("分析範圍");
+    expect(pagePaneEl.textContent).toContain("已建立");
+    expect(pagePaneEl.textContent).toContain("使用目前抽取內容");
+    expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("accept_current");
     expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(true);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(false);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-advisor details")?.open).toBe(false);
@@ -378,8 +386,8 @@ describe("sidepanel page reading runtime", () => {
 
     await runtime.requestReadCurrentPage("sidepanel");
 
-    expect(pagePaneEl.textContent).toContain("模型脈絡");
-    expect(pagePaneEl.textContent).toContain("暫不送模型");
+    expect(pagePaneEl.textContent).toContain("分析準備");
+    expect(pagePaneEl.textContent).toContain("暫不分析");
     expect(pagePaneEl.textContent).toContain("可讀文字低於目前門檻");
     expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(false);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(true);
@@ -432,8 +440,8 @@ describe("sidepanel page reading runtime", () => {
 
     await runtime.requestReadCurrentPage("sidepanel");
 
-    expect(pagePaneEl.textContent).toContain("需改善抽取（尚未送出）");
-    expect(pagePaneEl.textContent).toContain("目前使用 fallback 抽取");
+    expect(pagePaneEl.textContent).toContain("可分析但需留意（尚未送出）");
+    expect(pagePaneEl.textContent).toContain("目前只能使用備援抽取");
     expect(pagePaneEl.textContent).toContain("偵測到大量導覽噪音");
     expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(false);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(true);
@@ -519,10 +527,11 @@ describe("sidepanel page reading runtime", () => {
         mode: "rule-based-runtime-baseline",
       }),
     }));
-    expect(pagePaneEl.textContent).toContain("Reading context");
+    expect(pagePaneEl.textContent).toContain("分析範圍");
     expect(pagePaneEl.textContent).toContain("已建立");
-    expect(pagePaneEl.textContent).toContain("downgrade_to_index_or_feed");
-    expect(pagePaneEl.textContent).toContain("page_overview_only");
+    expect(pagePaneEl.textContent).toContain("只做頁面總覽");
+    expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("downgrade_to_index_or_feed");
+    expect(diagnosticRawValue(pagePaneEl, /用途/)).toBe("page_overview_only");
     expect(pagePaneEl.textContent).toContain("只適合頁面總覽");
   });
 
@@ -595,7 +604,7 @@ describe("sidepanel page reading runtime", () => {
           ok: true,
           brief: {
             schemaVersion: 1,
-            summary: "Synthetic overview generated after Tier B parser advisor.",
+            summary: "Synthetic overview generated after a scope check.",
             claims: [{
               c: "This claim should be stripped by overview guard.",
               why: "Overview mode should not render claims.",
@@ -643,8 +652,9 @@ describe("sidepanel page reading runtime", () => {
       }),
     }));
     expect(pagePaneEl.textContent).toContain("OpenAI 相容端點 / advisor-model");
-    expect(pagePaneEl.textContent).toContain("page_overview_only");
-    expect(pagePaneEl.textContent).toContain("Synthetic overview generated after Tier B parser advisor.");
+    expect(pagePaneEl.textContent).toContain("頁面總覽");
+    expect(diagnosticRawValue(pagePaneEl, /用途/)).toBe("page_overview_only");
+    expect(pagePaneEl.textContent).toContain("Synthetic overview generated after a scope check.");
     expect(pagePaneEl.textContent).not.toContain("This claim should be stripped");
   });
 
@@ -729,7 +739,8 @@ describe("sidepanel page reading runtime", () => {
     expect(sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({
       type: "GENERAL_PAGE_ANALYSIS_REQUEST",
     }));
-    expect(pagePaneEl.textContent).toContain("requires_user_target");
+    expect(pagePaneEl.textContent).toContain("需要指定目標");
+    expect(diagnosticRawValue(pagePaneEl, /用途/)).toBe("requires_user_target");
     expect(pagePaneEl.textContent).toContain("需要使用者選取段落");
   });
 
@@ -827,8 +838,9 @@ describe("sidepanel page reading runtime", () => {
       surfaceId: weakSurface.id,
       blockId: "block-article",
     }));
-    expect(pagePaneEl.textContent).toContain("prefer_candidate_block");
-    expect(pagePaneEl.textContent).toContain("article_or_selection_analysis");
+    expect(pagePaneEl.textContent).toContain("改用較乾淨的正文區塊");
+    expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("prefer_candidate_block");
+    expect(diagnosticRawValue(pagePaneEl, /用途/)).toBe("article_or_selection_analysis");
     expect(pagePaneEl.textContent).toContain("Full candidate continuation should appear");
   });
 
@@ -900,9 +912,10 @@ describe("sidepanel page reading runtime", () => {
     }));
     expect(pagePaneEl.textContent).toContain(selectedText);
     expect(pagePaneEl.textContent).toContain("目標");
-    expect(pagePaneEl.textContent).toContain("selection");
-    expect(pagePaneEl.textContent).toContain("Reading context");
-    expect(pagePaneEl.textContent).toContain("accept_current");
+    expect(pagePaneEl.textContent).toContain("選取文字");
+    expect(pagePaneEl.textContent).toContain("分析範圍");
+    expect(diagnosticRawValue(pagePaneEl, /目標/)).toBe("selection");
+    expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("accept_current");
   });
 
   it("shows a friendly explanation for reserved actions that are not enabled", async () => {

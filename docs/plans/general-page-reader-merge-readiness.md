@@ -12,13 +12,13 @@ This document is the current public-safe readiness index for the General Page Re
 - Page/Web model integration uses a single Tier B `GeneralPageBrief` request over the effective reading context, not the raw full DOM or hidden private artifacts.
 - Screenshot-assisted recovery is user-confirmed only, vision-gated, session-only, and never stored in `chrome.storage` or logs.
 - Multi-tab Page/Web sessions can be viewed and activated without implicitly switching the active Chrome tab.
-- Diagnostics remain inspectable for early users; ordinary ready pages keep model context as a compact one-line inspection row while caution/recovery states keep expanded diagnostics.
+- Diagnostics remain inspectable for early users; ordinary ready pages keep analysis readiness as a compact one-line inspection row while caution/recovery states keep expanded diagnostics.
 
 ## Accepted Evaluation Scope
 
 - Public fixtures stay synthetic and anonymous.
 - Real-web observation and 200-target live-DOM product-quality reviews stay under `tmp/` or private repos.
-- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, model brief generation, 430px Page/Web responsive overflow, Page/Web design restraint, Page/Web interaction accessibility, session switching, selection, current-region, URL stale handling, noisy fallback, candidate recovery, teaser-hub overview downgrade, and no-grant guidance.
+- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, page brief generation, 430px Page/Web responsive overflow, Page/Web design restraint, Page/Web interaction accessibility, session switching, selection, current-region, URL stale handling, noisy fallback, candidate recovery, teaser-hub overview downgrade, and no-grant guidance.
 - `general-page-ui-readiness-review.md` records the current Page/Web component decisions: keep ready pages quiet, expand diagnostics only for caution/recovery, preserve the compact Feed-aligned side-panel style, and avoid decorative reader-mode UI.
 - Long-running `audit:general-page-reader` phases are bounded by phase-level timeouts and write `audit-progress.json` plus `audit-phase-log.json`, so a CDP/browser hang fails with a diagnosable artifact instead of blocking reviewer validation indefinitely. Individual CDP commands also have client-side timeouts so an unresponsive `Runtime.evaluate` cannot bypass the phase's inner diagnostic screenshots and JSON state capture.
 - `check:merge-readiness` verifies that the feature branch is clean, synced with
@@ -83,7 +83,12 @@ npm run cws:package:local-smoke
 - `release:review:local-limited-context -- --dry-run`: passed on 2026-07-03 and generated ignored `artifacts/review/...` prompt/schema artifacts only.
 - `cws:review:local-limited-context -- --dry-run`: passed on 2026-07-03 and generated ignored `artifacts/review/...` prompt/schema artifacts only.
 - Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review:local-limited-context`: not accepted as evidence in this environment. The 2026-07-04 attempt was rejected by the execution policy because it would send repo-local release context and diffs to an external Claude service.
-- Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:local-limited-context`: not accepted as evidence in this environment for the same external-context reason. Do not treat dry-run artifacts as advisory pass results. The remaining advisory item is still an operational pre-upload check: confirm the Chrome Web Store dashboard disposition of the older `0.1.1 Preview 9` submission before uploading `0.1.2`.
+- Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:local-limited-context`: not accepted as evidence in this environment for the same external-context reason. Do not treat dry-run artifacts as advisory pass results.
+- Chrome Web Store dashboard disposition for the older `0.1.1 Preview 9`
+  submission is confirmed: CWS published it as an `Unlisted` extension on
+  2026-07-04 for item ID `kdgkgifmdflocjockbfnhkkncbdihpoj`. Preview 12 can
+  proceed as a `0.1.2` update after final human review, release tagging, formal
+  packaging, and dashboard upload.
 - CWS preview metadata was bumped from `0.1.1 Preview 11` to `0.1.2 Preview 12` after advisory review flagged that reusing the numeric `0.1.1` package version would risk a dashboard collision with the earlier Preview 9 submission.
 - `docs/release/cws-submission-checklist.md` now includes a manual dashboard gate for already published, in-review, or otherwise occupied packages for the current numeric `manifest.version`.
 - `docs/release/cws-listing-copy.md`, `docs/release/cws-reviewer-notes.md`, `docs/release/permission-justification.md`, and `docs/release/privacy-policy.md` now all disclose Page/Web screenshot-assisted recovery as user-confirmed, vision-gated, session-only, and not stored in `chrome.storage`.
@@ -91,9 +96,9 @@ npm run cws:package:local-smoke
 - `codex/general-page-reader-contract` is pushed and tracks
   `origin/codex/general-page-reader-contract`. A formal uploadable
   `npm run cws:package` still requires the release tag
-  `v0.1.2-preview.12` to exist locally and point at HEAD, and the Chrome Web
-  Store dashboard state for the earlier `0.1.1 Preview 9` submission must be
-  confirmed before uploading.
+  `v0.1.2-preview.12` to exist locally and point at HEAD. The Chrome Web Store
+  dashboard state for the earlier `0.1.1 Preview 9` submission has been
+  confirmed as published/unlisted.
 - `npm run cws:package:local-smoke`: available for pre-push ZIP creation, package-boundary audit, and `cws:preflight`. Its artifacts live under `artifacts/cws-local-smoke/`, are explicitly non-uploadable, and do not satisfy the upstream-sync or release-tag upload gates.
 - Formal `npm run cws:package` now also refuses to build an uploadable package
   unless the package commit is caught up with `origin/main`. Local-smoke reports
@@ -122,7 +127,7 @@ Representative recent clean-HEAD runs from this worktree on 2026-07-04:
 - `audit:general-page-reader`: passed from clean release-review-fix HEAD
   `4c8d517`. Expected and live build IDs matched
   `1783142895748-4c8d517`; QA matrix rows passed for popup activation,
-  ordinary article read, model brief generation, 430px responsive layout,
+  ordinary article read, page brief generation, 430px responsive layout,
   Page/Web design restraint, interaction accessibility, saved-session
   switching, selection target, current-region shortcut, URL identity/stale
   scrub, noisy fallback caution, candidate block recovery, teaser-hub overview,
@@ -140,7 +145,7 @@ Representative recent clean-HEAD runs from this worktree on 2026-07-04:
 - `check:merge-readiness`: also passed from clean, pushed implementation HEAD `c505333` before the documentation-only evidence clarification. It reported `origin/main` behind=0 / ahead=121 / ancestor=true and `origin/codex/general-page-reader-contract` ahead=0 / behind=0.
 - Formal `cws:package`: reached the release-tag upload gate from clean, pushed, mainline-caught-up HEAD `c505333` and refused to package because `v0.1.2-preview.12` does not yet exist locally. This is the expected remaining upload gate before any Chrome Web Store ZIP can be produced.
 - `cws:package:local-smoke`: passed from clean HEAD `c505333`. It wrote an explicitly non-uploadable local package report at `artifacts/cws-local-smoke/0.1.2-c5053339adce-2026-07-04T04-39-30-809Z/cws-local-smoke-report.md`, recorded build ID `1783139969912-c505333`, kept `Uploadable: no`, recorded `Mainline: origin/main (caught_up; ahead=121, behind=0, ancestor=true)`, and listed all selected CWS screenshots and promo tile as `status=ok`.
-- `audit:general-page-reader`: passed from clean HEAD `c505333` with expected and live build IDs matched at `1783139969912-c505333`. QA matrix rows passed for popup activation, ordinary article read, model brief generation, 430px responsive layout, Page/Web design restraint, interaction accessibility, saved-session switching, selection target, current-region shortcut, URL identity/stale scrub, noisy fallback caution, candidate block recovery, teaser-hub overview, and no-grant guidance. A Bencium-guided visual check of `page-analysis-ready.png` and `page-responsive-430.png` confirmed the compact Feed-aligned layout and no narrow side-panel overflow. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-04T04-40-00-152Z`.
+- `audit:general-page-reader`: passed from clean HEAD `c505333` with expected and live build IDs matched at `1783139969912-c505333`. QA matrix rows passed for popup activation, ordinary article read, page brief generation, 430px responsive layout, Page/Web design restraint, interaction accessibility, saved-session switching, selection target, current-region shortcut, URL identity/stale scrub, noisy fallback caution, candidate block recovery, teaser-hub overview, and no-grant guidance. A Bencium-guided visual check of `page-analysis-ready.png` and `page-responsive-430.png` confirmed the compact Feed-aligned layout and no narrow side-panel overflow. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-04T04-40-00-152Z`.
 - `smoke:general-page-current --all-open --min-page-count 4 --max-error-count 0`: passed from clean HEAD against four currently open HTTP(S) tabs through live CDP. Sanitized aggregate: 3 extracted caution pages, 1 blocked/empty page, 0 fetch/runtime errors, threshold `pass`, and no pages marked ready; public-safe summary: `tmp/general-page-product-quality/current-browser-review-2026-07-04T04-41-17-503Z/current-browser-smoke-summary.md`.
 
 Representative runs from this worktree on 2026-07-03, after the non-uploadable local-smoke package path was added. Re-run the Reviewer Gate Checklist from the current HEAD before merge or upload:
@@ -179,7 +184,7 @@ Results:
   `1783110226179-94eae34`, with no dirty suffix.
 - `audit:general-page-reader`: passed from clean HEAD `94eae34`. Expected and
   live build IDs matched `1783110226179-94eae34`; QA matrix rows passed for
-  popup activation, ordinary article read, model brief generation, 430px
+  popup activation, ordinary article read, page brief generation, 430px
   responsive layout, Page/Web design restraint, interaction accessibility,
   saved-session switching, selection target, current-region shortcut, URL
   identity/stale scrub, noisy fallback caution, candidate block recovery,
@@ -213,7 +218,7 @@ Results:
   `1783109614050-9df983b`, with no dirty suffix.
 - `audit:general-page-reader`: passed from clean HEAD `9df983b`. Expected and
   live build IDs matched `1783109614050-9df983b`; QA matrix rows passed for
-  popup activation, ordinary article read, model brief generation, 430px
+  popup activation, ordinary article read, page brief generation, 430px
   responsive layout, Page/Web design restraint, interaction accessibility,
   saved-session switching, selection target, current-region shortcut, URL
   identity/stale scrub, noisy fallback caution, candidate block recovery,
@@ -245,7 +250,7 @@ Results:
   `1783105704368-80a0e9a`, with no dirty suffix.
 - `cws:preflight`: passed for `0.1.2 Preview 12` / `v0.1.2-preview.12`.
 - `cws:package:local-smoke`: passed from clean HEAD `80a0e9a`. It wrote an explicitly non-uploadable local package report at `artifacts/cws-local-smoke/0.1.2-80a0e9a45df2-2026-07-03T19-08-43-110Z/cws-local-smoke-report.md`, audited the generated ZIP, ran `cws:preflight`, and recorded `Uploadable: no`.
-- `audit:general-page-reader`: passed after adding the 430px Page/Web responsive overflow gate. The QA matrix also records Page/Web design restraint and interaction accessibility: ready-path diagnostics stay collapsed, model context remains compact, source links stay capped, caution diagnostics expand, the 430px layout remains clean, and visible controls keep accessible names without undersized primary buttons/tabs. The no-grant guidance path now verifies that toolbar/all-sites guidance appears in the primary status detail without generic retry text or a duplicate error block. Clean-HEAD private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T15-31-42-943Z` (`1783092670025-fe854b6`).
+- `audit:general-page-reader`: passed after adding the 430px Page/Web responsive overflow gate. The QA matrix also records Page/Web design restraint and interaction accessibility: ready-path diagnostics stay collapsed, analysis readiness remains compact, source links stay capped, caution diagnostics expand, the 430px layout remains clean, and visible controls keep accessible names without undersized primary buttons/tabs. The no-grant guidance path now verifies that toolbar/all-sites guidance appears in the primary status detail without generic retry text or a duplicate error block. Clean-HEAD private CDP artifact: `tmp/general-page-reader-audit-2026-07-03T15-31-42-943Z` (`1783092670025-fe854b6`).
 - `smoke:general-page-current`: passed against the currently open Yahoo Taiwan news page through live CDP. Sanitized result: extracted, semantic HTML, partial/caution, model eligible, 6 model-context links after filtering; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T13-58-47-423Z`.
 - `smoke:general-page-current --all-open --max-ready-count 0`: passed against four open HTTP(S) tabs through live CDP after adding P24 dashboard/data-surface coverage. Sanitized result: 3 extracted / 1 blocked-or-empty, readiness `caution: 3`, `blocked: 1`, threshold `readyCount: 0`, and no dashboard or leaderboard data surface marked ready/good; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T15-16-22-109Z`.
 - `smoke:general-page-current --all-open --min-page-count 4 --max-error-count 0`: passed against five open HTTP(S) tabs through live CDP after adding thresholded current-browser smoke. Sanitized result: 4 extracted / 1 blocked-or-empty, readiness `caution: 4`, `blocked: 1`, threshold `pass`, `pageCount: 5`, `readyCount: 0`, `errorCount: 0`; private artifact: `tmp/general-page-product-quality/current-browser-review-2026-07-03T16-32-23-495Z`.
@@ -293,7 +298,7 @@ Results:
   promo tile as `status=ok` with expected/actual dimensions.
 - `audit:general-page-reader`: passed from clean HEAD `234582f`. Expected and
   live build IDs matched `1783109150798-234582f`; QA matrix rows passed for
-  popup activation, ordinary article read, model brief generation, 430px
+  popup activation, ordinary article read, page brief generation, 430px
   responsive layout, Page/Web design restraint, interaction accessibility,
   saved-session switching, selection target, current-region shortcut, URL
   identity/stale scrub, noisy fallback caution, candidate block recovery,
@@ -311,7 +316,7 @@ Results:
 - `audit:general-page-reader`: passed from clean HEAD after the supply-chain
   hardening commit. Expected and live build IDs matched
   `1783103572127-f5bb5e8`; QA matrix rows passed for popup activation,
-  ordinary read, model brief, 430px responsive layout, design restraint,
+  ordinary read, page brief, 430px responsive layout, design restraint,
   interaction accessibility, saved-session switching, selection,
   current-region, URL stale handling, noisy fallback, candidate recovery,
   teaser-hub overview, and no-grant guidance. Private CDP artifact:
@@ -319,7 +324,7 @@ Results:
 - `audit:general-page-reader`: passed again from Preview 12 clean HEAD
   `80a0e9a`. Expected and live build IDs matched
   `1783105722071-80a0e9a`; QA matrix rows passed for popup activation,
-  ordinary article read, model brief generation, 430px responsive layout,
+  ordinary article read, page brief generation, 430px responsive layout,
   Page/Web design restraint, interaction accessibility, saved-session
   switching, selection target, current-region shortcut, URL identity/stale
   scrub, noisy fallback caution, candidate block recovery, teaser-hub overview,

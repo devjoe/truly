@@ -449,4 +449,44 @@ describe("General Page Parser Advisor contract", () => {
       confidence: "medium",
     });
   });
+
+  it("downgrades multi-article teaser hubs even without large navigation noise", () => {
+    const context = buildGeneralPageModelContext({
+      id: "general:https://daily.example.test/briefs/teaser-hub",
+      kind: "web-page",
+      source: "general",
+      url: "https://daily.example.test/briefs/teaser-hub",
+      title: "Multi Article Teaser Hub Fixture",
+      mainText: "First synthetic teaser The multi article teaser hub fixture contains short cards that describe fictional civic notices. This first card is a preview, not a complete article body.",
+      extraction: {
+        method: "semantic-html",
+        status: "partial",
+        warnings: [],
+      },
+    });
+    const request = buildGeneralPageParserAdvisorRequest(context, {
+      document: {
+        articleCount: 3,
+        mainCount: 0,
+        roleMainCount: 0,
+        paragraphCount: 3,
+        linkCount: 3,
+        imageCount: 0,
+        formCount: 0,
+        hasArticleMeta: false,
+        hasOpenGraph: false,
+      },
+    });
+    const advice = buildRuleBasedGeneralPageParserAdvice(request);
+
+    expect(request.escalation.reasons).toEqual(expect.arrayContaining([
+      "index_or_feed",
+      "short_text",
+    ]));
+    expect(advice).toMatchObject({
+      pageType: "index_or_feed",
+      decision: "downgrade_to_index_or_feed",
+      confidence: "high",
+    });
+  });
 });

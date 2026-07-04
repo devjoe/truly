@@ -541,7 +541,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       error.message = `${error.message}; diagnostics: ${relative(ROOT, resolve(OUT_DIR, "page-ready-timeout.json"))}`;
       throw error;
     });
-    await waitFor(side, `(() => /Reading context/.test(document.querySelector('#page-pane .page-reader-advisor')?.textContent || ''))()`, 8000, "Page/Web reading context").catch(async (error) => {
+    await waitFor(side, `(() => /分析範圍|Analysis scope/.test(document.querySelector('#page-pane .page-reader-advisor')?.textContent || ''))()`, 8000, "Page/Web analysis scope").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-ready-advisor-timeout.png")).catch(() => {});
       throw error;
     });
@@ -569,7 +569,8 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
             className: el.className,
             rows: [...el.querySelectorAll('dl div')].map((row) => ({
               label: row.querySelector('dt')?.textContent?.trim(),
-              value: row.querySelector('dd')?.textContent?.trim()
+              value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
             })),
             diagnosticsOpen: el.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
           } : null;
@@ -580,7 +581,8 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           detail: advisor.querySelector('p')?.textContent?.trim(),
           rows: [...advisor.querySelectorAll('dl div')].map((row) => ({
             label: row.querySelector('dt')?.textContent?.trim(),
-            value: row.querySelector('dd')?.textContent?.trim()
+            value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
           })),
           note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
           diagnosticsOpen: advisor.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
@@ -750,9 +752,10 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       const model = document.querySelector('#page-pane .page-reader-model-context');
       const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
-        value: row.querySelector('dd')?.textContent?.trim()
+        value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
       }));
-      return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && row.value === 'selection');
+      return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && (row.rawValue || row.value) === 'selection');
     })()`, 10000, "Page/Web selection target").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-selection-timeout.png")).catch(() => {});
       throw error;
@@ -765,11 +768,13 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         modelRows: [...model?.querySelectorAll('dl div') || []].map((row) => ({
           label: row.querySelector('dt')?.textContent?.trim(),
-          value: row.querySelector('dd')?.textContent?.trim()
+          value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
         })),
         advisorRows: [...advisor?.querySelectorAll('dl div') || []].map((row) => ({
           label: row.querySelector('dt')?.textContent?.trim(),
-          value: row.querySelector('dd')?.textContent?.trim()
+          value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
         })),
         advisorStatus: advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
       };
@@ -796,12 +801,17 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     await side.evaluate(`chrome.storage.session.set({ pendingCurrentRegionRead: { tabId: ${JSON.stringify(pointerTab.activeTabId)}, ts: Date.now() } })`);
     await waitFor(side, `(() => {
       const model = document.querySelector('#page-pane .page-reader-model-context');
+      const advisor = document.querySelector('#page-pane .page-reader-advisor');
+      const advisorStatus = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
       const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
-        value: row.querySelector('dd')?.textContent?.trim()
+        value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
       }));
-      return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && row.value === 'current-region');
-    })()`, 10000, "Page/Web current-region target").catch(async (error) => {
+      return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && (row.rawValue || row.value) === 'current-region') &&
+        Boolean(advisor) &&
+        !/檢查中|Checking/.test(advisorStatus);
+    })()`, 16000, "Page/Web current-region target").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-point-target-timeout.png")).catch(() => {});
       throw error;
     });
@@ -811,10 +821,12 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       const advisor = pane?.querySelector('.page-reader-advisor');
       const modelRows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
-        value: row.querySelector('dd')?.textContent?.trim()
+        value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
       }));
       return {
-        targetKind: modelRows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.value,
+        targetKind: modelRows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.rawValue,
+        targetKindLabel: modelRows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.value,
         advisorStatus: advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
       };
@@ -1000,7 +1012,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
   try {
     await sleep(800);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => /需改善抽取|Extraction needs improvement/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web noisy fallback caution state").catch(async (error) => {
+    await waitFor(side, `(() => /可分析但需留意|Usable with caution/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web noisy caution state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, noisy, null).catch((captureError) => ({
         captureError: captureError.message,
       }));
@@ -1012,7 +1024,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
     await waitFor(side, `(() => {
       const advisor = document.querySelector('#page-pane .page-reader-advisor');
       const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
-      return /Reading context/.test(advisor?.textContent || '') && !/檢查中|Checking/.test(status);
+      return /分析範圍|Analysis scope/.test(advisor?.textContent || '') && !/檢查中|Checking/.test(status);
     })()`, 26000, "Page/Web parser advisor completion").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-noisy-advisor-timeout.png")).catch(() => {});
       throw error;
@@ -1041,7 +1053,8 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
           detail: advisor.querySelector('p')?.textContent?.trim(),
           rows: [...advisor.querySelectorAll('dl div')].map((row) => ({
             label: row.querySelector('dt')?.textContent?.trim(),
-            value: row.querySelector('dd')?.textContent?.trim()
+            value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
           })),
           note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
           className: advisor.className,
@@ -1078,9 +1091,9 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
     await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "candidate block page ready");
     await waitFor(side, `(() => {
       const advisor = document.querySelector('#page-pane .page-reader-advisor');
-      const text = advisor?.textContent || '';
       const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
-      return /prefer_candidate_block/.test(text) && !/檢查中|Checking/.test(status);
+      const decision = advisor?.querySelector('dd[data-raw-value="prefer_candidate_block"]');
+      return Boolean(decision) && !/檢查中|Checking/.test(status);
     })()`, 26000, "candidate block advisor decision").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-candidate-timeout.png")).catch(() => {});
       throw error;
@@ -1106,7 +1119,8 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
           detail: advisor.querySelector('p')?.textContent?.trim(),
           rows: [...advisor.querySelectorAll('dl div')].map((row) => ({
             label: row.querySelector('dt')?.textContent?.trim(),
-            value: row.querySelector('dd')?.textContent?.trim()
+            value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
           })),
           note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
           className: advisor.className,
@@ -1158,9 +1172,9 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
     });
     await waitFor(side, `(() => {
       const advisor = document.querySelector('#page-pane .page-reader-advisor');
-      const text = advisor?.textContent || '';
       const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
-      return /downgrade_to_index_or_feed/.test(text) && !/檢查中|Checking/.test(status);
+      const decision = advisor?.querySelector('dd[data-raw-value="downgrade_to_index_or_feed"]');
+      return Boolean(decision) && !/檢查中|Checking/.test(status);
     })()`, 26000, "teaser hub advisor decision").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-teaser-hub-advisor-timeout.png")).catch(() => {});
       throw error;
@@ -1186,7 +1200,8 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
           detail: advisor.querySelector('p')?.textContent?.trim(),
           rows: [...advisor.querySelectorAll('dl div')].map((row) => ({
             label: row.querySelector('dt')?.textContent?.trim(),
-            value: row.querySelector('dd')?.textContent?.trim()
+            value: row.querySelector('dd')?.textContent?.trim(),
+            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
           })),
           note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
           className: advisor.className,
@@ -1303,22 +1318,22 @@ function assertAudit(result) {
   if (result.success.ready.fullTailVisible) {
     errors.push("Page/Web pane includes the full synthetic body tail");
   }
-  if (!/模型脈絡|Model context/.test(result.success.ready.modelContext?.title || "")) {
-    errors.push("Page/Web pane does not show model context readiness");
+  if (!/分析準備|Analysis readiness/.test(result.success.ready.modelContext?.title || "")) {
+    errors.push("Page/Web pane does not show analysis readiness");
   }
-  if (!/可送模型|Model-ready/.test(result.success.ready.modelContext?.status || "")) {
-    errors.push(`unexpected model context status: ${result.success.ready.modelContext?.status || "(missing)"}`);
+  if (!/可分析|Ready to analyze/.test(result.success.ready.modelContext?.status || "")) {
+    errors.push(`unexpected analysis readiness status: ${result.success.ready.modelContext?.status || "(missing)"}`);
   }
   if (!hasPassingTextThresholdRow(result.success.ready.modelContext?.rows)) {
     errors.push("model context text threshold row is missing or incorrect");
   }
-  if (!/Reading context/.test(result.success.ready.advisor?.title || "")) {
-    errors.push("Page/Web pane does not show Reading context advisor state");
+  if (!/分析範圍|Analysis scope/.test(result.success.ready.advisor?.title || "")) {
+    errors.push("Page/Web pane does not show analysis scope state");
   }
-  if (!/本地通過|Local pass/.test(result.success.ready.advisor?.status || "")) {
-    errors.push(`successful read advisor should be local pass: ${result.success.ready.advisor?.status || "(missing)"}`);
+  if (!/已建立|Ready/.test(result.success.ready.advisor?.status || "")) {
+    errors.push(`successful read analysis scope should be established: ${result.success.ready.advisor?.status || "(missing)"}`);
   }
-  if (!result.success.ready.advisor?.rows?.some((row) => /判斷|Decision/.test(row.label || "") && row.value === "accept_current")) {
+  if (!result.success.ready.advisor?.rows?.some((row) => /判斷|Decision/.test(row.label || "") && rawRowValue(row) === "accept_current")) {
     errors.push("successful read advisor does not preserve accept_current effective context");
   }
   if (!result.success.ready.sourceLinks?.some((link) => link.label === "Source link" && /\/source$/.test(link.href))) {
@@ -1376,10 +1391,10 @@ function assertAudit(result) {
   if (!result.success.selection?.selectedText || !result.success.selection.excerpt?.includes(result.success.selection.selectedText.slice(0, 60))) {
     errors.push("selection target text was not rendered as the Page/Web preview");
   }
-  if (!result.success.selection?.modelRows?.some((row) => /目標|Target/.test(row.label || "") && row.value === "selection")) {
+  if (!result.success.selection?.modelRows?.some((row) => /目標|Target/.test(row.label || "") && rawRowValue(row) === "selection")) {
     errors.push("selection target did not switch model context targetKind to selection");
   }
-  if (!result.success.selection?.advisorRows?.some((row) => /判斷|Decision/.test(row.label || "") && row.value === "accept_current")) {
+  if (!result.success.selection?.advisorRows?.some((row) => /判斷|Decision/.test(row.label || "") && rawRowValue(row) === "accept_current")) {
     errors.push("selection target did not preserve accept_current reading context");
   }
   if (result.success.afterHash.stale) errors.push("hash-only URL change incorrectly marked stale");
@@ -1391,11 +1406,11 @@ function assertAudit(result) {
   if (result.noisy.ready.status !== "已讀取" && result.noisy.ready.status !== "Ready") {
     errors.push(`noisy fallback read did not reach ready status: ${result.noisy.ready.status}`);
   }
-  if (!/需改善抽取|Extraction needs improvement/.test(result.noisy.ready.modelContext?.status || "")) {
+  if (!/可分析但需留意|Usable with caution/.test(result.noisy.ready.modelContext?.status || "")) {
     errors.push(`noisy fallback model context was not downgraded to caution: ${result.noisy.ready.modelContext?.status || "(missing)"}`);
   }
-  if (!/fallback|Fallback/.test(result.noisy.ready.modelContext?.detail || "")) {
-    errors.push("noisy fallback model context does not explain fallback extraction quality");
+  if (!/備援抽取|backup extraction/.test(result.noisy.ready.modelContext?.detail || "")) {
+    errors.push("noisy fallback model context does not explain backup extraction quality");
   }
   if (!/is-caution/.test(result.noisy.ready.modelContext?.className || "")) {
     errors.push("noisy fallback model context does not use caution UI state");
@@ -1427,15 +1442,15 @@ function assertAudit(result) {
   if (result.noisy.ready.hasEdgeDownload || result.noisy.ready.hasFirefoxDownload || result.noisy.ready.hasGoogleDownload) {
     errors.push("noisy fallback audit still exposes browser download links as source context");
   }
-  if (!/Reading context/.test(result.noisy.ready.advisor?.title || "")) {
-    errors.push("noisy fallback does not show Reading context advisor state");
+  if (!/分析範圍|Analysis scope/.test(result.noisy.ready.advisor?.title || "")) {
+    errors.push("noisy fallback does not show analysis scope state");
   }
   if (/檢查中|Checking/.test(result.noisy.ready.advisor?.status || "")) {
     errors.push("noisy fallback advisor remained pending");
   }
   const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
-  const noisyDecision = noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
-  const noisyUse = noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  const noisyDecision = rawRowValue(noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
+  const noisyUse = rawRowValue(noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   if (noisyDecision !== "downgrade_to_index_or_feed") {
     errors.push(`noisy fallback advisor did not downgrade to index/feed: ${noisyDecision || "(missing)"}`);
   }
@@ -1446,8 +1461,8 @@ function assertAudit(result) {
     errors.push(`candidate block recovery did not reach ready status: ${result.candidate.ready.status}`);
   }
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
-  const candidateDecision = candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
-  const candidateUse = candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  const candidateDecision = rawRowValue(candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
+  const candidateUse = rawRowValue(candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   if (candidateDecision !== "prefer_candidate_block") {
     errors.push(`candidate block recovery did not prefer candidate block: ${candidateDecision || "(missing)"}`);
   }
@@ -1479,8 +1494,8 @@ function assertAudit(result) {
     errors.push(`teaser hub did not reach ready status: ${result.teaser.ready.status}`);
   }
   const teaserAdvisorRows = result.teaser.ready.advisor?.rows || [];
-  const teaserDecision = teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
-  const teaserUse = teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  const teaserDecision = rawRowValue(teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
+  const teaserUse = rawRowValue(teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   if (teaserDecision !== "downgrade_to_index_or_feed") {
     errors.push(`teaser hub advisor did not downgrade to index/feed: ${teaserDecision || "(missing)"}`);
   }
@@ -1517,6 +1532,10 @@ function hasPassingTextThresholdRow(rows) {
   const row = rows?.find((item) => /文字門檻|Text threshold/.test(item.label || ""));
   const match = String(row?.value ?? "").match(/^(\d+)\/240$/);
   return Boolean(match && Number(match[1]) >= 240);
+}
+
+function rawRowValue(row) {
+  return row?.rawValue || row?.value || "";
 }
 
 function qaPass(value) {
@@ -1556,12 +1575,12 @@ function qaMatrixRows(result) {
   const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
   const teaserAdvisorRows = result.teaser.ready.advisor?.rows || [];
-  const noisyDecision = noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
-  const noisyUse = noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
-  const candidateDecision = candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
-  const candidateUse = candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
-  const teaserDecision = teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || ""))?.value || "";
-  const teaserUse = teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || ""))?.value || "";
+  const noisyDecision = rawRowValue(noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
+  const noisyUse = rawRowValue(noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
+  const candidateDecision = rawRowValue(candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
+  const candidateUse = rawRowValue(candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
+  const teaserDecision = rawRowValue(teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
+  const teaserUse = rawRowValue(teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   const restraint = designRestraint(result);
   return [
     [
@@ -1582,7 +1601,7 @@ function qaMatrixRows(result) {
       "title=" + result.success.ready.title + "; links=" + (result.success.ready.sourceLinks?.length ?? 0) + "; diagnosticsCollapsed=" + (result.success.ready.extractionDiagnosticsOpen === false),
     ],
     [
-      "Model brief generation",
+      "Page brief generation",
       result.success.pageBrief?.status === "ready",
       "status=" + (result.success.pageBrief?.status || "missing"),
     ],
@@ -1622,8 +1641,8 @@ function qaMatrixRows(result) {
     [
       "Selection target",
       Boolean(result.success.selection?.selectedText) &&
-        result.success.selection?.modelRows?.some((row) => /目標|Target/.test(row.label || "") && row.value === "selection") &&
-        result.success.selection?.advisorRows?.some((row) => /判斷|Decision/.test(row.label || "") && row.value === "accept_current"),
+        result.success.selection?.modelRows?.some((row) => /目標|Target/.test(row.label || "") && rawRowValue(row) === "selection") &&
+        result.success.selection?.advisorRows?.some((row) => /判斷|Decision/.test(row.label || "") && rawRowValue(row) === "accept_current"),
       "selectedChars=" + (result.success.selection?.selectedText?.length ?? 0),
     ],
     [
@@ -1642,7 +1661,7 @@ function qaMatrixRows(result) {
     ],
     [
       "Noisy fallback caution",
-      /需改善抽取|Extraction needs improvement/.test(result.noisy.ready.modelContext?.status || "") &&
+      /可分析但需留意|Usable with caution/.test(result.noisy.ready.modelContext?.status || "") &&
         noisyDecision === "downgrade_to_index_or_feed" &&
         noisyUse === "page_overview_only" &&
         result.noisy.ready.extractionDiagnosticsOpen === true &&
@@ -1706,8 +1725,8 @@ function writeSummary(result, errors) {
     `- Popup general page: ${result.popup.general.button} / disabled=${result.popup.general.disabled}`,
     `- Popup unsupported page disabled: ${result.popup.unsupported.disabled}`,
     `- Page/Web read status: ${result.success.ready.status}`,
-    `- Model context: ${result.success.ready.modelContext?.status || "(missing)"}`,
-    `- Reading context: ${result.success.ready.advisor?.status || "(missing)"}`,
+    `- Analysis readiness: ${result.success.ready.modelContext?.status || "(missing)"}`,
+    `- Analysis scope: ${result.success.ready.advisor?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
     `- Responsive Page/Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
     `- Page/Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; compactModel=${restraint.readyModelCompact}; sourceLinksCapped=${restraint.sourceLinksCapped}; cautionExpanded=${restraint.cautionDiagnosticsExpanded}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,

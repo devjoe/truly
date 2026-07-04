@@ -287,7 +287,7 @@ export function resolveGeneralPageParserEscalation(
   const hasLargeNavigationNoise = issues.has("large_navigation_noise") || warnings.has("large-navigation-noise");
   if (hasLargeNavigationNoise)
     reasons.push("large_navigation_noise");
-  if (isDenseIndexLikeDocument(options.document) || (hasLargeNavigationNoise && isLikelyIndexLikeNoisyDocument(options.document)))
+  if (isDenseIndexLikeDocument(options.document) || isMultiArticleTeaserHub(options.document) || (hasLargeNavigationNoise && isLikelyIndexLikeNoisyDocument(options.document)))
     reasons.push("index_or_feed");
   if (issues.has("no_main_content") || warnings.has("no-main-content"))
     reasons.push("no_main_content");
@@ -695,6 +695,12 @@ function isDenseIndexLikeDocument(document: GeneralPageParserAdvisorDocumentSign
   if (document.articleCount !== 1 && document.linkCount >= 100 && document.imageCount >= 20)
     return true;
   return document.articleCount >= 3 && document.linkCount >= 40 && document.paragraphCount <= 20;
+}
+
+function isMultiArticleTeaserHub(document: GeneralPageParserAdvisorDocumentSignals | undefined): boolean {
+  if (!document || document.hasArticleMeta)
+    return false;
+  return document.articleCount >= 3 && document.paragraphCount <= Math.max(8, document.articleCount + 6);
 }
 
 function isLikelyIndexLikeNoisyDocument(document: GeneralPageParserAdvisorDocumentSignals | undefined): boolean {

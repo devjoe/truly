@@ -91,7 +91,7 @@ const REQUIRED_SNIPPETS = [
     path: "docs/plans/general-page-ui-readiness-review.md",
     snippets: [
       "Page/Web should stay close to the existing Facebook Feed experience",
-      "Ready pages keep the model context compact and diagnostics collapsed",
+      "Ready pages keep analysis readiness compact and diagnostics collapsed",
       "caution/recovery",
       "page-teaser-hub-overview.png",
       "Do not add decorative visual polish",

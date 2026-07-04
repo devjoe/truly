@@ -290,10 +290,10 @@ function generalPageBriefCopyLines(
   brief: GeneralPageBrief,
   allowedUse: GeneralPageEffectiveModelContextUse | undefined,
 ): string[] {
-  const lines = ["", "Model brief:", brief.summary];
-  if (allowedUse === "page_overview_only") lines.push("Scope: page overview only");
+  const lines = ["", "Page brief:", brief.summary];
+  if (allowedUse === "page_overview_only") lines.push("Scope: page overview");
   if (brief.bg?.length) {
-    lines.push("", "Reading context:");
+    lines.push("", "Page context:");
     for (const item of brief.bg) lines.push(`- ${item.t}: ${item.why}${item.q ? ` (${item.q})` : ""}`);
   }
   if (brief.claims?.length) {
@@ -370,11 +370,11 @@ function modelContextHtml(
     : context.qualityIssues.length > 0
     ? context.qualityIssues.map((issue) => tr(modelQualityIssueKey(issue))).join(" ")
     : "";
-  const rows = [
+  const rows: Array<[string, string, string?]> = [
     [tr("sidepanel.page.model.text"), `${context.mainText.length}/${GENERAL_PAGE_MODEL_MIN_MAIN_TEXT_LENGTH}`],
     [tr("sidepanel.page.model.links"), formatCount(context.links.length)],
     [tr("sidepanel.page.model.imageAlt"), formatCount(context.imageAltText.length)],
-    [tr("sidepanel.page.model.target"), context.targetKind],
+    [tr("sidepanel.page.model.target"), modelTargetKindLabel(context.targetKind, tr), context.targetKind],
   ];
   const detailsOpen = context.modelReadiness !== "ready";
   const compactReady = context.modelReadiness === "ready";
@@ -388,11 +388,25 @@ function modelContextHtml(
       <details class="page-reader-diagnostics"${detailsOpen ? " open" : ""}>
         <summary>${escapeHtml(tr("sidepanel.page.diagnostics.details"))}</summary>
         <dl>
-          ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+          ${rows.map(([label, value, raw]) => diagnosticRowHtml(label, value, raw)).join("")}
         </dl>
       </details>
     </section>
   `;
+}
+
+function diagnosticRowHtml(label: string, value: string, rawValue?: string): string {
+  const raw = rawValue && rawValue !== value ? ` data-raw-value="${escapeHtml(rawValue)}"` : "";
+  return `<div><dt>${escapeHtml(label)}</dt><dd${raw}>${escapeHtml(value)}</dd></div>`;
+}
+
+function modelTargetKindLabel(
+  targetKind: GeneralPageModelContext["targetKind"],
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (targetKind === "selection") return tr("sidepanel.page.model.target.selection");
+  if (targetKind === "current-region") return tr("sidepanel.page.model.target.currentRegion");
+  return tr("sidepanel.page.model.target.page");
 }
 
 function modelIneligibilityKey(reason: GeneralPageModelIneligibilityReason): string {
@@ -476,7 +490,54 @@ function advisorDecisionLabel(
   if (advisor.status === "not_needed") return tr("sidepanel.page.advisor.decision.notNeeded");
   if (advisor.status === "checking") return tr("sidepanel.page.advisor.decision.checking");
   if (advisor.status === "error") return tr("sidepanel.page.advisor.decision.error");
+  return advisorDecisionValueLabel(advisor.advice?.decision, tr);
+}
+
+function advisorDecisionRaw(advisor: PageReadingAdvisorSession): string {
+  if (advisor.status === "not_needed") return "accept_current";
+  if (advisor.status === "checking") return "pending";
+  if (advisor.status === "error") return "unavailable";
   return advisor.advice?.decision ?? "none";
+}
+
+function advisorDecisionValueLabel(
+  decision: string | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  switch (decision) {
+    case "accept_current":
+      return tr("sidepanel.page.advisor.decision.acceptCurrent");
+    case "prefer_candidate_block":
+      return tr("sidepanel.page.advisor.decision.preferCandidate");
+    case "downgrade_to_index_or_feed":
+      return tr("sidepanel.page.advisor.decision.pageOverview");
+    case "mark_blocked_or_empty":
+      return tr("sidepanel.page.advisor.decision.blocked");
+    case "request_user_selection":
+      return tr("sidepanel.page.advisor.decision.userSelection");
+    case "request_screenshot_region":
+      return tr("sidepanel.page.advisor.decision.screenshot");
+    default:
+      return tr("sidepanel.page.advisor.decision.none");
+  }
+}
+
+function allowedUseLabel(
+  allowedUse: GeneralPageEffectiveModelContextUse | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  switch (allowedUse) {
+    case "article_or_selection_analysis":
+      return tr("sidepanel.page.advisor.allowedUse.article");
+    case "page_overview_only":
+      return tr("sidepanel.page.advisor.allowedUse.overview");
+    case "requires_user_target":
+      return tr("sidepanel.page.advisor.allowedUse.target");
+    case "blocked":
+      return tr("sidepanel.page.advisor.allowedUse.blocked");
+    default:
+      return "-";
+  }
 }
 
 function advisorHtml(
@@ -498,11 +559,17 @@ function advisorHtml(
     : effective?.allowedUse === "requires_user_target"
     ? tr("sidepanel.page.advisor.detail.needsTarget")
     : tr("sidepanel.page.advisor.detail.ready");
-  const rows = [
-    [tr("sidepanel.page.advisor.decision"), advisorDecisionLabel(advisor, tr)],
+  const modelMode = advisor.providerRuntime?.mode === "tier-b-short-json" && advisor.providerRuntime.canUseModel
+    ? tr("sidepanel.page.advisor.mode.modelReady")
+    : advisor.providerRuntime?.mode === "tier-b-short-json-fallback"
+    ? tr("sidepanel.page.advisor.mode.modelFallback")
+    : tr("sidepanel.page.advisor.mode.localBaseline");
+  const rows: Array<[string, string, string?]> = [
+    [tr("sidepanel.page.advisor.decision"), advisorDecisionLabel(advisor, tr), advisorDecisionRaw(advisor)],
     [tr("sidepanel.page.advisor.provider"), provider],
     [tr("sidepanel.page.advisor.payload"), advisor.request ? `${advisor.request.payloadBudget.estimatedPayloadChars}/${advisor.request.payloadBudget.maxPayloadChars}` : "-"],
-    [tr("sidepanel.page.advisor.allowedUse"), effective?.allowedUse ?? "-"],
+    [tr("sidepanel.page.advisor.allowedUse"), allowedUseLabel(effective?.allowedUse, tr), effective?.allowedUse],
+    [tr("sidepanel.page.advisor.mode"), modelMode],
   ];
   const decision = advisor.advice?.decision;
   const detailsOpen = advisor.status === "checking" ||
@@ -510,11 +577,6 @@ function advisorHtml(
     effective?.allowedUse === "page_overview_only" ||
     effective?.allowedUse === "requires_user_target" ||
     (Boolean(decision) && decision !== "accept_current");
-  const modelMode = advisor.providerRuntime?.mode === "tier-b-short-json" && advisor.providerRuntime.canUseModel
-    ? tr("sidepanel.page.advisor.mode.modelReady")
-    : advisor.providerRuntime?.mode === "tier-b-short-json-fallback"
-    ? tr("sidepanel.page.advisor.mode.modelFallback")
-    : tr("sidepanel.page.advisor.mode.localBaseline");
   return `
     <section class="page-reader-advisor is-${escapeHtml(advisor.status)}">
       <div class="page-reader-advisor-header">
@@ -525,10 +587,9 @@ function advisorHtml(
       <details class="page-reader-diagnostics"${detailsOpen ? " open" : ""}>
         <summary>${escapeHtml(tr("sidepanel.page.diagnostics.details"))}</summary>
         <dl>
-          ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
+          ${rows.map(([label, value, raw]) => diagnosticRowHtml(label, value, raw)).join("")}
         </dl>
       </details>
-      <div class="page-reader-advisor-note">${escapeHtml(modelMode)}</div>
     </section>
   `;
 }

@@ -24,8 +24,8 @@ and what the next model-facing context would be.
 | Status banner | Keep | It is the fastest scan point for read, stale, no-grant, and failure states. |
 | Extracted page card | Keep | Early users need title/source/excerpt plus copy/download affordances to judge extraction quality. |
 | Extraction diagnostics | Keep collapsed for ready, expanded for caution/recovery | This matches the product need: ordinary pages stay quiet; uncertain pages expose enough detail for review. |
-| Model context card | Keep compact for ready, expanded for blocked/caution | It separates raw extraction eligibility from the later `Reading context` advisor result. This is necessary while the parser-advisor path is still being validated. |
-| Reading context card | Keep | It is the single place that explains whether the next model-facing context is article analysis, page overview only, a candidate block, or requires a user target. |
+| Analysis readiness card | Keep compact for ready, expanded for blocked/caution | It separates raw extraction eligibility from the later analysis-scope decision. This is necessary while the scope-check path is still being validated. |
+| Analysis scope card | Keep | It is the single place that explains whether the next model-facing context is article analysis, page overview only, a candidate block, or requires a user target. |
 | Page brief card | Keep | It proves the model-facing context is usable without storing the full page body. Overview pages suppress claims through deterministic guards. |
 | Source links | Keep capped and bottom-aligned | Source links are useful for early inspection, but the cap prevents navigation/sidebar links from taking over the panel. |
 | Saved page switcher | Keep | Multi-tab Page/Web sessions need a visible way to review and reactivate prior readings without hiding Facebook sessions. |
@@ -37,7 +37,7 @@ and what the next model-facing context would be.
   surface, not a decorative reader mode. The memorable product choice is
   restraint: quiet ready pages, explicit user-triggered actions, and visible
   uncertainty only when extraction quality needs review.
-- Ready pages keep the model context compact and diagnostics collapsed. This is
+- Ready pages keep analysis readiness compact and diagnostics collapsed. This is
   the main evidence that Page/Web has not become a developer console by
   default.
 - Caution, noisy fallback, candidate-block recovery, and teaser-hub overview
@@ -56,6 +56,11 @@ and what the next model-facing context would be.
   `tmp/general-page-reader-audit-2026-07-03T19-12-16-973Z`. The visual
   conclusion stayed unchanged: all visible components have a current product
   job, and the side-panel language remains aligned with the existing Feed tab.
+- A 2026-07-04 debug-vs-end-user copy pass renamed visible Page/Web cards from
+  engineering terms to user-facing labels: `Analysis readiness`, `Analysis
+  scope`, `Page brief`, and `Page context`. Internal routing values such as
+  advisor decisions and allowed-use enums remain available only as
+  `data-raw-value` diagnostics for automated audit assertions.
 
 ## Current Non-Changes
 
@@ -65,7 +70,7 @@ and what the next model-facing context would be.
 - Do not add decorative visual polish, gradients, or large reader-mode
   typography. Page/Web is an operational inspection surface, not an immersive
   reading destination.
-- Do not split `Model context` and `Reading context` into separate tabs yet.
+- Do not split analysis readiness and analysis scope into separate tabs yet.
   The contrast between raw extraction eligibility and advisor-derived effective
   context is important for debugging parser quality.
 - Do not add context menu or in-page selected-text buttons in this UI pass.
@@ -77,7 +82,7 @@ The current CDP audit includes Page/Web design restraint and interaction
 accessibility rows. It verifies:
 
 - ready-path diagnostics are collapsed;
-- ready-path model context is compact;
+- ready-path analysis readiness is compact;
 - source links are capped;
 - caution diagnostics expand;
 - the 430px Page/Web layout has no horizontal overflow, clipped interactive

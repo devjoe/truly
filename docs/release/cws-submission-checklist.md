@@ -25,10 +25,15 @@ Store. The dashboard copy should still come from
 - [ ] Before dashboard upload, confirm the Chrome Web Store dashboard has no
   already published, in-review, or otherwise occupied package for the current
   numeric `manifest.version`.
-- [ ] Record the outcome of Preview 9's numeric `0.1.1` submission before
-  dashboard upload. If it is still active in review, wait for that review to
-  finish or withdraw it before uploading Preview 12. If it was rejected or
-  withdrawn, record that result in this checklist or the release notes.
+- [x] Record the outcome of Preview 9's numeric `0.1.1` submission before
+  dashboard upload.
+  - Result: `0.1.1 Preview 9` was published to Chrome Web Store as `Unlisted`.
+  - Publication notification received: 2026-07-04
+  - Item ID: `kdgkgifmdflocjockbfnhkkncbdihpoj`
+  - Item link:
+    <https://chrome.google.com/webstore/detail/kdgkgifmdflocjockbfnhkkncbdihpoj>
+  - Preview 12 can proceed as an update to the existing item after final human
+    review and release tagging.
 - [ ] Run `npm run cws:package` from a clean, pushed branch.
 - [ ] Confirm the package report says `Uploadable: yes`.
 - [ ] Confirm the package report says `Dirty tree: no`.
@@ -155,6 +160,12 @@ Store. The dashboard copy should still come from
   - GitHub Release: `v0.1.1-preview.9`
   - Submitted version: previous Preview 9 submission for numeric version `0.1.1`
   - Submitted visibility: `Unlisted`
+- [x] Record previous CWS publication result.
+  - Published notification received: 2026-07-04
+  - Published version: Preview 9 of version `0.1.1`
+  - Published visibility: `Unlisted`
+  - Published item link:
+    <https://chrome.google.com/webstore/detail/kdgkgifmdflocjockbfnhkkncbdihpoj>
 - [x] Record the previous submission date and time in release notes or a short
   follow-up comment.
   - Submitted for Chrome Web Store review: 2026-06-24 14:48 CST
