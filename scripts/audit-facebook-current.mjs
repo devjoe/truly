@@ -962,12 +962,14 @@ try {
     const headsUp = root.querySelector(${JSON.stringify(HEADSUP_PANEL_SELECTOR)});
     const summary = root.querySelector(${JSON.stringify(HEADSUP_SUMMARY_SELECTOR)}) || root.querySelector("button");
     const before = summary?.getAttribute("aria-expanded") || null;
-    summary?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    const clicked = before !== "true";
+    if (clicked) summary?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     return new Promise((resolve) => setTimeout(() => {
       resolve({
         ok: true,
         before,
         after: summary?.getAttribute("aria-expanded") || null,
+        clicked,
         text: norm(headsUp?.innerText || headsUp?.textContent || "").slice(0, 600)
       });
     }, 350));
