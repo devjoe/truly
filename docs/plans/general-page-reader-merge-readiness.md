@@ -102,9 +102,10 @@ npm run cws:package:local-smoke
 
 ## Recent Local Verification Evidence
 
-Representative current-HEAD runs from this worktree on 2026-07-04:
+Representative recent clean-HEAD runs from this worktree on 2026-07-04:
 
-- `check:merge-readiness`: passed from clean, pushed HEAD `c505333`. It reported `origin/main` behind=0 / ahead=121 / ancestor=true and `origin/codex/general-page-reader-contract` ahead=0 / behind=0.
+- `check:merge-readiness`: passed from clean, pushed documentation HEAD `8c3e31e`. It reported `origin/main` behind=0 / ahead=122 / ancestor=true and `origin/codex/general-page-reader-contract` ahead=0 / behind=0.
+- `check:merge-readiness`: also passed from clean, pushed implementation HEAD `c505333` before the documentation-only evidence clarification. It reported `origin/main` behind=0 / ahead=121 / ancestor=true and `origin/codex/general-page-reader-contract` ahead=0 / behind=0.
 - Formal `cws:package`: reached the release-tag upload gate from clean, pushed, mainline-caught-up HEAD `c505333` and refused to package because `v0.1.2-preview.12` does not yet exist locally. This is the expected remaining upload gate before any Chrome Web Store ZIP can be produced.
 - `cws:package:local-smoke`: passed from clean HEAD `c505333`. It wrote an explicitly non-uploadable local package report at `artifacts/cws-local-smoke/0.1.2-c5053339adce-2026-07-04T04-39-30-809Z/cws-local-smoke-report.md`, recorded build ID `1783139969912-c505333`, kept `Uploadable: no`, recorded `Mainline: origin/main (caught_up; ahead=121, behind=0, ancestor=true)`, and listed all selected CWS screenshots and promo tile as `status=ok`.
 - `audit:general-page-reader`: passed from clean HEAD `c505333` with expected and live build IDs matched at `1783139969912-c505333`. QA matrix rows passed for popup activation, ordinary article read, model brief generation, 430px responsive layout, Page/Web design restraint, interaction accessibility, saved-session switching, selection target, current-region shortcut, URL identity/stale scrub, noisy fallback caution, candidate block recovery, teaser-hub overview, and no-grant guidance. A Bencium-guided visual check of `page-analysis-ready.png` and `page-responsive-430.png` confirmed the compact Feed-aligned layout and no narrow side-panel overflow. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-04T04-40-00-152Z`.
