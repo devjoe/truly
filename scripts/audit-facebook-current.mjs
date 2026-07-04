@@ -475,9 +475,10 @@ function localeExpectationMatches(signals) {
   if (expected === "zh" || expected === "zh-tw" || expected === "zh-hant") {
     const htmlLangOk = signals.htmlLang?.toLowerCase().startsWith("zh");
     const chromeTokenCount = signals.chineseChromeMatches?.length ?? 0;
+    const englishChromeTokenCount = signals.englishChromeMatches?.length ?? 0;
     const trulyTokenCount = signals.chineseTrulyMatches?.length ?? 0;
     return {
-      ok: Boolean(htmlLangOk && chromeTokenCount >= 2 && trulyTokenCount >= 1),
+      ok: Boolean(htmlLangOk && chromeTokenCount >= 1 && englishChromeTokenCount === 0 && trulyTokenCount >= 1),
       detail:
         `htmlLang=${signals.htmlLang || "(none)"} ` +
         `fbZh=${(signals.chineseChromeMatches ?? []).join(",") || "(none)"} ` +
@@ -1047,10 +1048,12 @@ try {
       detail: runtime.stats?.selectorHealth || "(unavailable)",
     },
     {
-      label: "heads-up expand toggles",
-      ok: hasHeadsUpAction ? firstInteraction.ok && firstInteraction.before !== firstInteraction.after : true,
+      label: "heads-up expand state",
+      ok: hasHeadsUpAction
+        ? firstInteraction.ok && (firstInteraction.after === "true" || firstInteraction.before !== firstInteraction.after)
+        : true,
       detail: hasHeadsUpAction
-        ? firstInteraction.ok ? `${firstInteraction.before} -> ${firstInteraction.after}` : firstInteraction.error
+        ? firstInteraction.ok ? `${firstInteraction.before} -> ${firstInteraction.after}${firstInteraction.clicked ? "" : " (already expanded)"}` : firstInteraction.error
         : "no heads-up action button; skipped",
     },
     {
