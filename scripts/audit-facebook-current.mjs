@@ -51,6 +51,8 @@ const CHINESE_TRULY_TOKENS = [
 ];
 const PANEL_ACTION_PATTERN = "^(深入閱讀|建議查核|Deep reading|Deep read|Read deeper|Suggested fact-check|Fact-check suggested)$";
 const SIDEPANEL_RENDER_WAIT_MS = 1600;
+const AUDIT_READY_TIMEOUT_MS = Number(process.env.TRULY_AUDIT_READY_TIMEOUT_MS || 25_000);
+const AUDIT_READY_POLL_MS = Number(process.env.TRULY_AUDIT_READY_POLL_MS || 750);
 
 function usage() {
   console.log(`Usage: node scripts/audit-facebook-current.mjs
@@ -63,6 +65,7 @@ Environment:
   TRULY_AUDIT_EXPECT_LOCALE=zh|en|zh-Hant|zh-TW
   TRULY_AUDIT_TARGET_ID=<Chrome-CDP-target-id>
   TRULY_AUDIT_AUTO_RELOAD=1   reload stale Truly extension + Facebook tab, then audit
+  TRULY_AUDIT_READY_TIMEOUT_MS=25000
   CDP_ALLOW_FOCUS=1            allow focus-required side-panel click fallback
 `);
 }
@@ -384,6 +387,68 @@ async function getContentScriptStats(serviceWorkerEntry, pageUrl) {
   }
 }
 
+async function readFacebookReadiness(page, serviceWorkerEntry, pageUrl) {
+  const pageState = await page.evaluateJson(`(() => ({
+    buildId: document.documentElement.dataset.trulyBuildId || null,
+    hosts: document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}).length,
+    taggedPosts: document.querySelectorAll(${JSON.stringify(TAGGED_POST_SELECTOR)}).length,
+    skippedPosts: document.querySelectorAll(${JSON.stringify(SKIPPED_POST_SELECTOR)}).length,
+    articles: document.querySelectorAll('[role="article"], article').length,
+    readyState: document.readyState
+  }))()`).catch((error) => ({ error: error.message }));
+  const runtime = await getContentScriptStats(serviceWorkerEntry, pageUrl);
+  return {
+    pageState,
+    stats: runtime.stats || null,
+    error: pageState.error || runtime.stats?.error || null,
+  };
+}
+
+function facebookReadinessSatisfied(snapshot) {
+  const pageState = snapshot?.pageState || {};
+  const stats = snapshot?.stats || {};
+  const hasPageEvidence =
+    (pageState.hosts ?? 0) > 0 ||
+    (pageState.taggedPosts ?? 0) > 0 ||
+    (pageState.skippedPosts ?? 0) > 0 ||
+    (stats.postsScanned ?? 0) > 0;
+  const selectorSettled =
+    !stats.selectorHealth ||
+    stats.selectorHealth === "healthy" ||
+    ((pageState.hosts ?? 0) > 0 && stats.selectorHealth !== "unhealthy");
+  return Boolean(hasPageEvidence && selectorSettled);
+}
+
+async function waitForFacebookReadiness(page, serviceWorkerEntry, pageUrl) {
+  const startedAt = Date.now();
+  const samples = [];
+  let latest = null;
+
+  while (Date.now() - startedAt <= AUDIT_READY_TIMEOUT_MS) {
+    latest = await readFacebookReadiness(page, serviceWorkerEntry, pageUrl);
+    samples.push({
+      elapsedMs: Date.now() - startedAt,
+      hosts: latest.pageState?.hosts ?? null,
+      taggedPosts: latest.pageState?.taggedPosts ?? null,
+      skippedPosts: latest.pageState?.skippedPosts ?? null,
+      articles: latest.pageState?.articles ?? null,
+      postsScanned: latest.stats?.postsScanned ?? null,
+      selectorHealth: latest.stats?.selectorHealth ?? null,
+      error: latest.error ?? null,
+    });
+    if (facebookReadinessSatisfied(latest)) break;
+    await sleep(AUDIT_READY_POLL_MS);
+  }
+
+  return {
+    ok: facebookReadinessSatisfied(latest),
+    waitedMs: Date.now() - startedAt,
+    timeoutMs: AUDIT_READY_TIMEOUT_MS,
+    latest,
+    samples,
+  };
+}
+
 function localeExpectationMatches(signals) {
   if (!EXPECT_LOCALE) return { ok: true, detail: "not requested" };
   const expected = EXPECT_LOCALE.toLowerCase();
@@ -652,6 +717,7 @@ function writeSummary(report, failures) {
     `- Heads-up hosts: ${report.audit.counts.hosts}`,
     `- Tagged posts: ${report.audit.counts.taggedPosts}`,
     `- Selector health: ${report.runtime.stats?.selectorHealth || "(unavailable)"}`,
+    `- Readiness wait: ${report.readiness?.ok ? "settled" : "timed out"} (${report.readiness?.waitedMs ?? 0}ms)`,
     `- Side Panel targets: ${sidePanel?.targetCount ?? 0}`,
     "",
     "## Verdict",
@@ -767,7 +833,7 @@ const page = connectCdp(pageTarget.webSocketDebuggerUrl);
 const screenshots = [];
 
 try {
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  const readiness = await waitForFacebookReadiness(page, serviceWorker.selected, pageTarget.url);
   const initialScroll = await page.evaluate("window.scrollY").catch(() => 0);
   const initialViewport = resolve(OUT_DIR, "viewport-initial.png");
   await page.screenshot(initialViewport).catch(() => {});
@@ -946,6 +1012,7 @@ try {
     page: { url: audit.url, title: audit.title, selectedTargetId: pageTarget.id },
     serviceWorker,
     remediation,
+    readiness,
     audit,
     interaction: firstInteraction,
     sidePanel,
