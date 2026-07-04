@@ -866,8 +866,10 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
     if (tabId) {
       if (message.status === "unhealthy") {
         tabHealthState.set(tabId, "unhealthy");
-        chrome.action.setBadgeText({ text: "!", tabId });
-        chrome.action.setBadgeBackgroundColor({ color: "#e41e3f", tabId });
+        // Selector health is maintainer/debug evidence, not an end-user
+        // toolbar warning. Keep it available through GET_STATS and clear any
+        // stale badge left by older builds.
+        chrome.action.setBadgeText({ text: "", tabId });
       } else if (message.status === "healthy") {
         tabHealthState.delete(tabId);
         chrome.action.setBadgeText({ text: "", tabId });
@@ -906,7 +908,8 @@ chrome.commands?.onCommand.addListener((command, tab) => {
   }
 });
 
-// Per-tab selector-health state. Unhealthy tabs show a red "!" action badge.
+// Per-tab selector-health state. This remains a debug/stat signal only; the
+// toolbar badge is reserved for user-actionable states.
 const tabHealthState = new Map<number, "unhealthy">();
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
