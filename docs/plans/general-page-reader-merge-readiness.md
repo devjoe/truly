@@ -82,8 +82,8 @@ npm run cws:package:local-smoke
 
 - `release:review:local-limited-context -- --dry-run`: passed on 2026-07-03 and generated ignored `artifacts/review/...` prompt/schema artifacts only.
 - `cws:review:local-limited-context -- --dry-run`: passed on 2026-07-03 and generated ignored `artifacts/review/...` prompt/schema artifacts only.
-- Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review:local-limited-context`: not run in this session because the environment review rejected sending local repository context to an external Claude service without explicit approval.
-- Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:local-limited-context`: passed for `0.1.2 Preview 12` with no blocker/high findings. The remaining advisory item is an operational pre-upload check: confirm the Chrome Web Store dashboard disposition of the older `0.1.1 Preview 9` submission before uploading `0.1.2`.
+- Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run release:review:local-limited-context`: not accepted as evidence in this environment. The 2026-07-04 attempt was rejected by the execution policy because it would send repo-local release context and diffs to an external Claude service.
+- Live `TRULY_ENABLE_CLAUDE_REVIEW=1 npm run cws:review:local-limited-context`: not accepted as evidence in this environment for the same external-context reason. Do not treat dry-run artifacts as advisory pass results. The remaining advisory item is still an operational pre-upload check: confirm the Chrome Web Store dashboard disposition of the older `0.1.1 Preview 9` submission before uploading `0.1.2`.
 - CWS preview metadata was bumped from `0.1.1 Preview 11` to `0.1.2 Preview 12` after advisory review flagged that reusing the numeric `0.1.1` package version would risk a dashboard collision with the earlier Preview 9 submission.
 - `docs/release/cws-submission-checklist.md` now includes a manual dashboard gate for already published, in-review, or otherwise occupied packages for the current numeric `manifest.version`.
 - `docs/release/cws-listing-copy.md`, `docs/release/cws-reviewer-notes.md`, `docs/release/permission-justification.md`, and `docs/release/privacy-policy.md` now all disclose Page/Web screenshot-assisted recovery as user-confirmed, vision-gated, session-only, and not stored in `chrome.storage`.
@@ -101,6 +101,14 @@ npm run cws:package:local-smoke
   upload gate.
 
 ## Recent Local Verification Evidence
+
+Representative current-HEAD runs from this worktree on 2026-07-04:
+
+- `check:merge-readiness`: passed from clean, pushed HEAD `c505333`. It reported `origin/main` behind=0 / ahead=121 / ancestor=true and `origin/codex/general-page-reader-contract` ahead=0 / behind=0.
+- Formal `cws:package`: reached the release-tag upload gate from clean, pushed, mainline-caught-up HEAD `c505333` and refused to package because `v0.1.2-preview.12` does not yet exist locally. This is the expected remaining upload gate before any Chrome Web Store ZIP can be produced.
+- `cws:package:local-smoke`: passed from clean HEAD `c505333`. It wrote an explicitly non-uploadable local package report at `artifacts/cws-local-smoke/0.1.2-c5053339adce-2026-07-04T04-39-30-809Z/cws-local-smoke-report.md`, recorded build ID `1783139969912-c505333`, kept `Uploadable: no`, recorded `Mainline: origin/main (caught_up; ahead=121, behind=0, ancestor=true)`, and listed all selected CWS screenshots and promo tile as `status=ok`.
+- `audit:general-page-reader`: passed from clean HEAD `c505333` with expected and live build IDs matched at `1783139969912-c505333`. QA matrix rows passed for popup activation, ordinary article read, model brief generation, 430px responsive layout, Page/Web design restraint, interaction accessibility, saved-session switching, selection target, current-region shortcut, URL identity/stale scrub, noisy fallback caution, candidate block recovery, teaser-hub overview, and no-grant guidance. A Bencium-guided visual check of `page-analysis-ready.png` and `page-responsive-430.png` confirmed the compact Feed-aligned layout and no narrow side-panel overflow. Private CDP artifact: `tmp/general-page-reader-audit-2026-07-04T04-40-00-152Z`.
+- `smoke:general-page-current --all-open --min-page-count 4 --max-error-count 0`: passed from clean HEAD against four currently open HTTP(S) tabs through live CDP. Sanitized aggregate: 3 extracted caution pages, 1 blocked/empty page, 0 fetch/runtime errors, threshold `pass`, and no pages marked ready; public-safe summary: `tmp/general-page-product-quality/current-browser-review-2026-07-04T04-41-17-503Z/current-browser-smoke-summary.md`.
 
 Representative runs from this worktree on 2026-07-03, after the non-uploadable local-smoke package path was added. Re-run the Reviewer Gate Checklist from the current HEAD before merge or upload:
 
