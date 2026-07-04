@@ -99,11 +99,43 @@ npm run cws:package:local-smoke
   unless the package commit is caught up with `origin/main`. Local-smoke reports
   include `Mainline:` evidence but still mark mainline freshness as an omitted
   upload gate.
+- Human-owned release review for `3ab9984` returned
+  `approve_with_conditions`. The blocking findings were fixed in `4c8d517`:
+  Page/Web screenshot data URLs are redacted from debug snapshot DOM exports,
+  and the readiness doc no longer claims storage behavior is verified by
+  `audit:general-page-model-integration`. The same commit also added service
+  worker screenshot data URL validation, removed unsafe canonical URL fallback,
+  and marked formal CWS packages as non-uploadable when dirty/unpushed escape
+  hatches are used.
 
 ## Recent Local Verification Evidence
 
 Representative recent clean-HEAD runs from this worktree on 2026-07-04:
 
+- `check:public`: passed from clean release-review-fix HEAD `4c8d517`. This
+  included public-boundary, release metadata, General Page corpus/parser/model
+  gates, typecheck, public contract tests, public unit tests, production build,
+  and release bundle audit. The production build recorded build ID
+  `1783142895748-4c8d517`, with no dirty suffix.
+- `cws:preflight`: passed from clean release-review-fix HEAD `4c8d517` for
+  `0.1.2 Preview 12` / `v0.1.2-preview.12`.
+- `audit:general-page-reader`: passed from clean release-review-fix HEAD
+  `4c8d517`. Expected and live build IDs matched
+  `1783142895748-4c8d517`; QA matrix rows passed for popup activation,
+  ordinary article read, model brief generation, 430px responsive layout,
+  Page/Web design restraint, interaction accessibility, saved-session
+  switching, selection target, current-region shortcut, URL identity/stale
+  scrub, noisy fallback caution, candidate block recovery, teaser-hub overview,
+  and no-grant guidance. Bencium-guided visual checks of
+  `page-analysis-ready.png` and `page-responsive-430.png` confirmed the compact
+  Feed-aligned layout and no narrow side-panel overflow. Private CDP artifact:
+  `tmp/general-page-reader-audit-2026-07-04T05-28-44-544Z`.
+- `smoke:general-page-current --all-open --min-page-count 4 --max-error-count
+  0`: passed from clean release-review-fix HEAD against four currently open
+  HTTP(S) tabs through live CDP. Sanitized aggregate: 3 extracted caution pages,
+  1 blocked/empty page, 0 fetch/runtime errors, threshold `pass`, and no pages
+  marked ready; public-safe summary:
+  `tmp/general-page-product-quality/current-browser-review-2026-07-04T05-30-07-602Z/current-browser-smoke-summary.md`.
 - `check:merge-readiness`: passed from clean, pushed documentation HEAD `8c3e31e`. It reported `origin/main` behind=0 / ahead=122 / ancestor=true and `origin/codex/general-page-reader-contract` ahead=0 / behind=0.
 - `check:merge-readiness`: also passed from clean, pushed implementation HEAD `c505333` before the documentation-only evidence clarification. It reported `origin/main` behind=0 / ahead=121 / ancestor=true and `origin/codex/general-page-reader-contract` ahead=0 / behind=0.
 - Formal `cws:package`: reached the release-tag upload gate from clean, pushed, mainline-caught-up HEAD `c505333` and refused to package because `v0.1.2-preview.12` does not yet exist locally. This is the expected remaining upload gate before any Chrome Web Store ZIP can be produced.
