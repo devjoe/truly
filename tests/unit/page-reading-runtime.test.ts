@@ -348,6 +348,7 @@ describe("sidepanel page reading runtime", () => {
       }
       if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
         expect(message.allowedUse).toBe("article_or_selection_analysis");
+        expect(message.mode).toBe("quick");
         expect(message.context.targetKind).toBe("page");
         expect(message.context.mainText).toContain("Runtime fixture text long enough");
         return {
@@ -356,6 +357,7 @@ describe("sidepanel page reading runtime", () => {
           ok: true,
           brief: {
             schemaVersion: 1,
+            mode: "quick",
             summary: "Synthetic model summary for the current page.",
             bg: [{ t: "Context", why: "The page is a synthetic runtime article." }],
             claims: [{ c: "Runtime claim", why: "It is central to the sample.", need: "Check the source." }],
@@ -396,6 +398,7 @@ describe("sidepanel page reading runtime", () => {
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: "GENERAL_PAGE_ANALYSIS_REQUEST",
       tabId: 42,
+      mode: "quick",
       providerRuntime: expect.objectContaining({
         canUseModel: true,
         effectiveProvider: "openai-compatible",
@@ -405,7 +408,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("頁面重點");
     expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
     expect(pagePaneEl.textContent).toContain("Runtime claim");
-    expect(pagePaneEl.textContent).toContain("brief-model 使用 1.2 秒");
+    expect(pagePaneEl.textContent).toContain("brief-model 使用 1.2 秒產生快速重點");
   });
 
   it("does not auto-read a general page when all-sites access is unavailable", async () => {
@@ -566,6 +569,7 @@ describe("sidepanel page reading runtime", () => {
         }
         if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
           expect(message.allowedUse).toBe("article_or_selection_analysis");
+          expect(message.mode).toBe("quick");
           expect(message.context.targetKind).toBe("page");
           return {
             type: "GENERAL_PAGE_ANALYSIS_RESULT",
@@ -573,6 +577,7 @@ describe("sidepanel page reading runtime", () => {
             ok: true,
             brief: {
               schemaVersion: 1,
+              mode: "quick",
               summary: "Auto-read model summary.",
               bg: [{ t: "Auto context", why: "The side panel was open with all-sites access." }],
               claims: [{ c: "Auto-read claim", why: "It verifies automatic model dispatch.", need: "Compare with the page." }],
@@ -871,6 +876,7 @@ describe("sidepanel page reading runtime", () => {
           model: "advisor-model",
         });
         expect(message.allowedUse).toBe("page_overview_only");
+        expect(message.mode).toBe("quick");
         return {
           type: "GENERAL_PAGE_ANALYSIS_RESULT",
           tabId: 42,
@@ -1363,6 +1369,7 @@ describe("sidepanel page reading runtime", () => {
 
     expect(sentAnalysis).toHaveLength(1);
     const request = sentAnalysis[0] as Extract<TrulyMessage, { type: "GENERAL_PAGE_ANALYSIS_REQUEST" }>;
+    expect(request.mode).toBe("full");
     expect(request.screenshotDataUrl).toContain("data:image/jpeg;base64");
     expect(pagePaneEl.textContent).toContain("Screenshot-grounded synthetic summary.");
   });

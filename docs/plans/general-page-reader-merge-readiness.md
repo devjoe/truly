@@ -18,7 +18,7 @@ This document is the current public-safe readiness index for the General Page Re
 
 - Public fixtures stay synthetic and anonymous.
 - Real-web observation and 200-target live-DOM product-quality reviews stay under `tmp/` or private repos.
-- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, page brief generation, 430px Page/Web responsive overflow, Page/Web design restraint, Page/Web interaction accessibility, session switching, selection, current-region, URL stale handling, noisy fallback, candidate recovery, teaser-hub overview downgrade, and no-grant guidance.
+- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, page brief generation, quick-brief mode, 430px Page/Web responsive overflow, Page/Web design restraint, Page/Web interaction accessibility, session switching, selection, current-region, URL stale handling, noisy fallback, candidate recovery, teaser-hub overview downgrade, no-grant guidance, and storage privacy scanning.
 - `general-page-ui-readiness-review.md` records the current Page/Web component decisions: keep ready pages quiet, expand diagnostics only for caution/recovery, preserve the compact Feed-aligned side-panel style, and avoid decorative reader-mode UI.
 - Long-running `audit:general-page-reader` phases are bounded by phase-level timeouts and write `audit-progress.json` plus `audit-phase-log.json`, so a CDP/browser hang fails with a diagnosable artifact instead of blocking reviewer validation indefinitely. Individual CDP commands also have client-side timeouts so an unresponsive `Runtime.evaluate` cannot bypass the phase's inner diagnostic screenshots and JSON state capture.
 - `check:merge-readiness` verifies that the feature branch is clean, synced with
@@ -28,7 +28,7 @@ This document is the current public-safe readiness index for the General Page Re
 - The uploadable `cws:package` gate also requires the package commit to be
   caught up with `origin/main`; `cws:package:local-smoke` records the same
   mainline state for reviewer context but remains explicitly non-uploadable.
-- `audit:general-page-model-integration` is included in `check:general-page` and verifies model payload scoping plus deterministic overview guards with a local mock endpoint. Session-only storage behavior is covered by code review and runtime privacy checks, not by that audit alone.
+- `audit:general-page-model-integration` is included in `check:general-page` and verifies model payload scoping plus deterministic overview guards with a local mock endpoint. Session-only storage behavior is also covered by the CDP `audit:general-page-reader` storage privacy probe, which fails if Page/Web screenshot data URLs, raw HTML, or synthetic fixture article text appear in `chrome.storage.local` or `chrome.storage.session`.
 - The live-DOM 200-target review proved the harness is useful for finding false-ready page patterns; public follow-up is represented only as aggregate findings plus synthetic fixtures.
 - `smoke:general-page-current` writes a public-safe `current-browser-smoke-summary.json` and `current-browser-smoke-summary.md` next to the private review artifacts. These summaries omit real URLs, titles, extracted text, screenshots, copied page content, and per-target notes while preserving readiness counts, issue tags, threshold results, and sanitized host-level evidence. Localhost and private/internal hosts are reduced to `localhost` or `private-host`. The smoke script rejects unsafe summary fields such as `url`, `title`, `mainText`, `textContent`, raw HTML, screenshots, data URLs, and `http(s)` strings before writing the public-safe summary.
 - Current-browser smoke can now fail on reviewer-shaped thresholds without manual JSON inspection: minimum page count, maximum ready count, maximum fetch/runtime errors, maximum empty-or-blocked pages, and selected public-safe issue tags.
@@ -51,6 +51,9 @@ This document is the current public-safe readiness index for the General Page Re
 ## Reviewer Gate Checklist
 
 Before merging this branch back to Truly, rerun these from a clean worktree:
+
+Start with `docs/plans/general-page-review-packet-2026-07-06.md` for the
+human-readable architecture, flow, and privacy review map.
 
 ```bash
 git fetch origin main

@@ -14,6 +14,7 @@ import { applyGeneralPageBriefOutputReview } from "./model-output-review";
 
 export interface GeneralPageBrief {
   schemaVersion: 1;
+  mode?: GeneralPageAnalysisMode;
   summary: string;
   bg?: ReadingBriefBackground[];
   claims?: ReadingBriefClaim[];
@@ -24,6 +25,8 @@ export interface GeneralPageBrief {
   elapsedMs?: number;
   outputReview?: ModelOutputReview;
 }
+
+export type GeneralPageAnalysisMode = "quick" | "full";
 
 export type GeneralPageAnalysisEligibilityReason =
   | "session_not_ready"
@@ -89,23 +92,25 @@ export function normalizeGeneralPageBrief(
   raw: unknown,
   model: string,
   outputLang?: Lang,
+  mode: GeneralPageAnalysisMode = "full",
 ): GeneralPageBrief | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
   if (record.schemaVersion !== 1) return null;
-  const summary = boundedString(record.summary, 900);
+  const summary = boundedString(record.summary, mode === "quick" ? 360 : 900);
   if (!summary) return null;
 
   const brief: GeneralPageBrief = {
     schemaVersion: 1,
+    mode,
     summary,
     model,
     outputLang,
   };
   const bg = normalizeArray(record.bg, 2, normalizeBackground);
-  const claims = normalizeArray(record.claims, 3, normalizeClaim);
-  const qs = normalizeArray(record.qs, 3, normalizeQuestion);
-  const note = boundedString(record.note, 500);
+  const claims = normalizeArray(record.claims, mode === "quick" ? 1 : 3, normalizeClaim);
+  const qs = normalizeArray(record.qs, mode === "quick" ? 1 : 3, normalizeQuestion);
+  const note = boundedString(record.note, mode === "quick" ? 200 : 500);
   if (bg.length > 0) brief.bg = bg;
   if (claims.length > 0) brief.claims = claims;
   if (qs.length > 0) brief.qs = qs;
@@ -117,13 +122,14 @@ export function parseGeneralPageBriefContent(
   content: string,
   model: string,
   outputLang?: Lang,
+  mode: GeneralPageAnalysisMode = "full",
 ): ParsedGeneralPageBriefContent {
   const trimmed = content.trim();
   if (!trimmed) return { ok: false, value: null, error: "empty_content" };
   const jsonText = extractJsonPayload(trimmed);
   if (!jsonText) return { ok: false, value: null, error: "json_not_found" };
   try {
-    const value = normalizeGeneralPageBrief(JSON.parse(jsonText), model, outputLang);
+    const value = normalizeGeneralPageBrief(JSON.parse(jsonText), model, outputLang, mode);
     const reviewed = value && outputLang === "zh-TW"
       ? applyGeneralPageBriefOutputReview(value)
       : value;

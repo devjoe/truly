@@ -27,8 +27,8 @@ permission. It should stay aligned with `src/manifest.json`.
 
 | Optional host permission | Why Truly may request it | Boundary |
 |---|---|---|
-| `http://*/*` | Support a user-configured HTTP model endpoint outside the default localhost hosts, and optionally let General Page Reader read HTTP pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send summary context to the configured model endpoint. |
-| `https://*/*` | Support a user-configured HTTPS model endpoint outside the default hosts, and optionally let General Page Reader read HTTPS pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send summary context to the configured model endpoint. |
+| `http://*/*` | Support a user-configured HTTP model endpoint outside the default localhost hosts, and optionally let General Page Reader read HTTP pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send quick-brief context to the configured model endpoint. |
+| `https://*/*` | Support a user-configured HTTPS model endpoint outside the default hosts, and optionally let General Page Reader read HTTPS pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send quick-brief context to the configured model endpoint. |
 
 Truly should request optional endpoint permissions at save/test time for the
 specific user-configured endpoint. General Page all-sites access is a separate

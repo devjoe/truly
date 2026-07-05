@@ -21,6 +21,7 @@ import {
 import {
   canOfferGeneralPageScreenshot,
   generalPageBriefEligibility,
+  type GeneralPageAnalysisMode,
   type GeneralPageAnalysisEligibilityReason,
   type GeneralPageBrief,
 } from "../lib/general-page-analysis";
@@ -111,6 +112,7 @@ interface PageReadingAdvisorSession {
 interface PageReadingAnalysisSession {
   status: PageReadingAnalysisStatus;
   key?: string;
+  mode?: GeneralPageAnalysisMode;
   brief?: GeneralPageBrief;
   error?: string;
   allowedUse?: GeneralPageEffectiveModelContextUse;
@@ -658,12 +660,18 @@ function briefHtml(
   allowedUse: GeneralPageEffectiveModelContextUse | undefined,
   tr: (key: string, params?: Record<string, string | number>) => string,
 ): string {
+  const noteKey = brief.mode === "quick"
+    ? "sidepanel.page.analysis.quickModelNote"
+    : "sidepanel.page.analysis.modelNote";
+  const noteWithElapsedKey = brief.mode === "quick"
+    ? "sidepanel.page.analysis.quickModelNoteWithElapsed"
+    : "sidepanel.page.analysis.modelNoteWithElapsed";
   const modelNote = brief.elapsedMs
-    ? tr("sidepanel.page.analysis.modelNoteWithElapsed", {
+    ? tr(noteWithElapsedKey, {
         model: brief.model,
         elapsed: Math.round(brief.elapsedMs / 100) / 10,
       })
-    : tr("sidepanel.page.analysis.modelNote", { model: brief.model });
+    : tr(noteKey, { model: brief.model });
   return `
     ${allowedUse === "page_overview_only" ? `<div class="page-reader-analysis-badge">${escapeHtml(tr("sidepanel.page.analysis.overview"))}</div>` : ""}
     <p class="page-reader-analysis-summary">${escapeHtml(brief.summary)}</p>
@@ -1250,16 +1258,18 @@ export function createSidepanelPageReadingRuntime({
       setScreenshot(tabId, { status: "error", error: analysisEligibilityMessage(eligibility.reason ?? "provider_not_ready"), updatedAt: now() });
       return;
     }
-    const key = `${generalPageAnalysisKey(effective, providerRuntime)}|screenshot`;
+    const mode: GeneralPageAnalysisMode = "full";
+    const key = `${generalPageAnalysisKey(effective, providerRuntime, mode)}|screenshot`;
     const dataUrl = shot.dataUrl;
     setScreenshot(tabId, { status: "sending", updatedAt: now() });
-    setAnalysis(tabId, { status: "running", key, allowedUse: effective.allowedUse, updatedAt: now() });
+    setAnalysis(tabId, { status: "running", key, mode, allowedUse: effective.allowedUse, updatedAt: now() });
     try {
       const response = await runtime.sendMessage({
         type: "GENERAL_PAGE_ANALYSIS_REQUEST",
         tabId,
         context: analysisContext,
         allowedUse: effective.allowedUse,
+        mode,
         providerRuntime,
         outputLang: getLang(),
         screenshotDataUrl: dataUrl,
@@ -1278,7 +1288,7 @@ export function createSidepanelPageReadingRuntime({
         return;
       }
       setScreenshot(tabId, { status: "sent", updatedAt: now() });
-      setAnalysis(tabId, { status: "ready", key, brief: result.brief, allowedUse: effective.allowedUse, updatedAt: now() });
+      setAnalysis(tabId, { status: "ready", key, mode, brief: result.brief, allowedUse: effective.allowedUse, updatedAt: now() });
     } catch (error) {
       setScreenshot(tabId, { status: "error", error: errorMessage(error), updatedAt: now() });
       setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse);
@@ -1299,7 +1309,12 @@ export function createSidepanelPageReadingRuntime({
     if (advisor.effectiveModelContext) runGeneralPageAnalysisIfEligible(tabId, nextSession, false);
   }
 
-  function runGeneralPageAnalysisIfEligible(tabId: number, session: PageReadingSession, force: boolean): void {
+  function runGeneralPageAnalysisIfEligible(
+    tabId: number,
+    session: PageReadingSession,
+    force: boolean,
+    mode: GeneralPageAnalysisMode = "quick",
+  ): void {
     const effective = session.advisor?.effectiveModelContext;
     const providerRuntime = session.advisor?.providerRuntime;
     if (!effective || !providerRuntime) return;
@@ -1318,13 +1333,14 @@ export function createSidepanelPageReadingRuntime({
       if (force) setAnalysisError(tabId, analysisEligibilityMessage(eligibility.reason ?? "provider_not_ready"));
       return;
     }
-    const key = generalPageAnalysisKey(effective, providerRuntime);
+    const key = generalPageAnalysisKey(effective, providerRuntime, mode);
     if (!force && session.analysis?.key === key && (session.analysis.status === "running" || session.analysis.status === "ready")) {
       return;
     }
     setAnalysis(tabId, {
       status: "running",
       key,
+      mode,
       allowedUse: effective.allowedUse,
       updatedAt: now(),
     });
@@ -1333,6 +1349,7 @@ export function createSidepanelPageReadingRuntime({
       tabId,
       context: analysisContext,
       allowedUse: effective.allowedUse,
+      mode,
       providerRuntime,
       outputLang: getLang(),
     } satisfies TrulyMessage)).then((response) => {
@@ -1352,6 +1369,7 @@ export function createSidepanelPageReadingRuntime({
       setAnalysis(tabId, {
         status: "ready",
         key,
+        mode,
         brief: result.brief,
         allowedUse: effective.allowedUse,
         updatedAt: now(),
@@ -1390,8 +1408,10 @@ export function createSidepanelPageReadingRuntime({
   function generalPageAnalysisKey(
     effective: GeneralPageEffectiveModelContext,
     providerRuntime: GeneralPageParserAdvisorProviderRuntime,
+    mode: GeneralPageAnalysisMode,
   ): string {
     return [
+      mode,
       effective.allowedUse,
       effective.source,
       effective.mainText.length,

@@ -188,8 +188,8 @@ facts intact:
 - Page/Web normally uses one-time toolbar access. If the user explicitly enables
   General Page all-sites access in Settings, the side panel can read the current
   page on ordinary HTTP/HTTPS sites while the Side Panel is open; suitable pages
-  may send summary context to the configured model endpoint, but this does not
-  enable background crawling or persistent full-page history.
+  may send quick-brief context to the configured model endpoint, but this does
+  not enable background crawling or persistent full-page history.
 - Page/Web screenshot-assisted recovery can process a visible-tab screenshot
   only when text extraction is insufficient, the selected model source supports
   vision input, and the user confirms the preview. The screenshot is

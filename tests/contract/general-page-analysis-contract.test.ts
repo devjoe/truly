@@ -53,6 +53,37 @@ describe("General Page analysis contract", () => {
     });
   });
 
+  it("bounds quick page briefs for automatic side-panel display", () => {
+    const brief = normalizeGeneralPageBrief({
+      schemaVersion: 1,
+      summary: "A ".repeat(400),
+      bg: [
+        { t: "Topic 1", why: "First point." },
+        { t: "Topic 2", why: "Second point." },
+        { t: "Topic 3", why: "Should be dropped." },
+      ],
+      claims: [
+        { c: "Claim 1", why: "Important.", need: "Evidence." },
+        { c: "Claim 2", why: "Should be dropped.", need: "Evidence." },
+      ],
+      qs: [
+        { q: "What should be checked?", kind: "verify" },
+        { q: "What should be dropped?", kind: "source" },
+      ],
+      note: "N".repeat(300),
+    }, "mock-model", "en", "quick");
+
+    expect(brief).toMatchObject({
+      mode: "quick",
+      model: "mock-model",
+    });
+    expect(brief?.summary.length).toBeLessThanOrEqual(360);
+    expect(brief?.bg).toHaveLength(2);
+    expect(brief?.claims).toHaveLength(1);
+    expect(brief?.qs).toHaveLength(1);
+    expect(brief?.note?.length).toBeLessThanOrEqual(200);
+  });
+
   it("rejects wrong schema versions and prose-wrapped JSON", () => {
     expect(normalizeGeneralPageBrief({ schemaVersion: 2, summary: "No" }, "model")).toBeNull();
     expect(parseGeneralPageBriefContent("Here is {\"schemaVersion\":1,\"summary\":\"No\"}", "model")).toMatchObject({
@@ -138,6 +169,18 @@ describe("General Page analysis contract", () => {
       allowedUse: "article_or_selection_analysis",
     });
     expect(typeof withoutShot.messages[1]?.content).toBe("string");
+    expect(withoutShot.max_tokens).toBe(1400);
+
+    const quick = buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://127.0.0.1:4999/v1/chat/completions",
+      model: "quick-model",
+      context,
+      allowedUse: "article_or_selection_analysis",
+      mode: "quick",
+      outputLang: "en",
+    });
+    expect(quick.max_tokens).toBe(520);
+    expect(String(quick.messages[0]?.content)).toContain("Quick mode");
 
     const withShot = buildTierBGeneralPageBriefChatBody({
       endpoint: "http://127.0.0.1:4999/v1/chat/completions",

@@ -1,0 +1,164 @@
+# General Page Reader Review Packet
+
+Date: 2026-07-06
+Branch: `codex/general-page-reader-contract`
+
+This packet is the public-safe technical index for the human review pass before
+the next release decision. It intentionally avoids real target URLs, copied page
+text, screenshots, private labels, and review HTML contents.
+
+## Review Scope
+
+This branch adds the General Page Reader runtime path beside the existing
+Facebook Feed reader. The current review should focus on whether Page/Web is
+usable, bounded, and privacy-consistent while preserving the existing Facebook
+heads-up, deep-read, and fact-check entry points.
+
+In scope:
+
+- Popup and Side Panel Page/Web read flow.
+- Side Panel auto-read only while the panel is open and all-sites access is
+  granted.
+- Automatic General Page quick brief when the page is eligible and Tier B model
+  settings are available.
+- Selection and current-region target seams for future paragraph summary and
+  check workflows.
+- User-confirmed screenshot-assisted recovery.
+- CDP audit coverage, public boundary checks, release disclosure text, and
+  storage/snapshot redaction.
+
+Out of scope for this review:
+
+- Durable Page/Web reading history.
+- Cross-page reasoning workspace.
+- Automatic screenshot sending.
+- Replacing the runtime heuristic parser with a third-party parser.
+- Publicly committing real-site HTML, URLs, copied text, screenshots, or manual
+  labels.
+
+## Runtime Architecture
+
+The implementation is deliberately layered so future target types reuse the same
+contracts instead of bypassing privacy and audit gates.
+
+| Layer | Role | Review focus |
+|---|---|---|
+| Popup | Captures a one-time user read intent and opens Page/Web. | One click should be enough for manual reads. |
+| Side Panel runtime | Holds session-only Page/Web state, tab sessions, stale markers, target state, and model analysis state. | UI should explain what has been read, what is stale, and what is model-ready. |
+| Service worker | Mediates extension messages, content-script reads, permission boundaries, and model calls. | Privileged model runtime must use trusted stored settings, not content-script supplied endpoints. |
+| Content scripts | Extract live page surfaces and target snapshots. | Page extraction should not mutate live pages or leak private data into storage. |
+| Reading contracts | `ReadingSurface`, `ReadingTarget`, and General Page context types. | Page, selection, current-region, and screenshot recovery should converge through the same model-context boundary. |
+| Tier B model client | Builds compact or full JSON-only prompts and parses bounded output. | Automatic Page/Web analysis should use quick mode; screenshot-confirmed recovery may use full mode. |
+| Audit tooling | Uses synthetic local pages and live CDP to verify behavior. | Artifacts stay under `tmp/` and remain private. |
+
+## Main Flows
+
+### Manual Page/Web Read
+
+1. User clicks the toolbar popup read action on an HTTP/HTTPS page.
+2. The popup path grants activeTab for the current page and opens the Side
+   Panel.
+3. The Side Panel sends the read request and renders Page/Web once extraction
+   returns.
+4. The in-panel read button remains available for retry/refresh, but should not
+   be required as a second step.
+
+### Auto-Read With All-Sites Access
+
+1. User has granted all-sites host access in settings.
+2. The Side Panel is open.
+3. Navigating to a new readable HTTP/HTTPS page triggers automatic Page/Web
+   extraction for the current tab.
+4. If the page is eligible and Tier B settings are available, Page/Web requests
+   a quick brief automatically.
+5. Blocked pages and pages requiring an explicit user target remain fail-closed.
+
+This boundary is intentional: all-sites access does not mean background crawling;
+it means Truly may read the currently viewed page while the user is actively
+using the Side Panel.
+
+### Quick Brief Versus Full Brief
+
+Automatic Page/Web analysis uses quick mode:
+
+- lower output token cap;
+- one-sentence summary target;
+- at most two background items;
+- at most one claim and one follow-up question;
+- UI copy says the model produced a quick brief.
+
+Full mode is reserved for explicit recovery flows such as user-confirmed
+screenshot-assisted analysis.
+
+### Targeted Reading
+
+Selection and current-region reading are modeled as `ReadingTarget`s. The v1
+goal is to keep the contract and fail-closed behavior correct so future
+paragraph summary and check features can reuse the same target boundary.
+
+Selection requires an explicit in-panel action. Current-region shortcut support
+uses a session marker and only works when the page has already been granted to
+Truly.
+
+### Screenshot Recovery
+
+Screenshot-assisted analysis is offered only when text extraction is too weak,
+the page is not blocked, and the model provider supports vision. The user sees a
+preview and must confirm before the data URL is sent to the configured model
+endpoint. Screenshot data must remain session-only and must not enter
+`chrome.storage`, debug snapshot DOM export, logs, release artifacts, or public
+fixtures.
+
+## Evidence Commands
+
+Run from the General Page Reader worktree root.
+
+```bash
+rtk npm run check:public
+TRULY_EXTENSION_ID=<loaded extension id> TRULY_AUDIT_AUTO_RELOAD=1 rtk npm run audit:general-page-reader
+TRULY_EXTENSION_ID=<loaded extension id> TRULY_AUDIT_AUTO_RELOAD=1 rtk npm run audit:facebook-current:zh
+rtk npm run cws:preflight
+```
+
+Expected evidence:
+
+- `check:public` passes typecheck, contract tests, unit tests, build, parser
+  spikes, public-boundary checks, model-integration audit, and release bundle
+  audit.
+- `audit:general-page-reader` passes synthetic Page/Web flows, quick brief
+  detection, saved-session switching, target flows, no-grant guidance, and
+  storage privacy scanning.
+- `audit:facebook-current:zh` passes against the currently opened Chinese
+  Facebook flow before release review.
+- `cws:preflight` confirms release disclosure strings remain aligned with
+  permissions and screenshot behavior.
+
+## Human Review Checklist
+
+- Manual read: toolbar popup read action should be enough; Side Panel read is a
+  refresh/retry control.
+- Auto-read: with all-sites access, Page/Web should read only while the Side
+  Panel is open.
+- Model output: automatic briefs should feel compact and not like a debug dump.
+- Timing copy: extraction elapsed and model elapsed should be distinguishable.
+- Parser quality: preview should not start with JSON-LD, navigation, related
+  links, browser-download prompts, or other obvious page chrome.
+- Multi-tab state: switching saved Page/Web sessions should not imply the Chrome
+  active tab changed unless the user chooses that action.
+- Facebook: Feed should remain activated on Facebook pages, and existing heads-
+  up, deep-read, and check actions should still work.
+- Privacy: screenshots, full page text, raw HTML, and real-site evidence should
+  not appear in storage, public docs, release artifacts, or committed fixtures.
+- CWS wording: all-sites access, model sending, and screenshot-assisted recovery
+  should match reviewer notes and privacy policy language.
+
+## Known Review Risks
+
+- Real-site parser quality still needs human judgment beyond synthetic audit
+  pages.
+- Quick brief reduces output length but does not eliminate model latency; slow
+  providers can still take noticeable time.
+- Current-region targeting is a v1 seam; it is intentionally conservative and
+  should not be judged as the final paragraph UX.
+- Vision fallback exists as a confirmed recovery path, not as automatic visual
+  parsing.

@@ -14,6 +14,7 @@ import type { GeneralPageModelContext } from "./general-page-model-context";
 import {
   applyGeneralPageBriefPostGuards,
   parseGeneralPageBriefContent,
+  type GeneralPageAnalysisMode,
   type GeneralPageBrief,
 } from "./general-page-analysis";
 import { buildGeneralPageModelUserPrompt } from "./general-page-model-context";
@@ -193,31 +194,43 @@ export function readingBriefSystemPrompt(outputLang?: Lang): string {
 export function generalPageBriefSystemPrompt(
   outputLang: Lang | undefined,
   allowedUse: GeneralPageEffectiveModelContextUse,
+  mode: GeneralPageAnalysisMode = "full",
 ): string {
   const lang = tierBOutputLang(outputLang);
   const overview = allowedUse === "page_overview_only";
+  const quick = mode === "quick";
   if (lang === "en") {
     return [
       "You are Truly's General Page reading assistant. You receive extracted web-page context and must return JSON only.",
-      "Schema: {\"schemaVersion\":1,\"summary\":\"2-4 neutral sentences\",\"bg\":[{\"t\":\"background topic\",\"why\":\"why it matters\",\"q\":\"optional question\"}],\"claims\":[{\"c\":\"checkable claim\",\"why\":\"why it matters\",\"need\":\"evidence needed\",\"q\":\"optional question\"}],\"qs\":[{\"q\":\"follow-up question\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"optional short note\"}",
+      quick
+        ? "Schema: {\"schemaVersion\":1,\"summary\":\"1 neutral sentence <=32 English words\",\"bg\":[{\"t\":\"point <=8 words\",\"why\":\"why it matters <=18 words\"}],\"claims\":[{\"c\":\"one checkable claim <=24 words\",\"why\":\"why it matters <=18 words\",\"need\":\"evidence needed <=16 words\"}],\"qs\":[{\"q\":\"one follow-up question <=28 words\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"optional note <=24 words\"}"
+        : "Schema: {\"schemaVersion\":1,\"summary\":\"2-4 neutral sentences\",\"bg\":[{\"t\":\"background topic\",\"why\":\"why it matters\",\"q\":\"optional question\"}],\"claims\":[{\"c\":\"checkable claim\",\"why\":\"why it matters\",\"need\":\"evidence needed\",\"q\":\"optional question\"}],\"qs\":[{\"q\":\"follow-up question\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"optional short note\"}",
       `Write every natural-language field in English. ${TEMPORAL_CONTEXT_GUIDANCE_EN}.`,
       "Use only the supplied page context. Do not invent sources, dates, authors, facts, motives, or URLs.",
       "When targetKind is selection, summarize and analyze only the selected text; surrounding text is context only.",
       overview
         ? "This is page overview only. Describe what kind of page it is, what linked topics or sections appear, and what the reader may inspect next. Return claims as an empty array or omit it. Do not produce article-grade claims."
         : "For article or selection analysis, return a neutral summary, useful background, checkable claims only when the supplied text supports them, and follow-up questions.",
+      quick
+        ? "Quick mode: keep output compact for automatic UI display. bg has at most 2 items; claims and qs have at most 1 item each. Prefer omitting claims/qs unless they are clearly useful."
+        : "Full mode: keep the output useful but still concise.",
       "Do not use markdown. Do not output extra fields.",
     ].join("\n");
   }
   return [
     "你是 Truly 的一般網頁閱讀助理。你會收到抽取後的網頁脈絡，只能回傳 JSON。",
-    "Schema: {\"schemaVersion\":1,\"summary\":\"2-4 句中立摘要\",\"bg\":[{\"t\":\"背景主題\",\"why\":\"為何重要\",\"q\":\"可選問題\"}],\"claims\":[{\"c\":\"可查核主張\",\"why\":\"為何重要\",\"need\":\"需要的證據\",\"q\":\"可選問題\"}],\"qs\":[{\"q\":\"延伸問題\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"可選短提醒\"}",
+    quick
+      ? "Schema: {\"schemaVersion\":1,\"summary\":\"1 句中立摘要，80 字以內\",\"bg\":[{\"t\":\"重點，12 字以內\",\"why\":\"為何重要，40 字以內\"}],\"claims\":[{\"c\":\"一個可查核主張，50 字以內\",\"why\":\"為何重要，40 字以內\",\"need\":\"需要的證據，30 字以內\"}],\"qs\":[{\"q\":\"一個延伸問題，50 字以內\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"可選短提醒，40 字以內\"}"
+      : "Schema: {\"schemaVersion\":1,\"summary\":\"2-4 句中立摘要\",\"bg\":[{\"t\":\"背景主題\",\"why\":\"為何重要\",\"q\":\"可選問題\"}],\"claims\":[{\"c\":\"可查核主張\",\"why\":\"為何重要\",\"need\":\"需要的證據\",\"q\":\"可選問題\"}],\"qs\":[{\"q\":\"延伸問題\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"可選短提醒\"}",
     `所有自然語言欄位使用台灣慣用繁體中文。${TEMPORAL_CONTEXT_GUIDANCE}。${ZHTW_OUTPUT_GUIDANCE}。`,
     "只能使用提供的頁面脈絡。不要發明來源、日期、作者、事實、動機或網址。",
     "targetKind 是 selection 時，只摘要與分析選取文字；surrounding text 只能當脈絡，不可當成摘要主體。",
     overview
       ? "這只允許頁面總覽。請描述這是什麼類型的頁面、它連到哪些主題或區塊、讀者下一步可檢視什麼。claims 必須回空陣列或省略，不得產生文章級查核主張。"
       : "文章或選取文字分析可回傳中立摘要、有用背景、僅限文本支持的可查核主張，以及延伸問題。",
+    quick
+      ? "快速模式：輸出要適合自動顯示。bg 最多 2 項；claims 與 qs 最多各 1 項。除非明顯有幫助，否則省略 claims/qs。"
+      : "完整模式：保持有用但仍需精簡。",
     "不要 markdown，不要輸出其他欄位。",
   ].join("\n");
 }
@@ -370,6 +383,7 @@ export interface TierBGeneralPageBriefRequest {
   apiKey?: string;
   context: GeneralPageModelContext;
   allowedUse: GeneralPageEffectiveModelContextUse;
+  mode?: GeneralPageAnalysisMode;
   timeoutMs?: number;
   outputLang?: Lang;
   /** User-confirmed visible-tab screenshot as a data URL (vision providers only). */
@@ -677,6 +691,7 @@ export function buildGeneralPageBriefPrompt(
 
 export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefRequest): TierBChatBody {
   const userText = buildGeneralPageBriefPrompt(req.context, req.outputLang);
+  const mode = req.mode ?? "full";
   const userContent: string | ChatContent[] = req.screenshotDataUrl
     ? [
         { type: "text", text: userText },
@@ -686,11 +701,11 @@ export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefReq
   const body: TierBChatBody = {
     model: req.model,
     messages: [
-      { role: "system", content: generalPageBriefSystemPrompt(req.outputLang, req.allowedUse) },
+      { role: "system", content: generalPageBriefSystemPrompt(req.outputLang, req.allowedUse, mode) },
       { role: "user", content: userContent },
     ],
     temperature: 0,
-    max_tokens: 1400,
+    max_tokens: mode === "quick" ? 520 : 1400,
     response_format: { type: "json_object" },
     truncate_prompt_tokens: TIER_B_CONTEXT_LIMIT_TOKENS,
     chat_template_kwargs: { enable_thinking: false },
@@ -845,7 +860,7 @@ export async function callTierBGeneralPageBrief(
     }
     const data = await resp.json();
     const raw = String(data?.choices?.[0]?.message?.content || "").trim();
-    const parsed = parseGeneralPageBriefContent(raw, req.model, req.outputLang);
+    const parsed = parseGeneralPageBriefContent(raw, req.model, req.outputLang, req.mode ?? "full");
     if (!parsed.ok || !parsed.value) {
       console.warn(`[Truly General Page Brief] ${parsed.error}:`, raw.slice(0, 240));
       return { ok: false, brief: null, raw: raw.slice(0, 1200), error: "general_page_brief_format_error" };

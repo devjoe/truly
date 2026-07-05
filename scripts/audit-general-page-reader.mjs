@@ -21,6 +21,7 @@ const PHASE_TIMEOUT_MS = {
   teaser: 45_000,
   candidate: 45_000,
   noGrant: 30_000,
+  storagePrivacy: 20_000,
 };
 const CDP_COMMAND_TIMEOUT_MS = 15_000;
 const auditPhaseLog = [];
@@ -487,6 +488,57 @@ async function currentVersion(extensionId) {
     extensionId,
     "chrome.runtime.sendMessage({ type: 'GET_VERSION' })",
   );
+}
+
+async function auditStoragePrivacy(extensionId) {
+  return extensionPageEval(extensionId, `(() => new Promise((resolve) => {
+    const suspiciousNeedles = [
+      { name: "screenshot_data_url", pattern: /^data:image\\/(?:jpeg|png|webp);base64,/i },
+      { name: "raw_html", pattern: /<\\/?(?:html|body|article|main|script|style)\\b/i },
+      { name: "synthetic_article_text", pattern: /synthetic article for the General Page Reader CDP acceptance test/i },
+      { name: "candidate_block_text", pattern: /Candidate block recovery fixture starts with synthetic article text/i },
+      { name: "teaser_hub_text", pattern: /multi article teaser hub fixture contains short cards/i },
+      { name: "noisy_fixture_text", pattern: /為達最佳瀏覽效果|download Chrome|請至 Google 官網下載/i },
+    ];
+    const safePreview = (value) => {
+      const text = String(value);
+      if (text.length <= 48) return text.replace(/[A-Za-z0-9+/=]{16,}/g, "[token]");
+      return text.slice(0, 48).replace(/[A-Za-z0-9+/=]{16,}/g, "[token]") + "...";
+    };
+    const scan = (value, path, hits) => {
+      if (typeof value === "string") {
+        for (const needle of suspiciousNeedles) {
+          if (needle.pattern.test(value)) {
+            hits.push({ area: path[0], path: path.join("."), kind: needle.name, preview: safePreview(value) });
+          }
+        }
+        return;
+      }
+      if (!value || typeof value !== "object") return;
+      if (Array.isArray(value)) {
+        value.forEach((item, index) => scan(item, path.concat(String(index)), hits));
+        return;
+      }
+      for (const [key, nested] of Object.entries(value)) {
+        scan(nested, path.concat(key), hits);
+      }
+    };
+
+    Promise.all([
+      chrome.storage.local.get(null).catch((error) => ({ __readError: String(error) })),
+      chrome.storage.session.get(null).catch((error) => ({ __readError: String(error) })),
+    ]).then(([local, session]) => {
+      const hits = [];
+      scan(local, ["local"], hits);
+      scan(session, ["session"], hits);
+      resolve({
+        ok: hits.length === 0,
+        localKeyCount: Object.keys(local || {}).length,
+        sessionKeyCount: Object.keys(session || {}).length,
+        hits,
+      });
+    });
+  }))()`);
 }
 
 async function auditPopup(extensionId, allowedUrl) {
@@ -1554,6 +1606,10 @@ function assertAudit(result) {
   if (!result.noGrant.detailHasGuidance) errors.push("no-grant primary status detail did not show toolbar activation guidance");
   if (result.noGrant.detailHasGenericRetry) errors.push("no-grant primary status detail still shows generic retry guidance");
   if (result.noGrant.errorBlockPresent) errors.push("no-grant toolbar guidance is duplicated in a separate error block");
+  if (result.storagePrivacy?.ok !== true) {
+    const hits = (result.storagePrivacy?.hits || []).map((hit) => `${hit.area}:${hit.path}:${hit.kind}`).join(", ");
+    errors.push(`storage privacy probe found sensitive Page/Web data in chrome.storage: ${hits || "(missing details)"}`);
+  }
   for (const [label, pass, evidence] of qaMatrixRows(result)) {
     if (!pass) errors.push(`QA matrix failed: ${label}: ${evidence}`);
   }
@@ -1651,6 +1707,11 @@ function qaMatrixRows(result) {
       "status=" + (result.success.pageBrief?.status || "missing"),
     ],
     [
+      "Page brief quick mode",
+      /快速重點|quick brief/.test(result.success.pageBrief?.text || ""),
+      "quickNote=" + /快速重點|quick brief/.test(result.success.pageBrief?.text || ""),
+    ],
+    [
       "Responsive Page/Web layout",
       result.success.responsive?.horizontalOverflow === false &&
         (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
@@ -1734,6 +1795,13 @@ function qaMatrixRows(result) {
       "decision=" + (teaserDecision || "missing") + "; use=" + (teaserUse || "missing"),
     ],
     [
+      "Storage privacy probe",
+      result.storagePrivacy?.ok === true,
+      "localKeys=" + (result.storagePrivacy?.localKeyCount ?? "missing") +
+        "; sessionKeys=" + (result.storagePrivacy?.sessionKeyCount ?? "missing") +
+        "; hits=" + (result.storagePrivacy?.hits?.length ?? "missing"),
+    ],
+    [
       "No-grant guidance",
       result.noGrant.hasGuidance === true &&
         result.noGrant.hasAllSitesGuidance === true &&
@@ -1774,6 +1842,7 @@ function writeSummary(result, errors) {
     `- Analysis readiness: ${result.success.ready.modelContext?.status || "(missing)"}`,
     `- Analysis scope: ${result.success.ready.advisor?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
+    `- Page brief quick mode: ${/快速重點|quick brief/.test(result.success.pageBrief?.text || "")}`,
     `- Responsive Page/Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
     `- Page/Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; compactModel=${restraint.readyModelCompact}; sourceLinksCapped=${restraint.sourceLinksCapped}; cautionExpanded=${restraint.cautionDiagnosticsExpanded}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
     `- Page/Web interaction accessibility: unnamed=${result.success.responsive?.unnamedInteractive?.length ?? "(missing)"}; undersizedControls=${result.success.responsive?.undersizedControls?.length ?? "(missing)"}`,
@@ -1791,6 +1860,7 @@ function writeSummary(result, errors) {
     `- Meaningful URL stale: ${result.success.afterMeaningful.stale}`,
     `- Meaningful URL scrubbed stale surface: ${!result.success.afterMeaningful.oldExcerptVisible && !result.success.afterMeaningful.sourceLinkVisible}`,
     `- Copy metadata title/url/excerpt: ${result.success.copy.hasTitle}/${result.success.copy.hasUrl}/${result.success.copy.hasExcerpt}`,
+    `- Storage privacy probe: ok=${result.storagePrivacy?.ok}; localKeys=${result.storagePrivacy?.localKeyCount ?? "(missing)"}; sessionKeys=${result.storagePrivacy?.sessionKeyCount ?? "(missing)"}; hits=${result.storagePrivacy?.hits?.length ?? "(missing)"}`,
     `- No-grant guidance: ${result.noGrant.hasGuidance}`,
     `- No-grant all-sites settings guidance: ${result.noGrant.hasAllSitesGuidance}`,
     `- No-grant primary status guidance: ${result.noGrant.detailHasGuidance}; genericRetry=${result.noGrant.detailHasGenericRetry}; duplicateErrorBlock=${result.noGrant.errorBlockPresent}`,
@@ -1855,6 +1925,8 @@ try {
       auditTeaserHubOverview(extensionId, server.allowedBase)),
     noGrant: await runAuditPhase("no-grant", PHASE_TIMEOUT_MS.noGrant, () =>
       auditNoGrantGuidance(extensionId, server.noGrantBase)),
+    storagePrivacy: await runAuditPhase("storage-privacy", PHASE_TIMEOUT_MS.storagePrivacy, () =>
+      auditStoragePrivacy(extensionId)),
     artifactDir: relative(ROOT, OUT_DIR),
   };
 

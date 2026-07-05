@@ -193,8 +193,9 @@ Some users configure their own private model endpoint outside localhost. Truly
 should request access only when a configured endpoint requires that origin.
 General Page all-sites access uses the same optional permission surface only
 after an explicit Settings opt-in; it reads the current active page while the
-Side Panel is open, may send suitable summary context to the configured model
-endpoint, and does not enable background crawling or persistent page history.
+Side Panel is open, may send suitable quick-brief context to the configured
+model endpoint, and does not enable background crawling or persistent page
+history.
 
 ### Does Page/Web capture screenshots automatically?
 
