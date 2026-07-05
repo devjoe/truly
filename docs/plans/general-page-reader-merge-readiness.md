@@ -7,7 +7,7 @@ This document is the current public-safe readiness index for the General Page Re
 
 ## Accepted Runtime Scope
 
-- Page/Web reads are explicitly user-triggered through toolbar popup activation or optional all-sites access enabled from Settings.
+- Page/Web reads are user-triggered through toolbar popup activation, or automatic while the Side Panel is open after optional all-sites access is enabled from Settings.
 - Whole-page, selected-text, and current-region reading paths share the same Page/Web session model and remain session-only.
 - Page/Web model integration uses a single Tier B `GeneralPageBrief` request over the effective reading context, not the raw full DOM or hidden private artifacts.
 - Screenshot-assisted recovery is user-confirmed only, vision-gated, session-only, and never stored in `chrome.storage` or logs.

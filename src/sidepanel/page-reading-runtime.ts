@@ -53,6 +53,7 @@ import {
   pageUrlIdentity,
   type PageUrlIdentity,
 } from "../lib/page-url-identity";
+import { hasGeneralPageAllSitesPermission } from "../lib/general-page-host-permission";
 import { safeFilenamePart, saveMarkdownTextFile } from "./browser-actions";
 import type { TabId } from "./tabs";
 
@@ -60,6 +61,7 @@ type PagePlatform = "facebook" | "general" | "unsupported";
 type PageSessionStatus = "idle" | "loading" | "ready" | "error" | "stale";
 type PageActivationSource = "toolbar" | "popup" | "sidepanel" | "hotkey";
 const LOADING_ELAPSED_VISIBLE_THRESHOLD_MS = 2_000;
+const AUTO_READ_DEBOUNCE_MS = 700;
 
 interface PageReadingSession {
   tabId: number;
@@ -189,6 +191,8 @@ export interface CreateSidepanelPageReadingRuntimeOptions {
   sessionStore?: PageReadingSessionStore;
   /** True when the configured Tier B provider passed the vision probe. */
   getVisionSupported?(): boolean;
+  /** True when Truly can read general pages without a fresh toolbar activeTab grant. */
+  hasAllSitesPermission?(): Promise<boolean>;
 }
 
 function escapeHtml(input: string): string {
@@ -699,6 +703,7 @@ export function createSidepanelPageReadingRuntime({
   now,
   sessionStore,
   getVisionSupported = () => false,
+  hasAllSitesPermission = hasGeneralPageAllSitesPermission,
 }: CreateSidepanelPageReadingRuntimeOptions): SidepanelPageReadingRuntime {
   const sessions = new Map<number, PageReadingSession>();
   let activeTabId: number | null = null;
@@ -710,6 +715,8 @@ export function createSidepanelPageReadingRuntime({
   let downloadState: "idle" | "saved" | "cancelled" | "failed" = "idle";
   let lastActivation: PageActivationAuditState | undefined;
   let loadingTicker: ReturnType<typeof setInterval> | undefined;
+  let autoReadTimer: ReturnType<typeof setTimeout> | undefined;
+  let autoReadToken = 0;
 
   function tr(key: string, params?: Record<string, string | number>): string {
     return t(key, getLang(), params);
@@ -718,6 +725,48 @@ export function createSidepanelPageReadingRuntime({
   function currentSession(): PageReadingSession | undefined {
     const tabId = typeof displayTabId === "number" ? displayTabId : activeTabId;
     return typeof tabId === "number" ? sessions.get(tabId) : undefined;
+  }
+
+  function clearAutoReadTimer(): void {
+    if (!autoReadTimer) return;
+    clearTimeout(autoReadTimer);
+    autoReadTimer = undefined;
+  }
+
+  function shouldAutoReadActivePage(): boolean {
+    if (typeof activeTabId !== "number") return false;
+    if (!isHttpLikeUrl(activeUrl) || platformForUrl(activeUrl) !== "general") return false;
+    const session = sessions.get(activeTabId);
+    if (!session) return true;
+    if (session.status === "loading") return false;
+    const samePage = isMeaningfullySamePage(session.identity, activeUrl);
+    if (samePage && session.surface && session.status !== "stale") return false;
+    return true;
+  }
+
+  async function maybeAutoReadActivePage(token: number, expectedTabId: number, expectedUrl: string): Promise<void> {
+    if (token !== autoReadToken) return;
+    if (activeTabId !== expectedTabId || activeUrl !== expectedUrl || !shouldAutoReadActivePage()) return;
+    const hasPermission = await hasAllSitesPermission().catch(() => false);
+    if (!hasPermission) return;
+    if (token !== autoReadToken) return;
+    if (activeTabId !== expectedTabId || activeUrl !== expectedUrl || !shouldAutoReadActivePage()) return;
+    await requestReadCurrentPage("sidepanel");
+  }
+
+  function scheduleAutoReadActivePage(): void {
+    clearAutoReadTimer();
+    autoReadToken += 1;
+    if (!installed || !shouldAutoReadActivePage()) return;
+    const expectedTabId = activeTabId;
+    const expectedUrl = activeUrl;
+    if (typeof expectedTabId !== "number") return;
+    const token = autoReadToken;
+    autoReadTimer = setTimeout(() => {
+      autoReadTimer = undefined;
+      void maybeAutoReadActivePage(token, expectedTabId, expectedUrl);
+    }, AUTO_READ_DEBOUNCE_MS);
+    (autoReadTimer as { unref?: () => void }).unref?.();
   }
 
   function friendlyPageReadingError(error: string): string {
@@ -810,6 +859,7 @@ export function createSidepanelPageReadingRuntime({
       session.updatedAt = now();
     }
     render();
+    scheduleAutoReadActivePage();
   }
 
   function markTabSessionStale(tabId: number, tab: BrowserTab): void {
@@ -1645,6 +1695,8 @@ export function createSidepanelPageReadingRuntime({
   }
 
   async function requestReadCurrentPage(source: PageActivationSource = "sidepanel"): Promise<void> {
+    clearAutoReadTimer();
+    autoReadToken += 1;
     try {
       const tab = await refreshActiveTab(false);
       if (typeof tab?.id !== "number") {

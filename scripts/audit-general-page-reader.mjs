@@ -532,7 +532,30 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       readDisabled: document.querySelector('#pageReadCurrent')?.disabled ?? null
     }))()`);
 
-    await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    const autoRead = await side.evaluateJson(`(() => new Promise((resolve) => {
+      chrome.permissions.contains({ origins: ['http://*/*', 'https://*/*'] }, (allSites) => {
+        resolve({
+          allSites: Boolean(allSites),
+          permissionError: chrome.runtime.lastError?.message || ''
+        });
+      });
+    }))()`);
+    autoRead.observed = false;
+    autoRead.error = "";
+    if (autoRead.allSites) {
+      await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web auto-read ready state")
+        .then(() => {
+          autoRead.observed = true;
+        })
+        .catch(async (error) => {
+          autoRead.error = error.message;
+          await side.screenshot(resolve(OUT_DIR, "page-auto-read-timeout.png")).catch(() => {});
+        });
+    }
+
+    if (!autoRead.observed) {
+      await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    }
     await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web ready state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, article, initial).catch((captureError) => ({
         initial,
@@ -863,6 +886,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
 
     return {
       initial,
+      autoRead,
       ready,
       pageBrief,
       responsive,
@@ -1317,6 +1341,9 @@ function assertAudit(result) {
   if (result.success.ready.status !== "已讀取" && result.success.ready.status !== "Ready") {
     errors.push(`successful read did not reach ready status: ${result.success.ready.status}`);
   }
+  if (result.success.autoRead?.allSites && !result.success.autoRead?.observed) {
+    errors.push(`all-sites sidepanel auto-read did not reach ready status: ${result.success.autoRead.error || "(no details)"}`);
+  }
   if (result.success.ready.title !== "Synthetic General Page Reader Article") {
     errors.push(`unexpected extracted title: ${result.success.ready.title}`);
   }
@@ -1610,6 +1637,15 @@ function qaMatrixRows(result) {
       "title=" + result.success.ready.title + "; links=" + (result.success.ready.sourceLinks?.length ?? 0) + "; diagnosticsCollapsed=" + (result.success.ready.extractionDiagnosticsOpen === false),
     ],
     [
+      "All-sites sidepanel auto-read",
+      result.success.autoRead?.allSites
+        ? result.success.autoRead?.observed === true
+        : true,
+      "allSites=" + Boolean(result.success.autoRead?.allSites) +
+        "; observed=" + Boolean(result.success.autoRead?.observed) +
+        (result.success.autoRead?.error ? "; error=" + result.success.autoRead.error : ""),
+    ],
+    [
       "Page brief generation",
       result.success.pageBrief?.status === "ready",
       "status=" + (result.success.pageBrief?.status || "missing"),
@@ -1733,6 +1769,7 @@ function writeSummary(result, errors) {
     "",
     `- Popup general page: ${result.popup.general.button} / disabled=${result.popup.general.disabled}`,
     `- Popup unsupported page disabled: ${result.popup.unsupported.disabled}`,
+    `- All-sites sidepanel auto-read: allSites=${Boolean(result.success.autoRead?.allSites)}; observed=${Boolean(result.success.autoRead?.observed)}`,
     `- Page/Web read status: ${result.success.ready.status}`,
     `- Analysis readiness: ${result.success.ready.modelContext?.status || "(missing)"}`,
     `- Analysis scope: ${result.success.ready.advisor?.status || "(missing)"}`,

@@ -49,8 +49,9 @@ Truly does not request `downloads`, `history`, broad `tabs`, `webRequest`, or
 reading under the `activeTab` boundary by default. Optional host permissions are
 reserved for explicit user actions: user-configured model endpoints, or the
 General Page all-sites Settings opt-in that lets the Side Panel read the current
-page when the user presses a read/analyze action. This does not enable background
-crawling, automatic model submission, or persistent full-article storage.
+active page while it is open. This does not enable background crawling,
+background model submission, automatic screenshot capture, or persistent
+full-article storage.
 
 ## Security Follow-ups
 

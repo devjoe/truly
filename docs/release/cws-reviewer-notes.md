@@ -142,8 +142,9 @@ surfaces:
 
 - `storage`: save user settings, readiness state, and extension preferences.
 - `activeTab`: interact with the current tab after user action.
-- `scripting`: inject the general page reader only after the user asks to read
-  the active page.
+- `scripting`: inject the general page reader for the active page after a
+  toolbar/Side Panel read action, or while the Side Panel is open when the user
+  has explicitly enabled General Page all-sites access.
 - `sidePanel`: provide the user-opened reading side panel.
 - Facebook / FB CDN hosts: inject the reading UI and read post/image context on
   supported Facebook pages. In-page Facebook GraphQL/network responses may also
@@ -191,8 +192,9 @@ Truly-owned backend.
 Some users configure their own private model endpoint outside localhost. Truly
 should request access only when a configured endpoint requires that origin.
 General Page all-sites access uses the same optional permission surface only
-after an explicit Settings opt-in; it reads the current page after a user action
-and does not enable background crawling or persistent page history.
+after an explicit Settings opt-in; it reads the current active page while the
+Side Panel is open, may send suitable summary context to the configured model
+endpoint, and does not enable background crawling or persistent page history.
 
 ### Does Page/Web capture screenshots automatically?
 

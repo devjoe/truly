@@ -123,8 +123,9 @@ Avoid adding `<all_urls>` or broad static host permissions for page reading.
 Truly may request the existing optional `http://*/*` and `https://*/*` host
 permissions only after the user explicitly enables General Page all-sites access
 from Settings. That opt-in lets the Page/Web tab read the current page directly
-when the user presses a read/analyze action; it does not enable automatic model
-sending, background crawling, or persistent article storage.
+while the Side Panel is open; it does not enable background crawling, automatic
+screenshot capture, or persistent article storage. Suitable pages may send
+summary context to the configured model endpoint.
 
 Optional endpoint host permissions may also be requested for user-configured
 model endpoints.

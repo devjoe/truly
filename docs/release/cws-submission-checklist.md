@@ -106,8 +106,8 @@ Store. The dashboard copy should still come from
   justifications.
 - [ ] Confirm optional broad host permissions are described as endpoint-driven
   and user-triggered. If General Page all-sites access is mentioned, it must be
-  described as a separate Settings opt-in for reading the current page only
-  after a user action.
+  described as a separate Settings opt-in for reading the current active page
+  only while the Side Panel is open.
 
 ## Reviewer Notes
 

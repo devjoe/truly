@@ -408,6 +408,224 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("brief-model 使用 1.2 秒");
   });
 
+  it("does not auto-read a general page when all-sites access is unavailable", async () => {
+    vi.useFakeTimers();
+    try {
+      const pagePaneEl = setupDom();
+      const sendMessage = vi.fn();
+      const runtime = createSidepanelPageReadingRuntime({
+        pagePaneEl,
+        runtime: { sendMessage },
+        tabs: {
+          query: vi.fn(async () => [{
+            id: 42,
+            url: "https://example.test/article",
+            title: "Runtime Fixture",
+          }]),
+        },
+        activateTab: vi.fn(),
+        getLang: () => "zh-TW",
+        now: () => 1_000,
+        hasAllSitesPermission: vi.fn(async () => false),
+      });
+
+      runtime.install();
+      await flushMicrotasks();
+      vi.advanceTimersByTime(1_000);
+      await flushMicrotasks();
+
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(pagePaneEl.textContent).toContain("讀取此頁");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("auto-reads the active general page when all-sites access is available", async () => {
+    vi.useFakeTimers();
+    try {
+      const pagePaneEl = setupDom();
+      const sendMessage = vi.fn(async (message: TrulyMessage) => {
+        if (message.type === "PAGE_READING_REQUEST") {
+          return {
+            type: "PAGE_READING_RESULT",
+            tabId: 42,
+            surface: surface(),
+          } satisfies TrulyMessage;
+        }
+        throw new Error(`unexpected message ${(message as { type: string }).type}`);
+      });
+      const runtime = createSidepanelPageReadingRuntime({
+        pagePaneEl,
+        runtime: { sendMessage },
+        tabs: {
+          query: vi.fn(async () => [{
+            id: 42,
+            url: "https://example.test/article",
+            title: "Runtime Fixture",
+          }]),
+        },
+        activateTab: vi.fn(),
+        getLang: () => "zh-TW",
+        now: () => 1_000,
+        hasAllSitesPermission: vi.fn(async () => true),
+      });
+
+      runtime.install();
+      await flushMicrotasks();
+      vi.advanceTimersByTime(1_000);
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      expect(sendMessage).toHaveBeenCalledTimes(1);
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+        type: "PAGE_READING_REQUEST",
+        tabId: 42,
+        inject: true,
+        activation: expect.objectContaining({
+          source: "sidepanel",
+          targetKind: "page",
+          action: "read",
+        }),
+      }));
+      expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("auto-reads once for the same meaningful URL after status-complete tab updates", async () => {
+    vi.useFakeTimers();
+    try {
+      const pagePaneEl = setupDom();
+      let onUpdated: ((tabId: number, changeInfo: { url?: string; status?: string }, tab: { id: number; url: string; title: string }) => void) | undefined;
+      const tab = {
+        id: 42,
+        url: "https://example.test/article?utm_source=feed#comments",
+        title: "Runtime Fixture",
+      };
+      const sendMessage = vi.fn(async (message: TrulyMessage) => {
+        if (message.type === "PAGE_READING_REQUEST") {
+          return {
+            type: "PAGE_READING_RESULT",
+            tabId: 42,
+            surface: surface({
+              url: "https://example.test/article",
+              canonicalUrl: "https://example.test/article",
+            }),
+          } satisfies TrulyMessage;
+        }
+        throw new Error(`unexpected message ${(message as { type: string }).type}`);
+      });
+      const runtime = createSidepanelPageReadingRuntime({
+        pagePaneEl,
+        runtime: { sendMessage },
+        tabs: {
+          query: vi.fn(async () => [tab]),
+          onUpdated: {
+            addListener(listener) {
+              onUpdated = listener;
+            },
+          },
+        },
+        activateTab: vi.fn(),
+        getLang: () => "zh-TW",
+        now: () => 1_000,
+        hasAllSitesPermission: vi.fn(async () => true),
+      });
+
+      runtime.install();
+      await flushMicrotasks();
+      vi.advanceTimersByTime(1_000);
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      onUpdated?.(42, { status: "complete" }, tab);
+      await flushMicrotasks();
+      vi.advanceTimersByTime(1_000);
+      await flushMicrotasks();
+
+      expect(sendMessage.mock.calls.filter(([message]) => message.type === "PAGE_READING_REQUEST")).toHaveLength(1);
+      expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("auto-generates a General Page brief after an all-sites auto-read when Tier B is available", async () => {
+    vi.useFakeTimers();
+    try {
+      const pagePaneEl = setupDom();
+      const sendMessage = vi.fn(async (message: TrulyMessage) => {
+        if (message.type === "PAGE_READING_REQUEST") {
+          return {
+            type: "PAGE_READING_RESULT",
+            tabId: 42,
+            surface: surface(),
+          } satisfies TrulyMessage;
+        }
+        if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+          expect(message.allowedUse).toBe("article_or_selection_analysis");
+          expect(message.context.targetKind).toBe("page");
+          return {
+            type: "GENERAL_PAGE_ANALYSIS_RESULT",
+            tabId: 42,
+            ok: true,
+            brief: {
+              schemaVersion: 1,
+              summary: "Auto-read model summary.",
+              bg: [{ t: "Auto context", why: "The side panel was open with all-sites access." }],
+              claims: [{ c: "Auto-read claim", why: "It verifies automatic model dispatch.", need: "Compare with the page." }],
+              qs: [{ q: "What changed after auto-read?", kind: "source" }],
+              model: "brief-model",
+              outputLang: "zh-TW",
+              elapsedMs: 900,
+            },
+          } satisfies TrulyMessage;
+        }
+        throw new Error(`unexpected message ${(message as { type: string }).type}`);
+      });
+      const runtime = createSidepanelPageReadingRuntime({
+        pagePaneEl,
+        runtime: { sendMessage },
+        tabs: {
+          query: vi.fn(async () => [{
+            id: 42,
+            url: "https://example.test/article",
+            title: "Runtime Fixture",
+          }]),
+        },
+        activateTab: vi.fn(),
+        getLang: () => "zh-TW",
+        getSettings: () => ({
+          ...DEFAULT_SETTINGS,
+          deepClassifyEnabled: true,
+          tierBProvider: "openai-compatible",
+          tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+          tierBModel: "brief-model",
+        }),
+        now: () => 1_000,
+        hasAllSitesPermission: vi.fn(async () => true),
+      });
+
+      runtime.install();
+      await flushMicrotasks();
+      vi.advanceTimersByTime(1_000);
+      await flushMicrotasks();
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      expect(sendMessage.mock.calls.map(([message]) => message.type)).toEqual([
+        "PAGE_READING_REQUEST",
+        "GENERAL_PAGE_ANALYSIS_REQUEST",
+      ]);
+      expect(pagePaneEl.textContent).toContain("Auto-read model summary.");
+      expect(pagePaneEl.textContent).toContain("Auto-read claim");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("shows why a short extraction should not be sent to a model", async () => {
     const pagePaneEl = setupDom();
     const runtime = createSidepanelPageReadingRuntime({

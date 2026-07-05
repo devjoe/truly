@@ -58,10 +58,10 @@ Page/Web side-panel reader for the current tab. The side panel can show
 summary, context, follow-up questions, claim signals, and manual handoff
 actions.
 
-Truly currently focuses on supported Facebook reading surfaces and
-user-triggered Page/Web reads. The longer roadmap is to support more social
-feeds, broader web-page quality, mobile apps, desktop apps, and community
-features.
+Truly currently focuses on supported Facebook reading surfaces and Page/Web
+reads while the user is using the Side Panel. The longer roadmap is to support
+more social feeds, broader web-page quality, mobile apps, desktop apps, and
+community features.
 
 Reading analysis runs in the model environment selected by the user: Chrome
 built-in Gemini Nano when available, a local model endpoint such as Ollama, or a
@@ -179,16 +179,17 @@ facts intact:
 - Truly does not include product analytics or telemetry.
 - Truly does not operate a project-owned backend for feed or page content.
 - The extension processes visible website content on supported Facebook
-  surfaces and user-triggered Page/Web reads to provide reading assistance.
+  surfaces and Page/Web reads while the user is using the Side Panel to provide
+  reading assistance.
 - On supported Facebook pages, the extension may hook in-page Facebook
   GraphQL/network responses or read server-rendered page data in the page
   context to recover post context and sponsorship signals for the current feed
   surface.
 - Page/Web normally uses one-time toolbar access. If the user explicitly enables
   General Page all-sites access in Settings, the side panel can read the current
-  page on ordinary HTTP/HTTPS sites the user visits when the user presses a
-  read/analyze action; this
-  does not enable background crawling or persistent full-page history.
+  page on ordinary HTTP/HTTPS sites while the Side Panel is open; suitable pages
+  may send summary context to the configured model endpoint, but this does not
+  enable background crawling or persistent full-page history.
 - Page/Web screenshot-assisted recovery can process a visible-tab screenshot
   only when text extraction is insufficient, the selected model source supports
   vision input, and the user confirms the preview. The screenshot is

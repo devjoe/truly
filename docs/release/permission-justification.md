@@ -11,7 +11,7 @@ permission. It should stay aligned with `src/manifest.json`.
 |---|---|---|
 | `storage` | Persist extension settings, readiness state, theme/language choices, model configuration, and user preferences. | Options, Popup, Heads-up, and Side Panel stay in sync across sessions. |
 | `activeTab` | Use temporary access after a user gesture when the extension needs to interact with the current tab. | Popup and user-triggered actions can operate on the active page without broad tab history permissions. |
-| `scripting` | Inject the general page reader content script only after a user action on the active tab. | The user can explicitly read the current web page without broad install-time page injection. |
+| `scripting` | Inject the general page reader content script for the active tab after a user action, or while the Side Panel is open after the user enables optional all-sites access. | The user can explicitly read the current web page without broad install-time page injection; all-sites access remains a separate Settings opt-in. |
 | `sidePanel` | Render the reading side panel through Chrome's Side Panel API. | The user can open a dedicated reading panel for the current post or current web page. |
 
 ## Static Host Permissions
@@ -27,14 +27,14 @@ permission. It should stay aligned with `src/manifest.json`.
 
 | Optional host permission | Why Truly may request it | Boundary |
 |---|---|---|
-| `http://*/*` | Support a user-configured HTTP model endpoint outside the default localhost hosts, and optionally let General Page Reader read HTTP pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current page only when the user presses a read/analyze action. |
-| `https://*/*` | Support a user-configured HTTPS model endpoint outside the default hosts, and optionally let General Page Reader read HTTPS pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current page only when the user presses a read/analyze action. |
+| `http://*/*` | Support a user-configured HTTP model endpoint outside the default localhost hosts, and optionally let General Page Reader read HTTP pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send summary context to the configured model endpoint. |
+| `https://*/*` | Support a user-configured HTTPS model endpoint outside the default hosts, and optionally let General Page Reader read HTTPS pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send summary context to the configured model endpoint. |
 
 Truly should request optional endpoint permissions at save/test time for the
 specific user-configured endpoint. General Page all-sites access is a separate
 Settings opt-in for users who want the Page/Web tab to work without clicking the
 toolbar popup on each new site. The permission does not enable background
-crawling, automatic model submission, or persistent full-article storage.
+crawling, automatic screenshot capture, or persistent full-article storage.
 
 Page/Web screenshot-assisted recovery uses the same user-gesture boundary. It
 does not add a separate screenshot permission. When text extraction is not
