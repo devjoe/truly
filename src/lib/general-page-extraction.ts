@@ -104,20 +104,31 @@ const NON_READING_BLOCK_SELECTORS = [
   "[role=\"complementary\"]",
   "[role=\"contentinfo\"]",
   "[aria-modal=\"true\"]",
+  "[class^=\"ad-\" i]",
+  "[class*=\" ad-\" i]",
+  "[class*=\"-ad\" i]",
+  "[class*=\"_ad\" i]",
+  "[class*=\"advert\" i]",
+  "[class*=\"banner\" i]",
   "[class*=\"breadcrumb\" i]",
   "[class*=\"cookie\" i]",
   "[class*=\"consent\" i]",
   "[class*=\"drawer\" i]",
   "[class*=\"modal\" i]",
   "[class*=\"newsletter\" i]",
+  "[class*=\"organic\" i]",
+  "[class*=\"partner\" i]",
   "[class*=\"popup\" i]",
   "[class*=\"promo\" i]",
+  "[class*=\"rbox\" i]",
   "[class*=\"recommend\" i]",
   "[class*=\"recirc\" i]",
+  "[class*=\"reel\" i]",
   "[class*=\"related\" i]",
   "[class*=\"share\" i]",
   "[class*=\"sidebar\" i]",
   "[class*=\"sponsor\" i]",
+  "[class*=\"trc_\" i]",
   "[class*=\"toolbar\" i]",
   "[id*=\"breadcrumb\" i]",
   "[id*=\"cookie\" i]",
@@ -219,7 +230,7 @@ const FALLBACK_CONTENT_CANDIDATE_SELECTOR = [
 ].join(",");
 
 const FALLBACK_CONTENT_POSITIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:article|body|content|copy|entry|feature|markdown|post|prose|story|text|本文|正文|文章)(?:$|[\s_-])/i;
-const FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:ad|advert|archive|card|carousel|category|comment|footer|grid|latest|menu|most|nav|popular|promo|rank|recommend|recirc|related|search|share|sidebar|sponsor|tag|teaser|trend|widget|排行|推薦|熱門|相關|輪播|側欄|廣告|分類|搜尋|分享)(?:$|[\s_-])/i;
+const FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:ad|advert|archive|card|carousel|category|comment|featured|footer|grid|latest|menu|most|nav|organic|partner|popular|promo|rank|rbox|reel|recommend|recirc|related|search|share|sidebar|sponsor|tag|teaser|trend|trc|widget|排行|推薦|熱門|相關|輪播|側欄|廣告|分類|搜尋|分享)(?:$|[\s_-])/i;
 
 const NON_READING_LINK_TEXT_PATTERNS = [
   /^home$/i,
@@ -270,10 +281,12 @@ export function extractGeneralPageSurface(
     "meta[property=\"og:site_name\"]",
     "meta[name=\"application-name\"]",
   ]) ?? hostnameLabel(sourceUrl);
+  const headingTitle = firstHeading(input.document);
   const title = firstMetaContent(input.document, [
     "meta[property=\"og:title\"]",
     "meta[name=\"twitter:title\"]",
-  ]) ?? normalizeWhitespace(input.document.title ?? "") ?? firstHeading(input.document);
+  ]) ?? normalizeWhitespace(input.document.title ?? "") ?? headingTitle;
+  const titleAnchors = uniqueTitleAnchors(title, headingTitle);
   const authorName = firstMetaContent(input.document, [
     "meta[name=\"author\"]",
     "meta[property=\"article:author\"]",
@@ -285,64 +298,73 @@ export function extractGeneralPageSurface(
 
   const selectedText = normalizeWhitespace(input.selectedText ?? "") ?? "";
   const selectedTextIsUseful = Boolean(selectedText && selectedText.length >= minSelectedTextLength);
-  const extractionRoot = findBestMainRoot(input.document, minMainTextLength, title);
+  const extractionRoot = findBestMainRoot(input.document, minMainTextLength, titleAnchors);
   const rootText = extractionRoot ? readableText(extractionRoot) ?? "" : "";
   const fallbackRoot = !selectedTextIsUseful
-    ? findBestFallbackContentRoot(input.document, currentUrl, title, minMainTextLength)
+    ? findBestFallbackContentRoot(input.document, currentUrl, titleAnchors, minMainTextLength)
     : null;
   const fallbackRootText = fallbackRoot ? readableText(fallbackRoot) ?? "" : "";
   const bodyText = input.document.body ? readableText(input.document.body) ?? "" : "";
 
   let method: ReadingSurfaceExtractionMethod = "fallback";
   let mainText = "";
+  let readingRoot: Element | null = null;
   const warnings: ReadingExtractionWarning[] = [];
 
   if (selectedTextIsUseful) {
     method = "selection";
     mainText = selectedText;
+    readingRoot = null;
     warnings.push("selection-only");
   } else if (
     rootText &&
     rootText.length >= minMainTextLength &&
     fallbackRootText &&
     fallbackRootText.length >= minMainTextLength &&
-    shouldPreferFallbackRootOverBroadSemanticRoot(extractionRoot, fallbackRoot, rootText, fallbackRootText)
+    shouldPreferFallbackRootOverSemanticRoot(extractionRoot, fallbackRoot, rootText, fallbackRootText, titleAnchors)
   ) {
     method = "fallback";
     mainText = fallbackRootText;
+    readingRoot = fallbackRoot;
     warnings.push("no-main-content");
   } else if (rootText && rootText.length >= minMainTextLength) {
     method = "semantic-html";
     mainText = rootText;
+    readingRoot = extractionRoot;
   } else if (fallbackRootText && fallbackRootText.length >= minMainTextLength) {
     method = "fallback";
     mainText = fallbackRootText;
+    readingRoot = fallbackRoot;
     warnings.push("no-main-content");
   } else if (rootText && bodyText && bodyText.length >= minMainTextLength && isShortSemanticRootFalseNegative(rootText, bodyText, minMainTextLength)) {
     method = "fallback";
     mainText = bodyText;
+    readingRoot = input.document.body;
     warnings.push("large-navigation-noise");
   } else if (rootText) {
     method = "semantic-html";
     mainText = rootText;
+    readingRoot = extractionRoot;
     warnings.push("very-short-content");
   } else if (bodyText && bodyText.length >= minMainTextLength) {
     method = "fallback";
     mainText = bodyText;
+    readingRoot = input.document.body;
     warnings.push("no-main-content", "large-navigation-noise");
   } else if (bodyText) {
     method = "fallback";
     mainText = bodyText;
+    readingRoot = input.document.body;
     warnings.push("no-main-content", "very-short-content");
   } else {
     method = "fallback";
     warnings.push("no-main-content");
   }
 
-  if (!selectedTextIsUseful && title && mainText)
-    mainText = trimLeadingTextBeforeTitle(mainText, title);
+  if (!selectedTextIsUseful && titleAnchors.length > 0 && mainText)
+    mainText = trimLeadingTextBeforeTitles(mainText, titleAnchors);
 
-  const extractionSignalRoot = extractionRoot ?? fallbackRoot;
+  const extractionSignalRoot = readingRoot ?? extractionRoot ?? fallbackRoot;
 
   if (looksBlockedOrPaywalled(input.document, extractionSignalRoot, title, mainText, minMainTextLength)) {
     warnings.push("login-or-paywall-like");
@@ -357,7 +379,7 @@ export function extractGeneralPageSurface(
   }
 
   const status = resolveExtractionStatus(mainText, warnings, minMainTextLength);
-  const linkRoot = extractionRoot ?? fallbackRoot ?? input.document.body ?? input.document.documentElement;
+  const linkRoot = readingRoot ?? extractionRoot ?? fallbackRoot ?? input.document.body ?? input.document.documentElement;
   const metadataRoot = clonePrunedReadingRoot(linkRoot);
   const links = collectLinks(metadataRoot, sourceUrl, maxLinks);
   const images = collectImages(metadataRoot, sourceUrl, maxImages);
@@ -385,7 +407,7 @@ export function extractGeneralPageSurface(
   };
 }
 
-function findBestMainRoot(documentRef: Document, minLength: number, title?: string): Element | null {
+function findBestMainRoot(documentRef: Document, minLength: number, titleAnchors: readonly string[]): Element | null {
   const candidates: Element[] = [];
   for (const selector of MAIN_ROOT_SELECTORS) {
     candidates.push(...Array.from(documentRef.querySelectorAll(selector)));
@@ -402,7 +424,7 @@ function findBestMainRoot(documentRef: Document, minLength: number, title?: stri
     .filter((candidate) => candidate.text.length > 0)
     .map((candidate) => ({
       ...candidate,
-      score: scoreMainRootCandidate(candidate.element, candidate.text, title),
+      score: scoreMainRootCandidate(candidate.element, candidate.text, titleAnchors),
     }))
     .sort((a, b) => b.score - a.score || b.text.length - a.text.length);
 
@@ -411,7 +433,7 @@ function findBestMainRoot(documentRef: Document, minLength: number, title?: stri
     ?? null;
 }
 
-function scoreMainRootCandidate(element: Element, text: string, title: string | undefined): number {
+function scoreMainRootCandidate(element: Element, text: string, titleAnchors: readonly string[]): number {
   const tagName = element.tagName.toLowerCase();
   const identity = `${tagName} ${element.getAttribute("class") ?? ""} ${element.getAttribute("id") ?? ""}`;
   const linkCount = element.querySelectorAll("a[href]").length;
@@ -435,9 +457,9 @@ function scoreMainRootCandidate(element: Element, text: string, title: string | 
     score += 70;
   if (/(?:^|[\s_-])(?:ad|advert|breadcrumb|comment|footer|header|latest|menu|nav|popular|rank|recommend|related|share|sidebar|ticker|trend|widget|排行|推薦|熱門|相關|側欄|廣告|選單|導覽)(?:$|[\s_-])/i.test(identity))
     score -= 120;
-  if (title && hasHeadingSimilarToTitle(element, title))
+  if (hasHeadingSimilarToAnyTitle(element, titleAnchors))
     score += 140;
-  if (title && textContainsComparableTitle(text, title))
+  if (textContainsComparableAnyTitle(text, titleAnchors))
     score += 70;
   if (text.length < 420 && linkCount >= 3)
     score -= 80;
@@ -447,42 +469,50 @@ function scoreMainRootCandidate(element: Element, text: string, title: string | 
 function findBestFallbackContentRoot(
   documentRef: Document,
   url: string,
-  title: string | undefined,
+  titleAnchors: readonly string[],
   minLength: number,
 ): Element | null {
-  if (!documentRef.body || isLikelyIndexFallbackDocument(documentRef, url, title))
+  if (!documentRef.body || isLikelyIndexFallbackDocument(documentRef, url, titleAnchors[0]))
     return null;
 
   const candidates = Array.from(new Set(
-    Array.from(documentRef.body.querySelectorAll(FALLBACK_CONTENT_CANDIDATE_SELECTOR)),
+    [
+      ...Array.from(documentRef.body.querySelectorAll(FALLBACK_CONTENT_CANDIDATE_SELECTOR)),
+      ...findHeadingAnchoredCandidateRoots(documentRef, titleAnchors),
+    ],
   ));
 
   const ranked = candidates
-    .map((element) => scoreFallbackContentCandidate(element, title, minLength))
+    .map((element) => scoreFallbackContentCandidate(element, titleAnchors, minLength))
     .filter((candidate): candidate is FallbackContentCandidateScore => candidate !== null)
     .sort((a, b) => b.score - a.score);
 
   return ranked[0]?.element ?? null;
 }
 
-function shouldPreferFallbackRootOverBroadSemanticRoot(
+function shouldPreferFallbackRootOverSemanticRoot(
   semanticRoot: Element | null,
   fallbackRoot: Element | null,
   semanticText: string,
   fallbackText: string,
+  titleAnchors: readonly string[],
 ): boolean {
   if (!semanticRoot || !fallbackRoot || semanticRoot === fallbackRoot)
     return false;
-  if (!containsElement(semanticRoot, fallbackRoot))
-    return false;
   const tagName = semanticRoot.tagName.toLowerCase();
   const isBroadMain = tagName === "main" || semanticRoot.getAttribute("role") === "main";
-  if (!isBroadMain)
-    return false;
-  const hasLayoutNoise = hasReadingLayoutNoise(semanticRoot);
-  if (!hasLayoutNoise)
-    return false;
-  return fallbackText.length >= semanticText.length * 0.55;
+  if (isBroadMain && containsElement(semanticRoot, fallbackRoot)) {
+    const hasLayoutNoise = hasReadingLayoutNoise(semanticRoot);
+    return hasLayoutNoise && fallbackText.length >= semanticText.length * 0.55;
+  }
+
+  const semanticHasTitle = textContainsComparableAnyTitle(semanticText, titleAnchors);
+  const fallbackParagraphCount = fallbackRoot.querySelectorAll("p").length;
+  const fallbackLinkDensity = linkedTextLength(fallbackRoot) / Math.max(fallbackText.length, 1);
+  return !semanticHasTitle &&
+    fallbackParagraphCount >= 3 &&
+    fallbackLinkDensity < 0.5 &&
+    fallbackText.length >= Math.max(semanticText.length * 1.5, semanticText.length + 240);
 }
 
 function containsElement(root: Element, candidate: Element): boolean {
@@ -505,6 +535,25 @@ function hasReadingLayoutNoise(element: Element): boolean {
   ].join(",")));
 }
 
+function findHeadingAnchoredCandidateRoots(documentRef: Document, titleAnchors: readonly string[]): Element[] {
+  if (titleAnchors.length === 0)
+    return [];
+  const roots: Element[] = [];
+  for (const heading of Array.from(documentRef.querySelectorAll("h1,h2"))) {
+    const headingText = normalizeWhitespace(heading.textContent ?? "") ?? "";
+    if (!isComparableToAnyTitle(headingText, titleAnchors))
+      continue;
+    let current: Element | null = heading;
+    let depth = 0;
+    while (current && current !== documentRef.body && depth < 7) {
+      roots.push(current);
+      current = current.parentElement;
+      depth += 1;
+    }
+  }
+  return roots;
+}
+
 interface FallbackContentCandidateScore {
   element: Element;
   score: number;
@@ -512,7 +561,7 @@ interface FallbackContentCandidateScore {
 
 function scoreFallbackContentCandidate(
   element: Element,
-  title: string | undefined,
+  titleAnchors: readonly string[],
   minLength: number,
 ): FallbackContentCandidateScore | null {
   const text = readableText(element) ?? "";
@@ -531,6 +580,12 @@ function scoreFallbackContentCandidate(
 
   const tagName = element.tagName.toLowerCase();
   const identity = `${element.tagName} ${element.getAttribute("class") ?? ""} ${element.getAttribute("id") ?? ""}`;
+  const hasTitleSignal = hasHeadingSimilarToAnyTitle(element, titleAnchors) ||
+    textContainsComparableAnyTitle(text, titleAnchors);
+  const hasNegativeIdentity = FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN.test(identity);
+  if (hasNegativeIdentity && !hasTitleSignal)
+    return null;
+
   let score = Math.min(text.length, 3600) / 36;
   score += Math.min(paragraphCount, 12) * 16;
   score -= linkCount * 7;
@@ -539,14 +594,16 @@ function scoreFallbackContentCandidate(
 
   if (FALLBACK_CONTENT_POSITIVE_TOKEN_PATTERN.test(identity))
     score += 75;
-  if (FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN.test(identity))
+  if (hasNegativeIdentity)
     score -= 80;
   if (tagName === "main" && hasReadingLayoutNoise(element))
     score -= 90;
   if (element.querySelector("h1"))
     score += 24;
-  if (title && hasHeadingSimilarToTitle(element, title))
+  if (hasHeadingSimilarToAnyTitle(element, titleAnchors))
     score += 45;
+  if (textContainsComparableAnyTitle(text, titleAnchors))
+    score += 28;
 
   return score >= 65 ? { element, score } : null;
 }
@@ -560,11 +617,16 @@ function isLikelyIndexFallbackDocument(
   const linkCount = documentRef.querySelectorAll("a[href]").length;
   const imageCount = documentRef.querySelectorAll("img").length;
   const listItemCount = documentRef.querySelectorAll("li").length;
+  const paragraphCount = documentRef.querySelectorAll("p").length;
   const path = urlPath(url);
   const bodyText = normalizeWhitespace(documentRef.body?.textContent ?? "") ?? "";
   const urlTitleSignals = `${url} ${title ?? ""}`.toLowerCase();
   const bodySignals = bodyText.slice(0, 1200).toLowerCase();
   const signals = `${urlTitleSignals} ${bodySignals}`;
+
+  const hasTitleHeading = title
+    ? Array.from(documentRef.querySelectorAll("h1")).some((heading) => isComparableToAnyTitle(heading.textContent ?? "", [title]))
+    : false;
 
   if (
     path === "/" &&
@@ -591,7 +653,7 @@ function isLikelyIndexFallbackDocument(
     /(?:首頁|索引頁|列表頁|即時新聞|熱門新聞|最新消息|公告列表)/.test(signals) &&
     (linkCount >= 3 || imageCount >= 3 || listItemCount >= 3)
   ) {
-    return true;
+    return !(hasTitleHeading && paragraphCount >= 3);
   }
 
   return false;
@@ -603,25 +665,60 @@ function linkedTextLength(element: Element): number {
   }, 0);
 }
 
-function hasHeadingSimilarToTitle(element: Element, title: string): boolean {
-  const normalizedTitle = normalizeComparableText(title);
-  if (!normalizedTitle)
+function uniqueTitleAnchors(title?: string, headingTitle?: string): string[] {
+  const anchors = [
+    title,
+    headingTitle,
+    ...(title ? title.split(/\s[-|｜]\s|\s*\|\s*|\s*-\s*/u) : []),
+  ]
+    .map((value) => normalizeWhitespace(value ?? "") ?? "")
+    .filter((value) => value.length >= 6);
+  const seen = new Set<string>();
+  return anchors.filter((value) => {
+    const comparable = normalizeComparableText(value);
+    if (!comparable || seen.has(comparable))
+      return false;
+    seen.add(comparable);
+    return true;
+  });
+}
+
+function hasHeadingSimilarToAnyTitle(element: Element, titleAnchors: readonly string[]): boolean {
+  if (titleAnchors.length === 0)
     return false;
   for (const heading of Array.from(element.querySelectorAll("h1,h2"))) {
-    const normalizedHeading = normalizeComparableText(heading.textContent ?? "");
-    if (!normalizedHeading)
-      continue;
-    if (normalizedTitle.includes(normalizedHeading) || normalizedHeading.includes(normalizedTitle))
+    if (isComparableToAnyTitle(heading.textContent ?? "", titleAnchors))
       return true;
   }
   return false;
 }
 
-function textContainsComparableTitle(text: string, title: string): boolean {
-  const normalizedTitle = normalizeComparableText(title);
-  if (!normalizedTitle || normalizedTitle.length < 12)
+function isComparableToAnyTitle(value: string, titleAnchors: readonly string[]): boolean {
+  const normalizedValue = normalizeComparableText(value);
+  if (!normalizedValue)
     return false;
-  return normalizeComparableText(text.slice(0, 1800)).includes(normalizedTitle);
+  return titleAnchors.some((title) => {
+    const normalizedTitle = normalizeComparableText(title);
+    return normalizedTitle.length >= 6 &&
+      (normalizedTitle.includes(normalizedValue) || normalizedValue.includes(normalizedTitle));
+  });
+}
+
+function textContainsComparableAnyTitle(text: string, titleAnchors: readonly string[]): boolean {
+  const normalizedText = normalizeComparableText(text.slice(0, 1800));
+  return titleAnchors.some((title) => {
+    const normalizedTitle = normalizeComparableText(title);
+    return normalizedTitle.length >= 12 && normalizedText.includes(normalizedTitle);
+  });
+}
+
+function trimLeadingTextBeforeTitles(text: string, titleAnchors: readonly string[]): string {
+  for (const title of titleAnchors) {
+    const trimmed = trimLeadingTextBeforeTitle(text, title);
+    if (trimmed !== text)
+      return trimmed;
+  }
+  return text;
 }
 
 function trimLeadingTextBeforeTitle(text: string, title: string): string {

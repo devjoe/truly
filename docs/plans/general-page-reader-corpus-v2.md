@@ -173,7 +173,7 @@ observation only; do not archive or commit source content.
 
 ## Fixture Roadmap
 
-The current fixture corpus contains 59 public-safe synthetic HTML fixtures.
+The current fixture corpus contains 62 public-safe synthetic HTML fixtures.
 It covers every pattern in this catalog at least once and stays within the
 planned 25-64 fixture range.
 
@@ -233,6 +233,16 @@ focused public regressions for:
   truncate later body paragraphs;
 - broad news layout wrappers where a smaller inner content-body root should win
   over navigation, ad, or widget-heavy ancestors.
+
+The v7 fixture batch converted the next Google News manual-review findings into
+focused public regressions for:
+
+- generic article panels where the best readable root is only discoverable from
+  heading/title anchoring rather than semantic class names;
+- unrelated semantic story cards or related-news blocks that appear before the
+  real titled article body;
+- entry-content article bodies inside broad semantic `main` layouts that may
+  render late in live-DOM review mode.
 
 The corpus moved beyond the original 35-fixture upper bound after the first
 200-target private product-quality reviews and the follow-up Google News review

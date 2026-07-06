@@ -286,6 +286,53 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.extraction.warnings).toContain("no-main-content");
   });
 
+  it("uses heading-anchored ancestors when article containers have generic classes", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "heading-anchored-news-body.html",
+        "https://radio.example.test/news/public-intercept-briefing",
+      ),
+      url: "https://radio.example.test/news/public-intercept-briefing",
+    });
+
+    expect(surface.mainText).toContain("合成新聞事件的主要狀況");
+    expect(surface.mainText).toContain("標題附近祖先節點取得正文");
+    expect(surface.mainText).not.toContain("網站導覽");
+    expect(surface.mainText).not.toContain("訂閱電子報");
+    expect(surface.extraction.method).toBe("fallback");
+  });
+
+  it("does not select an unrelated semantic article card over the titled body", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "semantic-wrong-card-before-body.html",
+        "https://news.example.test/local/vehicle-parking-review",
+      ),
+      url: "https://news.example.test/local/vehicle-parking-review",
+    });
+
+    expect(surface.mainText).toContain("公共車輛臨停爭議說明");
+    expect(surface.mainText).toContain("警方檢視影像後確認違規態樣");
+    expect(surface.mainText).not.toContain("合成推薦卡片不應被選為本文");
+    expect(surface.mainText).not.toContain("合成遊戲廣告與促銷內容");
+    expect(surface.mainText).not.toContain("另一則合成相關新聞描述完全不同");
+  });
+
+  it("extracts entry-content articles inside semantic main layouts", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "entry-content-main-article.html",
+        "https://apps.example.test/free/countdown-tool",
+      ),
+      url: "https://apps.example.test/free/countdown-tool",
+    });
+
+    expect(surface.mainText).toContain("合成倒數工具可以追蹤假期");
+    expect(surface.mainText).toContain("核心功能特色");
+    expect(surface.mainText).toContain("限時免費領取終生版");
+    expect(surface.mainText).not.toContain("合成熱門文章不應進入正文");
+  });
+
   it("drops non-web URLs at the extraction normalization boundary", () => {
     const document = new JSDOM(
       `<!doctype html>

@@ -12,6 +12,7 @@
 
 const DEFAULT_RENDER_TIMEOUT_MS = 20_000;
 const DEFAULT_SETTLE_MS = 1_500;
+const DEFAULT_STABLE_BODY_MS = 1_200;
 
 export function cdpBaseForPort(port) {
   return `http://127.0.0.1:${Number(port) || 9222}`;
@@ -22,7 +23,7 @@ export async function fetchRenderedPageHtml(url, options = {}) {
   const timeoutMs = options.timeoutMs ?? DEFAULT_RENDER_TIMEOUT_MS;
   const settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
 
-  const target = await fetchJson(`${cdpBase}/json/new?${encodeURIComponent(url)}`, { method: "PUT" });
+  const target = await fetchJson(`${cdpBase}/json/new?${encodeURIComponent("about:blank")}`, { method: "PUT" });
   if (!target?.webSocketDebuggerUrl || !target?.id)
     throw new Error(`cdp target creation failed for ${url}`);
 
@@ -30,8 +31,13 @@ export async function fetchRenderedPageHtml(url, options = {}) {
     const client = await connect(target.webSocketDebuggerUrl);
     try {
       await client.send("Page.enable");
+      await client.send("Page.navigate", { url });
       await waitForLoad(client, timeoutMs);
       await sleep(settleMs);
+      await waitForStableBody(client, {
+        timeoutMs: Math.max(2_000, Math.min(timeoutMs, 12_000)),
+        stableMs: DEFAULT_STABLE_BODY_MS,
+      });
       const evaluated = await client.send("Runtime.evaluate", {
         expression: "JSON.stringify({ html: document.documentElement.outerHTML, finalUrl: location.href })",
         returnByValue: true,
@@ -57,6 +63,37 @@ function waitForLoad(client, timeoutMs) {
       resolveLoad(undefined);
     });
   });
+}
+
+async function waitForStableBody(client, { timeoutMs, stableMs }) {
+  const started = Date.now();
+  let lastSignature = "";
+  let stableStarted = 0;
+  while (Date.now() - started < timeoutMs) {
+    const evaluated = await client.send("Runtime.evaluate", {
+      expression: `JSON.stringify({
+        readyState: document.readyState,
+        bodyTextLength: (document.body?.innerText || document.body?.textContent || "").replace(/\\s+/g, " ").trim().length,
+        h1: [...document.querySelectorAll("h1")].map((h) => (h.textContent || "").replace(/\\s+/g, " ").trim()).join("|").slice(0, 240)
+      })`,
+      returnByValue: true,
+    }).catch(() => null);
+    const raw = evaluated?.result?.value;
+    const parsed = typeof raw === "string" ? JSON.parse(raw) : {};
+    const signature = `${parsed.readyState}:${parsed.bodyTextLength}:${parsed.h1}`;
+    const hasUsefulDom = parsed.readyState === "complete" &&
+      (Number(parsed.bodyTextLength) >= 240 || String(parsed.h1 ?? "").length >= 8);
+    if (hasUsefulDom && signature === lastSignature) {
+      if (stableStarted === 0)
+        stableStarted = Date.now();
+      if (Date.now() - stableStarted >= stableMs)
+        return;
+    } else {
+      lastSignature = signature;
+      stableStarted = 0;
+    }
+    await sleep(300);
+  }
 }
 
 function connect(webSocketDebuggerUrl) {

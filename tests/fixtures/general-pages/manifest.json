@@ -219,6 +219,45 @@
       }
     },
     {
+      "id": "heading-anchored-news-body",
+      "file": "heading-anchored-news-body.html",
+      "url": "https://radio.example.test/news/public-intercept-briefing",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P03-navigation-sidebar-noise", "P16-missing-or-conflicting-metadata", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["合成新聞事件的主要狀況", "標題附近祖先節點取得正文"],
+        "excludes": ["網站導覽", "English 日本語", "訂閱電子報"]
+      }
+    },
+    {
+      "id": "semantic-wrong-card-before-body",
+      "file": "semantic-wrong-card-before-body.html",
+      "url": "https://news.example.test/local/vehicle-parking-review",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P04-related-content-recirc", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["公共車輛臨停爭議說明", "警方檢視影像後確認違規態樣"],
+        "excludes": ["合成推薦卡片不應被選為本文", "合成遊戲廣告與促銷內容", "另一則合成相關新聞描述完全不同"]
+      }
+    },
+    {
+      "id": "entry-content-main-article",
+      "file": "entry-content-main-article.html",
+      "url": "https://apps.example.test/free/countdown-tool",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P02-main-role-without-article", "P03-navigation-sidebar-noise", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["合成倒數工具可以追蹤假期", "核心功能特色", "限時免費領取終生版"],
+        "excludes": ["火熱文章", "合成熱門文章不應進入正文"]
+      }
+    },
+    {
       "id": "missing-metadata-blog",
       "file": "missing-metadata-blog.html",
       "url": "https://personal.example.test/posts/quiet-parser-notes",
