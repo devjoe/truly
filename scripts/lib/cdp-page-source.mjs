@@ -22,14 +22,14 @@ export async function fetchRenderedPageHtml(url, options = {}) {
   const cdpBase = options.cdpBase ?? cdpBaseForPort(options.cdpPort);
   const timeoutMs = options.timeoutMs ?? DEFAULT_RENDER_TIMEOUT_MS;
   const settleMs = options.settleMs ?? DEFAULT_SETTLE_MS;
-
   const target = await fetchJson(`${cdpBase}/json/new?${encodeURIComponent("about:blank")}`, { method: "PUT" });
   if (!target?.webSocketDebuggerUrl || !target?.id)
     throw new Error(`cdp target creation failed for ${url}`);
 
+  let client;
   try {
-    const client = await connect(target.webSocketDebuggerUrl);
-    try {
+    return await withTimeout((async () => {
+      client = await connect(target.webSocketDebuggerUrl);
       await client.send("Page.enable");
       await client.send("Page.navigate", { url });
       await waitForLoad(client, timeoutMs);
@@ -47,10 +47,9 @@ export async function fetchRenderedPageHtml(url, options = {}) {
       if (!parsed?.html)
         throw new Error("cdp evaluation returned no document HTML");
       return { html: parsed.html, finalUrl: parsed.finalUrl ?? url };
-    } finally {
-      client.close();
-    }
+    })(), timeoutMs + settleMs + 5_000, `cdp render timed out for ${url}`);
   } finally {
+    client?.close();
     await fetch(`${cdpBase}/json/close/${target.id}`).catch(() => {});
   }
 }
@@ -63,6 +62,14 @@ function waitForLoad(client, timeoutMs) {
       resolveLoad(undefined);
     });
   });
+}
+
+function withTimeout(promise, timeoutMs, message) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 async function waitForStableBody(client, { timeoutMs, stableMs }) {

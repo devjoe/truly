@@ -374,6 +374,23 @@ Results:
   extracted, 0 empty-or-blocked, 0 fetch errors, readiness `ready: 50`,
   suggested verdict `good: 50`; private artifact:
   `/private/tmp/truly-google-news-100/review-validation-50-google-news-new-v2`.
+- `review:general-page-product-quality --source cdp --limit 100`: collected a
+  private English balanced validation set covering 30 news pages, 12 blog
+  posts, 13 company/official posts, 7 government/NGO pages, 16 technical docs,
+  and 22 index/forum/social/paywall/search edge pages. Sanitized aggregate from
+  the full 10s-CDP run: 95/100 extracted, 5 CDP fetch errors, readiness
+  `ready: 71`, `caution: 21`, `blocked: 3`, `error: 5`; private artifact:
+  `/private/tmp/truly-english-validation-v1/review-english-balanced-v1-final`.
+  A 25s rerun of the five error targets showed both technical-doc errors were
+  timeout false negatives and became `good`; the remaining persistent errors
+  were edge pages. Adjusted interpretation: primary readable pages were 78/78
+  extracted with 70 `good`, 7 `partial`, and 1 `blocked_or_empty_review`; edge
+  pages were mostly partial/blocked/error as expected.
+- `review:general-page-product-quality`: CDP live-DOM fetching now has an
+  overall render watchdog. The English validation exposed that one login-wall
+  edge page could leave the helper promise unsettled and make the review CLI exit
+  without writing `review.json`; after the fix, the same target is recorded as a
+  `cdp-error` and the full report is written.
 - `check:general-page-corpus`: passed with 68 public-safe synthetic fixtures,
   30 covered patterns, and 72 observation targets.
 - `spike:general-page-parsers`: passed the runtime baseline with
