@@ -404,11 +404,24 @@ export function extractGeneralPageSurface(
     warnings.push(...nonArticlePageWarnings(input.document, extractionSignalRoot, mainText, currentUrl, title));
   }
 
-  const status = resolveExtractionStatus(mainText, warnings, minMainTextLength);
   const linkRoot = readingRoot ?? extractionRoot ?? fallbackRoot ?? input.document.body ?? input.document.documentElement;
   const metadataRoot = clonePrunedReadingRoot(linkRoot);
   const links = collectLinks(metadataRoot, sourceUrl, maxLinks);
   const images = collectImages(metadataRoot, sourceUrl, maxImages);
+  if (shouldSuppressFallbackArticleNoise({
+    method,
+    mainText,
+    title,
+    titleAnchors,
+    currentUrl,
+    linkCount: links.length,
+    warnings,
+  })) {
+    removeWarning(warnings, "no-main-content");
+    removeWarning(warnings, "large-navigation-noise");
+  }
+
+  const status = resolveExtractionStatus(mainText, warnings, minMainTextLength);
 
   return {
     id: stableSurfaceId(sourceUrl),
@@ -431,6 +444,40 @@ export function extractGeneralPageSurface(
       warnings: uniqueWarnings(warnings),
     },
   };
+}
+
+function shouldSuppressFallbackArticleNoise(input: {
+  method: ReadingSurfaceExtractionMethod;
+  mainText: string;
+  title?: string;
+  titleAnchors: readonly string[];
+  currentUrl: string;
+  linkCount: number;
+  warnings: readonly ReadingExtractionWarning[];
+}): boolean {
+  if (input.method !== "fallback")
+    return false;
+  if (!input.warnings.includes("no-main-content") && !input.warnings.includes("large-navigation-noise"))
+    return false;
+  if (input.warnings.includes("login-or-paywall-like") || input.warnings.includes("dynamic-content-partial"))
+    return false;
+  if (input.mainText.length < 900 || input.linkCount > 24)
+    return false;
+  if (hasIndexOrSearchSurfaceSignal(input.currentUrl, input.title, input.mainText))
+    return false;
+  const hasNoMainWarning = input.warnings.includes("no-main-content");
+  if (hasNoMainWarning && !textContainsComparableAnyTitle(input.mainText, input.titleAnchors))
+    return false;
+  const sentenceCount = (input.mainText.match(/[。！？.!?]/g) ?? []).length;
+  return sentenceCount >= 6;
+}
+
+function removeWarning(warnings: ReadingExtractionWarning[], warning: ReadingExtractionWarning): void {
+  let index = warnings.indexOf(warning);
+  while (index >= 0) {
+    warnings.splice(index, 1);
+    index = warnings.indexOf(warning);
+  }
 }
 
 function findBestMainRoot(documentRef: Document, minLength: number, titleAnchors: readonly string[]): Element | null {
@@ -647,7 +694,7 @@ function isConfidentFallbackReadingRoot(
     return false;
   if ((tagName === "table" || tagName === "td") && paragraphCount >= 3 && text.length >= 600 && linkDensity < 0.12)
     return true;
-  if (paragraphCount >= 5 && text.length >= 900 && linkCount <= 4 && linkDensity < 0.08)
+  if (paragraphCount >= 5 && text.length >= 900 && linkCount <= 24 && linkDensity < 0.22)
     return true;
   return hasTitleContext ||
     (hasStrongArticleContainer && paragraphCount >= 4 && text.length >= 500 && linkDensity < 0.35) ||
@@ -731,7 +778,7 @@ function hasExplicitArticleBodyIdentity(identity: string): boolean {
 
 function hasIndexOrSearchSurfaceSignal(url: string, title: string | undefined, text: string): boolean {
   const urlTitleSignals = `${url} ${title ?? ""}`.toLowerCase();
-  if (/(?:search results?|results for|filter by|query=|[?&]q=|index page|directory|latest entries|latest news|top stories|home ?page|front page|archive|topics|list page|category hub|搜尋|索引頁|列表頁|最新消息|公告列表)/i.test(urlTitleSignals))
+  if (/(?:search results?|results for|filter by|query=|[?&]q=|index page|directory|latest entries|latest news|top stories|home ?page|front page|topics|list page|category hub|搜尋|索引頁|列表頁|最新消息|公告列表)/i.test(urlTitleSignals))
     return true;
   const prefix = text.slice(0, 700).toLowerCase();
   return /(?:front page|home ?page|top stories|latest news|category hub|search results?|list page|not a single complete article|索引頁|列表頁|不要把.+完整文章)/i.test(prefix);

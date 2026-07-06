@@ -367,6 +367,13 @@ Results:
   empty-or-blocked, 0 fetch errors, readiness `ready: 100`, suggested verdict
   `good: 100`; private artifact:
   `/private/tmp/truly-google-news-100/review-after-video-table-v16`.
+- `review:general-page-product-quality --source cdp --limit 50`: collected a
+  fresh private Google News zh-TW publisher-URL validation set from RSS search
+  seeds, resolved Google News `read` links through CDP, and excluded the
+  previous 100 publisher URLs before review. Sanitized aggregate: 50/50
+  extracted, 0 empty-or-blocked, 0 fetch errors, readiness `ready: 50`,
+  suggested verdict `good: 50`; private artifact:
+  `/private/tmp/truly-google-news-100/review-validation-50-google-news-new-v2`.
 - `check:general-page-corpus`: passed with 68 public-safe synthetic fixtures,
   30 covered patterns, and 72 observation targets.
 - `spike:general-page-parsers`: passed the runtime baseline with
