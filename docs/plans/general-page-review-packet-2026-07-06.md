@@ -1,6 +1,6 @@
 # General Page Reader Review Packet
 
-Date: 2026-07-06
+Date: 2026-07-07
 Branch: `codex/general-page-reader-contract`
 
 This packet is the public-safe technical index for the human review pass before
@@ -133,6 +133,42 @@ Expected evidence:
 - `cws:preflight` confirms release disclosure strings remain aligned with
   permissions and screenshot behavior.
 
+## Current Validation Snapshot
+
+The current parser and Page/Web runtime have three layers of validation. Private
+artifacts contain real URLs and extracted previews; only aggregate evidence is
+safe to copy into public review material.
+
+| Area | Evidence | Current result |
+|---|---|---|
+| Public synthetic corpus | `check:general-page-corpus` and `spike:general-page-parsers` | 68 public-safe fixtures, 30 covered patterns, runtime baseline 68/68. |
+| Chinese live-DOM news validation | Private Google News publisher-URL reviews under `/private/tmp/truly-google-news-100` | 100/100 `good` after fixture-driven fixes, plus a fresh 50/50 `good` validation set. |
+| English live-DOM validation | Private balanced review under `/private/tmp/truly-english-validation-v1` | Primary readable pages: 78/78 extracted, 70 `good`, 7 `partial`, 1 expected blocked/empty; edge pages mostly partial/blocked/error as expected. |
+| CDP review harness | `tests/unit/cdp-page-source.test.mjs` | Stuck CDP target now becomes a recorded timeout and closes the target instead of leaving review output missing. |
+| Page/Web CDP product audit | `TRULY_EXTENSION_ID=<id> TRULY_AUDIT_AUTO_RELOAD=1 rtk npm run audit:general-page-reader` | Passed on 2026-07-07 with popup read included. A later post-build rerun used `TRULY_AUDIT_SKIP_POPUP_READ=1` because Chrome reported an inactive native window for `chrome.action.openPopup`; the non-popup Page/Web flows still passed. The combined evidence covers popup read, Side Panel auto-read, quick brief dispatch, tab switching, selection/current-region targets, unsupported-page guidance, screenshot recovery, storage privacy, and responsive UI checks. |
+| Runtime auto-read and model dispatch | `tests/unit/page-reading-runtime.test.ts` | all-sites auto-read is gated on Side Panel use, auto quick brief uses Tier B settings, and weak/target-required pages fail closed. |
+| Screenshot recovery | `tests/unit/page-reading-runtime.test.ts`, `tests/unit/screenshot-data-url.test.ts`, `tests/unit/snapshot-redaction.test.ts` | Vision recovery is user-confirmed, data URL format-checked, session-only, and snapshot-redacted. |
+
+Facebook live audit is intentionally separate from Page/Web synthetic audit. It
+requires an already opened, logged-in `facebook.com` page in the CDP session;
+without that target, the audit cannot produce meaningful old-flow evidence.
+
+## Reviewer Flow Notes
+
+For the human review pass, treat Page/Web pages as one of three classes:
+
+- **Article-grade pages**: news, blog posts, company posts, government/NGO detail
+  pages, and technical docs should usually be `ready` or at least readable.
+- **Overview-grade pages**: index/feed/search/forum/social pages may be useful
+  as page overviews, but should not be judged as clean single-article reads.
+- **Blocked or unsuitable pages**: login walls, paywalls, `chrome://`,
+  extension pages, PDFs without a readable DOM, and pages requiring a selected
+  target should fail closed with clear guidance.
+
+This distinction is important during review: a forum index or paywall homepage
+being `partial`, `blocked`, or `error` is often the correct product behavior,
+not a parser regression.
+
 ## Human Review Checklist
 
 - Manual read: toolbar popup read action should be enough; Side Panel read is a
@@ -151,6 +187,10 @@ Expected evidence:
   not appear in storage, public docs, release artifacts, or committed fixtures.
 - CWS wording: all-sites access, model sending, and screenshot-assisted recovery
   should match reviewer notes and privacy policy language.
+- Review packet: compare the temporary HTML at
+  `/private/tmp/truly-general-page-reader-feature-summary.html` with this file
+  before release review; the HTML is for human scanning only and should not be
+  treated as a public evidence artifact.
 
 ## Known Review Risks
 

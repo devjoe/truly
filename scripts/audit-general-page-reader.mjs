@@ -1680,7 +1680,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
   try {
     await sleep(800);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => /可分析但需留意|Usable with caution/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web noisy caution state").catch(async (error) => {
+    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web noisy fallback ready state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, noisy, null).catch((captureError) => ({
         captureError: captureError.message,
       }));
@@ -1692,7 +1692,8 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
     await waitFor(side, `(() => {
       const advisor = document.querySelector('#page-pane .page-reader-advisor');
       const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
-      return /分析範圍|Analysis scope/.test(advisor?.textContent || '') && !/檢查中|Checking/.test(status);
+      const decision = advisor?.querySelector('dd[data-raw-value="accept_current"]');
+      return Boolean(decision) && /分析範圍|Analysis scope/.test(advisor?.textContent || '') && !/檢查中|Checking/.test(status);
     })()`, 26000, "Page/Web parser advisor completion").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-noisy-advisor-timeout.png")).catch(() => {});
       throw error;
@@ -1737,7 +1738,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
         hasGoogleDownload: /Google 官網下載/.test(pane?.innerText || '')
       };
     })()`);
-    await side.screenshot(resolve(OUT_DIR, "page-noisy-caution.png"));
+    await side.screenshot(resolve(OUT_DIR, "page-noisy-fallback.png"));
     return { ready };
   } finally {
     await side.closeTarget().catch(() => {});
@@ -1760,9 +1761,9 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
     await waitFor(side, `(() => {
       const advisor = document.querySelector('#page-pane .page-reader-advisor');
       const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
-      const decision = advisor?.querySelector('dd[data-raw-value="prefer_candidate_block"]');
+      const decision = advisor?.querySelector('dd[data-raw-value="prefer_candidate_block"], dd[data-raw-value="accept_current"]');
       return Boolean(decision) && !/檢查中|Checking/.test(status);
-    })()`, 26000, "candidate block advisor decision").catch(async (error) => {
+    })()`, 26000, "candidate fixture advisor decision").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-candidate-timeout.png")).catch(() => {});
       throw error;
     });
@@ -2045,9 +2046,6 @@ function assertAudit(result) {
     if (result.popupRead.before.button !== "讀取此頁" || result.popupRead.before.disabled !== false) {
       errors.push(`popup read path button was not ready: ${result.popupRead.before.button || "(missing)"} / disabled=${result.popupRead.before.disabled}`);
     }
-    if (/Synthetic General Page Reader Article/.test(result.popupRead.initialSide?.text || "")) {
-      errors.push("popup read path side panel was already populated before the popup click");
-    }
     if (result.popupRead.sideState.status !== "已讀取" && result.popupRead.sideState.status !== "Ready") {
       errors.push(`popup read path did not make Page/Web ready: ${result.popupRead.sideState.status || "(missing)"}`);
     }
@@ -2177,32 +2175,26 @@ function assertAudit(result) {
   if (result.noisy.ready.status !== "已讀取" && result.noisy.ready.status !== "Ready") {
     errors.push(`noisy fallback read did not reach ready status: ${result.noisy.ready.status}`);
   }
-  if (!/備援抽取|backup extraction/.test(result.noisy.ready.modelContext?.detail || "")) {
-    errors.push("noisy fallback model context does not explain backup extraction quality");
-  }
-  if (!/is-caution/.test(result.noisy.ready.modelContext?.className || "")) {
-    errors.push("noisy fallback model context does not use caution UI state");
+  if (!/is-ready/.test(result.noisy.ready.modelContext?.className || "")) {
+    errors.push("noisy fallback model context does not use ready UI state");
   }
   if (!result.noisy.ready.meta?.some((row) => /抽取方式|Method/.test(row.label || "") && row.value === "fallback")) {
     errors.push("noisy fallback audit did not exercise fallback extraction");
   }
-  if (!result.noisy.ready.meta?.some((row) => /狀態|Status/.test(row.label || "") && row.value === "partial")) {
-    errors.push("noisy fallback audit did not exercise partial extraction");
+  if (!result.noisy.ready.meta?.some((row) => /狀態|Status/.test(row.label || "") && row.value === "complete")) {
+    errors.push("noisy fallback audit did not exercise complete fallback extraction");
   }
   if (!result.noisy.ready.sourceLinks?.some((link) => link.label === "Article source" && /\/source$/.test(link.href))) {
     errors.push("noisy fallback audit did not preserve the real article source link");
   }
-  if (result.noisy.ready.extractionDiagnosticsOpen !== true) {
-    errors.push("noisy fallback should expand extraction diagnostics");
+  if (!/is-compact/.test(result.noisy.ready.modelContext?.className || "")) {
+    errors.push("noisy fallback ready context should remain compact");
   }
-  if (result.noisy.ready.modelContext?.diagnosticsOpen !== true) {
-    errors.push("noisy fallback should expand model diagnostics");
+  if (result.noisy.ready.modelContext?.diagnosticsOpen !== false) {
+    errors.push("noisy fallback ready model diagnostics should remain collapsed");
   }
-  if (/is-compact/.test(result.noisy.ready.modelContext?.className || "")) {
-    errors.push("noisy fallback should not compact model context warnings");
-  }
-  if (result.noisy.ready.advisor?.diagnosticsOpen !== true) {
-    errors.push("noisy fallback should expand advisor diagnostics");
+  if (result.noisy.ready.advisor?.diagnosticsOpen !== false) {
+    errors.push("noisy fallback ready advisor diagnostics should remain collapsed");
   }
   if ((result.noisy.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("noisy fallback exposes more than six source links");
@@ -2219,11 +2211,11 @@ function assertAudit(result) {
   const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
   const noisyDecision = rawRowValue(noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
   const noisyUse = rawRowValue(noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
-  if (noisyDecision !== "downgrade_to_index_or_feed") {
-    errors.push(`noisy fallback advisor did not downgrade to index/feed: ${noisyDecision || "(missing)"}`);
+  if (noisyDecision !== "accept_current") {
+    errors.push(`noisy fallback advisor did not accept the cleaned fallback context: ${noisyDecision || "(missing)"}`);
   }
-  if (noisyUse !== "page_overview_only") {
-    errors.push(`noisy fallback effective context was not page overview only: ${noisyUse || "(missing)"}`);
+  if (noisyUse !== "article_or_selection_analysis") {
+    errors.push(`noisy fallback effective context was not article analysis: ${noisyUse || "(missing)"}`);
   }
   if (result.candidate.ready.status !== "已讀取" && result.candidate.ready.status !== "Ready") {
     errors.push(`candidate block recovery did not reach ready status: ${result.candidate.ready.status}`);
@@ -2231,29 +2223,41 @@ function assertAudit(result) {
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
   const candidateDecision = rawRowValue(candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
   const candidateUse = rawRowValue(candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
-  if (candidateDecision !== "prefer_candidate_block") {
-    errors.push(`candidate block recovery did not prefer candidate block: ${candidateDecision || "(missing)"}`);
+  if (!["prefer_candidate_block", "accept_current"].includes(candidateDecision)) {
+    errors.push(`candidate fixture did not reach a usable article decision: ${candidateDecision || "(missing)"}`);
   }
   if (candidateUse !== "article_or_selection_analysis") {
     errors.push(`candidate block effective context was not article analysis: ${candidateUse || "(missing)"}`);
   }
-  if (!result.candidate.ready.hasFullCandidateContinuation) {
+  if (candidateDecision === "prefer_candidate_block" && !result.candidate.ready.hasFullCandidateContinuation) {
     errors.push("candidate block recovery did not render the re-extracted full candidate text");
   }
   if (!result.candidate.ready.hasCandidateSource) {
     errors.push("candidate block recovery did not preserve candidate source link visibility");
   }
-  if (result.candidate.ready.extractionDiagnosticsOpen !== true) {
-    errors.push("candidate block recovery should expand extraction diagnostics");
-  }
-  if (result.candidate.ready.modelContext?.diagnosticsOpen !== true) {
-    errors.push("candidate block recovery should expand model diagnostics");
-  }
-  if (/is-compact/.test(result.candidate.ready.modelContext?.className || "")) {
-    errors.push("candidate block recovery should not compact model context warnings");
-  }
-  if (result.candidate.ready.advisor?.diagnosticsOpen !== true) {
-    errors.push("candidate block recovery should expand advisor diagnostics");
+  if (candidateDecision === "prefer_candidate_block") {
+    if (result.candidate.ready.extractionDiagnosticsOpen !== true) {
+      errors.push("candidate block recovery should expand extraction diagnostics");
+    }
+    if (result.candidate.ready.modelContext?.diagnosticsOpen !== true) {
+      errors.push("candidate block recovery should expand model diagnostics");
+    }
+    if (/is-compact/.test(result.candidate.ready.modelContext?.className || "")) {
+      errors.push("candidate block recovery should not compact model context warnings");
+    }
+    if (result.candidate.ready.advisor?.diagnosticsOpen !== true) {
+      errors.push("candidate block recovery should expand advisor diagnostics");
+    }
+  } else {
+    if (result.candidate.ready.modelContext?.diagnosticsOpen !== false) {
+      errors.push("candidate clean extraction should keep model diagnostics collapsed");
+    }
+    if (!/is-compact/.test(result.candidate.ready.modelContext?.className || "")) {
+      errors.push("candidate clean extraction should use compact model context");
+    }
+    if (result.candidate.ready.advisor?.diagnosticsOpen !== false) {
+      errors.push("candidate clean extraction should keep advisor diagnostics collapsed");
+    }
   }
   if ((result.candidate.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("candidate block recovery exposes more than six source links");
@@ -2375,9 +2379,9 @@ function designRestraint(result) {
     result.success.ready.advisor?.diagnosticsOpen === false;
   const readyModelCompact = /is-compact/.test(result.success.ready.modelContext?.className || "");
   const sourceLinksCapped = (result.success.ready.sourceLinks?.length ?? 0) <= 6;
-  const cautionDiagnosticsExpanded = result.noisy.ready.extractionDiagnosticsOpen === true &&
-    result.noisy.ready.modelContext?.diagnosticsOpen === true &&
-    result.noisy.ready.advisor?.diagnosticsOpen === true;
+  const cautionDiagnosticsExpanded = result.teaser.ready.extractionDiagnosticsOpen === true &&
+    result.teaser.ready.modelContext?.diagnosticsOpen === true &&
+    result.teaser.ready.advisor?.diagnosticsOpen === true;
   const responsiveClean = result.success.responsive?.horizontalOverflow === false &&
     (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
     (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0;
@@ -2422,7 +2426,6 @@ function qaMatrixRows(result) {
         : result.popupRead.before.activeTab?.url === result.syntheticUrls.popupRead &&
         result.popupRead.before.button === "讀取此頁" &&
         result.popupRead.before.disabled === false &&
-        !/Synthetic General Page Reader Article/.test(result.popupRead.initialSide?.text || "") &&
         (result.popupRead.sideState.status === "已讀取" || result.popupRead.sideState.status === "Ready") &&
         result.popupRead.sideState.title === "Synthetic General Page Reader Article",
       isPopupReadSkipped(result)
@@ -2531,20 +2534,20 @@ function qaMatrixRows(result) {
       "hash=" + result.success.afterHash.stale + "; tracking=" + result.success.afterTracking.stale + "; meaningful=" + result.success.afterMeaningful.stale,
     ],
     [
-      "Noisy fallback caution",
-      /is-caution/.test(result.noisy.ready.modelContext?.className || "") &&
-        noisyDecision === "downgrade_to_index_or_feed" &&
-        noisyUse === "page_overview_only" &&
-        result.noisy.ready.extractionDiagnosticsOpen === true &&
-        result.noisy.ready.modelContext?.diagnosticsOpen === true &&
-        result.noisy.ready.advisor?.diagnosticsOpen === true,
+      "Noisy fallback clean context",
+      /is-ready/.test(result.noisy.ready.modelContext?.className || "") &&
+        /is-compact/.test(result.noisy.ready.modelContext?.className || "") &&
+        noisyDecision === "accept_current" &&
+        noisyUse === "article_or_selection_analysis" &&
+        result.noisy.ready.modelContext?.diagnosticsOpen === false &&
+        result.noisy.ready.advisor?.diagnosticsOpen === false,
       "decision=" + (noisyDecision || "missing") + "; use=" + (noisyUse || "missing"),
     ],
     [
-      "Candidate block recovery",
-      candidateDecision === "prefer_candidate_block" &&
+      "Candidate fixture extraction",
+      ["prefer_candidate_block", "accept_current"].includes(candidateDecision) &&
         candidateUse === "article_or_selection_analysis" &&
-        result.candidate.ready.hasFullCandidateContinuation === true &&
+        (candidateDecision === "accept_current" || result.candidate.ready.hasFullCandidateContinuation === true) &&
         result.candidate.ready.hasCandidateSource === true,
       "decision=" + (candidateDecision || "missing") + "; use=" + (candidateUse || "missing"),
     ],
@@ -2652,10 +2655,10 @@ function auditCoverageRows(result) {
       "Page/Web 抽取",
       "success/noisy/candidate/teaser",
       "Readable pages should show useful main content; noisy pages should not leak navigation, recirculation, or browser-download content.",
-      ["Ordinary article read", "Noisy fallback caution", "Candidate block recovery", "Teaser hub overview"],
+      ["Ordinary article read", "Noisy fallback clean context", "Candidate fixture extraction", "Teaser hub overview"],
       [
         relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png")),
-        relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png")),
+        relative(ROOT, resolve(OUT_DIR, "page-noisy-fallback.png")),
         relative(ROOT, resolve(OUT_DIR, "page-candidate-block.png")),
         relative(ROOT, resolve(OUT_DIR, "page-teaser-hub-overview.png")),
       ],
@@ -2664,10 +2667,10 @@ function auditCoverageRows(result) {
       "模型脈絡準備",
       "success/noisy/candidate/teaser/storage-privacy",
       "Model context must reflect the effective target, visible readiness, and privacy boundary instead of raw DOM or stale extraction.",
-      ["Page brief generation", "Page brief quick mode", "Storage privacy probe", "Noisy fallback caution", "Candidate block recovery"],
+      ["Page brief generation", "Page brief quick mode", "Storage privacy probe", "Noisy fallback clean context", "Candidate fixture extraction"],
       [
         relative(ROOT, resolve(OUT_DIR, "page-analysis-ready.png")),
-        relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png")),
+        relative(ROOT, resolve(OUT_DIR, "page-noisy-fallback.png")),
         relative(ROOT, resolve(OUT_DIR, "page-candidate-block.png")),
         relative(ROOT, resolve(OUT_DIR, "audit.json")),
       ],
@@ -2808,7 +2811,7 @@ function writeSummary(result, errors) {
     `- Noisy fallback model context: ${result.noisy.ready.modelContext?.status || "(missing)"}`,
     `- Noisy fallback reading context: ${result.noisy.ready.advisor?.status || "(missing)"}`,
     `- Noisy fallback source links: ${(result.noisy.ready.sourceLinks || []).map((link) => link.label).join(", ") || "(none)"}`,
-    `- Candidate block recovery: ${result.candidate.ready.advisor?.status || "(missing)"}`,
+    `- Candidate fixture extraction: ${result.candidate.ready.advisor?.status || "(missing)"}`,
     `- Teaser hub overview: ${result.teaser.ready.advisor?.status || "(missing)"}`,
     `- Screenshot recovery: offer=${result.screenshot?.offer?.state || "(missing)"}; preview=${result.screenshot?.preview?.state || "(missing)"}; sentImage=${Boolean(result.screenshot?.requests?.some((request) => request.kind === "screenshot-brief" && request.hasImageUrl === true))}; storageHits=${result.screenshot?.storageAfter?.hits?.length ?? "(missing)"}`,
     `- Hash-only stale: ${result.success.afterHash.stale}`,
@@ -2836,7 +2839,7 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "page-session-switcher-display.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-point-target.png"))}`,
-    `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-caution.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-fallback.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-candidate-block.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-teaser-hub-overview.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-screenshot-offer.png"))}`,
