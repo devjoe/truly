@@ -832,6 +832,90 @@
         "excludes": ["@context", "script metadata should not appear", "Yahoo提醒您", "飲酒過量", "延伸閱讀", "相關文章一不應進入正文", "更多範例新聞網報導", "尾端站內推薦標題不應進入正文", "檢視留言", "廣告"],
         "status": "complete"
       }
+    },
+    {
+      "id": "app-shell-entity-body-article",
+      "file": "app-shell-entity-body-article.html",
+      "url": "https://social-news.example.test/tw/v3/article/synthetic",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P02-main-role-without-article", "P17-traditional-chinese-layout", "P27-app-shell-body-module"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["工作室針對網路傳聞發布簡短回應", "等待正式資訊"],
+        "excludes": ["廣告（請繼續閱讀本文）", "更多娛樂相關文章", "合成相關新聞一不應進入正文"],
+        "status": "complete"
+      }
+    },
+    {
+      "id": "legacy-news-detail-with-heavy-nav",
+      "file": "legacy-news-detail-with-heavy-nav.html",
+      "url": "https://finance.example.test/r/news/detail_synthetic.djhtm",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P03-navigation-sidebar-noise", "P17-traditional-chinese-layout", "P28-legacy-detail-container"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["期貨因假期休市", "舊式新聞詳情容器中的正文"],
+        "excludes": ["國內匯市首頁", "財經知識庫", "首頁 台股 基金"],
+        "status": "complete"
+      }
+    },
+    {
+      "id": "image-rich-long-news-article",
+      "file": "image-rich-long-news-article.html",
+      "url": "https://example.test/news/image-rich-long-article",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P01-semantic-article", "P17-traditional-chinese-layout", "P29-image-rich-long-article"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["虛構的城市閱讀活動", "確認圖片很多時仍可辨識完整正文"],
+        "excludes": [],
+        "status": "complete"
+      }
+    },
+    {
+      "id": "post-content-inside-noisy-main",
+      "file": "post-content-inside-noisy-main.html",
+      "url": "https://news.example.test/stories/noisy-main-post-content",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P02-main-role-without-article", "P03-navigation-sidebar-noise", "P04-related-content-recirc", "P17-traditional-chinese-layout", "P30-nested-post-content-body"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["真正正文仍集中在 post-content 容器內", "保留足夠模型脈絡"],
+        "excludes": ["首頁推薦卡片一不應進入正文", "合成延伸閱讀一不應進入正文", "最新文章一不應進入正文"],
+        "status": "complete"
+      }
+    },
+    {
+      "id": "legacy-table-news-body",
+      "file": "legacy-table-news-body.html",
+      "url": "https://radio.example.test/news/legacy-table-body",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P17-traditional-chinese-layout", "P28-legacy-detail-container"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["舊式表格新聞合成頁", "legacy table body 應該被視為可用正文候選"],
+        "excludes": ["排行榜", "隱私權"],
+        "status": "complete"
+      }
+    },
+    {
+      "id": "video-article-description",
+      "file": "video-article-description.html",
+      "url": "https://video.example.test/news/synthetic-video-description",
+      "locale": "zh-TW",
+      "pageType": "video",
+      "patterns": ["P18-media-and-caption", "P29-image-rich-long-article"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["這段合成影音描述說明一場虛構災害演練", "應優先於下方輪播與推薦影片"],
+        "excludes": ["最新影音一不應進入正文", "facebook.example.test/example-news", "instagram.example.test/example-news", "telegram.example.test/example_news"],
+        "status": "complete"
+      }
     }
   ]
 }

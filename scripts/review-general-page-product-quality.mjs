@@ -295,7 +295,15 @@ function autoReviewHints(surface, modelContext, document, target) {
     issueTags.push("missing-title");
   if ((modelContext.links?.length ?? 0) >= 12)
     issueTags.push("many-source-links");
-  if (document.linkCount >= 120 && document.articleCount >= 3 && !isDocumentationReviewTarget(target, surface))
+  const cleanCompleteExtraction = surface.extraction.status === "complete" &&
+    surface.extraction.warnings.length === 0 &&
+    modelContext.modelReadiness === "ready";
+  if (
+    document.linkCount >= 120 &&
+    document.articleCount >= 3 &&
+    !cleanCompleteExtraction &&
+    !isDocumentationReviewTarget(target, surface)
+  )
     issueTags.push("likely-index-or-feed");
 
   let suggestedVerdict = "good";

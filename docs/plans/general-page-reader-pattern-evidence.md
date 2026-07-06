@@ -83,14 +83,18 @@ Not allowed in this file:
 | P24-dashboard-data-surface | observed-category | Dashboard, leaderboard, and metric/table surfaces found during private live-tab smoke review (2026-07-03 aggregate) | `semantic-main-dashboard-table`, `semantic-main-short-leaderboard` | Semantic `main` should not make dashboard or leaderboard data surfaces pass as complete articles. |
 | P25-article-root-utility-dense | observed-category | `cluster:general-page-quality-followups` found repeated false-ready article roots with dense links, forms, ticker/tool UI, and low body coverage (2026-07-03 aggregate) | `article-root-utility-dense-ready-trap` | Semantic `article` still needs a caution signal when the article root is dominated by utility controls rather than body prose. |
 | P26-teaser-hub-page | observed-category | `cluster:general-page-quality-followups` found repeated multi-article teaser hubs with short body coverage and very-short-content warnings (2026-07-03 aggregate) | `multi-article-teaser-hub` | Short teaser hubs should remain partial/caution or overview-only, not clean article-ready context. |
+| P27-app-shell-body-module | observed-category | 100-target Google News private review found app-shell pages where the visible lead card was shorter than the later body module (2026-07-06 aggregate) | `app-shell-entity-body-article` | Explicit body modules should beat broad app `main` and visual lead cards without leaking ads or related links. |
+| P28-legacy-detail-container | observed-category | 100-target Google News private review found older finance/news detail templates with heavy nav and unsemantic detail containers (2026-07-06 aggregate) | `legacy-news-detail-with-heavy-nav` | Detail containers should be considered before whole-page fallback and should not trigger login-wall from surrounding member navigation. |
+| P29-image-rich-long-article | observed-category | 100-target Google News private review found image-heavy article roots where prose was complete but media density triggered over-demotion (2026-07-06 aggregate) | `image-rich-long-news-article` | Substantial article prose should not be downgraded only because a gallery or visual package contains many images. |
+| P30-nested-post-content-body | observed-category | 100-target Google News private review found noisy semantic `main` containers with a cleaner nested `post-content` body (2026-07-06 aggregate) | `post-content-inside-noisy-main` | Strong nested body containers should beat surrounding recirculation grids, latest widgets, and broad semantic layouts. |
 
 ## Evaluation V2 Exit Criteria
 
 Evaluation v2 is complete enough for parser-candidate comparison when:
 
 - the target list contains 60-80 public observation targets;
-- the pattern catalog has 15-25 patterns;
-- the synthetic fixture corpus contains 25-56 public-safe fixtures;
+- the pattern catalog has 15-30 patterns;
+- the synthetic fixture corpus contains 25-68 public-safe fixtures;
 - every pattern has at least one synthetic fixture;
 - every fixture is explicitly `synthetic: true`;
 - every committed fixture URL and embedded URL uses `example.test` or a

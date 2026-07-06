@@ -186,8 +186,12 @@ function isUsefulShortSemanticArticle(
 
 function resolveQualityIssues(surface: ReadingSurface): GeneralPageModelQualityIssue[] {
   const issues: GeneralPageModelQualityIssue[] = [];
-  if (surface.extraction.method === "fallback")
+  if (
+    surface.extraction.method === "fallback" &&
+    (surface.extraction.status !== "complete" || surface.extraction.warnings.length > 0)
+  ) {
     issues.push("fallback_extraction");
+  }
   if (surface.extraction.status === "partial")
     issues.push("partial_extraction");
   if (surface.extraction.warnings.includes("large-navigation-noise"))

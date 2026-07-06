@@ -191,6 +191,28 @@ describe("general page model context contract", () => {
     expect(prompt).toContain("qualityIssues: fallback_extraction, partial_extraction, large_navigation_noise, no_main_content");
   });
 
+  it("treats complete fallback extraction without warnings as model-ready", () => {
+    const url = "https://personal.example.test/notes/prose-shell";
+    const surface = extractGeneralPageSurface({
+      document: fixtureDocument("blog-prose-with-nav-shell.html", url),
+      url,
+    });
+
+    expect(surface.extraction).toMatchObject({
+      method: "fallback",
+      status: "complete",
+      warnings: [],
+    });
+
+    const context = buildGeneralPageModelContext(surface);
+
+    expect(context).toMatchObject({
+      modelEligible: true,
+      modelReadiness: "ready",
+      qualityIssues: [],
+    });
+  });
+
   it("keeps utility-dense article roots eligible but not clean-ready", () => {
     const url = "https://wire.example.test/news/utility-dense-ready-trap";
     const surface = extractGeneralPageSurface({

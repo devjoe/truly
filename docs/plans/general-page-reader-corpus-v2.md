@@ -64,6 +64,10 @@ Synthetic fixtures can combine multiple patterns.
 | P24-dashboard-data-surface | Dashboard, leaderboard, or table surface in semantic `main` | Parser treats a data surface as a single complete article | `semantic-main-dashboard-table`, `semantic-main-short-leaderboard` |
 | P25-article-root-utility-dense | Article root contains search/forms, dense utility links, and ticker controls | Parser trusts semantic `article` and marks a noisy, body-thin page as ready | `article-root-utility-dense-ready-trap` |
 | P26-teaser-hub-page | Multiple short teaser cards appear without a semantic `main` | Parser promotes a hub/list preview as a clean complete article | `multi-article-teaser-hub` |
+| P27-app-shell-body-module | App-shell news page has a short visual lead card before a deeper body module | Parser stops at the lead card or broad `main`, missing the actual article body | `app-shell-entity-body-article` |
+| P28-legacy-detail-container | Older news/detail template stores body text in unsemantic `detail` containers inside heavy navigation | Parser falls back to whole-page navigation instead of the detail body | `legacy-news-detail-with-heavy-nav` |
+| P29-image-rich-long-article | Complete article body includes many image/figure nodes around substantial prose | Parser over-demotes the page as media/navigation noise because of raw image count | `image-rich-long-news-article` |
+| P30-nested-post-content-body | Noisy semantic `main` wraps a cleaner nested `post-content` body | Parser trusts the broad semantic root and leaks leading recirculation/latest widgets | `post-content-inside-noisy-main` |
 
 ### 3. Synthetic Fixtures
 
@@ -175,7 +179,7 @@ observation only; do not archive or commit source content.
 
 The current fixture corpus contains 62 public-safe synthetic HTML fixtures.
 It covers every pattern in this catalog at least once and stays within the
-planned 25-64 fixture range.
+planned 25-68 fixture range.
 
 The first v2 fixture batch added coverage for:
 
@@ -246,7 +250,7 @@ focused public regressions for:
 
 The corpus moved beyond the original 35-fixture upper bound after the first
 200-target private product-quality reviews and the follow-up Google News review
-batch. The checker now allows up to 64 fixtures so high-signal manual-review
+batch. The checker now allows up to 68 fixtures so high-signal manual-review
 findings can be converted into public synthetic regressions without removing
 still-useful earlier coverage.
 

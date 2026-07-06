@@ -359,6 +359,23 @@ Results:
   A synthetic bad-CSS smoke under `/private/tmp` verified that the harness still
   prints normal aggregate progress and summary lines without jsdom CSS parser
   noise.
+- `review:general-page-product-quality --source cdp --limit 100`: reran the
+  private Google News zh-TW live-DOM review after converting the remaining
+  app-shell body module, legacy detail/table, image-rich article,
+  nested-post-content, and video-description findings into public-safe
+  synthetic regressions. Sanitized aggregate: 100/100 extracted, 0
+  empty-or-blocked, 0 fetch errors, readiness `ready: 100`, suggested verdict
+  `good: 100`; private artifact:
+  `/private/tmp/truly-google-news-100/review-after-video-table-v16`.
+- `check:general-page-corpus`: passed with 68 public-safe synthetic fixtures,
+  30 covered patterns, and 72 observation targets.
+- `spike:general-page-parsers`: passed the runtime baseline with
+  `truly-heuristic` at 68/68. Third-party parser misses/leaks remain
+  non-blocking candidate data and are not connected to extension runtime.
+- `check:type`, `test:contract:public`, `build`, and
+  `audit:release-bundle`: passed after the extraction quality changes. Build ID
+  was dirty because this evidence was collected before committing the current
+  worktree.
 
 ## Non-Blocking Follow-Ups
 

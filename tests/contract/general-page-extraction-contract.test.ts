@@ -607,6 +607,41 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).not.toContain("Search this site");
   });
 
+  it("selects app-shell entity body modules over visual lead cards", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "app-shell-entity-body-article.html",
+        "https://social-news.example.test/tw/v3/article/synthetic",
+      ),
+      url: "https://social-news.example.test/tw/v3/article/synthetic",
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).toEqual([]);
+    expect(surface.mainText).toContain("工作室針對網路傳聞發布簡短回應");
+    expect(surface.mainText).not.toContain("廣告（請繼續閱讀本文）");
+    expect(surface.mainText).not.toContain("更多娛樂相關文章");
+  });
+
+  it("selects legacy detail containers inside heavy navigation layouts", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "legacy-news-detail-with-heavy-nav.html",
+        "https://finance.example.test/r/news/detail_synthetic.djhtm",
+      ),
+      url: "https://finance.example.test/r/news/detail_synthetic.djhtm",
+    });
+
+    expect(surface.extraction.method).toBe("fallback");
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).toEqual([]);
+    expect(surface.mainText).toContain("期貨因假期休市");
+    expect(surface.mainText).toContain("舊式新聞詳情容器中的正文");
+    expect(surface.mainText).not.toContain("國內匯市首頁");
+    expect(surface.mainText).not.toContain("財經知識庫");
+  });
+
   it("downgrades multi-article teaser hubs instead of accepting one teaser as an article", () => {
     const surface = extractGeneralPageSurface({
       document: jsdomFixtureDocument(
@@ -839,8 +874,8 @@ describe("General Page Reader extraction contract", () => {
     });
 
     expect(surface.extraction.method).toBe("fallback");
-    expect(surface.extraction.status).toBe("partial");
-    expect(surface.extraction.warnings).toContain("no-main-content");
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).not.toContain("no-main-content");
     expect(surface.extraction.warnings).not.toContain("large-navigation-noise");
     expect(surface.mainText).toContain("actual body explains a fictional public monitoring project");
     expect(surface.mainText).not.toBe("Advertising");
@@ -890,8 +925,8 @@ describe("General Page Reader extraction contract", () => {
     });
 
     expect(surface.extraction.method).toBe("fallback");
-    expect(surface.extraction.status).toBe("partial");
-    expect(surface.extraction.warnings).toContain("no-main-content");
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).not.toContain("no-main-content");
     expect(surface.mainText).toContain("blog prose with nav shell fixture");
     expect(surface.mainText).toContain("paragraph density and heading similarity should beat archive widgets");
     expect(surface.mainText).not.toContain("Previous posts");
@@ -1013,6 +1048,77 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.links ?? []).not.toContainEqual(expect.objectContaining({
       text: expect.stringContaining("相關文章一不應進入正文"),
     }));
+  });
+
+  it("keeps image-rich long article bodies complete when prose is substantial", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "image-rich-long-news-article.html",
+        "https://example.test/news/image-rich-long-article",
+      ),
+      url: "https://example.test/news/image-rich-long-article",
+    });
+
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).not.toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("這篇合成新聞描述一場虛構的城市閱讀活動");
+    expect(surface.mainText).toContain("確認圖片很多時仍可辨識完整正文");
+  });
+
+  it("prefers nested post content over noisy semantic main containers", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "post-content-inside-noisy-main.html",
+        "https://news.example.test/stories/noisy-main-post-content",
+      ),
+      url: "https://news.example.test/stories/noisy-main-post-content",
+    });
+
+    expect(surface.extraction.method).toBe("fallback");
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).not.toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("真正正文仍集中在 post-content 容器內");
+    expect(surface.mainText).toContain("保留足夠模型脈絡");
+    expect(surface.mainText).not.toContain("首頁推薦卡片一不應進入正文");
+    expect(surface.mainText).not.toContain("合成延伸閱讀一不應進入正文");
+    expect(surface.mainText).not.toContain("最新文章一不應進入正文");
+  });
+
+  it("extracts legacy table news bodies without semantic landmarks", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "legacy-table-news-body.html",
+        "https://radio.example.test/news/legacy-table-body",
+      ),
+      url: "https://radio.example.test/news/legacy-table-body",
+    });
+
+    expect(surface.extraction.method).toBe("fallback");
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).not.toContain("no-main-content");
+    expect(surface.mainText).toContain("舊式表格新聞合成頁");
+    expect(surface.mainText).toContain("legacy table body 應該被視為可用正文候選");
+    expect(surface.mainText).not.toContain("排行榜");
+    expect(surface.mainText).not.toContain("隱私權");
+  });
+
+  it("prefers video article descriptions over playlist carousels", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "video-article-description.html",
+        "https://video.example.test/news/synthetic-video-description",
+      ),
+      url: "https://video.example.test/news/synthetic-video-description",
+    });
+
+    expect(surface.extraction.status).toBe("complete");
+    expect(surface.extraction.warnings).not.toContain("large-navigation-noise");
+    expect(surface.mainText).toContain("這段合成影音描述說明一場虛構災害演練");
+    expect(surface.mainText).toContain("應優先於下方輪播與推薦影片");
+    expect(surface.mainText).not.toContain("facebook.example.test/example-news");
+    expect(surface.mainText).not.toContain("instagram.example.test/example-news");
+    expect(surface.mainText).not.toContain("telegram.example.test/example_news");
+    expect(surface.mainText).not.toContain("最新影音一不應進入正文");
   });
 
   it("does not promote homepage lead cards through fallback block scoring", () => {
