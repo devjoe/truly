@@ -146,15 +146,12 @@ safe to copy into public review material.
 | English live-DOM validation | Private balanced review under `/private/tmp/truly-english-validation-v1` | Primary readable pages: 78/78 extracted, 70 `good`, 7 `partial`, 1 expected blocked/empty; edge pages mostly partial/blocked/error as expected. |
 | CDP review harness | `tests/unit/cdp-page-source.test.mjs` | Stuck CDP target now becomes a recorded timeout and closes the target instead of leaving review output missing. |
 | Page/Web CDP product audit | `TRULY_EXTENSION_ID=<id> TRULY_AUDIT_AUTO_RELOAD=1 rtk npm run audit:general-page-reader` | Passed on 2026-07-07 with popup read included. A later post-build rerun used `TRULY_AUDIT_SKIP_POPUP_READ=1` because Chrome reported an inactive native window for `chrome.action.openPopup`; the non-popup Page/Web flows still passed. The combined evidence covers popup read, Side Panel auto-read, quick brief dispatch, tab switching, selection/current-region targets, unsupported-page guidance, screenshot recovery, storage privacy, and responsive UI checks. |
-| Facebook live smoke | `TRULY_EXTENSION_ID=<id> TRULY_AUDIT_AUTO_RELOAD=1 rtk npm run audit:facebook-current:zh` | Passed on 2026-07-07 against a logged-in Chinese Facebook home feed. Verified clean service-worker/content-script build `1783366275821-4bb7a2a`, `zh-Hant` locale, heads-up rendering, post tagging, valid boundaries, and selector health. The current sample had no heads-up action button, so deep-read/Side Panel opening from the heads-up remains a manual review item. |
+| Facebook live smoke | `TRULY_EXTENSION_ID=<id> rtk npm run audit:facebook-current:zh` | Passed on 2026-07-07 against a logged-in Chinese Facebook home feed. Verified clean service-worker/content-script build `1783366275821-4bb7a2a`, `zh-Hant` locale, heads-up rendering, post tagging, valid boundaries, selector health, heads-up expand/collapse, and deep-read Side Panel handoff from the `深入閱讀` action button. |
 | Runtime auto-read and model dispatch | `tests/unit/page-reading-runtime.test.ts` | all-sites auto-read is gated on Side Panel use, auto quick brief uses Tier B settings, and weak/target-required pages fail closed. |
 | Screenshot recovery | `tests/unit/page-reading-runtime.test.ts`, `tests/unit/screenshot-data-url.test.ts`, `tests/unit/snapshot-redaction.test.ts` | Vision recovery is user-confirmed, data URL format-checked, session-only, and snapshot-redacted. |
 
 Facebook live audit is intentionally separate from Page/Web synthetic audit. It
 requires an already opened, logged-in `facebook.com` page in the CDP session.
-Deep-read coverage additionally requires a current heads-up with an action
-button; otherwise the audit can verify injection health but not the action
-handoff path.
 
 ## Reviewer Flow Notes
 
