@@ -3,6 +3,7 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
 import { extractGeneralPageSurface } from "@src/lib/general-page-extraction";
+import { buildGeneralPageModelContext } from "@src/lib/general-page-model-context";
 import type { TrulyMessage } from "@src/lib/messages";
 import type { ReadingSurface } from "@src/lib/reading-surface-types";
 import type { ReadingTarget } from "@src/lib/reading-target-types";
@@ -209,6 +210,29 @@ describe("General Page Reader extraction contract", () => {
         src: "https://example.test/images/street-plan.png",
         alt: "Illustration of a street plan",
         title: "Street plan",
+      },
+    ]);
+  });
+
+  it("keeps JSON-LD and related-link noise out of a synthetic news article preview", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "jsonld-leading-news-noise.html",
+        "https://news.example.test/sports/synthetic-match-report",
+      ),
+      url: "https://news.example.test/sports/synthetic-match-report",
+    });
+    const modelContext = buildGeneralPageModelContext(surface);
+
+    expect(surface.mainText).toContain("這則合成賽事新聞描述一場虛構的淘汰賽");
+    expect(surface.mainText).toContain("傷停補時未能再創造明確機會");
+    expect(surface.mainText).not.toContain("@context");
+    expect(surface.mainText).not.toContain("登入後即可張貼留言");
+    expect(surface.excerpt).not.toContain("@context");
+    expect(modelContext.links).toEqual([
+      {
+        href: "https://news.example.test/sports/synthetic-match-report/source",
+        text: "Article source",
       },
     ]);
   });

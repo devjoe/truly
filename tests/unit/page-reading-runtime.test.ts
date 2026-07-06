@@ -929,6 +929,52 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).not.toContain("請至 Firefox 官網下載");
   });
 
+  it("renders metadata dumps as a readable excerpt instead of raw JSON-LD", async () => {
+    const pagePaneEl = setupDom();
+    const rawJsonLd = JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "NewsArticle",
+      headline: "Synthetic metadata headline",
+      description: "This synthetic metadata description is safe to show when a parser accidentally returns JSON-LD instead of article prose.",
+      publisher: { name: "Example News" },
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: {
+        sendMessage: vi.fn(async () => ({
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface({
+            mainText: rawJsonLd,
+            excerpt: rawJsonLd,
+            extraction: {
+              method: "semantic-html",
+              status: "partial",
+              warnings: ["large-navigation-noise"],
+            },
+          }),
+        } satisfies TrulyMessage)),
+      },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+
+    const excerpt = pagePaneEl.querySelector(".page-reader-excerpt")?.textContent ?? "";
+    expect(excerpt).toContain("This synthetic metadata description is safe to show");
+    expect(excerpt).not.toContain("@context");
+    expect(excerpt).not.toContain("\"@type\"");
+  });
+
   it("runs parser advisor after a weak page reading and renders page-overview effective context", async () => {
     const pagePaneEl = setupDom();
     const weakSurface = surface({

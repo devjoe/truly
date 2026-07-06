@@ -8,6 +8,7 @@ const VERDICTS = new Set([
   "unreviewed",
   "good",
   "usable_with_caution",
+  "partial",
   "bad",
   "blocked_or_empty_ok",
 ]);
@@ -234,14 +235,14 @@ function candidateKeysForRow(row) {
       priority: 100,
     });
   }
-  if (row.autoSuggested === "good" && ["usable_with_caution", "bad", "blocked_or_empty_ok"].includes(row.verdict)) {
+  if (row.autoSuggested === "good" && ["usable_with_caution", "partial", "bad", "blocked_or_empty_ok"].includes(row.verdict)) {
     candidates.push({
       key: "auto:overconfident-good",
       kind: "auto-overconfident-good",
       priority: 90,
     });
   }
-  if (row.autoSuggested === "blocked_or_empty_review" && ["good", "usable_with_caution"].includes(row.verdict)) {
+  if (row.autoSuggested === "blocked_or_empty_review" && ["good", "usable_with_caution", "partial"].includes(row.verdict)) {
     candidates.push({
       key: "auto:underconfident-blocked",
       kind: "auto-underconfident-blocked",
@@ -253,6 +254,13 @@ function candidateKeysForRow(row) {
       key: "manual:usable-with-caution",
       kind: "manual-caution-pattern",
       priority: 70,
+    });
+  }
+  if (row.verdict === "partial") {
+    candidates.push({
+      key: "manual:partial-extraction",
+      kind: "manual-partial-pattern",
+      priority: 75,
     });
   }
   for (const tag of row.issueTags) {
@@ -300,6 +308,8 @@ function recommendationForKind(kind) {
     return "Treat as a false-negative risk: add fixture coverage for body recovery or candidate-block selection before tightening blockers.";
   if (kind === "manual-caution-pattern")
     return "Cluster reviewer notes privately, then convert repeated structure into a synthetic caution fixture if it persists.";
+  if (kind === "manual-partial-pattern")
+    return "Treat as an incomplete extraction pattern: add a synthetic fixture or demote the runtime path until the visible preview and model context are honest.";
   return "Inspect private examples for a repeated structure; convert only the pattern into public synthetic coverage.";
 }
 

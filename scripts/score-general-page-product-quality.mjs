@@ -8,6 +8,7 @@ const VERDICTS = new Set([
   "unreviewed",
   "good",
   "usable_with_caution",
+  "partial",
   "bad",
   "blocked_or_empty_ok",
 ]);
@@ -15,6 +16,7 @@ const VERDICTS = new Set([
 const ACCEPTABLE_VERDICTS = new Set([
   "good",
   "usable_with_caution",
+  "partial",
   "blocked_or_empty_ok",
 ]);
 
@@ -130,9 +132,11 @@ function summarize(rows, args) {
   const reviewedCount = reviewedRows.length;
   const acceptedCount = reviewedRows.filter((row) => row.acceptable).length;
   const badCount = reviewedRows.filter((row) => row.bad).length;
+  const partialCount = reviewedRows.filter((row) => row.verdict === "partial").length;
   const reviewedRate = ratio(reviewedCount, totalCount);
   const acceptableRate = ratio(acceptedCount, reviewedCount);
   const badRate = ratio(badCount, reviewedCount);
+  const partialRate = ratio(partialCount, reviewedCount);
   const failures = [];
 
   if (reviewedRate < args.minReviewedRate)
@@ -158,6 +162,7 @@ function summarize(rows, args) {
       reviewedCount,
       acceptedCount,
       badCount,
+      partialCount,
       verdicts: countValues(rows.map((row) => row.verdict)),
       autoSuggested: countValues(rows.map((row) => row.autoSuggested)),
     },
@@ -165,6 +170,7 @@ function summarize(rows, args) {
       reviewedRate,
       acceptableRate,
       badRate,
+      partialRate,
     },
     byCategory: groupedVerdicts(rows, "category"),
     byPageType: groupedVerdicts(rows, "pageType"),
@@ -232,7 +238,8 @@ function printSummary(summary) {
     `reviewed ${summary.counts.reviewedCount}/${summary.counts.totalCount} ` +
     `(${formatRate(summary.rates.reviewedRate)}); ` +
     `acceptable ${formatRate(summary.rates.acceptableRate)}; ` +
-    `bad ${formatRate(summary.rates.badRate)}`,
+    `bad ${formatRate(summary.rates.badRate)}; ` +
+    `partial ${formatRate(summary.rates.partialRate)}`,
   );
   if (summary.failures.length > 0) {
     for (const failure of summary.failures)

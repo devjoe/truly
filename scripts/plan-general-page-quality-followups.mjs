@@ -182,6 +182,12 @@ const CANDIDATE_RULES = {
     nextStep: "Cluster caution labels into concrete shapes; promote only repeated shapes to public synthetic fixtures.",
     fixtureShape: "A caution page with enough useful body text but explicit warnings such as recirculation, fallback, or partial extraction.",
   },
+  "manual:partial-extraction": {
+    status: "needs_private_review",
+    fixtures: [],
+    nextStep: "Cluster partial labels into body-miss, metadata-dump, source-link-noise, or truncation shapes before changing parser routing.",
+    fixtureShape: "A page where useful body text exists but the visible preview, model context, or source links remain incomplete or noisy.",
+  },
 };
 
 if (isDirectRun()) {

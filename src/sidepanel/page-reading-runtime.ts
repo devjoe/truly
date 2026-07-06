@@ -318,9 +318,56 @@ function visibleExcerpt(
     : modelContext && (modelContext.targetKind !== "page" || modelContext.qualityIssues.length > 0)
     ? modelContext.mainText
     : surface.excerpt || surface.mainText;
-  const text = (sourceText || "").trim().replace(/\s+/g, " ");
+  const text = displaySafeExcerptText(sourceText || surface.excerpt || surface.mainText || "");
   if (text.length <= 1200) return text;
   return `${text.slice(0, 1197)}...`;
+}
+
+function displaySafeExcerptText(value: string): string {
+  const text = (value || "").trim().replace(/\s+/g, " ");
+  if (!looksLikeMetadataDump(text))
+    return text;
+
+  const metadataExcerpt = excerptFromMetadataDump(text);
+  if (metadataExcerpt)
+    return metadataExcerpt;
+
+  return "";
+}
+
+function looksLikeMetadataDump(text: string): boolean {
+  if (!text)
+    return false;
+  if (/^\s*\{/.test(text) && /"@(?:context|type)"\s*:/.test(text))
+    return true;
+  if (/^\s*\[?\s*\{/.test(text) && /"(?:headline|description|datePublished|publisher|author)"\s*:/.test(text)) {
+    const punctuationCount = (text.match(/[{}[\]":,]/g) ?? []).length;
+    return punctuationCount / Math.max(text.length, 1) > 0.08;
+  }
+  return false;
+}
+
+function excerptFromMetadataDump(text: string): string {
+  const candidates = [
+    /"description"\s*:\s*"((?:\\.|[^"\\]){40,600})"/,
+    /"headline"\s*:\s*"((?:\\.|[^"\\]){20,240})"/,
+    /"name"\s*:\s*"((?:\\.|[^"\\]){20,240})"/,
+  ];
+  for (const pattern of candidates) {
+    const raw = text.match(pattern)?.[1];
+    const decoded = raw ? decodeJsonStringFragment(raw) : "";
+    if (decoded)
+      return decoded;
+  }
+  return "";
+}
+
+function decodeJsonStringFragment(value: string): string {
+  try {
+    return JSON.parse(`"${value}"`).trim().replace(/\s+/g, " ");
+  } catch {
+    return value.replace(/\\"/g, "\"").replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+  }
 }
 
 function buildCopyText(session: PageReadingSession): string {

@@ -71,6 +71,7 @@ describe("general page model context contract", () => {
         { href: "javascript:alert(1)", text: "unsafe" },
         { href: "data:text/plain,hello", text: "data" },
         { href: "https://example.test/", text: "首頁" },
+        { href: "https://example.test/", text: "Example News" },
         { href: "https://www.microsoft.com/edge/download", text: "請至 Edge 官網下載" },
         { href: "https://www.mozilla.org/firefox/new", text: "請至 Firefox 官網下載" },
         { href: "https://example.test/valid", text: "valid" },

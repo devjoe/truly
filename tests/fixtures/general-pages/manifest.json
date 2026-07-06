@@ -167,6 +167,19 @@
       }
     },
     {
+      "id": "jsonld-leading-news-noise",
+      "file": "jsonld-leading-news-noise.html",
+      "url": "https://news.example.test/sports/synthetic-match-report",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P04-related-content-recirc", "P15-rich-metadata", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["這則合成賽事新聞描述一場虛構的淘汰賽", "傷停補時未能再創造明確機會"],
+        "excludes": ["@context", "登入後即可張貼留言", "合成賽事賽程與直播轉播總整理", "相關報導"]
+      }
+    },
+    {
       "id": "missing-metadata-blog",
       "file": "missing-metadata-blog.html",
       "url": "https://personal.example.test/posts/quiet-parser-notes",

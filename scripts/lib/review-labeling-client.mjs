@@ -15,7 +15,7 @@ export function labelingClientScript() {
   return `<script data-truly="${LABELING_MARKER}">
 (function () {
   var STORE_KEY = "truly-review-labels";
-  var VERDICTS = ["unreviewed", "good", "usable_with_caution", "bad", "blocked_or_empty_ok"];
+  var VERDICTS = ["unreviewed", "good", "usable_with_caution", "partial", "bad", "blocked_or_empty_ok"];
 
   function loadStore() {
     try { return JSON.parse(localStorage.getItem(STORE_KEY) || "{}") || {}; }

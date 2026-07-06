@@ -8,6 +8,7 @@ const VERDICTS = new Set([
   "unreviewed",
   "good",
   "usable_with_caution",
+  "partial",
   "bad",
   "blocked_or_empty_ok",
 ]);
@@ -289,12 +290,14 @@ function candidateKeysForRow(row) {
   const candidates = [];
   if (row.verdict === "bad")
     candidates.push("manual:bad-regression");
-  if (row.autoSuggested === "good" && ["usable_with_caution", "bad", "blocked_or_empty_ok"].includes(row.verdict))
+  if (row.autoSuggested === "good" && ["usable_with_caution", "partial", "bad", "blocked_or_empty_ok"].includes(row.verdict))
     candidates.push("auto:overconfident-good");
-  if (row.autoSuggested === "blocked_or_empty_review" && ["good", "usable_with_caution"].includes(row.verdict))
+  if (row.autoSuggested === "blocked_or_empty_review" && ["good", "usable_with_caution", "partial"].includes(row.verdict))
     candidates.push("auto:underconfident-blocked");
   if (row.verdict === "usable_with_caution")
     candidates.push("manual:usable-with-caution");
+  if (row.verdict === "partial")
+    candidates.push("manual:partial-extraction");
   for (const tag of row.issueTags)
     candidates.push(`issue:${tag}`);
   return [...new Set(candidates)];

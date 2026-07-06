@@ -301,6 +301,8 @@ function autoReviewHints(surface, modelContext, document, target) {
   let suggestedVerdict = "good";
   if (!modelContext.modelEligible || surface.extraction.status === "empty" || surface.extraction.status === "blocked") {
     suggestedVerdict = "blocked_or_empty_review";
+  } else if (surface.extraction.status === "partial" || issueTags.includes("quality:partial_extraction")) {
+    suggestedVerdict = "partial";
   } else if (modelContext.modelReadiness === "caution" || issueTags.includes("likely-index-or-feed")) {
     suggestedVerdict = "usable_with_caution";
   }
@@ -437,7 +439,7 @@ function renderResultCard(item) {
       ).join("")}
     </div>
     <div class="review">
-      <label class="box"><span class="label">Manual verdict</span><select data-target="${escapeAttribute(item.targetId)}"><option>unreviewed</option><option>good</option><option>usable_with_caution</option><option>bad</option><option>blocked_or_empty_ok</option></select></label>
+      <label class="box"><span class="label">Manual verdict</span><select data-target="${escapeAttribute(item.targetId)}"><option>unreviewed</option><option>good</option><option>usable_with_caution</option><option>partial</option><option>bad</option><option>blocked_or_empty_ok</option></select></label>
       <label class="box"><span class="label">Issue tags</span><input value="${escapeAttribute((item.autoReview?.issueTags ?? []).join(", "))}"></label>
       <label class="box"><span class="label">Notes</span><textarea></textarea></label>
     </div>

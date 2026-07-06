@@ -345,6 +345,24 @@ notes, screenshots, and source content. Treat it as a local product-quality
 regression signal before deciding which patterns deserve new public synthetic
 fixtures.
 
+Manual review uses five effective verdicts plus `unreviewed`:
+
+- `good`: the main readable content, metadata, and source context are clean
+  enough for normal Page/Web use.
+- `usable_with_caution`: useful, but the reviewer should keep caveats visible
+  because the page shape is ambiguous or non-article-like.
+- `partial`: the main target is at least partly present, but preview text,
+  model context, source links, truncation, or body recovery are incomplete
+  enough to need a dedicated follow-up.
+- `bad`: the product output is misleading, wrong, or centered on the wrong
+  content.
+- `blocked_or_empty_ok`: login, paywall, empty shell, or intentionally blocked
+  pages were downgraded honestly.
+
+`partial` counts as acceptable in the private score gate, but it is tracked
+separately from `good` and `usable_with_caution` so product review can see
+whether incomplete extraction is becoming too common.
+
 Use the 200-target first pass to answer product questions:
 
 - Does the extracted preview contain the main readable content?

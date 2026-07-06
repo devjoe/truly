@@ -237,6 +237,12 @@ const NON_READING_LINK_TEXT_PATTERNS = [
   /^recommended$/i,
   /^login$/i,
   /^sign in$/i,
+  /^相關(?:文章|報導|閱讀)?$/i,
+  /^延伸閱讀$/i,
+  /^登入後即可張貼留言。?$/i,
+  /(?:登入|登錄).{0,16}留言/,
+  /(?:賽程|直播|轉播).{0,24}總整理/,
+  /特約記者$/,
   /下載/i,
   /\bdownload\b/i,
 ] as const;
@@ -1167,7 +1173,9 @@ function isNonReadingSourceLink(text: string, href: string): boolean {
     return true;
   if (/^(即時|熱門|政治|軍武|社會|生活|健康|國際|地方|財經|娛樂|體育|3C|評論|藝文|玩咖|食譜|地產|專區|搜尋|會員)$/i.test(cleanText))
     return true;
-  if (/^(comments?|share|related|more|recommended|popular|latest|most read|newsletter)\b/i.test(cleanText) || /相關文章|分享至/i.test(cleanText))
+  if (/^(comments?|share|related|more|recommended|popular|latest|most read|newsletter)\b/i.test(cleanText) || /相關文章|相關報導|延伸閱讀|分享至/i.test(cleanText))
+    return true;
+  if (/(登入|登錄).{0,16}留言|(?:賽程|直播|轉播).{0,24}總整理|特約記者$/i.test(cleanText))
     return true;
   if (/(下載|\bdownload\b)/i.test(cleanText))
     return true;

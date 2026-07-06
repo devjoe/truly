@@ -214,12 +214,54 @@ function clampText(value: string | undefined, maxLength: number): string {
 }
 
 function cleanCommonPageNoise(value: string | undefined): string {
-  return (value ?? "")
+  return cleanMetadataDump(value ?? "")
     .replace(/為達最佳瀏覽效果，?\s*建議使用\s*Chrome、?\s*Firefox\s*或\s*Microsoft\s*Edge\s*的瀏覽器。?/gi, " ")
     .replace(/請至\s*(?:Edge|Fire\s*Fox|Firefox|Google|Chrome|Microsoft\s*Edge)[^。.!?]*(?:下載|download)[^。.!?]*(?:[。.!?]|$)/gi, " ")
     .replace(/For best viewing[^.!?]*(?:Chrome|Firefox|Edge)[^.!?]*(?:browser|download)[^.!?]*(?:[.!?]|$)/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function cleanMetadataDump(value: string): string {
+  const text = value.trim();
+  if (!looksLikeMetadataDump(text))
+    return value;
+  return excerptFromMetadataDump(text) || "";
+}
+
+function looksLikeMetadataDump(text: string): boolean {
+  if (!text)
+    return false;
+  if (/^\s*\{/.test(text) && /"@(?:context|type)"\s*:/.test(text))
+    return true;
+  if (/^\s*\[?\s*\{/.test(text) && /"(?:headline|description|datePublished|publisher|author)"\s*:/.test(text)) {
+    const punctuationCount = (text.match(/[{}[\]":,]/g) ?? []).length;
+    return punctuationCount / Math.max(text.length, 1) > 0.08;
+  }
+  return false;
+}
+
+function excerptFromMetadataDump(text: string): string {
+  const candidates = [
+    /"description"\s*:\s*"((?:\\.|[^"\\]){40,600})"/,
+    /"headline"\s*:\s*"((?:\\.|[^"\\]){20,240})"/,
+    /"name"\s*:\s*"((?:\\.|[^"\\]){20,240})"/,
+  ];
+  for (const pattern of candidates) {
+    const raw = text.match(pattern)?.[1];
+    const decoded = raw ? decodeJsonStringFragment(raw) : "";
+    if (decoded)
+      return decoded;
+  }
+  return "";
+}
+
+function decodeJsonStringFragment(value: string): string {
+  try {
+    return JSON.parse(`"${value}"`).trim().replace(/\s+/g, " ");
+  } catch {
+    return value.replace(/\\"/g, "\"").replace(/\\n/g, " ").replace(/\s+/g, " ").trim();
+  }
 }
 
 function hostnameForUrl(rawUrl: string): string {
@@ -262,9 +304,11 @@ function isLikelyNavigationOrDownloadLink(link: ReadingSurfaceLink, pageUrl: str
     return true;
   if (/^(share|comments?|latest|most read|newsletter|popular|recommended|related|more|read article|copy ?link|subscribe|subscribe here|login|sign in|contact|archive|colophon|sponsorship|submit)\b/i.test(text))
     return true;
+  if (/(登入|登錄|留言|評論|分享|訂閱|會員|熱門|最新|推薦|相關|延伸閱讀|總整理|賽程|直播|轉播|專題|分類|首頁|新聞首頁|打開\s*App|作者|記者|特約記者)/i.test(text))
+    return true;
   if (/^(facebook|x|bluesky|flipboard|pinterest|reddit|hacker news)$/i.test(text))
     return true;
-  if (/(\/share\/|\/sharer(?:\/|$)|\/intent(?:\/|$)|\/pin(?:\/|$)|\/comments?(?:\/|$)|\/most-read(?:\/|$)|\/latest(?:\/|$)|\/recommended(?:\/|$)|\/newsletter(?:\/|$)|\/subscribe(?:\/|$)|\/subscription(?:\/|$)|\/login(?:\/|$)|\/signin(?:\/|$)|\/sign-in(?:\/|$))/i.test(lowerHref))
+  if (/(\/share\/|\/sharer(?:\/|$)|\/intent(?:\/|$)|\/pin(?:\/|$)|\/comments?(?:\/|$)|\/most-read(?:\/|$)|\/latest(?:\/|$)|\/recommended(?:\/|$)|\/newsletter(?:\/|$)|\/subscribe(?:\/|$)|\/subscription(?:\/|$)|\/login(?:\/|$)|\/signin(?:\/|$)|\/sign-in(?:\/|$)|\/author(?:\/|$)|\/authors(?:\/|$)|\/tag(?:\/|$)|\/tags(?:\/|$)|\/topic(?:\/|$)|\/topics(?:\/|$)|\/category(?:\/|$)|\/categories(?:\/|$)|\/search(?:\/|$))/i.test(lowerHref))
     return true;
   if (/(下載|download)/i.test(text) && /(chrome|firefox|edge|google|microsoft|mozilla)/i.test(text))
     return true;
@@ -274,9 +318,11 @@ function isLikelyNavigationOrDownloadLink(link: ReadingSurfaceLink, pageUrl: str
     const url = new URL(href);
     const page = new URL(pageUrl);
     const path = url.pathname.replace(/\/+$/, "");
-    const isSameOriginRoot = url.origin === page.origin && path === "";
+    const isSameHostRoot = url.hostname === page.hostname && path === "";
+    if (isSameHostRoot)
+      return true;
     const isHomeLabel = !text || /^home|首頁|主頁|網站首頁$/i.test(text);
-    return isSameOriginRoot && isHomeLabel;
+    return isSameHostRoot && isHomeLabel;
   } catch {
     return false;
   }
