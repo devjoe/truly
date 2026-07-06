@@ -180,6 +180,45 @@
       }
     },
     {
+      "id": "ticker-prefix-news",
+      "file": "ticker-prefix-news.html",
+      "url": "https://news.example.test/politics/public-data-source-update",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P01-semantic-article", "P03-navigation-sidebar-noise", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["公共資料來源說明更新", "避開新聞站台前方的即時 ticker"],
+        "excludes": ["合成快訊一不屬於本文", "即時 熱門 影音 直播"]
+      }
+    },
+    {
+      "id": "inline-recirc-mid-article",
+      "file": "inline-recirc-mid-article.html",
+      "url": "https://news.example.test/weather/path-update",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P01-semantic-article", "P04-related-content-recirc", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["第一段說明合成颱風資料", "第二段在延伸閱讀之後繼續正文", "第三段提醒讀者應以官方最新公告為準"],
+        "excludes": ["合成相關報導一不應進入正文", "合成相關報導二也不應進入正文"]
+      }
+    },
+    {
+      "id": "broad-wrapper-news-body",
+      "file": "broad-wrapper-news-body.html",
+      "url": "https://news.example.test/local/community-meeting",
+      "locale": "zh-TW",
+      "pageType": "news",
+      "patterns": ["P02-main-role-without-article", "P03-navigation-sidebar-noise", "P17-traditional-chinese-layout"],
+      "synthetic": true,
+      "expected": {
+        "contains": ["合成地方新聞的第一段描述社區會議", "保留公開紀錄供居民查閱"],
+        "excludes": ["首頁 即時 熱門", "合成廣告區塊不應進入正文", "合成熱門新聞不應進入正文"]
+      }
+    },
+    {
       "id": "missing-metadata-blog",
       "file": "missing-metadata-blog.html",
       "url": "https://personal.example.test/posts/quiet-parser-notes",

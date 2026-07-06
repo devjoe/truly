@@ -173,9 +173,9 @@ observation only; do not archive or commit source content.
 
 ## Fixture Roadmap
 
-The current fixture corpus contains 49 public-safe synthetic HTML fixtures.
+The current fixture corpus contains 59 public-safe synthetic HTML fixtures.
 It covers every pattern in this catalog at least once and stays within the
-planned 25-56 fixture range.
+planned 25-64 fixture range.
 
 The first v2 fixture batch added coverage for:
 
@@ -213,11 +213,6 @@ The v4 fixture batch added focused regression pressure for:
 - empty social shells with login/app prompts and JSON state;
 - malformed mixed-language pages with uneven markup.
 
-The corpus moved beyond the original 35-fixture upper bound after the first
-200-target private product-quality reviews. The checker now allows up to 56
-fixtures so high-signal manual-review findings can be converted into public
-synthetic regressions without removing still-useful earlier coverage.
-
 The v5 fixture batch added focused regression pressure for:
 
 - blog and personal-site prose containers that lack `article` or `main`
@@ -228,6 +223,22 @@ The v5 fixture batch added focused regression pressure for:
   pages rather than trusted as complete articles;
 - article footer links where source context should filter utility navigation,
   sharing, comment, newsletter, and recirculation links.
+
+The v6 fixture batch converted the first Google News manual-review findings into
+focused public regressions for:
+
+- breaking-news ticker modules that appear before an otherwise clean article
+  body;
+- inline related-reading modules in the middle of an article that must not
+  truncate later body paragraphs;
+- broad news layout wrappers where a smaller inner content-body root should win
+  over navigation, ad, or widget-heavy ancestors.
+
+The corpus moved beyond the original 35-fixture upper bound after the first
+200-target private product-quality reviews and the follow-up Google News review
+batch. The checker now allows up to 64 fixtures so high-signal manual-review
+findings can be converted into public synthetic regressions without removing
+still-useful earlier coverage.
 
 The current live-DOM review follow-up added focused regression pressure for:
 

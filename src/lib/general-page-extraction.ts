@@ -30,6 +30,7 @@ const MAIN_ROOT_SELECTORS = [
   "article",
   "main",
   "[role=\"main\"]",
+  "[itemprop=\"articleBody\"]",
 ] as const;
 
 const WEAK_PAYWALL_OR_LOGIN_PATTERNS = [
@@ -284,7 +285,7 @@ export function extractGeneralPageSurface(
 
   const selectedText = normalizeWhitespace(input.selectedText ?? "") ?? "";
   const selectedTextIsUseful = Boolean(selectedText && selectedText.length >= minSelectedTextLength);
-  const extractionRoot = findBestMainRoot(input.document, minMainTextLength);
+  const extractionRoot = findBestMainRoot(input.document, minMainTextLength, title);
   const rootText = extractionRoot ? readableText(extractionRoot) ?? "" : "";
   const fallbackRoot = !selectedTextIsUseful
     ? findBestFallbackContentRoot(input.document, currentUrl, title, minMainTextLength)
@@ -300,6 +301,16 @@ export function extractGeneralPageSurface(
     method = "selection";
     mainText = selectedText;
     warnings.push("selection-only");
+  } else if (
+    rootText &&
+    rootText.length >= minMainTextLength &&
+    fallbackRootText &&
+    fallbackRootText.length >= minMainTextLength &&
+    shouldPreferFallbackRootOverBroadSemanticRoot(extractionRoot, fallbackRoot, rootText, fallbackRootText)
+  ) {
+    method = "fallback";
+    mainText = fallbackRootText;
+    warnings.push("no-main-content");
   } else if (rootText && rootText.length >= minMainTextLength) {
     method = "semantic-html";
     mainText = rootText;
@@ -327,6 +338,9 @@ export function extractGeneralPageSurface(
     method = "fallback";
     warnings.push("no-main-content");
   }
+
+  if (!selectedTextIsUseful && title && mainText)
+    mainText = trimLeadingTextBeforeTitle(mainText, title);
 
   const extractionSignalRoot = extractionRoot ?? fallbackRoot;
 
@@ -371,7 +385,7 @@ export function extractGeneralPageSurface(
   };
 }
 
-function findBestMainRoot(documentRef: Document, minLength: number): Element | null {
+function findBestMainRoot(documentRef: Document, minLength: number, title?: string): Element | null {
   const candidates: Element[] = [];
   for (const selector of MAIN_ROOT_SELECTORS) {
     candidates.push(...Array.from(documentRef.querySelectorAll(selector)));
@@ -379,17 +393,55 @@ function findBestMainRoot(documentRef: Document, minLength: number): Element | n
   if (candidates.length === 0)
     return null;
 
-  const ranked = candidates
+  const ranked = Array.from(new Set(candidates))
     .map((element) => ({
       element,
       text: readableText(element) ?? "",
+      score: 0,
     }))
     .filter((candidate) => candidate.text.length > 0)
-    .sort((a, b) => b.text.length - a.text.length);
+    .map((candidate) => ({
+      ...candidate,
+      score: scoreMainRootCandidate(candidate.element, candidate.text, title),
+    }))
+    .sort((a, b) => b.score - a.score || b.text.length - a.text.length);
 
   return ranked.find((candidate) => candidate.text.length >= minLength)?.element
     ?? ranked[0]?.element
     ?? null;
+}
+
+function scoreMainRootCandidate(element: Element, text: string, title: string | undefined): number {
+  const tagName = element.tagName.toLowerCase();
+  const identity = `${tagName} ${element.getAttribute("class") ?? ""} ${element.getAttribute("id") ?? ""}`;
+  const linkCount = element.querySelectorAll("a[href]").length;
+  const paragraphCount = element.querySelectorAll("p").length;
+  const headingCount = element.querySelectorAll("h1, h2").length;
+  const imageCount = element.querySelectorAll("img").length;
+  const linkDensity = linkedTextLength(element) / Math.max(text.length, 1);
+
+  let score = Math.min(text.length, 5000) / 48;
+  score += Math.min(paragraphCount, 16) * 18;
+  score += Math.min(headingCount, 4) * 8;
+  score += Math.min(imageCount, 4) * 3;
+  score -= linkCount * 4;
+  score -= linkDensity * 260;
+
+  if (tagName === "article")
+    score += 140;
+  if (tagName === "main")
+    score += 16;
+  if (/(?:^|[\s_-])(?:article|body|content|entry|post|story|本文|正文)(?:$|[\s_-])/i.test(identity))
+    score += 70;
+  if (/(?:^|[\s_-])(?:ad|advert|breadcrumb|comment|footer|header|latest|menu|nav|popular|rank|recommend|related|share|sidebar|ticker|trend|widget|排行|推薦|熱門|相關|側欄|廣告|選單|導覽)(?:$|[\s_-])/i.test(identity))
+    score -= 120;
+  if (title && hasHeadingSimilarToTitle(element, title))
+    score += 140;
+  if (title && textContainsComparableTitle(text, title))
+    score += 70;
+  if (text.length < 420 && linkCount >= 3)
+    score -= 80;
+  return score;
 }
 
 function findBestFallbackContentRoot(
@@ -411,6 +463,46 @@ function findBestFallbackContentRoot(
     .sort((a, b) => b.score - a.score);
 
   return ranked[0]?.element ?? null;
+}
+
+function shouldPreferFallbackRootOverBroadSemanticRoot(
+  semanticRoot: Element | null,
+  fallbackRoot: Element | null,
+  semanticText: string,
+  fallbackText: string,
+): boolean {
+  if (!semanticRoot || !fallbackRoot || semanticRoot === fallbackRoot)
+    return false;
+  if (!containsElement(semanticRoot, fallbackRoot))
+    return false;
+  const tagName = semanticRoot.tagName.toLowerCase();
+  const isBroadMain = tagName === "main" || semanticRoot.getAttribute("role") === "main";
+  if (!isBroadMain)
+    return false;
+  const hasLayoutNoise = hasReadingLayoutNoise(semanticRoot);
+  if (!hasLayoutNoise)
+    return false;
+  return fallbackText.length >= semanticText.length * 0.55;
+}
+
+function containsElement(root: Element, candidate: Element): boolean {
+  if (typeof root.contains === "function")
+    return root.contains(candidate);
+  return Array.from(root.querySelectorAll("*")).includes(candidate);
+}
+
+function hasReadingLayoutNoise(element: Element): boolean {
+  return Boolean(element.querySelector([
+    "nav",
+    "aside",
+    "[class*=\"ad\" i]",
+    "[class*=\"banner\" i]",
+    "[class*=\"promo\" i]",
+    "[class*=\"recommend\" i]",
+    "[class*=\"related\" i]",
+    "[class*=\"sidebar\" i]",
+    "[class*=\"ticker\" i]",
+  ].join(",")));
 }
 
 interface FallbackContentCandidateScore {
@@ -437,6 +529,7 @@ function scoreFallbackContentCandidate(
   if (linkDensity > 0.45)
     return null;
 
+  const tagName = element.tagName.toLowerCase();
   const identity = `${element.tagName} ${element.getAttribute("class") ?? ""} ${element.getAttribute("id") ?? ""}`;
   let score = Math.min(text.length, 3600) / 36;
   score += Math.min(paragraphCount, 12) * 16;
@@ -445,9 +538,11 @@ function scoreFallbackContentCandidate(
   score -= linkDensity * 120;
 
   if (FALLBACK_CONTENT_POSITIVE_TOKEN_PATTERN.test(identity))
-    score += 45;
+    score += 75;
   if (FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN.test(identity))
     score -= 80;
+  if (tagName === "main" && hasReadingLayoutNoise(element))
+    score -= 90;
   if (element.querySelector("h1"))
     score += 24;
   if (title && hasHeadingSimilarToTitle(element, title))
@@ -522,6 +617,61 @@ function hasHeadingSimilarToTitle(element: Element, title: string): boolean {
   return false;
 }
 
+function textContainsComparableTitle(text: string, title: string): boolean {
+  const normalizedTitle = normalizeComparableText(title);
+  if (!normalizedTitle || normalizedTitle.length < 12)
+    return false;
+  return normalizeComparableText(text.slice(0, 1800)).includes(normalizedTitle);
+}
+
+function trimLeadingTextBeforeTitle(text: string, title: string): string {
+  const cleanTitle = normalizeWhitespace(title) ?? "";
+  if (cleanTitle.length < 10)
+    return text;
+
+  const directIndex = text.indexOf(cleanTitle);
+  if (directIndex > 0 && directIndex < 1400 && shouldDropLeadingPageChrome(text.slice(0, directIndex)))
+    return text.slice(directIndex).trim();
+
+  const normalizedTitle = normalizeComparableText(cleanTitle);
+  if (normalizedTitle.length < 12)
+    return text;
+  const prefixWindow = text.slice(0, 1400);
+  const normalizedWindow = normalizeComparableText(prefixWindow);
+  const comparableIndex = normalizedWindow.indexOf(normalizedTitle);
+  if (comparableIndex <= 0)
+    return text;
+
+  const titleWords = normalizedTitle.split(/\s+/).filter(Boolean);
+  const anchor = titleWords.length >= 3 ? titleWords.slice(0, 3).join(" ") : titleWords[0];
+  if (!anchor)
+    return text;
+  const roughAnchor = escapeRegExp(anchor).replace(/\s+/g, ".{0,12}");
+  const match = prefixWindow.match(new RegExp(roughAnchor, "iu"));
+  if (!match || match.index === undefined || match.index <= 0)
+    return text;
+  if (!shouldDropLeadingPageChrome(prefixWindow.slice(0, match.index)))
+    return text;
+  return text.slice(match.index).trim();
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function shouldDropLeadingPageChrome(prefix: string): boolean {
+  const text = normalizeWhitespace(prefix) ?? "";
+  if (text.length < 12)
+    return false;
+  const timestampCount = (text.match(/\b\d{1,2}:\d{2}\b/g) ?? []).length;
+  const navTokenCount = (text.match(/首頁|即時|熱門|影音|直播|社會|政治|生活|國際|財經|娛樂|體育|科技|健康|更多|搜尋|登入|分享|facebook|line/gi) ?? []).length;
+  const punctuationCount = (text.match(/[｜|>〉、]/g) ?? []).length;
+  return timestampCount >= 2 ||
+    navTokenCount >= 4 ||
+    punctuationCount >= 5 ||
+    text.length > 180;
+}
+
 function readableText(root: Element): string | undefined {
   const clone = root.cloneNode(true) as Element;
   for (const selector of NON_READING_TEXT_SELECTORS) {
@@ -573,6 +723,12 @@ function pruneRecirculationTailBlocks(root: Element): void {
       continue;
     if (!RECIRCULATION_TAIL_HEADING_PATTERNS.some((pattern) => pattern.test(text)))
       continue;
+
+    if (hasSubstantialReadingSiblingAfter(element)) {
+      removeInlineRecirculationCluster(element);
+      continue;
+    }
+
     let sibling = element.nextElementSibling;
     while (sibling) {
       const next = sibling.nextElementSibling;
@@ -581,6 +737,52 @@ function pruneRecirculationTailBlocks(root: Element): void {
     }
     element.remove();
   }
+}
+
+function hasSubstantialReadingSiblingAfter(element: Element): boolean {
+  let sibling = element.nextElementSibling;
+  let inspected = 0;
+  while (sibling && inspected < 8) {
+    inspected += 1;
+    const text = normalizeWhitespace(sibling.textContent ?? "") ?? "";
+    if (!text) {
+      sibling = sibling.nextElementSibling;
+      continue;
+    }
+    const tagName = sibling.tagName.toLowerCase();
+    const paragraphCount = sibling.querySelectorAll("p").length + (tagName === "p" ? 1 : 0);
+    const headingCount = sibling.querySelectorAll("h2, h3, h4").length + (/^h[2-4]$/.test(tagName) ? 1 : 0);
+    const linkDensity = linkedTextLength(sibling) / Math.max(text.length, 1);
+    if (
+      text.length >= 40 &&
+      linkDensity < 0.22 &&
+      (paragraphCount >= 1 || headingCount >= 1 || /[。.!?][\s\S]{40,}[。.!?]/.test(text))
+    ) {
+      return true;
+    }
+    sibling = sibling.nextElementSibling;
+  }
+  return false;
+}
+
+function removeInlineRecirculationCluster(heading: Element): void {
+  let sibling = heading.nextElementSibling;
+  while (sibling) {
+    const next = sibling.nextElementSibling;
+    const text = normalizeWhitespace(sibling.textContent ?? "") ?? "";
+    const linkCount = sibling.querySelectorAll("a[href]").length;
+    const paragraphCount = sibling.querySelectorAll("p").length;
+    const linkDensity = linkedTextLength(sibling) / Math.max(text.length, 1);
+    const looksLikeRecircBlock = text.length <= 760 &&
+      linkCount >= 1 &&
+      paragraphCount <= 3 &&
+      (linkDensity >= 0.18 || RECIRCULATION_TAIL_HEADING_PATTERNS.some((pattern) => pattern.test(text)));
+    if (!looksLikeRecircBlock)
+      break;
+    sibling.remove();
+    sibling = next;
+  }
+  heading.remove();
 }
 
 function isShortSemanticRootFalseNegative(rootText: string, bodyText: string, minMainTextLength: number): boolean {
@@ -704,14 +906,14 @@ function nonArticlePageWarnings(
   }
 
   if (
-    articleCount >= 3 &&
+    (articleCount >= 3 || documentArticleCount >= 3) &&
     /\b(thread|discussion|reply|replies|forum|community|comment|comments)\b/.test(lowerSignals)
   ) {
     return ["large-navigation-noise"];
   }
 
   if (
-    articleCount >= 2 &&
+    (articleCount >= 2 || documentArticleCount >= 2) &&
     /\b(social|post|reply|repost|share|timeline|feed|suggested accounts|install app|trending)\b/.test(lowerSignals)
   ) {
     return ["large-navigation-noise"];

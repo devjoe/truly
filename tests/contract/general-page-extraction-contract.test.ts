@@ -237,6 +237,55 @@ describe("General Page Reader extraction contract", () => {
     ]);
   });
 
+  it("prefers the article body over a larger ticker-heavy main root", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "ticker-prefix-news.html",
+        "https://news.example.test/politics/public-data-source-update",
+      ),
+      url: "https://news.example.test/politics/public-data-source-update",
+    });
+
+    expect(surface.mainText).toContain("公共資料來源說明更新");
+    expect(surface.mainText).toContain("避開新聞站台前方的即時 ticker");
+    expect(surface.mainText).not.toContain("合成快訊一不屬於本文");
+    expect(surface.mainText).not.toContain("即時 熱門 影音 直播");
+    expect(surface.extraction.method).toBe("semantic-html");
+  });
+
+  it("keeps article paragraphs after an inline related-reading block", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "inline-recirc-mid-article.html",
+        "https://news.example.test/weather/path-update",
+      ),
+      url: "https://news.example.test/weather/path-update",
+    });
+
+    expect(surface.mainText).toContain("第一段說明合成颱風資料");
+    expect(surface.mainText).toContain("第二段在延伸閱讀之後繼續正文");
+    expect(surface.mainText).toContain("第三段提醒讀者應以官方最新公告為準");
+    expect(surface.mainText).not.toContain("合成相關報導一不應進入正文");
+    expect(surface.extraction.method).toBe("semantic-html");
+  });
+
+  it("uses content-body class roots instead of a broad layout wrapper", () => {
+    const surface = extractGeneralPageSurface({
+      document: jsdomFixtureDocument(
+        "broad-wrapper-news-body.html",
+        "https://news.example.test/local/community-meeting",
+      ),
+      url: "https://news.example.test/local/community-meeting",
+    });
+
+    expect(surface.mainText).toContain("合成地方新聞的第一段描述社區會議");
+    expect(surface.mainText).toContain("保留公開紀錄供居民查閱");
+    expect(surface.mainText).not.toContain("首頁 即時 熱門");
+    expect(surface.mainText).not.toContain("合成廣告區塊不應進入正文");
+    expect(surface.extraction.method).toBe("fallback");
+    expect(surface.extraction.warnings).toContain("no-main-content");
+  });
+
   it("drops non-web URLs at the extraction normalization boundary", () => {
     const document = new JSDOM(
       `<!doctype html>
