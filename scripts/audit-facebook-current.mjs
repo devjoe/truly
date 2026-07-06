@@ -54,6 +54,9 @@ const PANEL_ACTION_PATTERN = "^(深入閱讀|建議查核|Deep reading|Deep read
 const SIDEPANEL_RENDER_WAIT_MS = 1600;
 const AUDIT_READY_TIMEOUT_MS = Number(process.env.TRULY_AUDIT_READY_TIMEOUT_MS || 25_000);
 const AUDIT_READY_POLL_MS = Number(process.env.TRULY_AUDIT_READY_POLL_MS || 750);
+const HEADSUP_SEEK_STEPS = Number(process.env.TRULY_AUDIT_HEADSUP_SEEK_STEPS || 14);
+const HEADSUP_SEEK_SCROLL_PX = Number(process.env.TRULY_AUDIT_HEADSUP_SEEK_SCROLL_PX || 650);
+const HEADSUP_SEEK_WAIT_MS = Number(process.env.TRULY_AUDIT_HEADSUP_SEEK_WAIT_MS || 900);
 
 function usage() {
   console.log(`Usage: node scripts/audit-facebook-current.mjs
@@ -68,6 +71,7 @@ Environment:
   TRULY_EXTENSION_ID=<loaded-extension-id>
   TRULY_AUDIT_AUTO_RELOAD=1   reload stale Truly extension + Facebook tab, then audit
   TRULY_AUDIT_READY_TIMEOUT_MS=25000
+  TRULY_AUDIT_HEADSUP_SEEK_STEPS=14
   CDP_ALLOW_FOCUS=1            allow focus-required side-panel click fallback
 `);
 }
@@ -469,6 +473,78 @@ async function waitForFacebookReadiness(page, serviceWorkerEntry, pageUrl) {
   };
 }
 
+async function seekHeadsUpCandidate(page) {
+  return page.evaluate(`new Promise(async (resolve) => {
+    const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+    const rectOf = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return {
+        top: Math.round(r.top),
+        bottom: Math.round(r.bottom),
+        w: Math.round(r.width),
+        h: Math.round(r.height)
+      };
+    };
+    const snapshot = (step) => {
+      const hosts = Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}));
+      const tagged = Array.from(document.querySelectorAll("[data-truly-id]"));
+      return {
+        step,
+        scrollY: Math.round(window.scrollY),
+        hosts: hosts.length,
+        tagged: tagged.length,
+        sponsored: tagged.filter((el) => el.getAttribute("data-truly-sponsored") === "true").length,
+        skipped: document.querySelectorAll(${JSON.stringify(SKIPPED_POST_SELECTOR)}).length,
+        sample: tagged.slice(-5).map((el, index) => ({
+          index,
+          sponsored: el.getAttribute("data-truly-sponsored"),
+          skip: el.getAttribute("data-truly-skip-reason"),
+          hasHeadsUp: !!el.querySelector(${JSON.stringify(HEADSUP_HOST_SELECTOR)}),
+          hasCollapse: !!el.querySelector(".truly-collapse-bar"),
+          rect: rectOf(el),
+          text: norm(el.innerText || el.textContent).slice(0, 180)
+        }))
+      };
+    };
+    const samples = [];
+    const settle = () => new Promise((resolveDelay) => setTimeout(resolveDelay, ${HEADSUP_SEEK_WAIT_MS}));
+    for (let step = 0; step <= ${HEADSUP_SEEK_STEPS}; step += 1) {
+      await settle();
+      const current = snapshot(step);
+      samples.push(current);
+      const firstHost = document.querySelector(${JSON.stringify(HEADSUP_HOST_SELECTOR)});
+      if (firstHost) {
+        firstHost.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+        resolve({
+          ok: true,
+          reason: "heads-up-found",
+          steps: step,
+          finalScrollY: Math.round(window.scrollY),
+          samples
+        });
+        return;
+      }
+      if (step < ${HEADSUP_SEEK_STEPS}) {
+        window.scrollBy(0, ${HEADSUP_SEEK_SCROLL_PX});
+      }
+    }
+    resolve({
+      ok: false,
+      reason: "heads-up-not-found",
+      steps: ${HEADSUP_SEEK_STEPS},
+      finalScrollY: Math.round(window.scrollY),
+      samples
+    });
+  })`).catch((error) => ({
+    ok: false,
+    reason: "seek-error",
+    error: error instanceof Error ? error.message : String(error),
+    samples: [],
+  }));
+}
+
 function localeExpectationMatches(signals) {
   if (!EXPECT_LOCALE) return { ok: true, detail: "not requested" };
   const expected = EXPECT_LOCALE.toLowerCase();
@@ -779,6 +855,7 @@ function writeSummary(report, failures) {
     `- Tagged posts: ${report.audit.counts.taggedPosts}`,
     `- Selector health: ${report.runtime.stats?.selectorHealth || "(unavailable)"}`,
     `- Readiness wait: ${report.readiness?.ok ? "settled" : "timed out"} (${report.readiness?.waitedMs ?? 0}ms)`,
+    `- Heads-up seek: ${report.headsUpSeek?.ok ? "found" : "not found"} (${report.headsUpSeek?.reason || "not run"})`,
     `- Side Panel targets: ${sidePanel?.targetCount ?? 0}`,
     "",
     "## Verdict",
@@ -817,6 +894,18 @@ function writeSummary(report, failures) {
     "## Checks",
     "",
     ...report.checks.map((check) => formatStep(check.ok, check.label, check.detail)),
+    "",
+    "## Heads-Up Seek",
+    "",
+    `- Result: ${report.headsUpSeek?.ok ? "found" : "not found"}`,
+    `- Reason: ${report.headsUpSeek?.reason || "(none)"}`,
+    `- Steps: ${report.headsUpSeek?.steps ?? 0}`,
+    `- Final scrollY: ${report.headsUpSeek?.finalScrollY ?? 0}`,
+    ...(report.headsUpSeek?.samples?.length
+      ? report.headsUpSeek.samples.slice(-5).map((sample) =>
+          `- sample #${sample.step}: hosts=${sample.hosts} tagged=${sample.tagged} sponsored=${sample.sponsored} skipped=${sample.skipped}`
+        )
+      : ["- no seek samples"]),
     "",
     "## Heads-Up Boundary Sample",
     "",
@@ -897,7 +986,8 @@ const screenshots = [];
 
 try {
   const readiness = await waitForFacebookReadiness(page, serviceWorker.selected, pageTarget.url);
-  const initialScroll = await page.evaluate("window.scrollY").catch(() => 0);
+  const originalScroll = await page.evaluate("window.scrollY").catch(() => 0);
+  const headsUpSeek = await seekHeadsUpCandidate(page);
   const initialViewport = resolve(OUT_DIR, "viewport-initial.png");
   await page.screenshot(initialViewport).catch(() => {});
   screenshots.push(initialViewport);
@@ -1070,7 +1160,7 @@ try {
     },
   ];
 
-  await page.evaluate(`window.scrollTo(0, ${Number(initialScroll) || 0})`).catch(() => {});
+  await page.evaluate(`window.scrollTo(0, ${Number(originalScroll) || 0})`).catch(() => {});
 
   const report = {
     capturedAt: new Date().toISOString(),
@@ -1080,6 +1170,7 @@ try {
     serviceWorker,
     remediation,
     readiness,
+    headsUpSeek,
     audit,
     interaction: firstInteraction,
     sidePanel,

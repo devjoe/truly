@@ -90,6 +90,7 @@ describe("sidepanel page reading runtime", () => {
       await flushMicrotasks();
 
       expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中");
+      expect(pagePaneEl.querySelector(".page-reader-status")?.getAttribute("title")).toBeNull();
 
       nowMs = 3_500;
       vi.advanceTimersByTime(2_500);
@@ -132,6 +133,135 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-status-detail")?.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
     expect(pagePaneEl.querySelector(".page-reader-status-detail")?.textContent).not.toContain("請重新讀取");
     expect(pagePaneEl.querySelector(".page-reader-error")).toBeNull();
+  });
+
+  it("shows the Truly settings page as unsupported instead of a read failure", async () => {
+    const pagePaneEl = setupDom();
+    Object.defineProperty(globalThis, "chrome", {
+      configurable: true,
+      value: { runtime: { id: "truly-test" } },
+    });
+    try {
+      const runtime = createSidepanelPageReadingRuntime({
+        pagePaneEl,
+        runtime: { sendMessage: vi.fn() },
+        tabs: {
+          query: vi.fn(async () => [{
+            id: 77,
+            url: "chrome-extension://truly-test/options/options.html",
+            title: "Truly 設定",
+          }]),
+        },
+        activateTab: vi.fn(),
+        getLang: () => "zh-TW",
+        now: () => 1_000,
+      });
+
+      runtime.install();
+      await flushMicrotasks();
+      runtime.handlePageReadingError({
+        type: "PAGE_READING_ERROR",
+        tabId: 77,
+        error: "page_grant_missing",
+        elapsedMs: 1,
+      });
+
+      expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("不支援此頁");
+      expect(pagePaneEl.textContent).toContain("這是 Truly 的設定或內部頁面");
+      expect(pagePaneEl.textContent).not.toContain("讀取失敗");
+      expect(pagePaneEl.textContent).not.toContain("請先在目標網頁上點 Truly 工具列圖示");
+      expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.disabled).toBe(true);
+    } finally {
+      Reflect.deleteProperty(globalThis, "chrome");
+    }
+  });
+
+  it("uses the session-only Truly settings marker when Chrome hides extension page URLs", async () => {
+    const pagePaneEl = setupDom();
+    const sessionStore = {
+      get: vi.fn(async () => ({
+        trulyActiveExtensionPage: {
+          kind: "options",
+          tabId: 77,
+          title: "Truly 設定",
+          url: "chrome-extension://truly-test/options/options.html",
+          ts: 900,
+          buildId: "test-build",
+        },
+      })),
+      remove: vi.fn(async () => undefined),
+    };
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage: vi.fn() },
+      tabs: {
+        query: vi.fn(async () => [{ id: 77 }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+      sessionStore,
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(sessionStore.get).toHaveBeenCalledWith("trulyActiveExtensionPage");
+    expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("不支援此頁");
+    expect(pagePaneEl.textContent).toContain("這是 Truly 的設定或內部頁面");
+    expect(pagePaneEl.textContent).not.toContain("請先在目標網頁上點 Truly 工具列圖示");
+    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.disabled).toBe(true);
+  });
+
+  it("does not reuse the previous page URL when Chrome hides the newly active tab URL", async () => {
+    const pagePaneEl = setupDom();
+    let activatedListener: ((activeInfo: { tabId: number; windowId: number }) => void) | undefined;
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage: vi.fn() },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://news.example.test/story",
+          title: "Synthetic News",
+        }]),
+        get: vi.fn(async (tabId: number) => tabId === 77 ? { id: 77 } : undefined),
+        onActivated: {
+          addListener: vi.fn((listener) => {
+            activatedListener = listener;
+          }),
+        },
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    runtime.handlePageReadingResult({
+      type: "PAGE_READING_RESULT",
+      tabId: 42,
+      surface: surface({
+        url: "https://news.example.test/story",
+        canonicalUrl: "https://news.example.test/story",
+        title: "Synthetic News",
+      }),
+      elapsedMs: 500,
+    });
+
+    expect(pagePaneEl.textContent).toContain("Synthetic News");
+
+    activatedListener?.({ tabId: 77, windowId: 1 });
+    await flushMicrotasks();
+
+    expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("不支援此頁");
+    expect(pagePaneEl.textContent).toContain("瀏覽器內部頁面無法由擴充功能讀取");
+    expect(pagePaneEl.textContent).not.toContain("讀取失敗");
+    expect(pagePaneEl.textContent).not.toContain("Synthetic News");
+    expect(pagePaneEl.textContent).not.toContain("news.example.test");
+    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.disabled).toBe(true);
   });
 
   it("maps page-access errors to a friendly retry explanation", async () => {
@@ -202,6 +332,7 @@ describe("sidepanel page reading runtime", () => {
 
     expect(pagePaneEl.textContent).toContain("已讀取");
     expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("已讀取");
+    expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).not.toContain("秒");
     expect(pagePaneEl.querySelector(".page-reader-status")?.getAttribute("title")).toContain("讀取耗時 1.8 秒");
     expect(pagePaneEl.textContent).toContain("Runtime Fixture");
     expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
@@ -215,6 +346,38 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(false);
   });
 
+  it("formats very fast page reads as less than 0.1 seconds in the hover title", async () => {
+    const pagePaneEl = setupDom();
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: {
+        sendMessage: vi.fn(async () => ({
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface(),
+          elapsedMs: 1,
+        } satisfies TrulyMessage)),
+      },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+
+    const title = pagePaneEl.querySelector(".page-reader-status")?.getAttribute("title") || "";
+    expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("已讀取");
+    expect(title).toContain("讀取耗時 少於 0.1 秒");
+    expect(title).not.toContain("讀取耗時 0 秒");
+  });
+
   it("switches among saved page sessions without implicitly activating Chrome tabs", async () => {
     const pagePaneEl = setupDom();
     let activeId = 42;
@@ -222,6 +385,7 @@ describe("sidepanel page reading runtime", () => {
     const tabsById = new Map<number, { id: number; url: string; title: string; windowId: number }>([
       [42, { id: 42, url: "https://first.example.test/article", title: "First Article", windowId: 7 }],
       [43, { id: 43, url: "https://second.example.test/article", title: "Second Article", windowId: 7 }],
+      [44, { id: 44, url: "https://third.example.test/article", title: "Third Article", windowId: 7 }],
     ]);
     const update = vi.fn(async (tabId: number, updateProperties: { active?: boolean }) => {
       if (updateProperties.active) activeId = tabId;
@@ -279,6 +443,23 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("已讀網頁");
     expect(pagePaneEl.textContent).toContain("Second saved excerpt.");
 
+    activeId = 44;
+    onActivated?.({ tabId: 44, windowId: 7 });
+    await flushMicrotasks();
+    runtime.handlePageReadingResult({
+      type: "PAGE_READING_RESULT",
+      tabId: 44,
+      surface: surface({
+        id: "general:https://third.example.test/article",
+        url: "https://third.example.test/article",
+        canonicalUrl: "https://third.example.test/article",
+        title: "Third Article",
+        excerpt: "Third saved excerpt.",
+      }),
+    });
+
+    expect(pagePaneEl.textContent).toContain("Third saved excerpt.");
+
     const firstButton = Array.from(pagePaneEl.querySelectorAll<HTMLButtonElement>("[data-page-session-tab-id]"))
       .find((button) => button.textContent?.includes("First Article"));
     firstButton?.click();
@@ -286,7 +467,25 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("First saved excerpt.");
     expect(update).not.toHaveBeenCalled();
     expect(focusWindow).not.toHaveBeenCalled();
-    expect(runtime.auditState().activeTabId).toBe(43);
+    expect(runtime.auditState().activeTabId).toBe(44);
+    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.disabled).toBe(true);
+    expect(pagePaneEl.textContent).toContain("切到此分頁");
+
+    runtime.handlePageReadingResult({
+      type: "PAGE_READING_RESULT",
+      tabId: 44,
+      surface: surface({
+        id: "general:https://third.example.test/article",
+        url: "https://third.example.test/article",
+        canonicalUrl: "https://third.example.test/article",
+        title: "Third Article",
+        excerpt: "Third late result excerpt.",
+      }),
+    });
+
+    expect(pagePaneEl.textContent).toContain("First saved excerpt.");
+    expect(pagePaneEl.textContent).not.toContain("Third late result excerpt.");
+    expect(runtime.auditState().activeTabId).toBe(44);
     expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.disabled).toBe(true);
     expect(pagePaneEl.textContent).toContain("切到此分頁");
 
@@ -409,6 +608,8 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
     expect(pagePaneEl.textContent).toContain("Runtime claim");
     expect(pagePaneEl.textContent).toContain("brief-model 使用 1.2 秒產生快速重點");
+    expect(pagePaneEl.querySelector(".page-reader-model-context-header span")?.textContent).toBe("已產生重點");
+    expect(pagePaneEl.querySelector(".page-reader-model-context-header span")?.textContent).not.toContain("尚未送出");
   });
 
   it("does not auto-read a general page when all-sites access is unavailable", async () => {
@@ -1197,6 +1398,52 @@ describe("sidepanel page reading runtime", () => {
     expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("accept_current");
   });
 
+  it("fails closed with toolbar guidance for current-region hotkey without a live read session", async () => {
+    const pagePaneEl = setupDom();
+    let storageListener: ((changes: Record<string, { newValue?: unknown }>, areaName: string) => void) | undefined;
+    const sendMessage = vi.fn();
+    const sessionStore = {
+      get: vi.fn(async () => ({})),
+      remove: vi.fn(async () => undefined),
+      onChanged: {
+        addListener: vi.fn((listener) => {
+          storageListener = listener;
+        }),
+      },
+    };
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+      sessionStore,
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    storageListener?.({
+      pendingCurrentRegionRead: {
+        newValue: { tabId: 42, ts: 1_000 },
+      },
+    }, "session");
+    await flushMicrotasks();
+
+    expect(sessionStore.remove).toHaveBeenCalledWith("pendingCurrentRegionRead");
+    expect(sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+      type: "READING_TARGET_REQUEST",
+    }));
+    expect(pagePaneEl.textContent).toContain("讀取失敗");
+    expect(pagePaneEl.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
+  });
+
   it("shows a friendly explanation for reserved actions that are not enabled", async () => {
     const pagePaneEl = setupDom();
     const runtime = createSidepanelPageReadingRuntime({
@@ -1362,6 +1609,13 @@ describe("sidepanel page reading runtime", () => {
     pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCapture")?.click();
     await flushMicrotasks();
     expect(captureVisibleTab).toHaveBeenCalledWith(7, { format: "jpeg", quality: 80 });
+    expect(pagePaneEl.querySelector(".page-reader-screenshot-preview")).toBeTruthy();
+
+    runtime.handlePageReadingResult({
+      type: "PAGE_READING_RESULT",
+      tabId: 42,
+      surface: weakSurface,
+    });
     expect(pagePaneEl.querySelector(".page-reader-screenshot-preview")).toBeTruthy();
 
     pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotConfirm")?.click();

@@ -17,6 +17,49 @@ afterEach(async () => {
 });
 
 describe("General Page model integration audit", () => {
+  it("sends quick page briefs as effective text context without raw DOM or screenshots", async () => {
+    const effectivePageText = "Effective synthetic article text that should be sent to the model as the readable page context.";
+    const forbiddenRawDom = "<html><body><script>DO_NOT_SEND_RAW_DOM</script><article>Hidden raw document</article></body></html>";
+    const forbiddenJsonLd = "{\"@context\":\"https://schema.org\",\"@type\":\"NewsArticle\",\"headline\":\"DO_NOT_SEND_JSON_LD\"}";
+    const forbiddenScreenshot = "data:image/png;base64,DO_NOT_SEND_SCREENSHOT";
+    const captured: CapturedRequest[] = [];
+    const endpoint = await startMockEndpoint(captured, {
+      schemaVersion: 1,
+      summary: "Quick synthetic page summary.",
+      bg: [{ t: "Context", why: "The effective page text was supplied." }],
+      claims: [{ c: "Quick claim", why: "It appears in the effective text.", need: "Check source." }],
+      qs: [{ q: "What source supports the article?", kind: "source" }],
+    });
+
+    const result = await callTierBGeneralPageBrief({
+      endpoint,
+      model: "audit-brief-model",
+      context: modelContext({
+        targetKind: "page",
+        mainText: effectivePageText,
+        links: [{ href: "https://example.test/source", text: "Effective source" }],
+        imageAltText: ["Effective image alt text"],
+      }),
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+      mode: "quick",
+      timeoutMs: 5_000,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(captured).toHaveLength(1);
+    const rawBody = JSON.stringify(captured[0].body);
+    const userContent = messageContent(captured[0].body, "user");
+    expect(captured[0].body.max_tokens).toBe(520);
+    expect(userContent).toContain(effectivePageText);
+    expect(userContent).toContain("Effective source");
+    expect(userContent).toContain("Effective image alt text");
+    expect(userContent).not.toContain(forbiddenRawDom);
+    expect(userContent).not.toContain(forbiddenJsonLd);
+    expect(rawBody).not.toContain(forbiddenScreenshot);
+    expect(rawBody).not.toContain("image_url");
+  });
+
   it("sends only the effective selected-text context to the mock OpenAI-compatible endpoint", async () => {
     const selectedText = "Selected synthetic paragraph that the user explicitly asked Truly to analyze.";
     const forbiddenWholePageText = "DO NOT SEND WHOLE PAGE BODY";
@@ -45,10 +88,12 @@ describe("General Page model integration audit", () => {
 
     expect(result.ok).toBe(true);
     expect(captured).toHaveLength(1);
+    const rawBody = JSON.stringify(captured[0].body);
     const userContent = messageContent(captured[0].body, "user");
     expect(userContent).toContain(selectedText);
     expect(userContent).toContain("Synthetic surrounding context");
     expect(userContent).not.toContain(forbiddenWholePageText);
+    expect(rawBody).not.toContain("image_url");
   });
 
   it("keeps page overview deterministic by removing claims from model output", async () => {

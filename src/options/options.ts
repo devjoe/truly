@@ -80,6 +80,7 @@ async function saveSettings(settings: UserSettings): Promise<void> {
 
 type ApiKeyStorageKey = "tierAApiKey" | "tierBApiKey";
 type ApiKeySessionFlagKey = "tierAApiKeySessionOnly" | "tierBApiKeySessionOnly";
+const ACTIVE_EXTENSION_PAGE_MARKER_KEY = "trulyActiveExtensionPage";
 
 async function sessionStorageGet(keys: string[]): Promise<Record<string, unknown>> {
   return chrome.storage.session?.get(keys).catch(() => ({} as Record<string, unknown>)) ??
@@ -92,6 +93,22 @@ async function sessionStorageSet(values: Record<string, unknown>): Promise<void>
 
 async function sessionStorageRemove(keys: string[]): Promise<void> {
   await chrome.storage.session?.remove(keys).catch(() => {});
+}
+
+function markActiveExtensionPage(): void {
+  if (document.visibilityState === "hidden") return;
+  void browser.tabs.getCurrent().catch(() => undefined).then((tab) =>
+    sessionStorageSet({
+      [ACTIVE_EXTENSION_PAGE_MARKER_KEY]: {
+        kind: "options",
+        tabId: tab?.id,
+        title: document.title,
+        url: location.href,
+        ts: Date.now(),
+        buildId: __TRULY_BUILD_ID__,
+      },
+    }),
+  );
 }
 
 async function persistApiKeyPreference(options: {
@@ -266,6 +283,12 @@ function makeUuid(): string {
 }
 
 async function init() {
+  markActiveExtensionPage();
+  window.addEventListener("focus", markActiveExtensionPage);
+  window.addEventListener("pageshow", markActiveExtensionPage);
+  document.addEventListener("visibilitychange", markActiveExtensionPage);
+  window.setInterval(markActiveExtensionPage, 10_000);
+
   const settings = await loadSettings();
   const themeController = createExtensionThemeController();
   themeController.setMode(settings.themeMode);

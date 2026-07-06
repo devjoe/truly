@@ -15,6 +15,7 @@ import {
 import { loadReadinessSnapshot } from "../lib/readiness-storage";
 import type { GetSidePanelStateResultMsg } from "../lib/messages";
 import { debugLog } from "../lib/logger";
+import { isGeneralPageReadableUrl } from "../lib/page-readability";
 
 debugLog(`[Truly Popup] Loaded buildId=${__TRULY_BUILD_ID__}`);
 
@@ -60,14 +61,7 @@ function readinessSummary(record: ReadinessRecord | undefined, fallback: string,
 }
 
 function isGeneralPageUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl);
-    const host = url.hostname.toLowerCase();
-    if (host === "facebook.com" || host.endsWith(".facebook.com")) return false;
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
+  return isGeneralPageReadableUrl(rawUrl, chrome.runtime.id);
 }
 
 async function init() {
