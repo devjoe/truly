@@ -51,16 +51,13 @@
       top: 0;
       z-index: 8;
       display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
-      padding: 6px 10px 5px;
+      justify-content: flex-end;
+      padding: 6px 10px 2px;
       background: linear-gradient(
         to bottom,
         color-mix(in srgb, var(--truly-sidepanel-bg) 94%, var(--truly-sidepanel-surface)) 76%,
         color-mix(in srgb, var(--truly-sidepanel-bg) 0%, transparent)
       );
-      border-bottom: 1px solid color-mix(in srgb, var(--truly-sidepanel-border) 56%, transparent);
     }
     .sidepanel-toolbar-btn {
       display: inline-flex;
@@ -104,33 +101,32 @@
       display: none;
     }
     .tab-bar {
+      position: sticky;
+      top: 36px;
+      z-index: 7;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 2px;
-      width: 124px;
-      min-height: 34px;
-      padding: 2px;
-      border: 1px solid var(--truly-sidepanel-control-border);
-      border-radius: 999px;
-      background: color-mix(in srgb, var(--truly-sidepanel-muted-surface) 72%, transparent);
-      flex: 0 0 auto;
+      gap: 4px;
+      padding: 4px 10px 6px;
+      background: color-mix(in srgb, var(--truly-sidepanel-bg) 94%, transparent);
+      border-bottom: 1px solid color-mix(in srgb, var(--truly-sidepanel-border) 70%, transparent);
     }
     .tab {
-      min-height: 28px;
-      border: 0;
-      border-radius: 999px;
-      background: transparent;
+      min-height: 30px;
+      border: 1px solid var(--truly-sidepanel-control-border);
+      border-radius: 8px;
+      background: var(--truly-sidepanel-muted-surface);
       color: var(--truly-sidepanel-muted-text);
       font-family: inherit;
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 700;
-      line-height: 1.1;
       cursor: pointer;
     }
     .tab[aria-selected="true"] {
-      background: color-mix(in srgb, var(--truly-sidepanel-accent) 14%, var(--truly-sidepanel-surface));
+      background: var(--truly-sidepanel-surface);
       color: var(--truly-sidepanel-accent);
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--truly-sidepanel-accent) 34%, transparent);
+      border-color: color-mix(in srgb, var(--truly-sidepanel-accent) 42%, var(--truly-sidepanel-control-border));
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
     }
     .tab:focus-visible {
       outline: 2px solid var(--truly-sidepanel-accent);
@@ -1232,20 +1228,14 @@
       display: flex;
       flex-direction: column;
       gap: 3px;
-      padding: 0 2px 0 9px;
-      border-left: 2px solid var(--truly-sidepanel-soft-border);
-      background: transparent;
+      padding: 7px 9px;
+      border-radius: 7px;
+      background: var(--truly-sidepanel-muted-surface);
       color: var(--truly-sidepanel-muted-text);
       font-size: 12px;
       line-height: 1.4;
     }
-    .reference-context-heading {
-      color: var(--truly-sidepanel-text);
-      font-size: 16px;
-      font-weight: 700;
-      line-height: 1.32;
-    }
-    .analysis-card > .post-details + .reference-section {
+    .analysis-card > .reference-context-summary + .reference-section {
       margin-top: 8px;
     }
     .reference-relation {
@@ -1262,12 +1252,12 @@
       font-size: 11px;
     }
     .investigation-actions {
-      margin-top: 4px;
-      padding: 8px 0 0;
+      margin-top: 2px;
+      padding: 10px 2px 0;
       border-top: 1px solid var(--truly-sidepanel-soft-border);
       border-radius: 0;
       background: transparent;
-      gap: 0;
+      gap: 6px;
     }
     .investigation-actions-label {
       color: var(--truly-sidepanel-muted-text);
@@ -1284,23 +1274,7 @@
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: 2px 6px;
-    }
-    .investigation-actions .btn-investigation-secondary {
-      min-height: 28px;
-      padding: 3px 7px;
-      border-color: transparent;
-      background: transparent;
-      color: var(--truly-sidepanel-muted-text);
-      font-size: 11px;
-      font-weight: 600;
-      box-shadow: none;
-    }
-    .investigation-actions .btn-investigation-secondary:hover:not(:disabled),
-    .investigation-actions .btn-investigation-secondary:focus-visible {
-      border-color: var(--truly-sidepanel-soft-border);
-      background: var(--truly-sidepanel-muted-surface);
-      color: var(--truly-sidepanel-text);
+      gap: 8px;
     }
     .btn-investigation-primary {
       padding: 5px 11px;
@@ -1367,13 +1341,10 @@
       stroke-width: 2;
     }
     .investigation-action-status {
-      min-height: 0;
+      min-height: 16px;
       color: var(--truly-sidepanel-muted-text);
       font-size: 11px;
       line-height: 1.4;
-    }
-    .investigation-action-status:empty {
-      display: none;
     }
     .investigation-action-footer {
       display: flex;
@@ -1391,18 +1362,13 @@
       font-size: 11px;
       font-weight: 600;
       line-height: 1.4;
-      padding: 3px 7px;
-      border: 1px solid transparent;
-      border-radius: 6px;
       text-decoration: none;
       opacity: 0.82;
     }
     .investigation-feedback-link:hover,
     .investigation-feedback-link:focus-visible {
-      border-color: var(--truly-sidepanel-soft-border);
-      background: var(--truly-sidepanel-muted-surface);
       color: var(--truly-sidepanel-accent);
-      text-decoration: none;
+      text-decoration: underline;
       opacity: 1;
     }
     .reading-brief-section {
@@ -1507,9 +1473,9 @@
       font-size: 11px;
       color: var(--truly-sidepanel-muted-text);
       line-height: 1.45;
-      background: transparent;
-      border-radius: 0;
-      padding: 0;
+      background: var(--truly-sidepanel-muted-surface);
+      border-radius: 6px;
+      padding: 6px 8px;
     }
     .sidepanel-attribution {
       align-self: flex-end;
@@ -1536,7 +1502,7 @@
     .reading-brief-question-actions {
       display: inline-flex;
       align-items: center;
-      gap: 3px;
+      gap: 5px;
       flex: 0 0 auto;
       white-space: nowrap;
     }
@@ -1547,7 +1513,7 @@
       padding: 1px 7px;
       background: transparent;
       flex: 0 0 auto;
-      color: var(--truly-sidepanel-muted-text);
+      color: var(--truly-sidepanel-accent);
       font-size: 11px;
       font-weight: 600;
       text-decoration: none;
@@ -1567,13 +1533,12 @@
     .reading-brief-copy-btn:focus-visible,
     .reading-brief-google-link:hover,
     .reading-brief-google-link:focus-visible {
-      border-color: var(--truly-sidepanel-soft-border);
-      background: var(--truly-sidepanel-muted-surface);
-      color: var(--truly-sidepanel-accent);
+      border-color: #ccd0d5;
+      background: #fff;
       outline: none;
     }
     .reading-brief-google-link:hover {
-      text-decoration: none;
+      text-decoration: underline;
     }
     .zhtw-review-section {
       padding: 9px 2px 0;
@@ -1701,7 +1666,7 @@
       .banner-close { color: #b0b3b8; }
       .banner-close:hover { background: rgba(255,255,255,0.08); }
       .reference-section { background: transparent; border-color: #3a3b3c; }
-      .reference-context-summary { background: transparent; color: #b0b3b8; }
+      .reference-context-summary { background: #18191a; color: #b0b3b8; }
       .reference-relation { color: #e4e6eb; }
       .reference-materials { color: #8a8d91; }
       .reading-brief-section { background: transparent; border-color: transparent; }
@@ -1710,7 +1675,7 @@
       .reading-brief-question-text { color: #e4e6eb; }
       .reading-brief-block-label { color: #b0b3b8; }
       .reading-brief-note {
-        background: transparent;
+        background: #18191a;
         color: #b0b3b8;
       }
       .reading-brief-muted-note {
@@ -1742,9 +1707,6 @@
       .investigation-actions { background: transparent; border-color: #3a3b3c; }
       .investigation-actions-label { color: #b0b3b8; }
       .investigation-actions-hint { color: #b0b3b8; }
-      .investigation-actions .btn-investigation-secondary { background: transparent; border-color: transparent; color: #b0b3b8; }
-      .investigation-actions .btn-investigation-secondary:hover:not(:disabled),
-      .investigation-actions .btn-investigation-secondary:focus-visible { background: #18191a; border-color: #4b4c4f; color: #e4e6eb; }
       .btn-investigation-secondary { background: #18191a; border-color: #4b4c4f; color: #e4e6eb; }
       .btn-investigation-secondary:hover:not(:disabled) { background: #3a3b3c; border-color: #5b5c60; }
       .btn-investigation-secondary-warning { background: #18191a; border-color: #4b4c4f; color: #d7b95b; }
@@ -1806,6 +1768,7 @@
     html[data-truly-theme="dark"] .trail-primary,
     html[data-truly-theme="dark"] .placeholder,
     html[data-truly-theme="dark"] .reading-brief-block-label,
+    html[data-truly-theme="dark"] .reading-brief-note,
     html[data-truly-theme="dark"] .reading-brief-muted-note,
     html[data-truly-theme="dark"] .zhtw-review-label,
     html[data-truly-theme="dark"] .zhtw-review-count,
@@ -1854,6 +1817,7 @@
     }
     html[data-truly-theme="dark"] .details-fulltext,
     html[data-truly-theme="dark"] .details-json,
+    html[data-truly-theme="dark"] .reading-brief-note,
     html[data-truly-theme="dark"] .reading-brief-muted-note,
     html[data-truly-theme="dark"] .zhtw-review-tab-panel-scroll {
       background: var(--truly-sidepanel-muted-surface);
@@ -1868,7 +1832,7 @@
       color: var(--truly-sidepanel-text);
     }
     html[data-truly-theme="dark"] .reference-context-summary {
-      background: transparent;
+      background: var(--truly-sidepanel-muted-surface);
       color: var(--truly-sidepanel-muted-text);
     }
     html[data-truly-theme="dark"] .reference-relation {
@@ -1896,7 +1860,7 @@
       color: var(--truly-sidepanel-muted-text);
     }
     html[data-truly-theme="dark"] .reading-brief-google-link {
-      color: var(--truly-sidepanel-muted-text);
+      color: var(--truly-sidepanel-accent);
     }
     html[data-truly-theme="dark"] .zhtw-review-tab {
       background: var(--truly-sidepanel-muted-surface);
@@ -1919,17 +1883,6 @@
     html[data-truly-theme="dark"] .btn-investigation-secondary:hover:not(:disabled) {
       background: #3a3b3c;
       border-color: #5b5c60;
-    }
-    html[data-truly-theme="dark"] .investigation-actions .btn-investigation-secondary {
-      background: transparent;
-      border-color: transparent;
-      color: var(--truly-sidepanel-muted-text);
-    }
-    html[data-truly-theme="dark"] .investigation-actions .btn-investigation-secondary:hover:not(:disabled),
-    html[data-truly-theme="dark"] .investigation-actions .btn-investigation-secondary:focus-visible {
-      background: var(--truly-sidepanel-muted-surface);
-      border-color: var(--truly-sidepanel-soft-border);
-      color: var(--truly-sidepanel-text);
     }
     html[data-truly-theme="dark"] .page-reader-card-action {
       background: transparent;
@@ -1995,6 +1948,7 @@
     html[data-truly-theme="light"] .post-text,
     html[data-truly-theme="light"] .post-time,
     html[data-truly-theme="light"] .reading-brief-block-label,
+    html[data-truly-theme="light"] .reading-brief-note,
     html[data-truly-theme="light"] .reading-brief-muted-note,
     html[data-truly-theme="light"] .zhtw-review-label,
     html[data-truly-theme="light"] .zhtw-review-count,
@@ -2025,7 +1979,7 @@
       border-color: var(--truly-sidepanel-soft-border);
     }
     html[data-truly-theme="light"] .reference-context-summary {
-      background: transparent;
+      background: var(--truly-sidepanel-muted-surface);
       color: var(--truly-sidepanel-muted-text);
     }
     html[data-truly-theme="light"] .reference-section .details-fulltext {
@@ -2034,6 +1988,7 @@
     }
     html[data-truly-theme="light"] .details-fulltext,
     html[data-truly-theme="light"] .details-json,
+    html[data-truly-theme="light"] .reading-brief-note,
     html[data-truly-theme="light"] .reading-brief-muted-note,
     html[data-truly-theme="light"] .zhtw-review-tab-panel-scroll {
       background: var(--truly-sidepanel-muted-surface);
@@ -2068,17 +2023,6 @@
       background: #f5f6f7;
       border-color: #bec3c9;
     }
-    html[data-truly-theme="light"] .investigation-actions .btn-investigation-secondary {
-      background: transparent;
-      border-color: transparent;
-      color: var(--truly-sidepanel-muted-text);
-    }
-    html[data-truly-theme="light"] .investigation-actions .btn-investigation-secondary:hover:not(:disabled),
-    html[data-truly-theme="light"] .investigation-actions .btn-investigation-secondary:focus-visible {
-      background: var(--truly-sidepanel-muted-surface);
-      border-color: var(--truly-sidepanel-soft-border);
-      color: var(--truly-sidepanel-text);
-    }
     html[data-truly-theme="light"] .page-reader-card-action {
       background: transparent;
       border-color: transparent;
@@ -2105,10 +2049,6 @@
 </head>
 <body>
   <div class="sidepanel-toolbar" aria-label="側欄工具" data-i18n-aria-label="sidepanel.toolsAria">
-    <div class="tab-bar" role="tablist" aria-label="閱讀面板" data-i18n-aria-label="sidepanel.tabsAria">
-      <button class="tab" type="button" role="tab" data-tab="analysis" data-i18n="sidepanel.tab.feed">Feed</button>
-      <button class="tab" type="button" role="tab" data-tab="page" data-i18n="sidepanel.tab.page">Web</button>
-    </div>
     <button id="openOptionsPage" class="sidepanel-toolbar-btn" type="button" title="開啟設定" aria-label="開啟 Truly 設定" data-i18n-title="sidepanel.openSettingsTitle" data-i18n-aria-label="sidepanel.openSettingsAria">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
         <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path>
@@ -2117,8 +2057,12 @@
       <span data-i18n="popup.settings">設定</span>
     </button>
   </div>
+  <div class="tab-bar" role="tablist" aria-label="閱讀面板" data-i18n-aria-label="sidepanel.tabsAria">
+    <button class="tab" type="button" role="tab" data-tab="analysis" data-i18n="sidepanel.tab.feed">Feed</button>
+    <button class="tab" type="button" role="tab" data-tab="page" data-i18n="sidepanel.tab.page">Web</button>
+  </div>
   <div id="analysis-pane" class="feed-container" role="tabpanel" data-tab="analysis" aria-label="閱讀輔助內容" data-i18n-aria-label="sidepanel.contentAria">
-    <div class="placeholder" id="analysisPlaceholder" data-i18n="sidepanel.placeholder">等待可讀內容……</div>
+    <div class="placeholder" id="analysisPlaceholder" data-i18n="sidepanel.placeholder">等待目前可視貼文……</div>
   </div>
   <div id="page-pane" class="feed-container page-container" role="tabpanel" data-tab="page" aria-label="Web 閱讀" data-i18n-aria-label="sidepanel.page.contentAria" hidden>
   </div>

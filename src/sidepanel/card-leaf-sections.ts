@@ -203,13 +203,6 @@ export function renderReferenceContextSummary(event: DashboardPostEvent, lang: L
   return wrap;
 }
 
-export function renderReferenceContextHeading(event: DashboardPostEvent, lang: Lang = "zh-TW"): HTMLElement {
-  const heading = document.createElement("div");
-  heading.className = "reference-context-heading";
-  heading.textContent = referenceRelationshipText(event, lang);
-  return heading;
-}
-
 export function renderMetadataSection(event: DashboardPostEvent): HTMLElement {
   const metaSection = document.createElement("div");
   metaSection.className = "details-section";

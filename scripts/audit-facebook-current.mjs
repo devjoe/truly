@@ -853,18 +853,8 @@ async function auditSidePanelWorkflow(page, serviceWorkerEntry) {
       problems.push(`sidepanel-horizontal-overflow:${capture.data.overflow.length}`);
     }
     if (capture.data?.feedVisualHierarchy?.hasReadingBrief && capture.data?.feedVisualHierarchy?.hasReferenceSection) {
-      if (!capture.data.feedVisualHierarchy.readingBeforeReference)
-        problems.push("sidepanel-feed-reference-before-reading");
       if (capture.data.feedVisualHierarchy.referenceOpen)
         problems.push("sidepanel-feed-reference-open-by-default");
-    }
-    if (capture.data?.feedActionBar?.present) {
-      if (!capture.data.feedActionBar.compact)
-        problems.push("sidepanel-feed-actions-not-compact");
-      if (capture.data.feedActionBar.hasVisibleLabel || capture.data.feedActionBar.hasVisibleHint)
-        problems.push("sidepanel-feed-actions-copy-visible");
-      if (capture.data.feedActionBar.hasFooter)
-        problems.push("sidepanel-feed-actions-footer-visible");
     }
     if (!capture.data?.text)
       problems.push("sidepanel-dom-text-empty");

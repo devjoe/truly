@@ -1,7 +1,7 @@
 import type { DashboardPostEvent } from "../lib/types";
 import type { Lang } from "../lib/types";
 import { t } from "../lib/i18n";
-import { renderReferenceContextHeading } from "./card-leaf-sections";
+import { renderReferenceContextSummary } from "./card-leaf-sections";
 
 export interface AnalysisPaneCardRenderOptions {
   lang?: Lang;
@@ -29,9 +29,9 @@ export function renderAnalysisCard(
   card.className = "post-card analysis-card expanded" + (event.isSponsored ? " sponsored" : "");
   card.setAttribute("data-truly-dash-id", event.id);
 
-  card.appendChild(options.renderExpanded(event, history));
-  card.insertBefore(renderReferenceContextHeading(event, lang), card.firstChild);
+  card.appendChild(renderReferenceContextSummary(event, lang));
   const reference = options.renderReferenceSection(event);
   if (reference) card.appendChild(reference);
+  card.appendChild(options.renderExpanded(event, history));
   return card;
 }

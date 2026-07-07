@@ -107,7 +107,7 @@ export function createSidepanelReadingSurface({
       renderPlaceholder: (hasRequestedPost) => renderAnalysisPlaceholder(hasRequestedPost, lang),
       renderCard: (event, postHistory) => renderAnalysisCard(event, postHistory, {
         lang,
-        renderReferenceSection: (post) => renderReferenceSection(post),
+        renderReferenceSection: (post) => renderReferenceSection(post, { showContextSummary: false }),
         renderExpanded: (post, expandedHistory) => renderFeedExpanded(post, expandedHistory, {
           showReferenceSection: false,
         }),
