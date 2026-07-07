@@ -1842,9 +1842,9 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
     await waitFor(side, `(() => {
       const advisor = document.querySelector('#page-pane .page-reader-advisor');
       const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
-      const decision = advisor?.querySelector('dd[data-raw-value="downgrade_to_index_or_feed"]');
+      const decision = advisor?.querySelector('dd[data-raw-value="downgrade_to_index_or_feed"], dd[data-raw-value="request_user_selection"]');
       return Boolean(decision) && !/檢查中|Checking/.test(status);
-    })()`, 26000, "teaser hub advisor decision").catch(async (error) => {
+    })()`, 26000, "teaser hub safe advisor decision").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-teaser-hub-advisor-timeout.png")).catch(() => {});
       throw error;
     });
@@ -2268,11 +2268,11 @@ function assertAudit(result) {
   const teaserAdvisorRows = result.teaser.ready.advisor?.rows || [];
   const teaserDecision = rawRowValue(teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
   const teaserUse = rawRowValue(teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
-  if (teaserDecision !== "downgrade_to_index_or_feed") {
-    errors.push(`teaser hub advisor did not downgrade to index/feed: ${teaserDecision || "(missing)"}`);
-  }
-  if (teaserUse !== "page_overview_only") {
-    errors.push(`teaser hub effective context was not page overview only: ${teaserUse || "(missing)"}`);
+  const teaserSafeScope =
+    (teaserDecision === "downgrade_to_index_or_feed" && teaserUse === "page_overview_only") ||
+    (teaserDecision === "request_user_selection" && teaserUse === "requires_user_target");
+  if (!teaserSafeScope) {
+    errors.push(`teaser hub advisor did not choose a safe non-article scope: decision=${teaserDecision || "(missing)"} use=${teaserUse || "(missing)"}`);
   }
   if (result.teaser.ready.extractionDiagnosticsOpen !== true) {
     errors.push("teaser hub should expand extraction diagnostics");
@@ -2552,9 +2552,9 @@ function qaMatrixRows(result) {
       "decision=" + (candidateDecision || "missing") + "; use=" + (candidateUse || "missing"),
     ],
     [
-      "Teaser hub overview",
-      teaserDecision === "downgrade_to_index_or_feed" &&
-        teaserUse === "page_overview_only" &&
+      "Teaser hub safe scope",
+      ((teaserDecision === "downgrade_to_index_or_feed" && teaserUse === "page_overview_only") ||
+        (teaserDecision === "request_user_selection" && teaserUse === "requires_user_target")) &&
         result.teaser.ready.extractionDiagnosticsOpen === true &&
         result.teaser.ready.modelContext?.diagnosticsOpen === true &&
         result.teaser.ready.advisor?.diagnosticsOpen === true &&
@@ -2655,7 +2655,7 @@ function auditCoverageRows(result) {
       "Page/Web 讀取",
       "success/noisy/candidate/teaser",
       "Readable pages should show useful main content; noisy pages should not leak navigation, recirculation, or browser-download content.",
-      ["Ordinary article read", "Noisy fallback clean context", "Candidate fixture extraction", "Teaser hub overview"],
+      ["Ordinary article read", "Noisy fallback clean context", "Candidate fixture extraction", "Teaser hub safe scope"],
       [
         relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png")),
         relative(ROOT, resolve(OUT_DIR, "page-noisy-fallback.png")),
@@ -2812,7 +2812,7 @@ function writeSummary(result, errors) {
     `- Noisy fallback reading context: ${result.noisy.ready.advisor?.status || "(missing)"}`,
     `- Noisy fallback source links: ${(result.noisy.ready.sourceLinks || []).map((link) => link.label).join(", ") || "(none)"}`,
     `- Candidate fixture extraction: ${result.candidate.ready.advisor?.status || "(missing)"}`,
-    `- Teaser hub overview: ${result.teaser.ready.advisor?.status || "(missing)"}`,
+    `- Teaser hub safe scope: ${result.teaser.ready.advisor?.status || "(missing)"}`,
     `- Screenshot recovery: offer=${result.screenshot?.offer?.state || "(missing)"}; preview=${result.screenshot?.preview?.state || "(missing)"}; sentImage=${Boolean(result.screenshot?.requests?.some((request) => request.kind === "screenshot-brief" && request.hasImageUrl === true))}; storageHits=${result.screenshot?.storageAfter?.hits?.length ?? "(missing)"}`,
     `- Hash-only stale: ${result.success.afterHash.stale}`,
     `- Tracking-only stale: ${result.success.afterTracking.stale}`,
