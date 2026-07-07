@@ -2178,10 +2178,10 @@ function assertAudit(result) {
   if (!/is-ready/.test(result.noisy.ready.modelContext?.className || "")) {
     errors.push("noisy fallback model context does not use ready UI state");
   }
-  if (!result.noisy.ready.meta?.some((row) => /抽取方式|Method/.test(row.label || "") && row.value === "fallback")) {
+  if (!result.noisy.ready.meta?.some((row) => /讀取方式|Reading method/.test(row.label || "") && row.value === "fallback")) {
     errors.push("noisy fallback audit did not exercise fallback extraction");
   }
-  if (!result.noisy.ready.meta?.some((row) => /狀態|Status/.test(row.label || "") && row.value === "complete")) {
+  if (!result.noisy.ready.meta?.some((row) => /內容狀態|Content state/.test(row.label || "") && row.value === "complete")) {
     errors.push("noisy fallback audit did not exercise complete fallback extraction");
   }
   if (!result.noisy.ready.sourceLinks?.some((link) => link.label === "Article source" && /\/source$/.test(link.href))) {
@@ -2652,7 +2652,7 @@ function auditCoverageRows(result) {
       ].filter(Boolean),
     ),
     row(
-      "Page/Web 抽取",
+      "Page/Web 讀取",
       "success/noisy/candidate/teaser",
       "Readable pages should show useful main content; noisy pages should not leak navigation, recirculation, or browser-download content.",
       ["Ordinary article read", "Noisy fallback clean context", "Candidate fixture extraction", "Teaser hub overview"],
@@ -2818,7 +2818,7 @@ function writeSummary(result, errors) {
     `- Tracking-only stale: ${result.success.afterTracking.stale}`,
     `- Meaningful URL stale: ${result.success.afterMeaningful.stale}`,
     `- Meaningful URL scrubbed stale surface: ${!result.success.afterMeaningful.oldExcerptVisible && !result.success.afterMeaningful.sourceLinkVisible}`,
-    `- Copy metadata title/url/excerpt: ${result.success.copy.hasTitle}/${result.success.copy.hasUrl}/${result.success.copy.hasExcerpt}`,
+    `- Copy info title/url/excerpt: ${result.success.copy.hasTitle}/${result.success.copy.hasUrl}/${result.success.copy.hasExcerpt}`,
     `- Storage privacy probe: ok=${result.storagePrivacy?.ok}; localKeys=${result.storagePrivacy?.localKeyCount ?? "(missing)"}; sessionKeys=${result.storagePrivacy?.sessionKeyCount ?? "(missing)"}; hits=${result.storagePrivacy?.hits?.length ?? "(missing)"}`,
     `- No-grant guidance: ${result.noGrant.hasGuidance}`,
     `- No-grant all-sites settings guidance: ${result.noGrant.hasAllSitesGuidance}`,

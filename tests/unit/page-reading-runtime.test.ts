@@ -342,7 +342,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("文字門檻");
     expect(pagePaneEl.textContent).toContain("來源連結");
     expect(pagePaneEl.textContent).toContain("Synthetic source");
-    expect(pagePaneEl.textContent).toContain("檢視抽取細節");
+    expect(pagePaneEl.textContent).toContain("檢視讀取細節");
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(false);
   });
 
@@ -527,7 +527,7 @@ describe("sidepanel page reading runtime", () => {
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(pagePaneEl.textContent).toContain("分析範圍");
     expect(pagePaneEl.textContent).toContain("已建立");
-    expect(pagePaneEl.textContent).toContain("使用目前抽取內容");
+    expect(pagePaneEl.textContent).toContain("使用目前內容");
     expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("accept_current");
     expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(true);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(false);
@@ -920,7 +920,7 @@ describe("sidepanel page reading runtime", () => {
     await runtime.requestReadCurrentPage("sidepanel");
 
     expect(pagePaneEl.textContent).toContain("可分析但需留意（尚未送出）");
-    expect(pagePaneEl.textContent).toContain("目前只能使用備援抽取");
+    expect(pagePaneEl.textContent).toContain("目前只能用備用讀取方式");
     expect(pagePaneEl.textContent).toContain("偵測到大量導覽噪音");
     expect(pagePaneEl.querySelector(".page-reader-model-context")?.classList.contains("is-compact")).toBe(false);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-model-context details")?.open).toBe(true);

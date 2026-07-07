@@ -176,7 +176,7 @@ not a parser regression.
 - Auto-read: with all-sites access, Page/Web should read only while the Side
   Panel is open.
 - Model output: automatic briefs should feel compact and not like a debug dump.
-- Timing copy: extraction elapsed and model elapsed should be distinguishable.
+- Timing copy: page-read elapsed and model elapsed should be distinguishable.
 - Parser quality: preview should not start with JSON-LD, navigation, related
   links, browser-download prompts, or other obvious page chrome.
 - Multi-tab state: switching saved Page/Web sessions should not imply the Chrome
