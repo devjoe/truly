@@ -529,7 +529,7 @@ describe("General Page product-quality findings summary", () => {
       }),
     ]));
     expect(markdown).toContain("manual:bad-regression");
-    expect(markdown).toContain("Create a synthetic fixture");
+    expect(markdown).toContain("create a small synthetic invariant only if the DOM failure shape repeats");
     expect(serialized).not.toContain("https://private-source.example.test");
     expect(serialized).not.toContain("Private Story");
     expect(serialized).not.toContain("Sensitive");

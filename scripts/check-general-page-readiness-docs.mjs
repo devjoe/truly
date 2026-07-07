@@ -43,6 +43,8 @@ const REQUIRED_SNIPPETS = [
       "heuristic_review",
       "needs_private_review",
       "covered_by_existing_fixture",
+      "check:general-page:synthetic",
+      "not as the main proof of product quality",
       "auto-overconfident good suggestions",
       "target ids",
       "git fetch origin main",

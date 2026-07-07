@@ -203,6 +203,8 @@ export interface SidepanelPageReadingRuntime {
       screenshotHasDataUrl: boolean;
       advisorStatus?: PageReadingAdvisorStatus;
       analysisStatus?: PageReadingAnalysisStatus;
+      targetKind?: GeneralPageModelContext["targetKind"];
+      allowedUse?: GeneralPageEffectiveModelContextUse;
     };
   };
   handlePageReadingResult(message: PageReadingResultMsg): void;
@@ -306,6 +308,12 @@ function hostnameForUrl(rawUrl: string): string {
   } catch {
     return rawUrl;
   }
+}
+
+function sourceLinkLabel(link: GeneralPageModelSourceLink): string {
+  const host = hostnameForUrl(link.href).replace(/^www\./i, "");
+  if (host && host !== link.href) return host;
+  return link.text?.trim() || link.href;
 }
 
 function visibleExcerpt(
@@ -440,7 +448,7 @@ function sourceLinksHtml(links: GeneralPageModelSourceLink[], title: string): st
       <h3>${escapeHtml(title)}</h3>
       <ul>
         ${visibleLinks.map((link) => {
-          const label = link.text?.trim() || link.href;
+          const label = sourceLinkLabel(link);
           return `<li><a href="${escapeHtml(link.href)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a></li>`;
         }).join("")}
       </ul>
@@ -454,10 +462,7 @@ function extractionDiagnosticsHtml(
   context: GeneralPageModelContext | undefined,
   tr: (key: string, params?: Record<string, string | number>) => string,
 ): string {
-  const detailsOpen = context?.modelReadiness !== "ready" ||
-    surface.extraction.status !== "complete" ||
-    surface.extraction.method !== "semantic-html" ||
-    surface.extraction.warnings.length > 0;
+  const detailsOpen = false;
   return `
     <details class="page-reader-diagnostics page-reader-extraction-diagnostics"${detailsOpen ? " open" : ""}>
       <summary>${escapeHtml(tr("sidepanel.page.diagnostics.extraction"))}</summary>
@@ -486,15 +491,16 @@ function modelContextHtml(
     [tr("sidepanel.page.model.imageAlt"), formatCount(context.imageAltText.length)],
     [tr("sidepanel.page.model.target"), modelTargetKindLabel(context.targetKind, tr), context.targetKind],
   ];
-  const detailsOpen = context.modelReadiness !== "ready";
-  const compactReady = context.modelReadiness === "ready";
+  const detailsOpen = false;
+  const needsVisibleReason = context.modelReadiness !== "ready";
+  const compactReady = true;
   return `
-    <section class="page-reader-model-context is-${context.modelReadiness}${compactReady ? " is-compact" : ""}">
+    <section class="page-reader-model-context is-${context.modelReadiness}${compactReady ? " is-compact" : ""}${needsVisibleReason ? " is-decision" : ""}">
       <div class="page-reader-model-context-header">
         <h3>${escapeHtml(tr("sidepanel.page.model.title"))}</h3>
         <span>${escapeHtml(statusText)}</span>
       </div>
-      ${compactReady ? "" : `<p>${escapeHtml(reason)}</p>`}
+      ${needsVisibleReason ? `<p>${escapeHtml(reason)}</p>` : ""}
       <details class="page-reader-diagnostics"${detailsOpen ? " open" : ""}>
         <summary>${escapeHtml(tr("sidepanel.page.diagnostics.details"))}</summary>
         <dl>
@@ -503,6 +509,188 @@ function modelContextHtml(
       </details>
     </section>
   `;
+}
+
+function modelContextReasonText(
+  context: GeneralPageModelContext,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (context.ineligibilityReason) return tr(modelIneligibilityKey(context.ineligibilityReason));
+  if (context.qualityIssues.length > 0) {
+    return context.qualityIssues.map((issue) => tr(modelQualityIssueKey(issue))).join(" ");
+  }
+  return "";
+}
+
+function advisorDetailText(
+  advisor: PageReadingAdvisorSession,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const effective = advisor.effectiveModelContext;
+  if (advisor.status === "error") return advisor.error || tr("sidepanel.page.advisor.detail.error");
+  if (advisor.status === "checking") return tr("sidepanel.page.advisor.detail.checking");
+  if (advisor.status === "not_needed") return tr("sidepanel.page.advisor.detail.notNeeded");
+  if (effective?.allowedUse === "page_overview_only") return tr("sidepanel.page.advisor.detail.pageOverview");
+  if (effective?.allowedUse === "requires_user_target") return tr("sidepanel.page.advisor.detail.needsTarget");
+  return tr("sidepanel.page.advisor.detail.ready");
+}
+
+function generalPageAnalysisErrorText(
+  error: string | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  switch (error) {
+    case "general_page_brief_format_error":
+    case "general_page_brief_no_response":
+    case "general_page_brief_failed":
+    case "general_page_brief_http_error":
+    case "general_page_brief_network_error":
+    case "general_page_brief_timeout":
+    case "general_page_brief_provider_unavailable":
+    case "general_page_brief_invalid_screenshot_data_url":
+      return tr("sidepanel.page.analysis.error");
+    default:
+      return error && !/^general_page_brief_/.test(error)
+        ? error
+        : tr("sidepanel.page.analysis.error");
+  }
+}
+
+function processingStatusText(
+  context: GeneralPageModelContext | undefined,
+  advisor: PageReadingAdvisorSession | undefined,
+  analysis: PageReadingAnalysisSession | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (analysis?.status === "running") return tr("sidepanel.page.processing.status.running");
+  if (analysis?.status === "ready") return tr("sidepanel.page.processing.status.ready");
+  if (analysis?.status === "error") return tr("sidepanel.page.processing.status.error");
+  if (context?.modelReadiness === "blocked" || advisor?.effectiveModelContext?.allowedUse === "blocked")
+    return tr("sidepanel.page.processing.status.blocked");
+  if (
+    context?.modelReadiness === "caution" ||
+    advisor?.effectiveModelContext?.allowedUse === "page_overview_only" ||
+    advisor?.effectiveModelContext?.allowedUse === "requires_user_target"
+  ) return tr("sidepanel.page.processing.status.caution");
+  return tr("sidepanel.page.processing.status.readyToUse");
+}
+
+function processingDetailText(
+  context: GeneralPageModelContext | undefined,
+  advisor: PageReadingAdvisorSession | undefined,
+  analysis: PageReadingAnalysisSession | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (analysis?.status === "running") return tr("sidepanel.page.processing.detail.running");
+  if (analysis?.status === "error") return generalPageAnalysisErrorText(analysis.error, tr);
+  if (
+    advisor?.effectiveModelContext?.allowedUse === "page_overview_only" ||
+    advisor?.effectiveModelContext?.allowedUse === "requires_user_target" ||
+    advisor?.effectiveModelContext?.allowedUse === "blocked" ||
+    advisor?.status === "checking"
+  ) return advisorDetailText(advisor, tr);
+  if (context) {
+    const reason = modelContextReasonText(context, tr);
+    if (reason) return reason;
+  }
+  if (advisor?.status === "error") return tr("sidepanel.page.advisor.detail.error");
+  if (analysis?.status === "ready") return tr("sidepanel.page.processing.detail.readyBrief");
+  return tr("sidepanel.page.processing.detail.ready");
+}
+
+function processingStatusClass(
+  context: GeneralPageModelContext | undefined,
+  advisor: PageReadingAdvisorSession | undefined,
+  analysis: PageReadingAnalysisSession | undefined,
+): string {
+  if (analysis?.status === "error" || context?.modelReadiness === "blocked" || advisor?.effectiveModelContext?.allowedUse === "blocked")
+    return "blocked";
+  if (
+    analysis?.status === "running" ||
+    context?.modelReadiness === "caution" ||
+    advisor?.status === "checking" ||
+    advisor?.effectiveModelContext?.allowedUse === "page_overview_only" ||
+    advisor?.effectiveModelContext?.allowedUse === "requires_user_target"
+  ) return "caution";
+  return "ready";
+}
+
+function processingStatusHtml(
+  context: GeneralPageModelContext | undefined,
+  advisor: PageReadingAdvisorSession | undefined,
+  analysis: PageReadingAnalysisSession | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (!context && !advisor) return "";
+  const contextRows: Array<[string, string, string?]> = context
+    ? [
+        [tr("sidepanel.page.model.text"), `${context.mainText.length}/${GENERAL_PAGE_MODEL_MIN_MAIN_TEXT_LENGTH}`],
+        [tr("sidepanel.page.model.links"), formatCount(context.links.length)],
+        [tr("sidepanel.page.model.imageAlt"), formatCount(context.imageAltText.length)],
+        [tr("sidepanel.page.model.target"), modelTargetKindLabel(context.targetKind, tr), context.targetKind],
+      ]
+    : [];
+  const effective = advisor?.effectiveModelContext;
+  const provider = advisor ? providerRuntimeLabel(advisor.providerRuntime) || tr("sidepanel.page.advisor.provider.local") : "";
+  const modelMode = advisor?.providerRuntime?.mode === "tier-b-short-json" && advisor.providerRuntime.canUseModel
+    ? tr("sidepanel.page.advisor.mode.modelReady")
+    : advisor?.providerRuntime?.mode === "tier-b-short-json-fallback"
+    ? tr("sidepanel.page.advisor.mode.modelFallback")
+    : tr("sidepanel.page.advisor.mode.localBaseline");
+  const advisorRows: Array<[string, string, string?]> = advisor
+    ? [
+        [tr("sidepanel.page.advisor.decision"), advisorDecisionLabel(advisor, tr), advisorDecisionRaw(advisor)],
+        [tr("sidepanel.page.advisor.provider"), provider],
+        [tr("sidepanel.page.advisor.payload"), advisor.request ? `${advisor.request.payloadBudget.estimatedPayloadChars}/${advisor.request.payloadBudget.maxPayloadChars}` : "-"],
+        [tr("sidepanel.page.advisor.allowedUse"), allowedUseLabel(effective?.allowedUse, tr), effective?.allowedUse],
+        [tr("sidepanel.page.advisor.mode"), modelMode],
+      ]
+    : [];
+  const rows = [...contextRows, ...advisorRows];
+  return `
+    <section class="page-reader-processing-status is-${processingStatusClass(context, advisor, analysis)}">
+      <div class="page-reader-processing-status-header">
+        <h3>${escapeHtml(tr("sidepanel.page.processing.title"))}</h3>
+        <span>${escapeHtml(processingStatusText(context, advisor, analysis, tr))}</span>
+      </div>
+      <p>${escapeHtml(processingDetailText(context, advisor, analysis, tr))}</p>
+      ${rows.length > 0 ? `
+        <details class="page-reader-diagnostics page-reader-processing-details">
+          <summary>${escapeHtml(tr("sidepanel.page.processing.details"))}</summary>
+          <dl>
+            ${rows.map(([label, value, raw]) => diagnosticRowHtml(label, value, raw)).join("")}
+          </dl>
+        </details>
+      ` : ""}
+    </section>
+  `;
+}
+
+function shouldHideReadyPipelineState(
+  context: GeneralPageModelContext | undefined,
+  advisor: PageReadingAdvisorSession | undefined,
+  analysis: PageReadingAnalysisSession | undefined,
+): boolean {
+  if (!context || !advisor || analysis?.status !== "ready") return false;
+  if (context.modelReadiness !== "ready" || context.targetKind !== "page") return false;
+  const effective = advisor.effectiveModelContext;
+  const cleanScope = advisor.status === "not_needed" ||
+    (advisor.status === "ready" &&
+      advisor.advice?.decision === "accept_current" &&
+      effective?.allowedUse === "article_or_selection_analysis");
+  return cleanScope;
+}
+
+function shouldHideCleanExtractionDiagnostics(
+  surface: ReadingSurface | undefined,
+  context: GeneralPageModelContext | undefined,
+  advisor: PageReadingAdvisorSession | undefined,
+  analysis: PageReadingAnalysisSession | undefined,
+): boolean {
+  if (!surface || !shouldHideReadyPipelineState(context, advisor, analysis)) return false;
+  return surface.extraction.method === "semantic-html" &&
+    surface.extraction.status === "complete" &&
+    surface.extraction.warnings.length === 0;
 }
 
 function modelContextStatusText(
@@ -671,17 +859,7 @@ function advisorHtml(
   const effective = advisor.effectiveModelContext;
   const provider = providerRuntimeLabel(advisor.providerRuntime) || tr("sidepanel.page.advisor.provider.local");
   const statusText = tr(`sidepanel.page.advisor.status.${advisor.status}`);
-  const detail = advisor.status === "error"
-    ? advisor.error || tr("sidepanel.page.advisor.detail.error")
-    : advisor.status === "checking"
-    ? tr("sidepanel.page.advisor.detail.checking")
-    : advisor.status === "not_needed"
-    ? tr("sidepanel.page.advisor.detail.notNeeded")
-    : effective?.allowedUse === "page_overview_only"
-    ? tr("sidepanel.page.advisor.detail.pageOverview")
-    : effective?.allowedUse === "requires_user_target"
-    ? tr("sidepanel.page.advisor.detail.needsTarget")
-    : tr("sidepanel.page.advisor.detail.ready");
+  const detail = advisorDetailText(advisor, tr);
   const modelMode = advisor.providerRuntime?.mode === "tier-b-short-json" && advisor.providerRuntime.canUseModel
     ? tr("sidepanel.page.advisor.mode.modelReady")
     : advisor.providerRuntime?.mode === "tier-b-short-json-fallback"
@@ -695,13 +873,13 @@ function advisorHtml(
     [tr("sidepanel.page.advisor.mode"), modelMode],
   ];
   const decision = advisor.advice?.decision;
-  const detailsOpen = advisor.status === "checking" ||
-    advisor.status === "error" ||
-    effective?.allowedUse === "page_overview_only" ||
+  const needsVisibleDecision = effective?.allowedUse === "page_overview_only" ||
     effective?.allowedUse === "requires_user_target" ||
     (Boolean(decision) && decision !== "accept_current");
+  const detailsOpen = false;
+  const compactReady = advisor.status !== "checking" && advisor.status !== "error";
   return `
-    <section class="page-reader-advisor is-${escapeHtml(advisor.status)}">
+    <section class="page-reader-advisor is-${escapeHtml(advisor.status)}${compactReady ? " is-compact" : ""}${needsVisibleDecision ? " is-decision" : ""}">
       <div class="page-reader-advisor-header">
         <h3>${escapeHtml(tr("sidepanel.page.advisor.title"))}</h3>
         <span>${escapeHtml(statusText)}</span>
@@ -724,11 +902,14 @@ function analysisHtml(
   if (!analysis || analysis.status === "idle") return "";
   const title = tr("sidepanel.page.analysis.title");
   const statusText = tr(`sidepanel.page.analysis.status.${analysis.status}`);
+  const visibleStatus = analysis.status === "ready"
+    ? ""
+    : `<span>${escapeHtml(statusText)}</span>`;
   const body = analysis.status === "running"
     ? `<p>${escapeHtml(tr("sidepanel.page.analysis.running"))}</p>`
     : analysis.status === "error"
     ? `
-      <p>${escapeHtml(analysis.error || tr("sidepanel.page.analysis.error"))}</p>
+      <p>${escapeHtml(generalPageAnalysisErrorText(analysis.error, tr))}</p>
       <button id="pageAnalysisRetry" class="btn-investigation-secondary page-reader-analysis-retry" type="button">${escapeHtml(tr("sidepanel.page.analysis.retry"))}</button>
     `
     : analysis.brief
@@ -738,7 +919,7 @@ function analysisHtml(
     <section class="page-reader-analysis is-${escapeHtml(analysis.status)}">
       <div class="page-reader-analysis-header">
         <h3>${escapeHtml(title)}</h3>
-        <span>${escapeHtml(statusText)}</span>
+        ${visibleStatus}
       </div>
       ${body}
     </section>
@@ -775,6 +956,14 @@ function briefHtml(
 
 function briefSectionHtml(title: string, items: string[]): string {
   if (items.length === 0) return "";
+  if (items.length === 1) {
+    return `
+      <div class="page-reader-analysis-section is-single">
+        <h4>${escapeHtml(title)}</h4>
+        <p>${escapeHtml(items[0])}</p>
+      </div>
+    `;
+  }
   return `
     <div class="page-reader-analysis-section">
       <h4>${escapeHtml(title)}</h4>
@@ -1062,6 +1251,10 @@ export function createSidepanelPageReadingRuntime({
     const excerpt = session?.surface
       ? visibleExcerpt(session.surface, modelContext, session.advisor?.effectiveModelContext)
       : "";
+    const hideReadyPipelineState = shouldHideReadyPipelineState(modelContext, session?.advisor, session?.analysis);
+    const hideExtractionDiagnostics = shouldHideCleanExtractionDiagnostics(session?.surface, modelContext, session?.advisor, session?.analysis);
+    const quietReadyStatus = hideReadyPipelineState;
+    const quietReadyActions = hideReadyPipelineState;
     const warningText = session?.surface?.extraction.warnings.join(", ") || "";
     const updatedAt = session ? formatUpdatedAt(session.updatedAt, lang) : "";
     const statusTitle = pageStatusTitle(session, updatedAt);
@@ -1075,21 +1268,59 @@ export function createSidepanelPageReadingRuntime({
           [tr("sidepanel.page.meta.updated"), updatedAt],
         ]
       : [];
+    const extractionDiagnostics = session?.surface && !hideExtractionDiagnostics
+      ? extractionDiagnosticsHtml(session.surface, metadataRows, modelContext, tr)
+      : "";
+    const screenshotBlock = session && displayedSessionIsActive ? screenshotHtml(session, tr) : "";
+    const prioritizeScreenshotRecovery = Boolean(screenshotBlock);
+    const visibleWarningText = prioritizeScreenshotRecovery ? "" : warningText;
+    const modelPipeline = [
+      hideReadyPipelineState || prioritizeScreenshotRecovery ? "" : processingStatusHtml(modelContext, session?.advisor, session?.analysis, tr),
+      screenshotBlock,
+    ].join("");
+    const analysisBlock = analysisHtml(session?.analysis, tr);
+    const sourceLinksBlock = sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"));
+    const cleanReadyBodyOrder = hideReadyPipelineState;
+    const excerptBlock = cleanReadyBodyOrder
+      ? ""
+      : excerpt
+      ? `<p class="page-reader-excerpt">${escapeHtml(excerpt)}</p>`
+      : `<p class="page-reader-empty">${escapeHtml(tr("sidepanel.page.noExcerpt"))}</p>`;
+    const cardHeaderActions = !session?.surface || displayedSessionIsActive
+      ? ""
+      : `
+        <div class="page-reader-card-actions">
+          <button id="pageActivateDisplayedTab" class="btn-investigation-secondary page-reader-card-action" type="button">${escapeHtml(tr("sidepanel.page.switcher.activate"))}</button>
+        </div>
+      `;
+    const cardFooterActions = session?.surface
+      ? `
+        <div class="page-reader-card-tools">
+          <button id="pageCopyMetadata" class="btn-investigation-secondary page-reader-card-action" type="button">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</button>
+          <button id="pageDownloadMarkdown" class="btn-investigation-secondary page-reader-card-action" type="button">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</button>
+        </div>
+      `
+      : "";
+    const cardFooterBlock = sourceLinksBlock || cardFooterActions
+      ? `<footer class="page-reader-card-footer">${sourceLinksBlock}${cardFooterActions}</footer>`
+      : "";
+    const emptyBodyBlock = !session?.surface && !showErrorBlock && session?.status !== "loading" && platform === "general"
+      ? emptyBody(platform, canRead)
+      : "";
+    const pageActionsHtml = `
+      <div class="page-reader-actions${quietReadyActions ? " is-quiet-ready" : ""}">
+        <button id="pageReadCurrent" class="btn-investigation-secondary" type="button" ${canRead ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.readCurrent"))}</button>
+        <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.useSelection"))}</button>
+      </div>
+    `;
 
     pagePaneEl.innerHTML = `
-      <section class="page-reader-header" aria-live="polite">
-        <div class="page-reader-heading">
-          <div class="page-reader-kicker">${escapeHtml(tr("sidepanel.page.kicker"))}</div>
-          <h1>${escapeHtml(tr("sidepanel.page.title"))}</h1>
+      <section class="page-reader-status${statusClass}${quietReadyStatus ? " is-quiet-ready" : ""}"${statusTitle ? ` title="${escapeHtml(statusTitle)}" aria-label="${escapeHtml(statusTitle)}"` : ""} aria-live="polite">
+        <div class="page-reader-status-main">
+          <div class="page-reader-status-label">${escapeHtml(statusLabel)}</div>
+          <div class="page-reader-status-detail">${escapeHtml(statusDetailText)}</div>
         </div>
-        <div class="page-reader-actions">
-          <button id="pageReadCurrent" class="btn-investigation-secondary" type="button" ${canRead ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.readCurrent"))}</button>
-          <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.useSelection"))}</button>
-        </div>
-      </section>
-      <section class="page-reader-status${statusClass}"${statusTitle ? ` title="${escapeHtml(statusTitle)}" aria-label="${escapeHtml(statusTitle)}"` : ""}>
-        <div class="page-reader-status-label">${escapeHtml(statusLabel)}</div>
-        <div class="page-reader-status-detail">${escapeHtml(statusDetailText)}</div>
+        ${pageActionsHtml}
       </section>
       ${sessionSwitcherHtml(session)}
       ${showErrorBlock ? `<section class="page-reader-error">${escapeHtml(errorText)}</section>` : ""}
@@ -1100,22 +1331,16 @@ export function createSidepanelPageReadingRuntime({
               <h2>${escapeHtml(title)}</h2>
               <div class="page-reader-url">${escapeHtml(source || url)}</div>
             </div>
-            <div class="page-reader-card-actions">
-              ${displayedSessionIsActive ? "" : `<button id="pageActivateDisplayedTab" class="btn-investigation-secondary" type="button">${escapeHtml(tr("sidepanel.page.switcher.activate"))}</button>`}
-              <button id="pageCopyMetadata" class="btn-investigation-secondary" type="button">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</button>
-              <button id="pageDownloadMarkdown" class="btn-investigation-secondary" type="button">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</button>
-            </div>
+            ${cardHeaderActions}
           </div>
-          ${excerpt ? `<p class="page-reader-excerpt">${escapeHtml(excerpt)}</p>` : `<p class="page-reader-empty">${escapeHtml(tr("sidepanel.page.noExcerpt"))}</p>`}
-          ${session.surface ? extractionDiagnosticsHtml(session.surface, metadataRows, modelContext, tr) : ""}
-          ${modelContextHtml(modelContext, session.analysis, tr)}
-          ${advisorHtml(session.advisor, tr)}
-          ${displayedSessionIsActive ? screenshotHtml(session, tr) : ""}
-          ${analysisHtml(session.analysis, tr)}
-          ${sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"))}
-          ${warningText ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(warningText)}</div>` : ""}
+          ${excerptBlock}
+          ${cleanReadyBodyOrder ? analysisBlock : extractionDiagnostics}
+          ${cleanReadyBodyOrder ? extractionDiagnostics : modelPipeline}
+          ${cleanReadyBodyOrder ? "" : analysisBlock}
+          ${cardFooterBlock}
+          ${visibleWarningText ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(visibleWarningText)}</div>` : ""}
         </article>
-      ` : emptyBody(platform, canRead)}
+      ` : emptyBodyBlock}
     `;
     syncLoadingTicker(session?.status === "loading");
 
@@ -1193,7 +1418,7 @@ export function createSidepanelPageReadingRuntime({
     if (items.length <= 1) return "";
     return `
       <section class="page-reader-switcher" aria-label="${escapeHtml(tr("sidepanel.page.switcher.label"))}">
-        <div class="page-reader-switcher-title">${escapeHtml(tr("sidepanel.page.switcher.title"))}</div>
+        <div class="page-reader-switcher-title sr-only">${escapeHtml(tr("sidepanel.page.switcher.title"))}</div>
         <div class="page-reader-switcher-list">
           ${items.map((item) => {
             const selected = item.tabId === activeSession?.tabId;
@@ -2201,6 +2426,8 @@ export function createSidepanelPageReadingRuntime({
               screenshotHasDataUrl: Boolean(session.screenshot?.dataUrl),
               advisorStatus: session.advisor?.status,
               analysisStatus: session.analysis?.status,
+              targetKind: session.surface ? modelContextForSession({ ...session, surface: session.surface }).targetKind : undefined,
+              allowedUse: session.advisor?.effectiveModelContext?.allowedUse,
             }
           : undefined,
       };

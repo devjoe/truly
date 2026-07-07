@@ -571,8 +571,14 @@ npm run audit:general-page-model-integration
 synthetic local HTML only, and writes screenshots/JSON under `tmp/`. Do not
 commit those artifacts. `audit:general-page-model-integration` runs a local
 OpenAI-compatible mock endpoint and verifies payload scoping plus overview
-post-guards without storing page analysis content; it is now included in
+post-guards without storing page analysis content; it is included in
 `check:general-page` and therefore in `check:public`.
+
+Public synthetic parser regression is intentionally lower cadence than runtime
+and live-DOM review. Use `npm run check:general-page:synthetic` when extraction
+heuristics, fixture metadata, pattern coverage, or parser candidates change. Do
+not treat synthetic fixture pass rates as representative product-quality
+evidence; use private live-DOM review and screenshots for that judgment.
 
 For a quick private smoke against the page currently open in Chrome, run:
 

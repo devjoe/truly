@@ -462,7 +462,7 @@ async function startSyntheticServer() {
       return;
     }
     if (req.url?.startsWith("/article3")) {
-      res.end(syntheticHtml("Third Synthetic Article", "This is a third synthetic article for multi-session Page/Web switching."));
+      res.end(syntheticHtml("Third Synthetic Article", "This is a third synthetic article for multi-session Web switching."));
       return;
     }
     res.end(syntheticHtml("Synthetic General Page Reader Article", "This is a synthetic article for the General Page Reader CDP acceptance test."));
@@ -843,7 +843,7 @@ async function auditScreenshotRecovery(extensionId, allowedBase) {
     side = connectCdp(sideTarget.webSocketDebuggerUrl);
     await sleep(1000);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => Boolean(document.querySelector('#pageScreenshotCapture')))()`, 18000, "Page/Web screenshot offer").catch(async (error) => {
+    await waitFor(side, `(() => Boolean(document.querySelector('.page-reader-screenshot[data-state="offer"] #pageScreenshotCapture')))()`, 18000, "Web screenshot offer").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-screenshot-offer-timeout.png")).catch(() => {});
       throw error;
     });
@@ -851,11 +851,14 @@ async function auditScreenshotRecovery(extensionId, allowedBase) {
       const pane = document.querySelector('#page-pane');
       const screenshot = pane?.querySelector('.page-reader-screenshot');
       const advisor = pane?.querySelector('.page-reader-advisor');
+      const modelContext = pane?.querySelector('.page-reader-model-context');
       return {
         text: screenshot?.textContent?.replace(/\\s+/g, ' ').trim() || '',
         state: screenshot?.getAttribute('data-state') || null,
         hasCaptureButton: Boolean(document.querySelector('#pageScreenshotCapture')),
         hasPreview: Boolean(document.querySelector('.page-reader-screenshot-preview')),
+        pipelineHidden: !advisor && !modelContext,
+        warningsHidden: !pane?.querySelector('.page-reader-warnings'),
         advisorRows: [...advisor?.querySelectorAll('dl div') || []].map((row) => ({
           label: row.querySelector('dt')?.textContent?.trim(),
           value: row.querySelector('dd')?.textContent?.trim(),
@@ -890,7 +893,7 @@ async function auditScreenshotRecovery(extensionId, allowedBase) {
       return state.activeTabId === ${JSON.stringify(screenshotTab.tabId)} &&
         state.displayTabId === ${JSON.stringify(screenshotTab.tabId)} &&
         Boolean(document.querySelector('#pageScreenshotCapture'));
-    })()`, 8000, "Page/Web screenshot tab activation").catch(async (error) => {
+    })()`, 8000, "Web screenshot tab activation").catch(async (error) => {
       const activationState = await side.evaluateJson(`(() => ({
         runtimeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
         hasCaptureButton: Boolean(document.querySelector('#pageScreenshotCapture')),
@@ -928,10 +931,12 @@ async function auditScreenshotRecovery(extensionId, allowedBase) {
     })()`);
     await waitFor(side, `(() => {
       const img = document.querySelector('.page-reader-screenshot-preview');
+      const rect = img?.getBoundingClientRect();
       return Boolean(img?.getAttribute('src')?.startsWith('data:image/')) &&
+        (rect?.height || 0) >= 100 &&
         Boolean(document.querySelector('#pageScreenshotConfirm')) &&
         Boolean(document.querySelector('#pageScreenshotCancel'));
-    })()`, 12000, "Page/Web screenshot preview").catch(async (error) => {
+    })()`, 12000, "Web screenshot preview").catch(async (error) => {
       writeFileSync(resolve(OUT_DIR, "page-screenshot-preview-timeout.json"), JSON.stringify(captureClickState, null, 2));
       await side.screenshot(resolve(OUT_DIR, "page-screenshot-preview-timeout.png")).catch(() => {});
       throw error;
@@ -941,6 +946,10 @@ async function auditScreenshotRecovery(extensionId, allowedBase) {
       return {
         state: document.querySelector('.page-reader-screenshot')?.getAttribute('data-state') || null,
         imgSrcPrefix: img?.getAttribute('src')?.slice(0, 32) || '',
+        previewRect: img ? (() => {
+          const rect = img.getBoundingClientRect();
+          return { width: rect.width, height: rect.height };
+        })() : null,
         hasConfirmButton: Boolean(document.querySelector('#pageScreenshotConfirm')),
         hasCancelButton: Boolean(document.querySelector('#pageScreenshotCancel')),
         explanation: document.querySelector('.page-reader-screenshot')?.textContent?.replace(/\\s+/g, ' ').trim() || ''
@@ -949,7 +958,7 @@ async function auditScreenshotRecovery(extensionId, allowedBase) {
     await side.screenshot(resolve(OUT_DIR, "page-screenshot-preview.png"));
 
     await side.evaluate(`document.querySelector('#pageScreenshotConfirm')?.click(); undefined`);
-    await waitFor(side, `(() => /Screenshot-grounded synthetic summary|截圖/.test(document.querySelector('#page-pane')?.innerText || '') && !document.querySelector('.page-reader-screenshot-preview'))()`, 18000, "Page/Web screenshot confirmed brief").catch(async (error) => {
+    await waitFor(side, `(() => /Screenshot-grounded synthetic summary|截圖/.test(document.querySelector('#page-pane')?.innerText || '') && !document.querySelector('.page-reader-screenshot-preview'))()`, 18000, "Web screenshot confirmed brief").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-screenshot-confirm-timeout.png")).catch(() => {});
       throw error;
     });
@@ -1055,12 +1064,12 @@ async function auditPopupReadClick(extensionId, allowedBase) {
       };
     })()`);
     await popup.evaluate(`document.querySelector('#dashboardLink')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => /Synthetic General Page Reader Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "popup-triggered Page/Web replay")
+    await waitFor(side, `(() => /Synthetic General Page Reader Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "popup-triggered Web replay")
       .catch(async (error) => {
         await capturePopupReadTimeoutState(popup, side, article, before, initialSide, "replay");
         throw error;
       });
-    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane .page-reader-status-label')?.textContent || ''))()`, 8000, "popup-triggered Page/Web ready status")
+    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane .page-reader-status-label')?.textContent || ''))()`, 8000, "popup-triggered Web ready status")
       .catch(async (error) => {
         await capturePopupReadTimeoutState(popup, side, article, before, initialSide, "ready");
         throw error;
@@ -1145,7 +1154,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     autoRead.observed = false;
     autoRead.error = "";
     if (autoRead.allSites) {
-      await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web auto-read ready state")
+      await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web auto-read ready state")
         .then(() => {
           autoRead.observed = true;
         })
@@ -1158,7 +1167,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     if (!autoRead.observed) {
       await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     }
-    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web ready state").catch(async (error) => {
+    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web ready state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, article, initial).catch((captureError) => ({
         initial,
         captureError: captureError.message,
@@ -1168,20 +1177,36 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       error.message = `${error.message}; diagnostics: ${relative(ROOT, resolve(OUT_DIR, "page-ready-timeout.json"))}`;
       throw error;
     });
-    await waitFor(side, `(() => /分析範圍|Analysis scope/.test(document.querySelector('#page-pane .page-reader-advisor')?.textContent || ''))()`, 8000, "Page/Web analysis scope").catch(async (error) => {
+    await waitFor(side, `(() => {
+      const processingReady = /頁面狀態|Page status/.test(document.querySelector('#page-pane .page-reader-processing-status')?.textContent || '');
+      const briefReady = Boolean(document.querySelector('#page-pane .page-reader-analysis:not(.is-running)'));
+      return processingReady || briefReady;
+    })()`, 8000, "Web analysis scope or brief").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-ready-advisor-timeout.png")).catch(() => {});
       throw error;
     });
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const processing = pane?.querySelector('.page-reader-processing-status');
       const advisor = pane?.querySelector('.page-reader-advisor');
+      const processingRows = [...processing?.querySelectorAll('dl div') || []].map((row) => ({
+        label: row.querySelector('dt')?.textContent?.trim(),
+        value: row.querySelector('dd')?.textContent?.trim(),
+        rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
+      }));
       return {
         activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
         status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         statusTitle: pane?.querySelector('.page-reader-status')?.getAttribute('title') || '',
         statusAriaLabel: pane?.querySelector('.page-reader-status')?.getAttribute('aria-label') || '',
         detail: pane?.querySelector('.page-reader-status-detail')?.textContent?.trim(),
+        primaryActions: {
+          hasStandaloneHeader: Boolean(pane?.querySelector('.page-reader-header')),
+          inStatus: Boolean(pane?.querySelector('.page-reader-status #pageReadCurrent')) &&
+            Boolean(pane?.querySelector('.page-reader-status #pageReadSelection')),
+          quiet: Boolean(pane?.querySelector('.page-reader-status .page-reader-actions.is-quiet-ready')),
+        },
         title: pane?.querySelector('.page-reader-title-block h2')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         meta: [...pane?.querySelectorAll('.page-reader-meta div') || []].map((el) => ({
@@ -1189,7 +1214,22 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           value: el.querySelector('dd')?.textContent?.trim()
         })),
         extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
-        modelContext: (() => {
+        processingStatus: processing ? {
+          title: processing.querySelector('h3')?.textContent?.trim(),
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          className: processing.className,
+          rows: processingRows,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : null,
+        modelContext: processing ? {
+          title: processing.querySelector('h3')?.textContent?.trim(),
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          className: processing.className,
+          rows: processingRows,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : (() => {
           const el = pane?.querySelector('.page-reader-model-context');
           return el ? {
             title: el.querySelector('h3')?.textContent?.trim(),
@@ -1204,7 +1244,14 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
             diagnosticsOpen: el.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
           } : null;
         })(),
-        advisor: advisor ? {
+        advisor: processing ? {
+          title: processing.querySelector('h3')?.textContent?.trim(),
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          rows: processingRows,
+          note: '',
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : advisor ? {
           title: advisor.querySelector('h3')?.textContent?.trim(),
           status: advisor.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
           detail: advisor.querySelector('p')?.textContent?.trim(),
@@ -1216,6 +1263,25 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           note: advisor.querySelector('.page-reader-advisor-note')?.textContent?.trim(),
           diagnosticsOpen: advisor.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
         } : null,
+        pageAnalysis: (() => {
+          const el = pane?.querySelector('.page-reader-analysis');
+          return el ? {
+            className: el.className,
+            title: el.querySelector('h3')?.textContent?.trim(),
+            statusVisible: Boolean(el.querySelector('.page-reader-analysis-header span')),
+            singleSectionCount: el.querySelectorAll('.page-reader-analysis-section.is-single').length,
+            listSectionCount: el.querySelectorAll('.page-reader-analysis-section:not(.is-single) ul').length,
+          } : null;
+        })(),
+        cardActions: {
+          headerCopy: Boolean(pane?.querySelector('.page-reader-card-header #pageCopyMetadata')),
+          headerDownload: Boolean(pane?.querySelector('.page-reader-card-header #pageDownloadMarkdown')),
+          footerCopy: Boolean(pane?.querySelector('.page-reader-card-tools #pageCopyMetadata')),
+          footerDownload: Boolean(pane?.querySelector('.page-reader-card-tools #pageDownloadMarkdown')),
+          unifiedFooter: Boolean(pane?.querySelector('.page-reader-card-footer .page-reader-source-links a')) &&
+            Boolean(pane?.querySelector('.page-reader-card-footer .page-reader-card-tools #pageCopyMetadata')) &&
+            Boolean(pane?.querySelector('.page-reader-card-footer .page-reader-card-tools #pageDownloadMarkdown')),
+        },
         sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
           label: el.textContent?.trim(),
           href: el.href
@@ -1255,7 +1321,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     await secondArticle.send("Page.bringToFront");
     await sleep(600);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => /Second Synthetic Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web second session ready").catch(async (error) => {
+    await waitFor(side, `(() => /Second Synthetic Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web second session ready").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-session-switcher-second-timeout.png")).catch(() => {});
       throw error;
     });
@@ -1270,7 +1336,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     await thirdArticle.send("Page.bringToFront");
     await sleep(600);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => /Third Synthetic Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web third session ready").catch(async (error) => {
+    await waitFor(side, `(() => /Third Synthetic Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web third session ready").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-session-switcher-third-timeout.png")).catch(() => {});
       throw error;
     });
@@ -1304,6 +1370,13 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       globalThis.__trulySwitcherDisplayAudit = {
         text: document.querySelector('#page-pane')?.innerText || '',
         sessionCount: document.querySelectorAll('[data-page-session-tab-id]').length,
+        titleClassName: document.querySelector('.page-reader-switcher-title')?.className || '',
+        titleRect: (() => {
+          const title = document.querySelector('.page-reader-switcher-title');
+          if (!title) return null;
+          const rect = title.getBoundingClientRect();
+          return { width: rect.width, height: rect.height, top: rect.top, left: rect.left };
+        })(),
         pageTitle: title.trim() || null,
         selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
         hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
@@ -1315,7 +1388,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
         activeState: state
       };
       return true;
-    })()`, 8000, "Page/Web saved session display").catch(async (error) => {
+    })()`, 8000, "Web saved session display").catch(async (error) => {
       const timeoutStateRaw = await side.evaluate(`(async () => {
         const diagnostics = await new Promise((resolve) => {
           chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -1351,7 +1424,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       return /Synthetic General Page Reader Article/.test(title) &&
         document.querySelector('#pageReadSelection')?.disabled === false &&
         state.activeTabId === state.displayTabId;
-    })()`, 8000, "Page/Web saved session activation").catch(async (error) => {
+    })()`, 8000, "Web saved session activation").catch(async (error) => {
       const timeoutStateRaw = await side.evaluate(`(async () => {
         const diagnostics = await new Promise((resolve) => {
           chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -1396,35 +1469,40 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     const selectionBeforeAction = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
-      const model = pane?.querySelector('.page-reader-model-context');
+      const model = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-model-context');
       const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
         value: row.querySelector('dd')?.textContent?.trim(),
         rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
       }));
+      const activeState = globalThis.__trulyPageReadingRuntime?.auditState?.() || null;
       return {
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
-        targetKind: rows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.rawValue || null,
+        targetKind: activeState?.displayedSession?.targetKind ||
+          rows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.rawValue ||
+          null,
+        pipelineHidden: !model && !pane?.querySelector('.page-reader-advisor'),
+        activeState,
       };
     })()`);
     await side.evaluate(`document.querySelector('#pageReadSelection')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     await waitFor(side, `(() => {
-      const model = document.querySelector('#page-pane .page-reader-model-context');
+      const model = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-model-context');
       const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
         value: row.querySelector('dd')?.textContent?.trim(),
             rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
       }));
       return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && (row.rawValue || row.value) === 'selection');
-    })()`, 10000, "Page/Web selection target").catch(async (error) => {
+    })()`, 10000, "Web selection target").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-selection-timeout.png")).catch(() => {});
       throw error;
     });
     const selection = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
-      const model = pane?.querySelector('.page-reader-model-context');
-      const advisor = pane?.querySelector('.page-reader-advisor');
+      const model = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-model-context');
+      const advisor = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-advisor');
       return {
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         modelRows: [...model?.querySelectorAll('dl div') || []].map((row) => ({
@@ -1437,7 +1515,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           value: row.querySelector('dd')?.textContent?.trim(),
             rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
         })),
-        advisorStatus: advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
+        advisorStatus: advisor?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim(),
       };
     })()`);
     await side.screenshot(resolve(OUT_DIR, "page-selection-target.png"));
@@ -1461,9 +1539,9 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     await side.evaluate(`chrome.storage.session.set({ pendingCurrentRegionRead: { tabId: ${JSON.stringify(pointerTab.activeTabId)}, ts: Date.now() } })`);
     await waitFor(side, `(() => {
-      const model = document.querySelector('#page-pane .page-reader-model-context');
-      const advisor = document.querySelector('#page-pane .page-reader-advisor');
-      const advisorStatus = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
+      const model = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-model-context');
+      const advisor = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-advisor');
+      const advisorStatus = advisor?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim() || '';
       const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
         value: row.querySelector('dd')?.textContent?.trim(),
@@ -1471,15 +1549,15 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       }));
       return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && (row.rawValue || row.value) === 'current-region') &&
         Boolean(advisor) &&
-        !/檢查中|Checking/.test(advisorStatus);
-    })()`, 16000, "Page/Web current-region target").catch(async (error) => {
+        !/整理中|Organizing|檢查中|Checking/.test(advisorStatus);
+    })()`, 16000, "Web current-region target").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-point-target-timeout.png")).catch(() => {});
       throw error;
     });
     const pointTarget = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
-      const model = pane?.querySelector('.page-reader-model-context');
-      const advisor = pane?.querySelector('.page-reader-advisor');
+      const model = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-model-context');
+      const advisor = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-advisor');
       const modelRows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
         value: row.querySelector('dd')?.textContent?.trim(),
@@ -1488,7 +1566,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       return {
         targetKind: modelRows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.rawValue,
         targetKindLabel: modelRows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.value,
-        advisorStatus: advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
+        advisorStatus: advisor?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
       };
     })()`);
@@ -1515,7 +1593,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
       stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || ''),
       oldExcerptVisible: /synthetic article for the General Page Reader CDP acceptance test/.test(document.querySelector('#page-pane')?.innerText || ''),
-      sourceLinkVisible: /Source link/.test(document.querySelector('#page-pane')?.innerText || '')
+      sourceLinkVisible: Boolean(document.querySelector('#page-pane .page-reader-source-links a[href$="/source"]'))
     }))()`);
 
     await side.screenshot(resolve(OUT_DIR, "page-ready-and-stale.png"));
@@ -1552,12 +1630,17 @@ async function observePageBrief(side, readyScreenshotName) {
     screenshot: null,
     text: "",
     modelContextStatus: "",
+    pipelineHidden: false,
+    diagnosticsHidden: false,
+    primaryActions: null,
+    rawExcerptVisible: false,
+    readyHeaderVisible: false,
   };
   try {
     await waitFor(side, `(() => {
       const analysis = document.querySelector('#page-pane .page-reader-analysis');
       return analysis && !analysis.classList.contains('is-running');
-    })()`, 20000, "Page/Web page brief completion");
+    })()`, 20000, "Web page brief completion");
   } catch {
     observation.status = "pending_or_timeout";
     observation.text = await side.evaluate(`document.querySelector('#page-pane .page-reader-analysis')?.innerText || ''`).catch(() => "");
@@ -1567,18 +1650,36 @@ async function observePageBrief(side, readyScreenshotName) {
   }
   const state = await side.evaluateJson(`(() => {
     const analysis = document.querySelector('#page-pane .page-reader-analysis');
-    const modelContext = document.querySelector('#page-pane .page-reader-model-context');
+    const modelContext = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-model-context');
+    const advisor = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-advisor');
+    const extractionDiagnostics = document.querySelector('#page-pane .page-reader-extraction-diagnostics');
+    const analysisHeader = analysis?.querySelector('.page-reader-analysis-header');
     return {
       className: analysis?.className || '',
       header: analysis?.querySelector('h3')?.textContent?.trim(),
       status: analysis?.querySelector('.page-reader-analysis-header span')?.textContent?.trim(),
       text: analysis?.innerText?.trim() || '',
-      modelContextStatus: modelContext?.querySelector('.page-reader-model-context-header span')?.textContent?.trim() || ''
+      modelContextStatus: modelContext?.querySelector('.page-reader-processing-status-header span, .page-reader-model-context-header span')?.textContent?.trim() || '',
+      pipelineHidden: !modelContext && !advisor,
+      diagnosticsHidden: !extractionDiagnostics,
+      rawExcerptVisible: Boolean(document.querySelector('#page-pane .page-reader-excerpt')),
+      readyHeaderVisible: Boolean(analysisHeader) && getComputedStyle(analysisHeader).display !== 'none',
+      primaryActions: {
+        hasStandaloneHeader: Boolean(document.querySelector('#page-pane .page-reader-header')),
+        inStatus: Boolean(document.querySelector('#page-pane .page-reader-status #pageReadCurrent')) &&
+          Boolean(document.querySelector('#page-pane .page-reader-status #pageReadSelection')),
+        quiet: Boolean(document.querySelector('#page-pane .page-reader-status .page-reader-actions.is-quiet-ready')),
+      }
     };
   })()`);
   observation.status = /is-ready/.test(state?.className || "") ? "ready" : /is-error/.test(state?.className || "") ? "error" : "unknown";
   observation.text = state?.text || "";
   observation.modelContextStatus = state?.modelContextStatus || "";
+  observation.pipelineHidden = Boolean(state?.pipelineHidden);
+  observation.diagnosticsHidden = Boolean(state?.diagnosticsHidden);
+  observation.rawExcerptVisible = Boolean(state?.rawExcerptVisible);
+  observation.readyHeaderVisible = Boolean(state?.readyHeaderVisible);
+  observation.primaryActions = state?.primaryActions || null;
   await side.screenshot(resolve(OUT_DIR, readyScreenshotName)).catch(() => {});
   observation.screenshot = relative(ROOT, resolve(OUT_DIR, readyScreenshotName));
   return observation;
@@ -1639,7 +1740,7 @@ async function auditResponsivePageWebLayout(side, screenshotName) {
           item.rect.width < 28 ||
           item.rect.height < 28
         ));
-      const visibleCardsOutsideViewport = Array.from(document.querySelectorAll("#page-pane .page-reader-card, #page-pane .page-reader-model-context, #page-pane .page-reader-advisor, #page-pane .page-reader-analysis"))
+      const visibleCardsOutsideViewport = Array.from(document.querySelectorAll("#page-pane .page-reader-card, #page-pane .page-reader-processing-status, #page-pane .page-reader-model-context, #page-pane .page-reader-advisor, #page-pane .page-reader-analysis"))
         .map((element) => {
           const rect = element.getBoundingClientRect();
           return {
@@ -1680,7 +1781,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
   try {
     await sleep(800);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Page/Web noisy fallback ready state").catch(async (error) => {
+    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web noisy fallback ready state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, noisy, null).catch((captureError) => ({
         captureError: captureError.message,
       }));
@@ -1690,19 +1791,28 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
       throw error;
     });
     await waitFor(side, `(() => {
-      const advisor = document.querySelector('#page-pane .page-reader-advisor');
-      const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
-      const decision = advisor?.querySelector('dd[data-raw-value="accept_current"]');
-      return Boolean(decision) && /分析範圍|Analysis scope/.test(advisor?.textContent || '') && !/檢查中|Checking/.test(status);
-    })()`, 26000, "Page/Web parser advisor completion").catch(async (error) => {
+      const analysis = document.querySelector('#page-pane .page-reader-analysis:not(.is-running)');
+      if (analysis) return true;
+      const processing = document.querySelector('#page-pane .page-reader-processing-status');
+      const status = processing?.querySelector('.page-reader-processing-status-header span')?.textContent?.trim() || '';
+      const decision = processing?.querySelector('dd[data-raw-value="accept_current"]');
+      return Boolean(decision) && /頁面狀態|Page status/.test(processing?.textContent || '') && !/整理中|Organizing/.test(status);
+    })()`, 26000, "Web parser advisor completion").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-noisy-advisor-timeout.png")).catch(() => {});
       throw error;
     });
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const processing = pane?.querySelector('.page-reader-processing-status');
+      const processingRows = [...processing?.querySelectorAll('dl div') || []].map((row) => ({
+        label: row.querySelector('dt')?.textContent?.trim(),
+        value: row.querySelector('dd')?.textContent?.trim(),
+        rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
+      }));
       const model = pane?.querySelector('.page-reader-model-context');
       const advisor = pane?.querySelector('.page-reader-advisor');
+      const pageAnalysis = pane?.querySelector('.page-reader-analysis');
       return {
         status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         meta: [...pane?.querySelectorAll('.page-reader-meta div') || []].map((el) => ({
@@ -1710,13 +1820,41 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
           value: el.querySelector('dd')?.textContent?.trim()
         })),
         extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
-        modelContext: model ? {
+        pipelineHidden: !processing && !model && !advisor,
+        pageAnalysis: pageAnalysis ? {
+          className: pageAnalysis.className,
+          text: pageAnalysis.textContent?.trim() || '',
+          ready: !pageAnalysis.classList.contains('is-running')
+        } : null,
+        processingStatus: processing ? {
+          title: processing.querySelector('h3')?.textContent?.trim(),
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          className: processing.className,
+          rows: processingRows,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : null,
+        modelContext: processing ? {
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          className: processing.className,
+          rows: processingRows,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : model ? {
           status: model.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
           detail: model.querySelector('p')?.textContent?.trim(),
           className: model.className,
           diagnosticsOpen: model.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
         } : null,
-        advisor: advisor ? {
+        advisor: processing ? {
+          title: processing.querySelector('h3')?.textContent?.trim(),
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          rows: processingRows,
+          note: '',
+          className: processing.className,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : advisor ? {
           title: advisor.querySelector('h3')?.textContent?.trim(),
           status: advisor.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
           detail: advisor.querySelector('p')?.textContent?.trim(),
@@ -1759,10 +1897,12 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "candidate block page ready");
     await waitFor(side, `(() => {
-      const advisor = document.querySelector('#page-pane .page-reader-advisor');
-      const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
-      const decision = advisor?.querySelector('dd[data-raw-value="prefer_candidate_block"], dd[data-raw-value="accept_current"]');
-      return Boolean(decision) && !/檢查中|Checking/.test(status);
+      const analysis = document.querySelector('#page-pane .page-reader-analysis:not(.is-running)');
+      if (analysis) return true;
+      const processing = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-advisor');
+      const status = processing?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim() || '';
+      const decision = processing?.querySelector('dd[data-raw-value="prefer_candidate_block"], dd[data-raw-value="accept_current"]');
+      return Boolean(decision) && !/整理中|Organizing|檢查中|Checking/.test(status);
     })()`, 26000, "candidate fixture advisor decision").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-candidate-timeout.png")).catch(() => {});
       throw error;
@@ -1770,19 +1910,54 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const processing = pane?.querySelector('.page-reader-processing-status');
+      const processingRows = [...processing?.querySelectorAll('dl div') || []].map((row) => ({
+        label: row.querySelector('dt')?.textContent?.trim(),
+        value: row.querySelector('dd')?.textContent?.trim(),
+        rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
+      }));
       const model = pane?.querySelector('.page-reader-model-context');
       const advisor = pane?.querySelector('.page-reader-advisor');
+      const pageAnalysis = pane?.querySelector('.page-reader-analysis');
       return {
         status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
-        modelContext: model ? {
+        pipelineHidden: !processing && !model && !advisor,
+        pageAnalysis: pageAnalysis ? {
+          className: pageAnalysis.className,
+          text: pageAnalysis.textContent?.trim() || '',
+          ready: !pageAnalysis.classList.contains('is-running')
+        } : null,
+        processingStatus: processing ? {
+          title: processing.querySelector('h3')?.textContent?.trim(),
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          className: processing.className,
+          rows: processingRows,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : null,
+        modelContext: processing ? {
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          className: processing.className,
+          rows: processingRows,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : model ? {
           status: model.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
           detail: model.querySelector('p')?.textContent?.trim(),
           className: model.className,
           diagnosticsOpen: model.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
         } : null,
-        advisor: advisor ? {
+        advisor: processing ? {
+          title: processing.querySelector('h3')?.textContent?.trim(),
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          rows: processingRows,
+          note: '',
+          className: processing.className,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : advisor ? {
           title: advisor.querySelector('h3')?.textContent?.trim(),
           status: advisor.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
           detail: advisor.querySelector('p')?.textContent?.trim(),
@@ -1840,10 +2015,12 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
       throw error;
     });
     await waitFor(side, `(() => {
-      const advisor = document.querySelector('#page-pane .page-reader-advisor');
-      const status = advisor?.querySelector('.page-reader-advisor-header span')?.textContent?.trim() || '';
-      const decision = advisor?.querySelector('dd[data-raw-value="downgrade_to_index_or_feed"], dd[data-raw-value="request_user_selection"]');
-      return Boolean(decision) && !/檢查中|Checking/.test(status);
+      const analysis = document.querySelector('#page-pane .page-reader-analysis:not(.is-running)');
+      if (analysis) return true;
+      const processing = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-advisor');
+      const status = processing?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim() || '';
+      const decision = processing?.querySelector('dd[data-raw-value="downgrade_to_index_or_feed"], dd[data-raw-value="request_user_selection"]');
+      return Boolean(decision) && !/整理中|Organizing|檢查中|Checking/.test(status);
     })()`, 26000, "teaser hub safe advisor decision").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-teaser-hub-advisor-timeout.png")).catch(() => {});
       throw error;
@@ -1851,19 +2028,54 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const processing = pane?.querySelector('.page-reader-processing-status');
+      const processingRows = [...processing?.querySelectorAll('dl div') || []].map((row) => ({
+        label: row.querySelector('dt')?.textContent?.trim(),
+        value: row.querySelector('dd')?.textContent?.trim(),
+        rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
+      }));
       const model = pane?.querySelector('.page-reader-model-context');
       const advisor = pane?.querySelector('.page-reader-advisor');
+      const pageAnalysis = pane?.querySelector('.page-reader-analysis');
       return {
         status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
-        modelContext: model ? {
+        pipelineHidden: !processing && !model && !advisor,
+        pageAnalysis: pageAnalysis ? {
+          className: pageAnalysis.className,
+          text: pageAnalysis.textContent?.trim() || '',
+          ready: !pageAnalysis.classList.contains('is-running')
+        } : null,
+        processingStatus: processing ? {
+          title: processing.querySelector('h3')?.textContent?.trim(),
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          className: processing.className,
+          rows: processingRows,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : null,
+        modelContext: processing ? {
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          className: processing.className,
+          rows: processingRows,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : model ? {
           status: model.querySelector('.page-reader-model-context-header span')?.textContent?.trim(),
           detail: model.querySelector('p')?.textContent?.trim(),
           className: model.className,
           diagnosticsOpen: model.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
         } : null,
-        advisor: advisor ? {
+        advisor: processing ? {
+          title: processing.querySelector('h3')?.textContent?.trim(),
+          status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
+          detail: processing.querySelector('p')?.textContent?.trim(),
+          rows: processingRows,
+          note: '',
+          className: processing.className,
+          diagnosticsOpen: processing.querySelector('.page-reader-diagnostics')?.hasAttribute('open') ?? null
+        } : advisor ? {
           title: advisor.querySelector('h3')?.textContent?.trim(),
           status: advisor.querySelector('.page-reader-advisor-header span')?.textContent?.trim(),
           detail: advisor.querySelector('p')?.textContent?.trim(),
@@ -1944,6 +2156,7 @@ async function auditNoGrantGuidance(extensionId, noGrantBase) {
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
       error: document.querySelector('#page-pane .page-reader-error')?.textContent?.trim(),
       errorBlockPresent: Boolean(document.querySelector('#page-pane .page-reader-error')),
+      emptyBlockPresent: Boolean(document.querySelector('#page-pane .page-reader-empty')),
       detailHasGuidance: /工具列圖示|toolbar icon/.test(document.querySelector('#page-pane .page-reader-status-detail')?.textContent || ''),
       detailHasGenericRetry: /請重新讀取|Try again after the page finishes loading/.test(document.querySelector('#page-pane .page-reader-status-detail')?.textContent || ''),
       hasGuidance: /工具列圖示|toolbar icon/.test(document.querySelector('#page-pane')?.innerText || ''),
@@ -1966,7 +2179,8 @@ async function inspectUnsupportedPageSidePanel(extensionId, activeUrl, suffix, s
     await sleep(900);
     await side.evaluate(`(() => {
       const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
-      const tab = Array.from(document.querySelectorAll("button,[role='tab']")).find((el) => /Page\\/Web/.test(norm(el.textContent || el.getAttribute("aria-label") || "")));
+      const tab = document.querySelector('[role="tab"][data-tab="page"]') ||
+        Array.from(document.querySelectorAll("button,[role='tab']")).find((el) => /Page\\/Web|\\bWeb\\b/.test(norm(el.textContent || el.getAttribute("aria-label") || "")));
       tab?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
     })()`);
     await sleep(400);
@@ -2047,10 +2261,10 @@ function assertAudit(result) {
       errors.push(`popup read path button was not ready: ${result.popupRead.before.button || "(missing)"} / disabled=${result.popupRead.before.disabled}`);
     }
     if (result.popupRead.sideState.status !== "已讀取" && result.popupRead.sideState.status !== "Ready") {
-      errors.push(`popup read path did not make Page/Web ready: ${result.popupRead.sideState.status || "(missing)"}`);
+      errors.push(`popup read path did not make Web ready: ${result.popupRead.sideState.status || "(missing)"}`);
     }
     if (result.popupRead.sideState.title !== "Synthetic General Page Reader Article") {
-      errors.push(`popup read path showed unexpected Page/Web title: ${result.popupRead.sideState.title || "(missing)"}`);
+      errors.push(`popup read path showed unexpected Web title: ${result.popupRead.sideState.title || "(missing)"}`);
     }
   }
   if (result.success.ready.status !== "已讀取" && result.success.ready.status !== "Ready") {
@@ -2072,87 +2286,96 @@ function assertAudit(result) {
     errors.push(`unexpected extracted title: ${result.success.ready.title}`);
   }
   if (result.success.ready.fullTailVisible) {
-    errors.push("Page/Web pane includes the full synthetic body tail");
+    errors.push("Web pane includes the full synthetic body tail");
   }
-  if (!/分析準備|Analysis readiness/.test(result.success.ready.modelContext?.title || "")) {
-    errors.push("Page/Web pane does not show analysis readiness");
+  const cleanBriefHidesPipeline = result.success.pageBrief?.status === "ready" &&
+    result.success.pageBrief?.pipelineHidden === true &&
+    result.success.pageBrief?.diagnosticsHidden === true;
+  if (!cleanBriefHidesPipeline) {
+    if (!/頁面狀態|Page status/.test(result.success.ready.processingStatus?.title || result.success.ready.modelContext?.title || "")) {
+      errors.push("Web pane does not show the consolidated page status");
+    }
+    if (!/is-ready/.test(result.success.ready.modelContext?.className || "")) {
+      errors.push(`unexpected page status class: ${result.success.ready.modelContext?.className || "(missing)"}`);
+    }
+    if (!/可用|Usable|整理中|Organizing|已整理|Organized/.test(result.success.ready.modelContext?.status || "")) {
+      errors.push(`unexpected page status value: ${result.success.ready.modelContext?.status || "(missing)"}`);
+    }
+    if (!hasPassingTextThresholdRow(result.success.ready.modelContext?.rows)) {
+      errors.push("model context text threshold row is missing or incorrect");
+    }
+    if (!result.success.ready.advisor?.rows?.some((row) => /判斷|Decision/.test(row.label || "") && rawRowValue(row) === "accept_current")) {
+      errors.push("successful read advisor does not preserve accept_current effective context");
+    }
   }
-  if (!/is-ready/.test(result.success.ready.modelContext?.className || "")) {
-    errors.push(`unexpected analysis readiness class: ${result.success.ready.modelContext?.className || "(missing)"}`);
-  }
-  if (!/可分析|Ready to analyze|已送出|Sent|已產生重點|Brief created/.test(result.success.ready.modelContext?.status || "")) {
-    errors.push(`unexpected analysis readiness status: ${result.success.ready.modelContext?.status || "(missing)"}`);
-  }
-  if (!hasPassingTextThresholdRow(result.success.ready.modelContext?.rows)) {
-    errors.push("model context text threshold row is missing or incorrect");
-  }
-  if (!/分析範圍|Analysis scope/.test(result.success.ready.advisor?.title || "")) {
-    errors.push("Page/Web pane does not show analysis scope state");
-  }
-  if (!/已建立|Ready/.test(result.success.ready.advisor?.status || "")) {
-    errors.push(`successful read analysis scope should be established: ${result.success.ready.advisor?.status || "(missing)"}`);
-  }
-  if (!result.success.ready.advisor?.rows?.some((row) => /判斷|Decision/.test(row.label || "") && rawRowValue(row) === "accept_current")) {
-    errors.push("successful read advisor does not preserve accept_current effective context");
-  }
-  if (!result.success.ready.sourceLinks?.some((link) => link.label === "Source link" && /\/source$/.test(link.href))) {
-    errors.push("Page/Web pane does not expose extracted source links for early inspection");
+  if (!hasSourceHref(result.success.ready.sourceLinks, /\/source$/)) {
+    errors.push("Web pane does not expose extracted source links for early inspection");
   }
   if (result.success.ready.extractionDiagnosticsOpen !== false) {
     errors.push("successful read should keep extraction diagnostics collapsed by default");
   }
-  if (result.success.ready.modelContext?.diagnosticsOpen !== false) {
-    errors.push("successful read should keep model diagnostics collapsed by default");
-  }
-  if (!/is-compact/.test(result.success.ready.modelContext?.className || "")) {
-    errors.push("successful read should render model context as a compact row");
-  }
-  if (result.success.ready.advisor?.diagnosticsOpen !== false) {
-    errors.push("successful read should keep advisor diagnostics collapsed by default");
+  if (!cleanBriefHidesPipeline) {
+    if (result.success.ready.modelContext?.diagnosticsOpen !== false) {
+      errors.push("successful read should keep page-status details collapsed by default");
+    }
+    if (result.success.ready.advisor?.diagnosticsOpen !== false) {
+      errors.push("successful read should keep advisor details collapsed by default");
+    }
   }
   if (result.success.pageBrief?.status === "ready" &&
-    !/已產生重點|Brief created/.test(result.success.pageBrief?.modelContextStatus || "")) {
+    !result.success.pageBrief?.pipelineHidden &&
+    !/已整理|Organized|已產生重點|Brief created/.test(result.success.pageBrief?.modelContextStatus || "")) {
     errors.push(`page brief completed but model context still shows wrong status: ${result.success.pageBrief?.modelContextStatus || "(missing)"}`);
+  }
+  if (result.success.pageBrief?.status === "ready" &&
+    result.success.pageBrief?.pipelineHidden &&
+    !result.success.pageBrief?.diagnosticsHidden) {
+    errors.push("page brief clean UI should hide reading diagnostics");
   }
   if ((result.success.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("successful read exposes more than six source links");
   }
   if (result.success.responsive?.horizontalOverflow) {
-    errors.push(`Page/Web 430px layout has horizontal overflow: documentWidth=${result.success.responsive.documentWidth}`);
+    errors.push(`Web 430px layout has horizontal overflow: documentWidth=${result.success.responsive.documentWidth}`);
   }
   if ((result.success.responsive?.interactiveOverflows?.length ?? 0) > 0) {
-    errors.push(`Page/Web 430px layout clips interactive elements: ${result.success.responsive.interactiveOverflows.map((item) => item.text || item.id || item.className || item.tag).join(", ")}`);
+    errors.push(`Web 430px layout clips interactive elements: ${result.success.responsive.interactiveOverflows.map((item) => item.text || item.id || item.className || item.tag).join(", ")}`);
   }
   if ((result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) > 0) {
-    errors.push(`Page/Web 430px layout renders cards outside viewport: ${result.success.responsive.visibleCardsOutsideViewport.map((item) => item.className || item.tag).join(", ")}`);
+    errors.push(`Web 430px layout renders cards outside viewport: ${result.success.responsive.visibleCardsOutsideViewport.map((item) => item.className || item.tag).join(", ")}`);
   }
   if ((result.success.responsive?.unnamedInteractive?.length ?? 0) > 0) {
-    errors.push(`Page/Web interactive elements are missing accessible names: ${result.success.responsive.unnamedInteractive.map((item) => item.id || item.className || item.tag).join(", ")}`);
+    errors.push(`Web interactive elements are missing accessible names: ${result.success.responsive.unnamedInteractive.map((item) => item.id || item.className || item.tag).join(", ")}`);
   }
   if ((result.success.responsive?.undersizedControls?.length ?? 0) > 0) {
-    errors.push(`Page/Web primary controls are too small at 430px: ${result.success.responsive.undersizedControls.map((item) => item.text || item.accessibleName || item.id || item.className || item.tag).join(", ")}`);
+    errors.push(`Web primary controls are too small at 430px: ${result.success.responsive.undersizedControls.map((item) => item.text || item.accessibleName || item.id || item.className || item.tag).join(", ")}`);
   }
   if (!result.success.copy.hasTitle || !result.success.copy.hasUrl || !result.success.copy.hasExcerpt || result.success.copy.hasFullTail) {
     errors.push("copy metadata boundary failed");
   }
   if ((result.success.switcher?.third?.sessionCount ?? 0) < 3 || (result.success.switcher?.display?.sessionCount ?? 0) < 3) {
-    errors.push("Page/Web session switcher did not expose three saved page sessions");
+    errors.push("Web session switcher did not expose three saved page sessions");
   }
   if (result.success.switcher?.display?.activeState?.activeTabId !== result.success.switcher?.third?.activeState?.activeTabId) {
-    errors.push("Page/Web saved-session display implicitly changed the active Chrome tab");
+    errors.push("Web saved-session display implicitly changed the active Chrome tab");
   }
   if (result.success.switcher?.display?.selectionDisabled !== true || result.success.switcher?.display?.hasActivateButton !== true) {
-    errors.push("Page/Web inactive saved-session display did not gate live selection behind explicit tab activation");
+    errors.push("Web inactive saved-session display did not gate live selection behind explicit tab activation");
+  }
+  if (!/sr-only/.test(result.success.switcher?.display?.titleClassName || "") ||
+    (result.success.switcher?.display?.titleRect?.width ?? 999) > 2 ||
+    (result.success.switcher?.display?.titleRect?.height ?? 999) > 2) {
+    errors.push("Web session switcher title should be visually hidden while preserving the accessible label");
   }
   if (
     result.success.switcher?.activated?.selectionDisabled !== false ||
     result.success.switcher?.activated?.hasActivateButton !== false ||
     result.success.switcher?.activated?.activeState?.activeTabId === result.success.switcher?.third?.activeState?.activeTabId
   ) {
-    errors.push("Page/Web explicit saved-session activation did not restore live page controls");
+    errors.push("Web explicit saved-session activation did not restore live page controls");
   }
   if (!result.success.selection?.selectedText || !result.success.selection.excerpt?.includes(result.success.selection.selectedText.slice(0, 60))) {
-    errors.push("selection target text was not rendered as the Page/Web preview");
+    errors.push("selection target text was not rendered as the Web preview");
   }
   if (result.success.selection?.beforeAction?.selectionDisabled !== false) {
     errors.push(`selection target button was not available before explicit action: ${result.success.selection?.beforeAction?.selectionDisabled}`);
@@ -2170,13 +2393,10 @@ function assertAudit(result) {
   if (result.success.afterTracking.stale) errors.push("tracking-only query change incorrectly marked stale");
   if (!result.success.afterMeaningful.stale) errors.push("meaningful URL change did not mark stale");
   if (result.success.afterMeaningful.oldExcerptVisible || result.success.afterMeaningful.sourceLinkVisible) {
-    errors.push("meaningful URL change did not scrub stale Page/Web surface content");
+    errors.push("meaningful URL change did not scrub stale Web surface content");
   }
   if (result.noisy.ready.status !== "已讀取" && result.noisy.ready.status !== "Ready") {
     errors.push(`noisy fallback read did not reach ready status: ${result.noisy.ready.status}`);
-  }
-  if (!/is-ready/.test(result.noisy.ready.modelContext?.className || "")) {
-    errors.push("noisy fallback model context does not use ready UI state");
   }
   if (!result.noisy.ready.meta?.some((row) => /讀取方式|Reading method/.test(row.label || "") && row.value === "fallback")) {
     errors.push("noisy fallback audit did not exercise fallback extraction");
@@ -2184,17 +2404,21 @@ function assertAudit(result) {
   if (!result.noisy.ready.meta?.some((row) => /內容狀態|Content state/.test(row.label || "") && row.value === "complete")) {
     errors.push("noisy fallback audit did not exercise complete fallback extraction");
   }
-  if (!result.noisy.ready.sourceLinks?.some((link) => link.label === "Article source" && /\/source$/.test(link.href))) {
+  if (!hasSourceHref(result.noisy.ready.sourceLinks, /\/source$/)) {
     errors.push("noisy fallback audit did not preserve the real article source link");
   }
-  if (!/is-compact/.test(result.noisy.ready.modelContext?.className || "")) {
-    errors.push("noisy fallback ready context should remain compact");
+  const noisyBriefReady = result.noisy.ready.pipelineHidden === true && result.noisy.ready.pageAnalysis?.ready === true;
+  if (!noisyBriefReady && !/is-ready/.test(result.noisy.ready.modelContext?.className || "")) {
+    errors.push("noisy fallback model context does not use ready UI state");
   }
-  if (result.noisy.ready.modelContext?.diagnosticsOpen !== false) {
-    errors.push("noisy fallback ready model diagnostics should remain collapsed");
+  if (!noisyBriefReady && !/page-reader-processing-status/.test(result.noisy.ready.modelContext?.className || "")) {
+    errors.push("noisy fallback should render the consolidated page status");
   }
-  if (result.noisy.ready.advisor?.diagnosticsOpen !== false) {
-    errors.push("noisy fallback ready advisor diagnostics should remain collapsed");
+  if (!noisyBriefReady && result.noisy.ready.modelContext?.diagnosticsOpen !== false) {
+    errors.push("noisy fallback page-status details should remain collapsed");
+  }
+  if (!noisyBriefReady && result.noisy.ready.advisor?.diagnosticsOpen !== false) {
+    errors.push("noisy fallback advisor details should remain collapsed");
   }
   if ((result.noisy.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("noisy fallback exposes more than six source links");
@@ -2202,61 +2426,62 @@ function assertAudit(result) {
   if (result.noisy.ready.hasEdgeDownload || result.noisy.ready.hasFirefoxDownload || result.noisy.ready.hasGoogleDownload) {
     errors.push("noisy fallback audit still exposes browser download links as source context");
   }
-  if (!/分析範圍|Analysis scope/.test(result.noisy.ready.advisor?.title || "")) {
-    errors.push("noisy fallback does not show analysis scope state");
+  if (!noisyBriefReady && !/頁面狀態|Page status/.test(result.noisy.ready.advisor?.title || "")) {
+    errors.push("noisy fallback does not show consolidated page status");
   }
-  if (/檢查中|Checking/.test(result.noisy.ready.advisor?.status || "")) {
+  if (!noisyBriefReady && /整理中|Organizing|檢查中|Checking/.test(result.noisy.ready.advisor?.status || "")) {
     errors.push("noisy fallback advisor remained pending");
   }
   const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
   const noisyDecision = rawRowValue(noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
   const noisyUse = rawRowValue(noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
-  if (noisyDecision !== "accept_current") {
+  if (!noisyBriefReady && noisyDecision !== "accept_current") {
     errors.push(`noisy fallback advisor did not accept the cleaned fallback context: ${noisyDecision || "(missing)"}`);
   }
-  if (noisyUse !== "article_or_selection_analysis") {
+  if (!noisyBriefReady && noisyUse !== "article_or_selection_analysis") {
     errors.push(`noisy fallback effective context was not article analysis: ${noisyUse || "(missing)"}`);
   }
   if (result.candidate.ready.status !== "已讀取" && result.candidate.ready.status !== "Ready") {
     errors.push(`candidate block recovery did not reach ready status: ${result.candidate.ready.status}`);
   }
+  const candidateBriefReady = result.candidate.ready.pipelineHidden === true && result.candidate.ready.pageAnalysis?.ready === true;
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
   const candidateDecision = rawRowValue(candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
   const candidateUse = rawRowValue(candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
-  if (!["prefer_candidate_block", "accept_current"].includes(candidateDecision)) {
+  if (!candidateBriefReady && !["prefer_candidate_block", "accept_current"].includes(candidateDecision)) {
     errors.push(`candidate fixture did not reach a usable article decision: ${candidateDecision || "(missing)"}`);
   }
-  if (candidateUse !== "article_or_selection_analysis") {
+  if (!candidateBriefReady && candidateUse !== "article_or_selection_analysis") {
     errors.push(`candidate block effective context was not article analysis: ${candidateUse || "(missing)"}`);
   }
-  if (candidateDecision === "prefer_candidate_block" && !result.candidate.ready.hasFullCandidateContinuation) {
+  if (!candidateBriefReady && candidateDecision === "prefer_candidate_block" && !result.candidate.ready.hasFullCandidateContinuation) {
     errors.push("candidate block recovery did not render the re-extracted full candidate text");
   }
-  if (!result.candidate.ready.hasCandidateSource) {
+  if (!hasSourceHref(result.candidate.ready.sourceLinks, /\/candidate-source$/)) {
     errors.push("candidate block recovery did not preserve candidate source link visibility");
   }
   if (candidateDecision === "prefer_candidate_block") {
-    if (result.candidate.ready.extractionDiagnosticsOpen !== true) {
-      errors.push("candidate block recovery should expand extraction diagnostics");
+    if (result.candidate.ready.extractionDiagnosticsOpen !== false) {
+      errors.push("candidate block recovery should keep extraction diagnostics collapsed by default");
     }
-    if (result.candidate.ready.modelContext?.diagnosticsOpen !== true) {
-      errors.push("candidate block recovery should expand model diagnostics");
-    }
-    if (/is-compact/.test(result.candidate.ready.modelContext?.className || "")) {
-      errors.push("candidate block recovery should not compact model context warnings");
-    }
-    if (result.candidate.ready.advisor?.diagnosticsOpen !== true) {
-      errors.push("candidate block recovery should expand advisor diagnostics");
-    }
-  } else {
     if (result.candidate.ready.modelContext?.diagnosticsOpen !== false) {
-      errors.push("candidate clean extraction should keep model diagnostics collapsed");
+      errors.push("candidate block recovery should keep page-status details collapsed by default");
     }
-    if (!/is-compact/.test(result.candidate.ready.modelContext?.className || "")) {
-      errors.push("candidate clean extraction should use compact model context");
+    if (!/page-reader-processing-status/.test(result.candidate.ready.modelContext?.className || "")) {
+      errors.push("candidate block recovery should render consolidated page status by default");
     }
     if (result.candidate.ready.advisor?.diagnosticsOpen !== false) {
-      errors.push("candidate clean extraction should keep advisor diagnostics collapsed");
+      errors.push("candidate block recovery should keep advisor details collapsed by default");
+    }
+  } else {
+    if (!candidateBriefReady && result.candidate.ready.modelContext?.diagnosticsOpen !== false) {
+      errors.push("candidate clean extraction should keep page-status details collapsed");
+    }
+    if (!candidateBriefReady && !/page-reader-processing-status/.test(result.candidate.ready.modelContext?.className || "")) {
+      errors.push("candidate clean extraction should render consolidated page status");
+    }
+    if (!candidateBriefReady && result.candidate.ready.advisor?.diagnosticsOpen !== false) {
+      errors.push("candidate clean extraction should keep advisor details collapsed");
     }
   }
   if ((result.candidate.ready.sourceLinks?.length ?? 0) > 6) {
@@ -2265,23 +2490,24 @@ function assertAudit(result) {
   if (result.teaser.ready.status !== "已讀取" && result.teaser.ready.status !== "Ready") {
     errors.push(`teaser hub did not reach ready status: ${result.teaser.ready.status}`);
   }
+  const teaserBriefReady = result.teaser.ready.pipelineHidden === true && result.teaser.ready.pageAnalysis?.ready === true;
   const teaserAdvisorRows = result.teaser.ready.advisor?.rows || [];
   const teaserDecision = rawRowValue(teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
   const teaserUse = rawRowValue(teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   const teaserSafeScope =
     (teaserDecision === "downgrade_to_index_or_feed" && teaserUse === "page_overview_only") ||
     (teaserDecision === "request_user_selection" && teaserUse === "requires_user_target");
-  if (!teaserSafeScope) {
+  if (!teaserBriefReady && !teaserSafeScope) {
     errors.push(`teaser hub advisor did not choose a safe non-article scope: decision=${teaserDecision || "(missing)"} use=${teaserUse || "(missing)"}`);
   }
-  if (result.teaser.ready.extractionDiagnosticsOpen !== true) {
-    errors.push("teaser hub should expand extraction diagnostics");
+  if (result.teaser.ready.extractionDiagnosticsOpen !== false) {
+    errors.push("teaser hub should keep extraction diagnostics collapsed by default");
   }
-  if (result.teaser.ready.modelContext?.diagnosticsOpen !== true) {
-    errors.push("teaser hub should expand model diagnostics");
+  if (!teaserBriefReady && result.teaser.ready.modelContext?.diagnosticsOpen !== false) {
+    errors.push("teaser hub should keep page-status details collapsed by default");
   }
-  if (result.teaser.ready.advisor?.diagnosticsOpen !== true) {
-    errors.push("teaser hub should expand advisor diagnostics");
+  if (!teaserBriefReady && result.teaser.ready.advisor?.diagnosticsOpen !== false) {
+    errors.push("teaser hub should keep advisor details collapsed by default");
   }
   if ((result.teaser.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("teaser hub exposes more than six source links");
@@ -2292,8 +2518,17 @@ function assertAudit(result) {
   if (result.screenshot?.offer?.state !== "offer" || result.screenshot?.offer?.hasCaptureButton !== true) {
     errors.push("screenshot recovery did not show an explicit capture offer");
   }
+  if (result.screenshot?.offer?.pipelineHidden !== true) {
+    errors.push("screenshot recovery offer should hide model/advisor pipeline rows");
+  }
+  if (result.screenshot?.offer?.warningsHidden !== true) {
+    errors.push("screenshot recovery offer should hide technical extraction warnings");
+  }
   if (result.screenshot?.preview?.state !== "preview" || !/^data:image\//.test(result.screenshot?.preview?.imgSrcPrefix || "")) {
     errors.push("screenshot recovery did not show a user preview with a supported image data URL");
+  }
+  if ((result.screenshot?.preview?.previewRect?.height ?? 0) < 100) {
+    errors.push("screenshot recovery preview was not visually inspectable");
   }
   if (!result.screenshot?.captureStub?.stubbed || result.screenshot?.captureClickState?.captureCalls?.length !== 1) {
     errors.push("screenshot recovery audit did not exercise the captureVisibleTab seam exactly once");
@@ -2319,8 +2554,9 @@ function assertAudit(result) {
   if (!result.noGrant.detailHasGuidance) errors.push("no-grant primary status detail did not show toolbar activation guidance");
   if (result.noGrant.detailHasGenericRetry) errors.push("no-grant primary status detail still shows generic retry guidance");
   if (result.noGrant.errorBlockPresent) errors.push("no-grant toolbar guidance is duplicated in a separate error block");
+  if (result.noGrant.emptyBlockPresent) errors.push("no-grant guidance is duplicated in a separate empty-state block");
   if (result.unsupportedPages?.truly?.side?.readDisabled !== true) {
-    errors.push("Truly internal page should keep Page/Web read button disabled");
+    errors.push("Truly internal page should keep Web read button disabled");
   }
   if (!/不支援此頁|Unsupported page/.test(result.unsupportedPages?.truly?.side?.status || "")) {
     errors.push(`Truly internal page did not render unsupported status: ${result.unsupportedPages?.truly?.side?.status || "(missing)"}`);
@@ -2331,8 +2567,11 @@ function assertAudit(result) {
   if (/工具列圖示|toolbar icon/.test(result.unsupportedPages?.truly?.side?.text || "")) {
     errors.push("Truly internal page incorrectly shows toolbar activation guidance");
   }
+  if (result.unsupportedPages?.truly?.side?.empty) {
+    errors.push("Truly internal page should not render a duplicate empty-state block");
+  }
   if (result.unsupportedPages?.browser?.side?.readDisabled !== true) {
-    errors.push("browser internal page should keep Page/Web read button disabled");
+    errors.push("browser internal page should keep Web read button disabled");
   }
   if (!/不支援此頁|Unsupported page/.test(result.unsupportedPages?.browser?.side?.status || "")) {
     errors.push(`browser internal page did not render unsupported status: ${result.unsupportedPages?.browser?.side?.status || "(missing)"}`);
@@ -2343,9 +2582,12 @@ function assertAudit(result) {
   if (/工具列圖示|toolbar icon/.test(result.unsupportedPages?.browser?.side?.text || "")) {
     errors.push("browser internal page incorrectly shows toolbar activation guidance");
   }
+  if (result.unsupportedPages?.browser?.side?.empty) {
+    errors.push("browser internal page should not render a duplicate empty-state block");
+  }
   if (result.storagePrivacy?.ok !== true) {
     const hits = (result.storagePrivacy?.hits || []).map((hit) => `${hit.area}:${hit.path}:${hit.kind}`).join(", ");
-    errors.push(`storage privacy probe found sensitive Page/Web data in chrome.storage: ${hits || "(missing details)"}`);
+    errors.push(`storage privacy probe found sensitive Web data in chrome.storage: ${hits || "(missing details)"}`);
   }
   for (const [label, pass, evidence] of qaMatrixRows(result)) {
     if (pass === null) continue;
@@ -2364,6 +2606,10 @@ function rawRowValue(row) {
   return row?.rawValue || row?.value || "";
 }
 
+function hasSourceHref(links, pattern) {
+  return (links || []).some((link) => pattern.test(link.href || ""));
+}
+
 function qaPass(value) {
   if (value === null) return "SKIP";
   return value ? "PASS" : "FAIL";
@@ -2377,22 +2623,53 @@ function designRestraint(result) {
   const readyDiagnosticsCollapsed = result.success.ready.extractionDiagnosticsOpen === false &&
     result.success.ready.modelContext?.diagnosticsOpen === false &&
     result.success.ready.advisor?.diagnosticsOpen === false;
-  const readyModelCompact = /is-compact/.test(result.success.ready.modelContext?.className || "");
+  const cleanBriefDebugHidden = result.success.pageBrief?.status !== "ready" ||
+    (result.success.pageBrief?.pipelineHidden === true &&
+      result.success.pageBrief?.diagnosticsHidden === true &&
+      !/讀取細節|Reading details|分析準備|Analysis readiness|分析範圍|Analysis scope|頁面狀態|Page status/.test(result.success.responsive?.pageText || ""));
+  const readyPageStatusConsolidated = /page-reader-processing-status/.test(result.success.ready.modelContext?.className || "") &&
+    /頁面狀態|Page status/.test(result.success.ready.processingStatus?.title || result.success.ready.modelContext?.title || "");
+  const readyBriefStatusQuiet = !/is-ready/.test(result.success.ready.pageAnalysis?.className || "") ||
+    result.success.ready.pageAnalysis?.statusVisible === false;
+  const singleItemBriefSectionsCompact = !/is-ready/.test(result.success.ready.pageAnalysis?.className || "") ||
+    ((result.success.ready.pageAnalysis?.singleSectionCount ?? 0) >= 1 &&
+      (result.success.ready.pageAnalysis?.listSectionCount ?? 0) === 0);
+  const cleanReadyRawExcerptHidden = result.success.pageBrief?.status !== "ready" ||
+    result.success.pageBrief?.rawExcerptVisible === false;
+  const cleanReadyBriefHeaderHidden = result.success.pageBrief?.status !== "ready" ||
+    result.success.pageBrief?.readyHeaderVisible === false;
+  const secondaryActionsInFooter = result.success.ready.cardActions?.headerCopy === false &&
+    result.success.ready.cardActions?.headerDownload === false &&
+    result.success.ready.cardActions?.footerCopy === true &&
+    result.success.ready.cardActions?.footerDownload === true;
+  const sourceAndToolsUnifiedFooter = result.success.ready.cardActions?.unifiedFooter === true;
+  const cleanReadyPrimaryActions = result.success.pageBrief?.primaryActions || result.success.ready.primaryActions;
+  const primaryActionsMergedIntoStatus = cleanReadyPrimaryActions?.hasStandaloneHeader === false &&
+    cleanReadyPrimaryActions?.inStatus === true &&
+    cleanReadyPrimaryActions?.quiet === true;
   const sourceLinksCapped = (result.success.ready.sourceLinks?.length ?? 0) <= 6;
-  const cautionDiagnosticsExpanded = result.teaser.ready.extractionDiagnosticsOpen === true &&
-    result.teaser.ready.modelContext?.diagnosticsOpen === true &&
-    result.teaser.ready.advisor?.diagnosticsOpen === true;
+  const nonCleanTechnicalCollapsed = result.teaser.ready.extractionDiagnosticsOpen === false &&
+    result.teaser.ready.modelContext?.diagnosticsOpen === false &&
+    result.teaser.ready.advisor?.diagnosticsOpen === false;
   const responsiveClean = result.success.responsive?.horizontalOverflow === false &&
     (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
     (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0;
   const interactionAccessible = (result.success.responsive?.unnamedInteractive?.length ?? 0) === 0 &&
     (result.success.responsive?.undersizedControls?.length ?? 0) === 0;
   return {
-    pass: readyDiagnosticsCollapsed && readyModelCompact && sourceLinksCapped && cautionDiagnosticsExpanded && responsiveClean && interactionAccessible,
+    pass: readyDiagnosticsCollapsed && cleanBriefDebugHidden && readyPageStatusConsolidated && readyBriefStatusQuiet && singleItemBriefSectionsCompact && cleanReadyRawExcerptHidden && cleanReadyBriefHeaderHidden && secondaryActionsInFooter && sourceAndToolsUnifiedFooter && primaryActionsMergedIntoStatus && sourceLinksCapped && nonCleanTechnicalCollapsed && responsiveClean && interactionAccessible,
     readyDiagnosticsCollapsed,
-    readyModelCompact,
+    cleanBriefDebugHidden,
+    readyPageStatusConsolidated,
+    readyBriefStatusQuiet,
+    singleItemBriefSectionsCompact,
+    cleanReadyRawExcerptHidden,
+    cleanReadyBriefHeaderHidden,
+    secondaryActionsInFooter,
+    sourceAndToolsUnifiedFooter,
+    primaryActionsMergedIntoStatus,
     sourceLinksCapped,
-    cautionDiagnosticsExpanded,
+    nonCleanTechnicalCollapsed,
     responsiveClean,
     interactionAccessible,
   };
@@ -2408,6 +2685,9 @@ function qaMatrixRows(result) {
   const candidateUse = rawRowValue(candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   const teaserDecision = rawRowValue(teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
   const teaserUse = rawRowValue(teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
+  const noisyBriefReady = result.noisy.ready.pipelineHidden === true && result.noisy.ready.pageAnalysis?.ready === true;
+  const candidateBriefReady = result.candidate.ready.pipelineHidden === true && result.candidate.ready.pageAnalysis?.ready === true;
+  const teaserBriefReady = result.teaser.ready.pipelineHidden === true && result.teaser.ready.pageAnalysis?.ready === true;
   const restraint = designRestraint(result);
   return [
     [
@@ -2442,7 +2722,7 @@ function qaMatrixRows(result) {
         !result.success.ready.fullTailVisible &&
         result.success.ready.extractionDiagnosticsOpen === false &&
         result.success.ready.modelContext?.diagnosticsOpen === false &&
-        /is-compact/.test(result.success.ready.modelContext?.className || "") &&
+        /page-reader-processing-status/.test(result.success.ready.modelContext?.className || "") &&
         result.success.ready.advisor?.diagnosticsOpen === false &&
         (result.success.ready.sourceLinks?.length ?? 0) <= 6,
       "title=" + result.success.ready.title + "; links=" + (result.success.ready.sourceLinks?.length ?? 0) + "; diagnosticsCollapsed=" + (result.success.ready.extractionDiagnosticsOpen === false),
@@ -2467,9 +2747,12 @@ function qaMatrixRows(result) {
     [
       "Page brief generation",
       result.success.pageBrief?.status === "ready" &&
-        /已產生重點|Brief created/.test(result.success.pageBrief?.modelContextStatus || ""),
+        (result.success.pageBrief?.pipelineHidden === true ||
+          /已整理|Organized|已產生重點|Brief created/.test(result.success.pageBrief?.modelContextStatus || "")) &&
+        result.success.pageBrief?.diagnosticsHidden === true,
       "status=" + (result.success.pageBrief?.status || "missing") +
-        "; modelContext=" + (result.success.pageBrief?.modelContextStatus || "missing"),
+        "; modelContext=" + (result.success.pageBrief?.modelContextStatus || (result.success.pageBrief?.pipelineHidden ? "hidden" : "missing")) +
+        "; diagnostics=" + (result.success.pageBrief?.diagnosticsHidden ? "hidden" : "visible"),
     ],
     [
       "Page brief quick mode",
@@ -2477,7 +2760,7 @@ function qaMatrixRows(result) {
       "quickNote=" + /快速重點|quick brief/.test(result.success.pageBrief?.text || ""),
     ],
     [
-      "Responsive Page/Web layout",
+      "Responsive Web layout",
       result.success.responsive?.horizontalOverflow === false &&
         (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
         (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0,
@@ -2486,17 +2769,25 @@ function qaMatrixRows(result) {
         "; offscreenCards=" + (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0),
     ],
     [
-      "Page/Web design restraint",
+      "Web design restraint",
       restraint.pass,
       "readyCollapsed=" + restraint.readyDiagnosticsCollapsed +
-        "; compactModel=" + restraint.readyModelCompact +
+        "; cleanBriefDebugHidden=" + restraint.cleanBriefDebugHidden +
+        "; pageStatusConsolidated=" + restraint.readyPageStatusConsolidated +
+        "; readyBriefStatusQuiet=" + restraint.readyBriefStatusQuiet +
+        "; singleItemBriefSectionsCompact=" + restraint.singleItemBriefSectionsCompact +
+        "; cleanReadyRawExcerptHidden=" + restraint.cleanReadyRawExcerptHidden +
+        "; cleanReadyBriefHeaderHidden=" + restraint.cleanReadyBriefHeaderHidden +
+        "; secondaryActionsInFooter=" + restraint.secondaryActionsInFooter +
+        "; sourceAndToolsUnifiedFooter=" + restraint.sourceAndToolsUnifiedFooter +
+        "; primaryActionsMergedIntoStatus=" + restraint.primaryActionsMergedIntoStatus +
         "; sourceLinksCapped=" + restraint.sourceLinksCapped +
-        "; cautionExpanded=" + restraint.cautionDiagnosticsExpanded +
+        "; nonCleanTechnicalCollapsed=" + restraint.nonCleanTechnicalCollapsed +
         "; responsiveClean=" + restraint.responsiveClean +
         "; interactionAccessible=" + restraint.interactionAccessible,
     ],
     [
-      "Page/Web interaction accessibility",
+      "Web interaction accessibility",
       (result.success.responsive?.unnamedInteractive?.length ?? 0) === 0 &&
         (result.success.responsive?.undersizedControls?.length ?? 0) === 0,
       "unnamed=" + (result.success.responsive?.unnamedInteractive?.length ?? 0) +
@@ -2506,8 +2797,11 @@ function qaMatrixRows(result) {
       "Saved-session switching",
       (result.success.switcher?.display?.sessionCount ?? 0) >= 3 &&
         result.success.switcher?.display?.selectionDisabled === true &&
+        /sr-only/.test(result.success.switcher?.display?.titleClassName || "") &&
         result.success.switcher?.activated?.selectionDisabled === false,
-      "sessions=" + (result.success.switcher?.display?.sessionCount ?? 0) + "; restored=" + (result.success.switcher?.activated?.selectionDisabled === false),
+      "sessions=" + (result.success.switcher?.display?.sessionCount ?? 0) +
+        "; titleHidden=" + /sr-only/.test(result.success.switcher?.display?.titleClassName || "") +
+        "; restored=" + (result.success.switcher?.activated?.selectionDisabled === false),
     ],
     [
       "Selection target",
@@ -2535,37 +2829,42 @@ function qaMatrixRows(result) {
     ],
     [
       "Noisy fallback clean context",
-      /is-ready/.test(result.noisy.ready.modelContext?.className || "") &&
-        /is-compact/.test(result.noisy.ready.modelContext?.className || "") &&
-        noisyDecision === "accept_current" &&
-        noisyUse === "article_or_selection_analysis" &&
-        result.noisy.ready.modelContext?.diagnosticsOpen === false &&
-        result.noisy.ready.advisor?.diagnosticsOpen === false,
-      "decision=" + (noisyDecision || "missing") + "; use=" + (noisyUse || "missing"),
+      noisyBriefReady ||
+        (/page-reader-processing-status/.test(result.noisy.ready.modelContext?.className || "") &&
+          noisyDecision === "accept_current" &&
+          noisyUse === "article_or_selection_analysis" &&
+          result.noisy.ready.modelContext?.diagnosticsOpen === false &&
+          result.noisy.ready.advisor?.diagnosticsOpen === false),
+      "briefReady=" + noisyBriefReady + "; decision=" + (noisyDecision || "missing") + "; use=" + (noisyUse || "missing"),
     ],
     [
       "Candidate fixture extraction",
-      ["prefer_candidate_block", "accept_current"].includes(candidateDecision) &&
-        candidateUse === "article_or_selection_analysis" &&
-        (candidateDecision === "accept_current" || result.candidate.ready.hasFullCandidateContinuation === true) &&
-        result.candidate.ready.hasCandidateSource === true,
-      "decision=" + (candidateDecision || "missing") + "; use=" + (candidateUse || "missing"),
+      (candidateBriefReady ||
+        (["prefer_candidate_block", "accept_current"].includes(candidateDecision) &&
+          candidateUse === "article_or_selection_analysis" &&
+          (candidateDecision === "accept_current" || result.candidate.ready.hasFullCandidateContinuation === true))) &&
+        hasSourceHref(result.candidate.ready.sourceLinks, /\/candidate-source$/),
+      "briefReady=" + candidateBriefReady + "; decision=" + (candidateDecision || "missing") + "; use=" + (candidateUse || "missing"),
     ],
     [
       "Teaser hub safe scope",
-      ((teaserDecision === "downgrade_to_index_or_feed" && teaserUse === "page_overview_only") ||
-        (teaserDecision === "request_user_selection" && teaserUse === "requires_user_target")) &&
-        result.teaser.ready.extractionDiagnosticsOpen === true &&
-        result.teaser.ready.modelContext?.diagnosticsOpen === true &&
-        result.teaser.ready.advisor?.diagnosticsOpen === true &&
+      (teaserBriefReady ||
+        ((teaserDecision === "downgrade_to_index_or_feed" && teaserUse === "page_overview_only") ||
+          (teaserDecision === "request_user_selection" && teaserUse === "requires_user_target"))) &&
+        result.teaser.ready.extractionDiagnosticsOpen === false &&
+        (teaserBriefReady || result.teaser.ready.modelContext?.diagnosticsOpen === false) &&
+        (teaserBriefReady || result.teaser.ready.advisor?.diagnosticsOpen === false) &&
         result.teaser.ready.hasMemberArea === false &&
         result.teaser.ready.hasNewsletter === false,
-      "decision=" + (teaserDecision || "missing") + "; use=" + (teaserUse || "missing"),
+      "briefReady=" + teaserBriefReady + "; decision=" + (teaserDecision || "missing") + "; use=" + (teaserUse || "missing"),
     ],
     [
       "Screenshot recovery",
       result.screenshot?.offer?.state === "offer" &&
+        result.screenshot?.offer?.pipelineHidden === true &&
+        result.screenshot?.offer?.warningsHidden === true &&
         result.screenshot?.preview?.state === "preview" &&
+        (result.screenshot?.preview?.previewRect?.height ?? 0) >= 100 &&
         result.screenshot?.preview?.hasConfirmButton === true &&
         result.screenshot?.captureClickState?.captureCalls?.length === 1 &&
         result.screenshot?.confirmed?.hasPreview === false &&
@@ -2573,7 +2872,10 @@ function qaMatrixRows(result) {
         result.screenshot?.requests?.some((request) => request.kind === "screenshot-brief" && request.hasImageUrl === true) &&
         result.screenshot?.storageAfter?.ok === true,
       "offer=" + (result.screenshot?.offer?.state || "missing") +
+        "; offerPipelineHidden=" + Boolean(result.screenshot?.offer?.pipelineHidden) +
+        "; offerWarningsHidden=" + Boolean(result.screenshot?.offer?.warningsHidden) +
         "; preview=" + (result.screenshot?.preview?.state || "missing") +
+        "/" + Math.round(result.screenshot?.preview?.previewRect?.height ?? 0) + "px" +
         "; captureCalls=" + (result.screenshot?.captureClickState?.captureCalls?.length ?? "missing") +
         "; sentImage=" + Boolean(result.screenshot?.requests?.some((request) => request.kind === "screenshot-brief" && request.hasImageUrl === true)) +
         "; domHasDataImageAfter=" + Boolean(result.screenshot?.confirmed?.domHasDataImage) +
@@ -2592,12 +2894,14 @@ function qaMatrixRows(result) {
         result.noGrant.hasAllSitesGuidance === true &&
         result.noGrant.detailHasGuidance === true &&
         result.noGrant.detailHasGenericRetry === false &&
-        result.noGrant.errorBlockPresent === false,
+        result.noGrant.errorBlockPresent === false &&
+        result.noGrant.emptyBlockPresent === false,
       "toolbarGuidance=" + result.noGrant.hasGuidance +
         "; allSitesGuidance=" + result.noGrant.hasAllSitesGuidance +
         "; primaryDetail=" + result.noGrant.detailHasGuidance +
         "; genericRetry=" + result.noGrant.detailHasGenericRetry +
-        "; duplicateErrorBlock=" + result.noGrant.errorBlockPresent,
+        "; duplicateErrorBlock=" + result.noGrant.errorBlockPresent +
+        "; duplicateEmptyBlock=" + result.noGrant.emptyBlockPresent,
     ],
     [
       "Unsupported page guidance",
@@ -2607,6 +2911,8 @@ function qaMatrixRows(result) {
         /不支援此頁|Unsupported page/.test(result.unsupportedPages?.browser?.side?.status || "") &&
         /Truly.*設定|Truly settings|內部頁面|internal page/.test(result.unsupportedPages?.truly?.side?.detail || "") &&
         /瀏覽器內部頁面|Browser internal pages/.test(result.unsupportedPages?.browser?.side?.detail || "") &&
+        !result.unsupportedPages?.truly?.side?.empty &&
+        !result.unsupportedPages?.browser?.side?.empty &&
         !/工具列圖示|toolbar icon/.test(result.unsupportedPages?.truly?.side?.text || "") &&
         !/工具列圖示|toolbar icon/.test(result.unsupportedPages?.browser?.side?.text || ""),
       "truly=" + (result.unsupportedPages?.truly?.side?.detail || "missing") +
@@ -2652,7 +2958,7 @@ function auditCoverageRows(result) {
       ].filter(Boolean),
     ),
     row(
-      "Page/Web 讀取",
+      "Web 讀取",
       "success/noisy/candidate/teaser",
       "Readable pages should show useful main content; noisy pages should not leak navigation, recirculation, or browser-download content.",
       ["Ordinary article read", "Noisy fallback clean context", "Candidate fixture extraction", "Teaser hub safe scope"],
@@ -2683,9 +2989,9 @@ function auditCoverageRows(result) {
       [relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))],
     ),
     row(
-      "多分頁 Page/Web session",
+      "多分頁 Web session",
       "success",
-      "Saved Page/Web sessions must not activate the wrong browser tab or enable live-target actions against an inactive page.",
+      "Saved Web sessions must not activate the wrong browser tab or enable live-target actions against an inactive page.",
       ["Saved-session switching"],
       [
         relative(ROOT, resolve(OUT_DIR, "page-session-switcher-display.png")),
@@ -2794,16 +3100,15 @@ function writeSummary(result, errors) {
       ? `- Popup read click: skipped (${result.popupRead.reason || "requested"})`
       : `- Popup read click: activeUrl=${result.popupRead.before.activeTab?.url || "(missing)"}; initialHadResult=${/Synthetic General Page Reader Article/.test(result.popupRead.initialSide?.text || "")}; status=${result.popupRead.sideState.status || "(missing)"}`,
     `- All-sites sidepanel auto-read: allSites=${Boolean(result.success.autoRead?.allSites)}; observed=${Boolean(result.success.autoRead?.observed)}`,
-    `- Page/Web read status: ${result.success.ready.status}`,
-    `- Page/Web read elapsed title: ${result.success.ready.statusTitle || "(missing)"}`,
-    `- Analysis readiness: ${result.success.ready.modelContext?.status || "(missing)"}`,
-    `- Analysis scope: ${result.success.ready.advisor?.status || "(missing)"}`,
+    `- Web read status: ${result.success.ready.status}`,
+    `- Web read elapsed title: ${result.success.ready.statusTitle || "(missing)"}`,
+    `- Page status: ${result.success.ready.processingStatus?.status || result.success.ready.modelContext?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
-    `- Page brief model context status: ${result.success.pageBrief?.modelContextStatus || "(missing)"}`,
+    `- Page brief model context status: ${result.success.pageBrief?.modelContextStatus || (result.success.pageBrief?.pipelineHidden ? "hidden" : "(missing)")}`,
     `- Page brief quick mode: ${/快速重點|quick brief/.test(result.success.pageBrief?.text || "")}`,
-    `- Responsive Page/Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
-    `- Page/Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; compactModel=${restraint.readyModelCompact}; sourceLinksCapped=${restraint.sourceLinksCapped}; cautionExpanded=${restraint.cautionDiagnosticsExpanded}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
-    `- Page/Web interaction accessibility: unnamed=${result.success.responsive?.unnamedInteractive?.length ?? "(missing)"}; undersizedControls=${result.success.responsive?.undersizedControls?.length ?? "(missing)"}`,
+    `- Responsive Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
+    `- Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; cleanBriefDebugHidden=${restraint.cleanBriefDebugHidden}; pageStatusConsolidated=${restraint.readyPageStatusConsolidated}; readyBriefStatusQuiet=${restraint.readyBriefStatusQuiet}; singleItemBriefSectionsCompact=${restraint.singleItemBriefSectionsCompact}; cleanReadyRawExcerptHidden=${restraint.cleanReadyRawExcerptHidden}; cleanReadyBriefHeaderHidden=${restraint.cleanReadyBriefHeaderHidden}; secondaryActionsInFooter=${restraint.secondaryActionsInFooter}; sourceAndToolsUnifiedFooter=${restraint.sourceAndToolsUnifiedFooter}; primaryActionsMergedIntoStatus=${restraint.primaryActionsMergedIntoStatus}; sourceLinksCapped=${restraint.sourceLinksCapped}; nonCleanTechnicalCollapsed=${restraint.nonCleanTechnicalCollapsed}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
+    `- Web interaction accessibility: unnamed=${result.success.responsive?.unnamedInteractive?.length ?? "(missing)"}; undersizedControls=${result.success.responsive?.undersizedControls?.length ?? "(missing)"}`,
     `- Saved-page switcher: ${(result.success.switcher?.display?.sessionCount || 0)} sessions / activation restored=${result.success.switcher?.activated?.selectionDisabled === false}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
     `- Current-region target: ${result.success.pointTarget?.targetKind || "(missing)"} / ${result.success.pointTarget?.advisorStatus || "(missing)"}`,
@@ -2813,7 +3118,7 @@ function writeSummary(result, errors) {
     `- Noisy fallback source links: ${(result.noisy.ready.sourceLinks || []).map((link) => link.label).join(", ") || "(none)"}`,
     `- Candidate fixture extraction: ${result.candidate.ready.advisor?.status || "(missing)"}`,
     `- Teaser hub safe scope: ${result.teaser.ready.advisor?.status || "(missing)"}`,
-    `- Screenshot recovery: offer=${result.screenshot?.offer?.state || "(missing)"}; preview=${result.screenshot?.preview?.state || "(missing)"}; sentImage=${Boolean(result.screenshot?.requests?.some((request) => request.kind === "screenshot-brief" && request.hasImageUrl === true))}; storageHits=${result.screenshot?.storageAfter?.hits?.length ?? "(missing)"}`,
+    `- Screenshot recovery: offer=${result.screenshot?.offer?.state || "(missing)"}; preview=${result.screenshot?.preview?.state || "(missing)"}/${Math.round(result.screenshot?.preview?.previewRect?.height ?? 0)}px; sentImage=${Boolean(result.screenshot?.requests?.some((request) => request.kind === "screenshot-brief" && request.hasImageUrl === true))}; storageHits=${result.screenshot?.storageAfter?.hits?.length ?? "(missing)"}`,
     `- Hash-only stale: ${result.success.afterHash.stale}`,
     `- Tracking-only stale: ${result.success.afterTracking.stale}`,
     `- Meaningful URL stale: ${result.success.afterMeaningful.stale}`,
@@ -2822,7 +3127,7 @@ function writeSummary(result, errors) {
     `- Storage privacy probe: ok=${result.storagePrivacy?.ok}; localKeys=${result.storagePrivacy?.localKeyCount ?? "(missing)"}; sessionKeys=${result.storagePrivacy?.sessionKeyCount ?? "(missing)"}; hits=${result.storagePrivacy?.hits?.length ?? "(missing)"}`,
     `- No-grant guidance: ${result.noGrant.hasGuidance}`,
     `- No-grant all-sites settings guidance: ${result.noGrant.hasAllSitesGuidance}`,
-    `- No-grant primary status guidance: ${result.noGrant.detailHasGuidance}; genericRetry=${result.noGrant.detailHasGenericRetry}; duplicateErrorBlock=${result.noGrant.errorBlockPresent}`,
+    `- No-grant primary status guidance: ${result.noGrant.detailHasGuidance}; genericRetry=${result.noGrant.detailHasGenericRetry}; duplicateErrorBlock=${result.noGrant.errorBlockPresent}; duplicateEmptyBlock=${result.noGrant.emptyBlockPresent}`,
     `- Unsupported Truly page: status=${result.unsupportedPages?.truly?.side?.status || "(missing)"}; detail=${result.unsupportedPages?.truly?.side?.detail || "(missing)"}`,
     `- Unsupported browser page: status=${result.unsupportedPages?.browser?.side?.status || "(missing)"}; detail=${result.unsupportedPages?.browser?.side?.detail || "(missing)"}`,
     "",

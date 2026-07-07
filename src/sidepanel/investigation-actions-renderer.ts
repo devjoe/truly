@@ -108,17 +108,8 @@ export function renderInvestigationActionSection(
 ): HTMLElement {
   const logger = options.logger ?? console;
   const section = document.createElement("div");
-  section.className = "details-section investigation-actions";
-
-  const label = document.createElement("div");
-  label.className = "details-label investigation-actions-label";
-  label.textContent = t("sidepanel.dynamic.actions.title", lang);
-  section.appendChild(label);
-
-  const hint = document.createElement("div");
-  hint.className = "investigation-actions-hint";
-  hint.textContent = t("sidepanel.dynamic.actions.hint", lang);
-  section.appendChild(hint);
+  section.className = "details-section investigation-actions is-compact";
+  section.setAttribute("aria-label", t("sidepanel.dynamic.actions.title", lang));
 
   const row = document.createElement("div");
   row.className = "investigation-action-row";
@@ -215,11 +206,6 @@ export function renderInvestigationActionSection(
   });
   row.appendChild(metaAiBtn);
 
-  section.appendChild(row);
-  const footer = document.createElement("div");
-  footer.className = "investigation-action-footer";
-  footer.appendChild(status);
-
   const feedbackLink = document.createElement("a");
   feedbackLink.className = "investigation-feedback-link";
   feedbackLink.href = FEEDBACK_URL;
@@ -227,8 +213,10 @@ export function renderInvestigationActionSection(
   feedbackLink.rel = "noopener noreferrer";
   feedbackLink.textContent = t("sidepanel.dynamic.actions.feedback", lang);
   feedbackLink.setAttribute("aria-label", t("sidepanel.dynamic.actions.feedbackAria", lang));
-  footer.appendChild(feedbackLink);
+  feedbackLink.dataset.tooltip = t("sidepanel.dynamic.actions.feedbackAria", lang);
+  row.appendChild(feedbackLink);
 
-  section.appendChild(footer);
+  row.appendChild(status);
+  section.appendChild(row);
   return section;
 }

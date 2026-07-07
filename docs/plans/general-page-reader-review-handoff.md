@@ -39,10 +39,11 @@ Dev/evaluation-only code added or hardened:
 Claude review found no merge blockers, but flagged several items to handle
 before runtime work. The branch now addresses the high-value items:
 
-- `check:general-page` runs both `check:general-page-corpus` and
-  `spike:general-page-parsers`.
-- `check:general-page` is part of `check:public` and
-  `check:public:release-tag`.
+- `check:general-page` keeps the lightweight corpus hygiene check and
+  model-integration contract gate in `check:public`.
+- The heavier parser/advisor synthetic regression gate is now
+  `check:general-page:synthetic`; use it for parser, fixture, or pattern
+  changes, not as representative product-quality evidence.
 - Real-world eval sanitizer has a no-leak unit test for URL, raw text,
   excerpt, preview, expected snippets, title, author, and site labels.
 - Newsletter CTA text no longer marks a normal readable article as paywall-like.

@@ -476,6 +476,7 @@ async function waitForFacebookReadiness(page, serviceWorkerEntry, pageUrl) {
 async function seekHeadsUpCandidate(page) {
   return page.evaluate(`new Promise(async (resolve) => {
     const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+    const actionPattern = new RegExp(${JSON.stringify(PANEL_ACTION_PATTERN)});
     const rectOf = (el) => {
       if (!el) return null;
       const r = el.getBoundingClientRect();
@@ -501,6 +502,9 @@ async function seekHeadsUpCandidate(page) {
           sponsored: el.getAttribute("data-truly-sponsored"),
           skip: el.getAttribute("data-truly-skip-reason"),
           hasHeadsUp: !!el.querySelector(${JSON.stringify(HEADSUP_HOST_SELECTOR)}),
+          hasAction: Array.from((el.querySelector(${JSON.stringify(HEADSUP_HOST_SELECTOR)})?.shadowRoot || el)
+            .querySelectorAll("button, [role='button']"))
+            .some((button) => actionPattern.test(norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))),
           hasCollapse: !!el.querySelector(".truly-collapse-bar"),
           rect: rectOf(el),
           text: norm(el.innerText || el.textContent).slice(0, 180)
@@ -508,18 +512,28 @@ async function seekHeadsUpCandidate(page) {
       };
     };
     const samples = [];
+    let firstHostSnapshot = null;
     const settle = () => new Promise((resolveDelay) => setTimeout(resolveDelay, ${HEADSUP_SEEK_WAIT_MS}));
     for (let step = 0; step <= ${HEADSUP_SEEK_STEPS}; step += 1) {
       await settle();
       const current = snapshot(step);
       samples.push(current);
-      const firstHost = document.querySelector(${JSON.stringify(HEADSUP_HOST_SELECTOR)});
-      if (firstHost) {
-        firstHost.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
+      const hosts = Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}));
+      if (!firstHostSnapshot && hosts[0]) {
+        firstHostSnapshot = { host: hosts[0], step };
+      }
+      const actionableHost = hosts.find((host) => {
+        const root = host.shadowRoot || host;
+        return Array.from(root.querySelectorAll("button, [role='button']")).some((button) =>
+          actionPattern.test(norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))
+        );
+      });
+      if (actionableHost) {
+        actionableHost.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
         await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
         resolve({
           ok: true,
-          reason: "heads-up-found",
+          reason: "heads-up-action-found",
           steps: step,
           finalScrollY: Math.round(window.scrollY),
           samples
@@ -529,6 +543,18 @@ async function seekHeadsUpCandidate(page) {
       if (step < ${HEADSUP_SEEK_STEPS}) {
         window.scrollBy(0, ${HEADSUP_SEEK_SCROLL_PX});
       }
+    }
+    if (firstHostSnapshot?.host) {
+      firstHostSnapshot.host.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+      resolve({
+        ok: true,
+        reason: "heads-up-found-without-action",
+        steps: firstHostSnapshot.step,
+        finalScrollY: Math.round(window.scrollY),
+        samples
+      });
+      return;
     }
     resolve({
       ok: false,
@@ -606,6 +632,12 @@ async function captureSidePanelTarget(target, index) {
         };
       };
       const analysis = document.querySelector("[role='tabpanel'][data-tab='analysis'], #analysis-pane");
+      const readingBrief = document.querySelector(".reading-brief-body");
+      const referenceSection = document.querySelector(".reference-section");
+      const referenceHeading = document.querySelector(".reference-context-heading");
+      const readingRect = rectOf(readingBrief);
+      const referenceRect = rectOf(referenceSection);
+      const actionSection = document.querySelector(".investigation-actions");
       const bodyText = norm(document.body?.innerText || document.documentElement?.innerText || document.body?.textContent || "");
       const inspected = Array.from(document.querySelectorAll(
         "button,a,.post-card,.analysis-overview,.details-row,.details-label,.chip,.necessity-pill,.source-badge,.deep-ai-chip,.iq-chip,.analysis-context-tag,.placeholder"
@@ -631,6 +663,23 @@ async function captureSidePanelTarget(target, index) {
           .map((button) => norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))
           .filter(Boolean)
           .slice(0, 60),
+        feedVisualHierarchy: {
+          hasReferenceHeading: Boolean(referenceHeading),
+          hasReadingBrief: Boolean(readingBrief),
+          hasReferenceSection: Boolean(referenceSection),
+          referenceOpen: referenceSection instanceof HTMLDetailsElement ? referenceSection.open : null,
+          readingTop: readingRect?.top ?? null,
+          referenceTop: referenceRect?.top ?? null,
+          readingBeforeReference: Boolean(readingRect && referenceRect && readingRect.top <= referenceRect.top)
+        },
+        feedActionBar: {
+          present: Boolean(actionSection),
+          compact: actionSection?.classList.contains("is-compact") ?? false,
+          hasVisibleLabel: Boolean(actionSection?.querySelector(".investigation-actions-label")),
+          hasVisibleHint: Boolean(actionSection?.querySelector(".investigation-actions-hint")),
+          hasFooter: Boolean(actionSection?.querySelector(".investigation-action-footer")),
+          actionCount: actionSection?.querySelectorAll("button,a").length ?? 0
+        },
         rawDebugVisible: /Raw decision|GraphQL 查詢|原始回應 JSON|送出的文字/.test(bodyText),
         overflow: inspected.filter((item) => item.overflow),
         inspectedCount: inspected.length
@@ -803,6 +852,20 @@ async function auditSidePanelWorkflow(page, serviceWorkerEntry) {
     if ((capture.data?.overflow?.length ?? 0) > 0) {
       problems.push(`sidepanel-horizontal-overflow:${capture.data.overflow.length}`);
     }
+    if (capture.data?.feedVisualHierarchy?.hasReadingBrief && capture.data?.feedVisualHierarchy?.hasReferenceSection) {
+      if (!capture.data.feedVisualHierarchy.readingBeforeReference)
+        problems.push("sidepanel-feed-reference-before-reading");
+      if (capture.data.feedVisualHierarchy.referenceOpen)
+        problems.push("sidepanel-feed-reference-open-by-default");
+    }
+    if (capture.data?.feedActionBar?.present) {
+      if (!capture.data.feedActionBar.compact)
+        problems.push("sidepanel-feed-actions-not-compact");
+      if (capture.data.feedActionBar.hasVisibleLabel || capture.data.feedActionBar.hasVisibleHint)
+        problems.push("sidepanel-feed-actions-copy-visible");
+      if (capture.data.feedActionBar.hasFooter)
+        problems.push("sidepanel-feed-actions-footer-visible");
+    }
     if (!capture.data?.text)
       problems.push("sidepanel-dom-text-empty");
   }
@@ -930,7 +993,13 @@ function writeSummary(report, failures) {
           `- #${index}: title=${capture.data?.title || capture.target?.title || "(unknown)"} ` +
           `text=${capture.data?.text ? "present" : "empty"} ` +
           `overflow=${capture.data?.overflow?.length ?? 0} ` +
-          `rawDebug=${capture.data?.rawDebugVisible ? "yes" : "no"}`
+          `rawDebug=${capture.data?.rawDebugVisible ? "yes" : "no"} ` +
+          `feedHierarchy=${capture.data?.feedVisualHierarchy
+            ? `readingBeforeReference=${capture.data.feedVisualHierarchy.readingBeforeReference ? "yes" : "no"},referenceOpen=${capture.data.feedVisualHierarchy.referenceOpen ? "yes" : "no"}`
+            : "n/a"} ` +
+          `feedActions=${capture.data?.feedActionBar
+            ? `compact=${capture.data.feedActionBar.compact ? "yes" : "no"},copyVisible=${capture.data.feedActionBar.hasVisibleLabel || capture.data.feedActionBar.hasVisibleHint ? "yes" : "no"},actions=${capture.data.feedActionBar.actionCount}`
+            : "n/a"}`
         )
       : ["- no side-panel capture"]),
     "",
@@ -1010,6 +1079,11 @@ try {
       };
     };
     const visibleText = (el) => norm(el?.innerText || el?.textContent || "");
+    const controlText = (root) => Array.from(root?.querySelectorAll?.("button,[role='button']") || [])
+      .map((el) => norm(el.innerText || el.textContent || el.getAttribute("aria-label") || ""))
+      .filter(Boolean)
+      .join(" ");
+    const rootText = (root) => norm(visibleText(root) + " " + controlText(root));
     const hosts = Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}));
     const taggedPosts = Array.from(document.querySelectorAll(${JSON.stringify(TAGGED_POST_SELECTOR)}));
     const articles = Array.from(document.querySelectorAll('[role="article"], article'));
@@ -1022,7 +1096,7 @@ try {
       const article = host.closest("[data-truly-id],[role='article'],article");
       const hostRect = rectOf(host);
       const articleRect = rectOf(article);
-      const summaryText = visibleText(summary);
+      const summaryText = visibleText(summary) || controlText(root);
       const detailText = visibleText(detail);
       const problems = [];
       if (!article) problems.push("missing-post-boundary");
@@ -1051,7 +1125,7 @@ try {
     const bodyText = visibleText(document.body).slice(0, 2500);
     const headsUpText = hosts.map((host) => {
       const root = host.shadowRoot || host;
-      return visibleText(root);
+      return rootText(root);
     }).join(" ");
     return {
       url: location.href,

@@ -141,7 +141,7 @@ safe to copy into public review material.
 
 | Area | Evidence | Current result |
 |---|---|---|
-| Public synthetic corpus | `check:general-page-corpus` and `spike:general-page-parsers` | 68 public-safe fixtures, 30 covered patterns, runtime baseline 68/68. |
+| Public synthetic corpus | `check:general-page-corpus`; `check:general-page:synthetic` when parser/fixture behavior changes | 68 public-safe fixtures, 30 covered patterns, runtime baseline 68/68. Regression pressure only, not representative product-quality evidence. |
 | Chinese live-DOM news validation | Private Google News publisher-URL reviews under `/private/tmp/truly-google-news-100` | 100/100 `good` after fixture-driven fixes, plus a fresh 50/50 `good` validation set. |
 | English live-DOM validation | Private balanced review under `/private/tmp/truly-english-validation-v1` | Primary readable pages: 78/78 extracted, 70 `good`, 7 `partial`, 1 expected blocked/empty; edge pages mostly partial/blocked/error as expected. |
 | CDP review harness | `tests/unit/cdp-page-source.test.mjs` | Stuck CDP target now becomes a recorded timeout and closes the target instead of leaving review output missing. |

@@ -1,6 +1,10 @@
 # Testing
 
 Truly's public test suite uses synthetic fixtures only.
+Synthetic fixtures protect public-safe invariants and known regressions; they
+are not representative product-quality evidence because real pages rarely look
+like minimized fixtures. Use private live-DOM review, screenshots, and manual
+labels to judge extraction quality.
 
 ## Public Gate
 
@@ -42,7 +46,15 @@ Public tests must not include:
 - live CDP or logged-in browser state.
 
 When a private regression is useful, convert it into a small synthetic fixture
-before adding it to the public suite.
+before adding it to the public suite, but only after repeated private examples
+show a stable DOM shape worth preserving.
+
+Run the full General Page synthetic parser/advisor gate only when parser or
+fixture behavior changes:
+
+```bash
+npm run check:general-page:synthetic
+```
 
 ## Private Confidence Passes
 

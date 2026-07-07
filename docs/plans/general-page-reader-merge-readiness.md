@@ -29,11 +29,12 @@ This document is the current public-safe readiness index for the General Page Re
   caught up with `origin/main`; `cws:package:local-smoke` records the same
   mainline state for reviewer context but remains explicitly non-uploadable.
 - `audit:general-page-model-integration` is included in `check:general-page` and verifies model payload scoping plus deterministic overview guards with a local mock endpoint. Session-only storage behavior is also covered by the CDP `audit:general-page-reader` storage privacy probe, which fails if Page/Web screenshot data URLs, raw HTML, or synthetic fixture article text appear in `chrome.storage.local` or `chrome.storage.session`.
-- The live-DOM 200-target review proved the harness is useful for finding false-ready page patterns; public follow-up is represented only as aggregate findings plus synthetic fixtures.
+- The live-DOM 200-target review is the primary evidence source for extraction quality. Public synthetic fixtures are intentionally lower-representativeness checks: use them for known parser invariants, privacy/permission boundaries, and repeated live-DOM patterns that have been rewritten with fake content.
+- `check:public` keeps only the lightweight General Page synthetic corpus hygiene check plus model-integration contracts. The heavier synthetic parser/advisor regression gate is `check:general-page:synthetic`; run it when parser heuristics, fixture metadata, candidate parser behavior, or pattern coverage changes, not as the main proof of product quality.
 - `smoke:general-page-current` writes a public-safe `current-browser-smoke-summary.json` and `current-browser-smoke-summary.md` next to the private review artifacts. These summaries omit real URLs, titles, extracted text, screenshots, copied page content, and per-target notes while preserving readiness counts, issue tags, threshold results, and sanitized host-level evidence. Localhost and private/internal hosts are reduced to `localhost` or `private-host`. The smoke script rejects unsafe summary fields such as `url`, `title`, `mainText`, `textContent`, raw HTML, screenshots, data URLs, and `http(s)` strings before writing the public-safe summary.
 - Current-browser smoke can now fail on reviewer-shaped thresholds without manual JSON inspection: minimum page count, maximum ready count, maximum fetch/runtime errors, maximum empty-or-blocked pages, and selected public-safe issue tags.
 - `summarize:general-page-quality-findings` converts a private 200-target `review.json` plus optional `manual-labels.jsonl` into `quality-findings-summary.json` and `.md` aggregate follow-up candidates. It groups bad labels, partial extraction labels, auto-overconfident good suggestions, auto-underconfident blocked suggestions, caution clusters, and issue-tag clusters while omitting real URLs, titles, excerpts, previews, notes, screenshots, target ids, seed ids, and source content.
-- `plan:general-page-quality-followups` converts `quality-findings-summary.json` into `quality-followups-plan.json` and `quality-followups-plan.md`. It validates existing synthetic fixture coverage against `tests/fixtures/general-pages/manifest.json`, marks covered clusters such as source-link noise and index-like semantic-main traps, and keeps broad symptoms such as partial/fallback extraction in `needs_private_review` until repeated private DOM shapes can be rewritten as synthetic fixtures.
+- `plan:general-page-quality-followups` converts `quality-findings-summary.json` into `quality-followups-plan.json` and `quality-followups-plan.md`. It validates existing synthetic invariant coverage against `tests/fixtures/general-pages/manifest.json`, marks covered clusters such as source-link noise and index-like semantic-main traps, and keeps broad symptoms such as partial/fallback extraction in `needs_private_review` until repeated private DOM shapes justify a small public-safe synthetic invariant.
 - `cluster:general-page-quality-followups` reads the private review, labels, and `quality-followups-plan.json`, then writes `quality-followups-clusters.json` and `quality-followups-clusters.md`. It clusters only structural signals such as document-shape buckets, extraction/readiness state, issue tags, and count medians, so reviewer handoff can name `fixture_candidate`, `heuristic_review`, or `private_review_only` work without exposing targets or copied page content.
 
 ## Security Review Follow-Up State
@@ -393,9 +394,11 @@ Results:
   `cdp-error` and the full report is written.
 - `check:general-page-corpus`: passed with 68 public-safe synthetic fixtures,
   30 covered patterns, and 72 observation targets.
-- `spike:general-page-parsers`: passed the runtime baseline with
+- `check:general-page:synthetic`: passed the runtime baseline with
   `truly-heuristic` at 68/68. Third-party parser misses/leaks remain
-  non-blocking candidate data and are not connected to extension runtime.
+  non-blocking candidate data and are not connected to extension runtime. This
+  is regression pressure only; the English and Chinese live-DOM reviews above
+  remain the representative extraction-quality evidence.
 - `check:type`, `test:contract:public`, `build`, and
   `audit:release-bundle`: passed after the extraction quality changes. Build ID
   was dirty because this evidence was collected before committing the current

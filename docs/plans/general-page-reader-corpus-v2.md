@@ -76,6 +76,19 @@ must use fake authors, fake URLs, fake source names, and newly written body text
 The DOM structure should preserve the observed extraction problem, but content
 must not be copied from the observed source.
 
+These fixtures are not treated as representative product-quality samples. Most
+real pages do not look like the minimized synthetic pages, so this layer is for
+public-safe contract checks and known-regression pressure only. Extraction
+quality decisions should come from private live-DOM review, screenshots, and
+manual labels first; only repeated, clearly understood page shapes should be
+rewritten into synthetic fixtures.
+
+Routine review should prioritize live/private smoke and manual inspection.
+Synthetic regression should run at a lower cadence unless a changed heuristic
+directly touches one of these preserved invariants, because minimized synthetic
+pages are deliberately unlike most real publisher, documentation, or social
+surfaces.
+
 The v2 parser spike reads `tests/fixtures/general-pages/manifest.json`. Each
 fixture declares:
 
@@ -90,7 +103,7 @@ turn every fixture into a test for every possible page problem. Secondary issues
 remain visible in the JSON report and can become dedicated fixtures later.
 
 Evaluation v3 keeps this public synthetic fixture layer as the committed
-regression corpus, and adds a separate private real-world evaluation runner for
+invariant corpus, and adds a separate private real-world evaluation runner for
 local HTML or explicitly approved live fetches. The private runner produces only
 sanitized metrics under `tmp/`; it is not a source fixture layer and must not be
 committed.
@@ -367,8 +380,8 @@ npm run score:general-page-product-quality -- \
 The gate output is a sanitized aggregate only: counts, rates, category/page-type
 breakdowns, and issue-tag totals. It intentionally omits URLs, text previews,
 notes, screenshots, and source content. Treat it as a local product-quality
-regression signal before deciding which patterns deserve new public synthetic
-fixtures.
+signal; use public synthetic fixtures only after private review shows a repeated
+structure worth preserving as an invariant.
 
 Manual review uses five effective verdicts plus `unreviewed`:
 
@@ -408,6 +421,13 @@ spike comparison candidates until a separate runtime-adoption decision is made.
 This matters for fixtures that intentionally expose parser differences. For
 example, recirculation-heavy magazine fixtures may pass the Truly heuristic while
 a third-party candidate leaks teaser text. The report should keep those misses
-visible as non-blocking candidate misses, but `npm run check:general-page` should
-fail only when the committed runtime baseline misses the fixture threshold or
-when the runtime suitability policy fails.
+visible as non-blocking candidate misses, but
+`npm run check:general-page:synthetic` should fail only when the committed
+runtime baseline misses the fixture threshold or when the runtime suitability
+policy fails.
+
+For day-to-day release checks, `npm run check:general-page` does not run the
+full parser/advisor spike. Use `npm run check:general-page:synthetic` when
+changing extraction heuristics, fixture metadata, pattern coverage, or
+third-party parser candidate comparisons. The synthetic gate is regression pressure,
+not representative extraction-quality evidence.

@@ -161,7 +161,7 @@ const CANDIDATE_RULES = {
   "manual:bad-regression": {
     status: "needs_private_review",
     fixtures: [],
-    nextStep: "Prioritize these private examples; convert the repeated DOM failure into the next synthetic fixture before changing heuristics.",
+    nextStep: "Prioritize these private examples; change heuristics from live evidence, and create a synthetic invariant only if the DOM failure shape repeats.",
     fixtureShape: "The smallest synthetic page that reproduces the manually confirmed bad extraction without copied HTML or text.",
   },
   "auto:overconfident-good": {
@@ -173,7 +173,7 @@ const CANDIDATE_RULES = {
   "auto:underconfident-blocked": {
     status: "needs_private_review",
     fixtures: [],
-    nextStep: "Look for recoverable body text that the extractor missed; add a body-recovery fixture before relaxing blockers.",
+    nextStep: "Look for recoverable body text that the extractor missed; use live evidence before relaxing blockers, then add a body-recovery invariant only for a repeated shape.",
     fixtureShape: "A page where visible article text exists but the automatic status is blocked or empty.",
   },
   "manual:usable-with-caution": {

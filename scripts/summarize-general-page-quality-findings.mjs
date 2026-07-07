@@ -301,15 +301,15 @@ function summarizeCandidate(candidate) {
 
 function recommendationForKind(kind) {
   if (kind === "bad-regression")
-    return "Create a synthetic fixture for the clustered DOM pattern, then fix extraction or readiness before model context.";
+    return "Inspect private examples first; create a small synthetic invariant only if the DOM failure shape repeats, then fix extraction or readiness before model context.";
   if (kind === "auto-overconfident-good")
-    return "Treat as a false-ready risk: add fixture coverage and demote readiness or advisor decision until the model path is honest.";
+    return "Treat as a false-ready risk: demote readiness or advisor decision from live evidence; add synthetic invariant coverage only for repeated shapes.";
   if (kind === "auto-underconfident-blocked")
-    return "Treat as a false-negative risk: add fixture coverage for body recovery or candidate-block selection before tightening blockers.";
+    return "Treat as a false-negative risk: inspect body recovery or candidate-block selection on private examples before tightening blockers.";
   if (kind === "manual-caution-pattern")
     return "Cluster reviewer notes privately, then convert repeated structure into a synthetic caution fixture if it persists.";
   if (kind === "manual-partial-pattern")
-    return "Treat as an incomplete extraction pattern: add a synthetic fixture or demote the runtime path until the visible preview and model context are honest.";
+    return "Treat as an incomplete extraction pattern: demote the runtime path from live evidence; add a synthetic invariant only for a repeated body-miss shape.";
   return "Inspect private examples for a repeated structure; convert only the pattern into public synthetic coverage.";
 }
 
