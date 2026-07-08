@@ -51,13 +51,16 @@
       top: 0;
       z-index: 8;
       display: flex;
-      justify-content: flex-end;
-      padding: 6px 10px 2px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 6px 10px 5px;
       background: linear-gradient(
         to bottom,
         color-mix(in srgb, var(--truly-sidepanel-bg) 94%, var(--truly-sidepanel-surface)) 76%,
         color-mix(in srgb, var(--truly-sidepanel-bg) 0%, transparent)
       );
+      border-bottom: 1px solid color-mix(in srgb, var(--truly-sidepanel-border) 56%, transparent);
     }
     .sidepanel-toolbar-btn {
       display: inline-flex;
@@ -101,32 +104,33 @@
       display: none;
     }
     .tab-bar {
-      position: sticky;
-      top: 36px;
-      z-index: 7;
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 4px;
-      padding: 4px 10px 6px;
-      background: color-mix(in srgb, var(--truly-sidepanel-bg) 94%, transparent);
-      border-bottom: 1px solid color-mix(in srgb, var(--truly-sidepanel-border) 70%, transparent);
+      gap: 2px;
+      width: 124px;
+      min-height: 34px;
+      padding: 2px;
+      border: 1px solid var(--truly-sidepanel-control-border);
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--truly-sidepanel-muted-surface) 72%, transparent);
+      flex: 0 0 auto;
     }
     .tab {
-      min-height: 30px;
-      border: 1px solid var(--truly-sidepanel-control-border);
-      border-radius: 8px;
-      background: var(--truly-sidepanel-muted-surface);
+      min-height: 28px;
+      border: 0;
+      border-radius: 999px;
+      background: transparent;
       color: var(--truly-sidepanel-muted-text);
       font-family: inherit;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
+      line-height: 1.1;
       cursor: pointer;
     }
     .tab[aria-selected="true"] {
-      background: var(--truly-sidepanel-surface);
+      background: color-mix(in srgb, var(--truly-sidepanel-accent) 14%, var(--truly-sidepanel-surface));
       color: var(--truly-sidepanel-accent);
-      border-color: color-mix(in srgb, var(--truly-sidepanel-accent) 42%, var(--truly-sidepanel-control-border));
-      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--truly-sidepanel-accent) 34%, transparent);
     }
     .tab:focus-visible {
       outline: 2px solid var(--truly-sidepanel-accent);
@@ -2049,6 +2053,10 @@
 </head>
 <body>
   <div class="sidepanel-toolbar" aria-label="側欄工具" data-i18n-aria-label="sidepanel.toolsAria">
+    <div class="tab-bar" role="tablist" aria-label="閱讀面板" data-i18n-aria-label="sidepanel.tabsAria">
+      <button class="tab" type="button" role="tab" data-tab="analysis" data-i18n="sidepanel.tab.feed">Feed</button>
+      <button class="tab" type="button" role="tab" data-tab="page" data-i18n="sidepanel.tab.page">Web</button>
+    </div>
     <button id="openOptionsPage" class="sidepanel-toolbar-btn" type="button" title="開啟設定" aria-label="開啟 Truly 設定" data-i18n-title="sidepanel.openSettingsTitle" data-i18n-aria-label="sidepanel.openSettingsAria">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
         <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path>
@@ -2056,10 +2064,6 @@
       </svg>
       <span data-i18n="popup.settings">設定</span>
     </button>
-  </div>
-  <div class="tab-bar" role="tablist" aria-label="閱讀面板" data-i18n-aria-label="sidepanel.tabsAria">
-    <button class="tab" type="button" role="tab" data-tab="analysis" data-i18n="sidepanel.tab.feed">Feed</button>
-    <button class="tab" type="button" role="tab" data-tab="page" data-i18n="sidepanel.tab.page">Web</button>
   </div>
   <div id="analysis-pane" class="feed-container" role="tabpanel" data-tab="analysis" aria-label="閱讀輔助內容" data-i18n-aria-label="sidepanel.contentAria">
     <div class="placeholder" id="analysisPlaceholder" data-i18n="sidepanel.placeholder">等待目前可視貼文……</div>
