@@ -51,6 +51,8 @@ const contractDocs = [
       "Screenshot-assisted recovery is offered only after a user-triggered Page/Web",
       "vision input",
       "not written to extension storage or logs",
+      "authorize-domain action",
+      "authorizes a single domain from the Page/Web side panel",
     ],
   },
   {
@@ -60,6 +62,9 @@ const contractDocs = [
       "confirm the preview",
       "not written to Chrome extension storage, logs",
       "durable page history",
+      "automatically while the Side Panel is",
+      "authorize a single domain",
+      "Closing the side panel stops these",
     ],
   },
   {
@@ -68,6 +73,9 @@ const contractDocs = [
       "Page/Web screenshot-assisted recovery uses the same user-gesture boundary",
       "does not add a separate screenshot permission",
       "not written to Chrome extension storage or logs",
+      "single-domain grant",
+      "authorize-domain action",
+      "while the Side Panel is open",
     ],
   },
   {
@@ -91,6 +99,8 @@ const contractDocs = [
       "GraphQL/network responses",
       "General Page all-sites access",
       "sponsorship signals",
+      "authorizes a single domain",
+      "while the Side Panel is open",
     ],
   },
 ];

@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-07-04
+Last updated: 2026-07-09
 
 Canonical URL: https://trulyreader.org/privacy/
 
@@ -21,8 +21,9 @@ When you use Truly on supported pages, the extension may process:
 - Facebook page responses and server-rendered page data that contain supported
   post context or sponsorship signals needed to match the current visible feed
   surface;
-- visible current-page text and page metadata when you explicitly use Page/Web
-  reading;
+- visible current-page text and page metadata when you use Page/Web reading,
+  including automatic reads of the current page while the Side Panel is open if
+  you enabled all-sites access;
 - a visible-tab screenshot only when Page/Web offers screenshot-assisted
   recovery, the configured model source supports vision input, and you confirm
   the preview;
@@ -53,10 +54,15 @@ reading UI; it does not enable background crawling or a Truly-owned collection
 service.
 
 For Page/Web reading, Truly normally uses the one-time page access granted when
-you click the toolbar action. If you explicitly enable General Page all-sites
-access in Settings, the side panel can read the current page on ordinary HTTP/HTTPS sites you visit
-when you press a read/analyze action. This opt-in does not enable
-background crawling or persistent full-page history.
+you click the toolbar action. From the side panel you can also
+authorize a single domain; that grant gives persistent read access to that one site only,
+and reading still happens only while you are using the side panel. If you
+explicitly enable General Page all-sites access in Settings, Truly can read the
+current page on ordinary HTTP/HTTPS sites automatically while the Side Panel is
+open, and suitable pages may automatically produce a short reading brief
+through the model source you configured. Closing the side panel stops these
+reads. None of these options enable background crawling or persistent
+full-page history.
 
 Page/Web screenshot-assisted recovery is off by default and not automatic. If
 Truly cannot build enough reading context from visible page text, it may offer a

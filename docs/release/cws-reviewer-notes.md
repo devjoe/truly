@@ -1,6 +1,6 @@
 # Chrome Web Store Reviewer Notes
 
-Last updated: 2026-07-04
+Last updated: 2026-07-09
 
 Status: Preview 12 reviewer-notes reference
 
@@ -93,8 +93,10 @@ surface failures instead of silently claiming analysis is complete.
   usually means Chrome is preparing, downloading, or running the browser-managed
   model locally.
 - The extension may request optional host permission only when the reviewer
-  saves or tests a non-default model endpoint that requires that origin, or
-  explicitly enables General Page all-sites access in Settings.
+  saves or tests a non-default model endpoint that requires that origin,
+  presses the Page/Web authorize-domain action to grant persistent read access
+  for a single site, or explicitly enables General Page all-sites access in
+  Settings.
 
 ## Single Purpose Boundary
 
@@ -152,8 +154,10 @@ surfaces:
   for the current feed surface.
 - `localhost` / `127.0.0.1`: support local model endpoints.
 - Optional broad `http://*/*` and `https://*/*`: requested only when the user
-  configures a non-default model endpoint that requires that origin, or when
-  the user explicitly enables General Page all-sites access from Settings.
+  configures a non-default model endpoint that requires that origin, when the
+  user authorizes a single domain from the Page/Web side panel (a per-origin
+  subset of the same optional permission surface), or when the user explicitly
+  enables General Page all-sites access from Settings.
 
 See `docs/release/permission-justification.md` for the detailed table.
 

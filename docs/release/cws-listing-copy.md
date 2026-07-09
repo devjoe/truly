@@ -185,11 +185,13 @@ facts intact:
   GraphQL/network responses or read server-rendered page data in the page
   context to recover post context and sponsorship signals for the current feed
   surface.
-- Page/Web normally uses one-time toolbar access. If the user explicitly enables
-  General Page all-sites access in Settings, the side panel can read the current
-  page on ordinary HTTP/HTTPS sites while the Side Panel is open; suitable pages
-  may send quick-brief context to the configured model endpoint, but this does
-  not enable background crawling or persistent full-page history.
+- Page/Web normally uses one-time toolbar access. The user can also authorize a
+  single domain from the side panel for persistent read access to that site
+  only. If the user explicitly enables General Page all-sites access in
+  Settings, the side panel can read the current page on ordinary HTTP/HTTPS
+  sites while the Side Panel is open; suitable pages may send quick-brief
+  context to the configured model endpoint, but this does not enable background
+  crawling or persistent full-page history.
 - Page/Web screenshot-assisted recovery can process a visible-tab screenshot
   only when text extraction is insufficient, the selected model source supports
   vision input, and the user confirms the preview. The screenshot is
@@ -209,8 +211,9 @@ dashboard-facing summary:
 
 - `storage`: saves settings, readiness state, and model configuration.
 - `activeTab`: supports current-tab actions after user gesture.
-- `scripting`: injects the general page reader only after the user asks to read
-  the active page.
+- `scripting`: injects the general page reader for the active page after a
+  toolbar/Side Panel read action, or while the Side Panel is open when the user
+  has granted single-domain or all-sites access.
 - `sidePanel`: provides the reading side panel.
 - Facebook host permissions: injects the supported reading UI and reads visible
   post context on supported Facebook surfaces; in-page Facebook
@@ -220,5 +223,6 @@ dashboard-facing summary:
   image-aware reading assistance.
 - `localhost` / `127.0.0.1`: supports local model endpoints.
 - Optional `http://*/*` / `https://*/*`: requested only when a user-configured
-  private endpoint requires that origin, or when the user explicitly enables
-  General Page all-sites access from Settings.
+  private endpoint requires that origin, when the user
+  authorizes a single domain from the Page/Web side panel, or when the user
+  explicitly enables General Page all-sites access from Settings.

@@ -1,6 +1,6 @@
 # Permission And Host Permission Justification
 
-Last updated: 2026-07-04
+Last updated: 2026-07-09
 
 This document explains why Truly requests each Chrome permission and host
 permission. It should stay aligned with `src/manifest.json`.
@@ -31,10 +31,15 @@ permission. It should stay aligned with `src/manifest.json`.
 | `https://*/*` | Support a user-configured HTTPS model endpoint outside the default hosts, and optionally let General Page Reader read HTTPS pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send quick-brief context to the configured model endpoint. |
 
 Truly should request optional endpoint permissions at save/test time for the
-specific user-configured endpoint. General Page all-sites access is a separate
-Settings opt-in for users who want the Page/Web tab to work without clicking the
-toolbar popup on each new site. The permission does not enable background
-crawling, automatic screenshot capture, or persistent full-article storage.
+specific user-configured endpoint. The Page/Web side panel can also request a
+single-domain grant (`http://<host>/*` or `https://<host>/*`, a per-origin
+subset of the same optional permission surface) when the user presses the
+authorize-domain action; that grant gives persistent read access to that one
+origin only, and reading still happens only while the user is using the Side
+Panel. General Page all-sites access is a separate Settings opt-in for users
+who want the Page/Web tab to work without clicking the toolbar popup or
+authorizing each new site. None of these grants enable background crawling,
+automatic screenshot capture, or persistent full-article storage.
 
 Page/Web screenshot-assisted recovery uses the same user-gesture boundary. It
 does not add a separate screenshot permission. When text extraction is not
