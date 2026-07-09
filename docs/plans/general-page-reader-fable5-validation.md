@@ -24,7 +24,7 @@ parser advisor and model-brief path are implemented.
 
 1. Run `npm run check:public` to verify the committed public gates.
 2. Run the CDP audit against the loaded unpacked extension. The audit now
-   verifies popup activation, model brief generation, saved-session switching,
+   verifies popup activation, model brief generation, hidden Web history,
    selection, current-region, no-grant guidance, candidate recovery, and the
    430px Page/Web responsive layout gate:
 

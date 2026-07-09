@@ -4,9 +4,12 @@ import {
   GENERAL_PAGE_ALL_HOST_ORIGINS,
   canManageGeneralPageAllSitesPermission,
   generalPageHostAccessStatus,
+  generalPageOriginPermissionForUrl,
   hasGeneralPageAllSitesPermission,
+  hasGeneralPageHostPermission,
   removeGeneralPageAllSitesPermission,
   requestGeneralPageAllSitesPermission,
+  requestGeneralPageHostPermission,
 } from "@src/lib/general-page-host-permission";
 
 function setPermissionsApi(api: unknown): void {
@@ -56,5 +59,20 @@ describe("general page host permission helper", () => {
 
     await expect(generalPageHostAccessStatus()).resolves.toBe("active_tab_only");
     await expect(requestGeneralPageAllSitesPermission()).resolves.toBe(false);
+  });
+
+  it("checks and requests a single page origin", async () => {
+    const contains = vi.fn(async (permissions: chrome.permissions.Permissions) =>
+      permissions.origins?.[0] === "https://example.test/*"
+    );
+    const request = vi.fn(async () => true);
+    setPermissionsApi({ contains, request, remove: vi.fn(async () => true) });
+
+    expect(generalPageOriginPermissionForUrl("https://example.test/article")).toEqual({
+      origins: ["https://example.test/*"],
+    });
+    await expect(hasGeneralPageHostPermission("https://example.test/article")).resolves.toBe(true);
+    await expect(requestGeneralPageHostPermission("https://example.test/article")).resolves.toBe(true);
+    expect(request).toHaveBeenCalledWith({ origins: ["https://example.test/*"] });
   });
 });

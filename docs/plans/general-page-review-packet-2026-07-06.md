@@ -126,7 +126,7 @@ Expected evidence:
   spikes, public-boundary checks, model-integration audit, and release bundle
   audit.
 - `audit:general-page-reader` passes synthetic Page/Web flows, quick brief
-  detection, saved-session switching, target flows, no-grant guidance, and
+  detection, hidden Web history checks, target flows, no-grant guidance, and
   storage privacy scanning.
 - `audit:facebook-current:zh` passes against the currently opened Chinese
   Facebook flow before release review.
@@ -145,7 +145,7 @@ safe to copy into public review material.
 | Chinese live-DOM news validation | Private Google News publisher-URL reviews under `/private/tmp/truly-google-news-100` | 100/100 `good` after fixture-driven fixes, plus a fresh 50/50 `good` validation set. |
 | English live-DOM validation | Private balanced review under `/private/tmp/truly-english-validation-v1` | Primary readable pages: 78/78 extracted, 70 `good`, 7 `partial`, 1 expected blocked/empty; edge pages mostly partial/blocked/error as expected. |
 | CDP review harness | `tests/unit/cdp-page-source.test.mjs` | Stuck CDP target now becomes a recorded timeout and closes the target instead of leaving review output missing. |
-| Page/Web CDP product audit | `TRULY_EXTENSION_ID=<id> TRULY_AUDIT_AUTO_RELOAD=1 rtk npm run audit:general-page-reader` | Passed on 2026-07-07 with popup read included. A later post-build rerun used `TRULY_AUDIT_SKIP_POPUP_READ=1` because Chrome reported an inactive native window for `chrome.action.openPopup`; the non-popup Page/Web flows still passed. The combined evidence covers popup read, Side Panel auto-read, quick brief dispatch, tab switching, selection/current-region targets, unsupported-page guidance, screenshot recovery, storage privacy, and responsive UI checks. |
+| Page/Web CDP product audit | `TRULY_EXTENSION_ID=<id> TRULY_AUDIT_AUTO_RELOAD=1 rtk npm run audit:general-page-reader` | Passed on 2026-07-07 with popup read included. A later post-build rerun used `TRULY_AUDIT_SKIP_POPUP_READ=1` because Chrome reported an inactive native window for `chrome.action.openPopup`; the non-popup Page/Web flows still passed. The combined evidence covers popup read, Side Panel auto-read, quick brief dispatch, tab-state isolation without a visible Web history strip, selection/current-region targets, unsupported-page guidance, screenshot recovery, storage privacy, and responsive UI checks. |
 | Facebook live smoke | `TRULY_EXTENSION_ID=<id> rtk npm run audit:facebook-current:zh` | Passed on 2026-07-07 against a logged-in Chinese Facebook home feed. Verified clean service-worker/content-script build `1783366275821-4bb7a2a`, `zh-Hant` locale, heads-up rendering, post tagging, valid boundaries, selector health, heads-up expand/collapse, and deep-read Side Panel handoff from the `深入閱讀` action button. |
 | Runtime auto-read and model dispatch | `tests/unit/page-reading-runtime.test.ts` | all-sites auto-read is gated on Side Panel use, auto quick brief uses Tier B settings, and weak/target-required pages fail closed. |
 | Screenshot recovery | `tests/unit/page-reading-runtime.test.ts`, `tests/unit/screenshot-data-url.test.ts`, `tests/unit/snapshot-redaction.test.ts` | Vision recovery is user-confirmed, data URL format-checked, session-only, and snapshot-redacted. |
@@ -179,8 +179,9 @@ not a parser regression.
 - Timing copy: page-read elapsed and model elapsed should be distinguishable.
 - Parser quality: preview should not start with JSON-LD, navigation, related
   links, browser-download prompts, or other obvious page chrome.
-- Multi-tab state: switching saved Page/Web sessions should not imply the Chrome
-  active tab changed unless the user chooses that action.
+- Multi-tab state: repeated Web reads should keep prior tab sessions isolated
+  internally without showing a history strip that competes with the current
+  page brief.
 - Facebook: Feed should remain activated on Facebook pages, and existing heads-
   up, deep-read, and check actions should still work.
 - Privacy: screenshots, full page text, raw HTML, and real-site evidence should

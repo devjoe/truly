@@ -28,7 +28,7 @@ and what the next model-facing context would be.
 | Analysis scope card | Keep | It is the single place that explains whether the next model-facing context is article analysis, page overview only, a candidate block, or requires a user target. |
 | Page brief card | Keep | It proves the model-facing context is usable without storing the full page body. Overview pages suppress claims through deterministic guards. |
 | Source links | Keep capped and bottom-aligned | Source links are useful for early inspection, but the cap prevents navigation/sidebar links from taking over the panel. |
-| Saved page switcher | Keep | Multi-tab Page/Web sessions need a visible way to review and reactivate prior readings without hiding Facebook sessions. |
+| Web history switcher | Hide from primary UI | Multi-tab Page/Web sessions remain internal for current-tab lifecycle, stale detection, and result isolation. A visible history strip made Web feel busier than Feed and competed with the page brief. Multi-page recall should return later only as a deliberate workspace, not default chrome. |
 
 ## Visual Review Notes
 
@@ -89,6 +89,8 @@ accessibility rows. It verifies:
   elements, or offscreen cards;
 - visible controls have accessible names and no undersized primary buttons or
   tabs.
+- repeated Web reads keep internal session state without rendering a visible
+  history strip or `切到此分頁` activation control.
 
 Before merge, rerun:
 
@@ -102,4 +104,5 @@ Then visually inspect the generated screenshots for:
 - `page-noisy-caution.png`;
 - `page-candidate-block.png`;
 - `page-teaser-hub-overview.png`;
-- `page-no-grant.png`.
+- `page-no-grant.png`;
+- `page-web-history-hidden.png`.

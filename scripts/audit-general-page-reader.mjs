@@ -913,13 +913,20 @@ async function auditScreenshotRecovery(extensionId, allowedBase) {
       return { stubbed: true, originalType };
     })()`);
 
-    await side.evaluate(`document.querySelector('#pageScreenshotCapture')?.click(); undefined`);
     const captureClickState = await side.evaluateJson(`(async () => {
-      const button = document.querySelector('#pageScreenshotCapture');
+      let clicked = false;
+      for (let attempt = 0; attempt < 20; attempt += 1) {
+        const button = document.querySelector('#pageScreenshotCapture');
+        if (button) {
+          clicked = button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
       await new Promise((resolve) => setTimeout(resolve, 700));
       const screenshot = document.querySelector('.page-reader-screenshot');
       return {
-        clicked: Boolean(button),
+        clicked,
         runtimeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
         auditEvents: globalThis.__trulyPageReadingAuditEvents || [],
         captureCalls: globalThis.__trulyAuditCaptureVisibleTabCalls || [],
@@ -1044,7 +1051,7 @@ async function auditPopupReadClick(extensionId, allowedBase) {
     await sleep(800);
     const initialSide = await side.evaluateJson(`(() => ({
       activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
-      status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
+      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       title: document.querySelector('#page-pane .page-reader-title-block h2')?.textContent?.trim() || null,
       text: document.querySelector('#page-pane')?.innerText || '',
       readDisabled: document.querySelector('#pageReadCurrent')?.disabled ?? null
@@ -1069,7 +1076,7 @@ async function auditPopupReadClick(extensionId, allowedBase) {
         await capturePopupReadTimeoutState(popup, side, article, before, initialSide, "replay");
         throw error;
       });
-    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane .page-reader-status-label')?.textContent || ''))()`, 8000, "popup-triggered Web ready status")
+    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane .page-reader-status-label')?.textContent || ''))()`, 8000, "popup-triggered Web ready status")
       .catch(async (error) => {
         await capturePopupReadTimeoutState(popup, side, article, before, initialSide, "ready");
         throw error;
@@ -1077,7 +1084,7 @@ async function auditPopupReadClick(extensionId, allowedBase) {
     await side.screenshot(resolve(OUT_DIR, "page-popup-read-result.png"));
     const sideState = await side.evaluateJson(`(() => ({
       activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
-      status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
+      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       title: document.querySelector('#page-pane .page-reader-title-block h2')?.textContent?.trim(),
       excerpt: document.querySelector('#page-pane .page-reader-excerpt')?.textContent?.trim(),
       readDisabled: document.querySelector('#pageReadCurrent')?.disabled ?? null,
@@ -1110,7 +1117,7 @@ async function capturePopupReadTimeoutState(popup, side, article, before, initia
     side: await side.evaluateJson(`(() => ({
       href: location.href,
       activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
-      status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
+      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
       readDisabled: document.querySelector('#pageReadCurrent')?.disabled ?? null,
       text: document.querySelector('#page-pane')?.innerText || '',
@@ -1154,7 +1161,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     autoRead.observed = false;
     autoRead.error = "";
     if (autoRead.allSites) {
-      await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web auto-read ready state")
+      await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web auto-read ready state")
         .then(() => {
           autoRead.observed = true;
         })
@@ -1167,7 +1174,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     if (!autoRead.observed) {
       await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     }
-    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web ready state").catch(async (error) => {
+    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web ready state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, article, initial).catch((captureError) => ({
         initial,
         captureError: captureError.message,
@@ -1197,15 +1204,17 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       }));
       return {
         activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
-        status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
-        statusTitle: pane?.querySelector('.page-reader-status')?.getAttribute('title') || '',
-        statusAriaLabel: pane?.querySelector('.page-reader-status')?.getAttribute('aria-label') || '',
+        status: pane?.querySelector('.page-reader-card-status')?.textContent?.trim() || pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
+        statusTitle: pane?.querySelector('.page-reader-card-meta')?.getAttribute('title') || pane?.querySelector('.page-reader-status')?.getAttribute('title') || '',
+        statusAriaLabel: pane?.querySelector('.page-reader-status')?.getAttribute('aria-label') || pane?.querySelector('.page-reader-card-meta')?.getAttribute('title') || '',
         detail: pane?.querySelector('.page-reader-status-detail')?.textContent?.trim(),
         primaryActions: {
           hasStandaloneHeader: Boolean(pane?.querySelector('.page-reader-header')),
-          inStatus: Boolean(pane?.querySelector('.page-reader-status #pageReadCurrent')) &&
-            Boolean(pane?.querySelector('.page-reader-status #pageReadSelection')),
-          quiet: Boolean(pane?.querySelector('.page-reader-status .page-reader-actions.is-quiet-ready')),
+          cardScopedReadAction: Boolean(pane?.querySelector('.page-reader-card-header #pageReadCurrent, .page-reader-card-header #pageAuthorizeDomain')),
+          hasTopLevelFocusTab: Boolean(document.querySelector('.tab[data-tab="focus"]')),
+          hasInternalWorkspaceTabs: Boolean(pane?.querySelector('.page-reader-workspace-tabs')),
+          selectionInFocus: Boolean(pane?.querySelector('.page-reader-focus-panel #pageReadSelection')),
+          noPaneCommandBar: !pane?.querySelector('.page-reader-command-bar'),
         },
         title: pane?.querySelector('.page-reader-title-block h2')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
@@ -1214,6 +1223,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           value: el.querySelector('dd')?.textContent?.trim()
         })),
         extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
+        supplementalDetailsOpen: pane?.querySelector('.page-reader-supplemental-details')?.hasAttribute('open') ?? null,
         processingStatus: processing ? {
           title: processing.querySelector('h3')?.textContent?.trim(),
           status: processing.querySelector('.page-reader-processing-status-header span')?.textContent?.trim(),
@@ -1322,12 +1332,13 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     await sleep(600);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     await waitFor(side, `(() => /Second Synthetic Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web second session ready").catch(async (error) => {
-      await side.screenshot(resolve(OUT_DIR, "page-session-switcher-second-timeout.png")).catch(() => {});
+      await side.screenshot(resolve(OUT_DIR, "page-web-history-second-timeout.png")).catch(() => {});
       throw error;
     });
-    const switcherSecond = await side.evaluateJson(`(() => ({
+    const historySecond = await side.evaluateJson(`(() => ({
       text: document.querySelector('#page-pane')?.innerText || '',
       sessionCount: document.querySelectorAll('[data-page-session-tab-id]').length,
+      switcherVisible: Boolean(document.querySelector('.page-reader-switcher')),
       selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
       activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null
     }))()`);
@@ -1337,128 +1348,77 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     await sleep(600);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     await waitFor(side, `(() => /Third Synthetic Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web third session ready").catch(async (error) => {
-      await side.screenshot(resolve(OUT_DIR, "page-session-switcher-third-timeout.png")).catch(() => {});
+      await side.screenshot(resolve(OUT_DIR, "page-web-history-third-timeout.png")).catch(() => {});
       throw error;
     });
-    const switcherThird = await side.evaluateJson(`(() => ({
+    const historyThird = await side.evaluateJson(`(() => ({
       text: document.querySelector('#page-pane')?.innerText || '',
       sessionCount: document.querySelectorAll('[data-page-session-tab-id]').length,
+      switcherVisible: Boolean(document.querySelector('.page-reader-switcher')),
       selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
       activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null
     }))()`);
-    const clickedSavedTabId = await side.evaluate(`(() => {
-      const activeTabId = globalThis.__trulyPageReadingRuntime?.auditState?.()?.activeTabId;
-      const button = Array.from(document.querySelectorAll('[data-page-session-tab-id]'))
-        .find((item) => Number(item.dataset.pageSessionTabId) !== activeTabId && /Synthetic General Page/.test(item.textContent || '')) ||
-        Array.from(document.querySelectorAll('[data-page-session-tab-id]'))
-          .find((item) => Number(item.dataset.pageSessionTabId) !== activeTabId);
-      button?.click();
-      return button ? Number(button.dataset.pageSessionTabId) : null;
-    })()`);
     await waitFor(side, `(() => {
       const title = document.querySelector('#page-pane .page-reader-title-block h2')?.textContent || '';
       const state = globalThis.__trulyPageReadingRuntime?.auditState?.() || {};
-      const selectedChip = document.querySelector('[data-page-session-tab-id].is-selected');
-      const ready = /Synthetic General Page Reader Article/.test(title) &&
-        Boolean(document.querySelector('#pageActivateDisplayedTab')) &&
-        state.displayTabId === ${JSON.stringify(clickedSavedTabId)} &&
-        state.activeTabId !== state.displayTabId &&
-        selectedChip &&
-        Number(selectedChip.dataset.pageSessionTabId) === state.displayTabId &&
-        !selectedChip.classList.contains('is-live');
+      const ready = /Third Synthetic Article/.test(title) &&
+        state.activeTabId === state.displayTabId &&
+        document.querySelectorAll('[data-page-session-tab-id]').length === 0 &&
+        !document.querySelector('.page-reader-switcher') &&
+        !document.querySelector('#pageActivateDisplayedTab');
       if (!ready) return false;
-      globalThis.__trulySwitcherDisplayAudit = {
+      globalThis.__trulyHistoryDisplayAudit = {
         text: document.querySelector('#page-pane')?.innerText || '',
         sessionCount: document.querySelectorAll('[data-page-session-tab-id]').length,
-        titleClassName: document.querySelector('.page-reader-switcher-title')?.className || '',
-        titleRect: (() => {
-          const title = document.querySelector('.page-reader-switcher-title');
-          if (!title) return null;
-          const rect = title.getBoundingClientRect();
-          return { width: rect.width, height: rect.height, top: rect.top, left: rect.left };
-        })(),
+        switcherVisible: Boolean(document.querySelector('.page-reader-switcher')),
         pageTitle: title.trim() || null,
         selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
         hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
-        chips: Array.from(document.querySelectorAll('[data-page-session-tab-id]')).map((item) => ({
-          tabId: Number(item.dataset.pageSessionTabId),
-          className: item.className,
-          text: item.textContent?.trim() || ''
-        })),
         activeState: state
       };
       return true;
-    })()`, 8000, "Web saved session display").catch(async (error) => {
+    })()`, 8000, "Web history hidden after multiple sessions").catch(async (error) => {
       const timeoutStateRaw = await side.evaluate(`(async () => {
         const diagnostics = await new Promise((resolve) => {
           chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             const activeTab = tabs?.[0] || null;
             resolve({
-              clickedSavedTabId: ${JSON.stringify(clickedSavedTabId)},
               runtimeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
               chromeActiveTab: activeTab ? { id: activeTab.id, url: activeTab.url, title: activeTab.title, active: activeTab.active } : null,
               pageTitle: document.querySelector('#page-pane .page-reader-title-block h2')?.textContent?.trim() || null,
               selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
               hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
-              chips: Array.from(document.querySelectorAll('[data-page-session-tab-id]')).map((item) => ({
-                tabId: Number(item.dataset.pageSessionTabId),
-                className: item.className,
-                text: item.textContent?.trim() || ''
-              }))
+              switcherVisible: Boolean(document.querySelector('.page-reader-switcher')),
+              sessionCount: document.querySelectorAll('[data-page-session-tab-id]').length
             });
           });
         });
         return JSON.stringify(diagnostics);
       })()`).catch((captureError) => JSON.stringify({ captureError: captureError.message }));
-      writeFileSync(resolve(OUT_DIR, "page-session-switcher-display-timeout.json"), timeoutStateRaw);
-      await side.screenshot(resolve(OUT_DIR, "page-session-switcher-display-timeout.png")).catch(() => {});
+      writeFileSync(resolve(OUT_DIR, "page-web-history-hidden-timeout.json"), timeoutStateRaw);
+      await side.screenshot(resolve(OUT_DIR, "page-web-history-hidden-timeout.png")).catch(() => {});
       throw error;
     });
-    const switcherDisplay = await side.evaluateJson(`(() => globalThis.__trulySwitcherDisplayAudit || null)()`);
-    writeFileSync(resolve(OUT_DIR, "page-session-switcher-display.json"), JSON.stringify(switcherDisplay, null, 2));
-    await side.screenshot(resolve(OUT_DIR, "page-session-switcher-display.png")).catch(() => {});
-    await side.evaluate(`document.querySelector('#pageActivateDisplayedTab')?.click(); undefined`);
-    await waitFor(side, `(() => {
-      const title = document.querySelector('#page-pane .page-reader-title-block h2')?.textContent || '';
-      const state = globalThis.__trulyPageReadingRuntime?.auditState?.() || {};
-      return /Synthetic General Page Reader Article/.test(title) &&
-        document.querySelector('#pageReadSelection')?.disabled === false &&
-        state.activeTabId === state.displayTabId;
-    })()`, 8000, "Web saved session activation").catch(async (error) => {
-      const timeoutStateRaw = await side.evaluate(`(async () => {
-        const diagnostics = await new Promise((resolve) => {
-          chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-            const activeTab = tabs?.[0] || null;
-            resolve({
-            clickedSavedTabId: ${JSON.stringify(clickedSavedTabId)},
-            runtimeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
-            chromeActiveTab: activeTab ? { id: activeTab.id, url: activeTab.url, title: activeTab.title, active: activeTab.active } : null,
-            pageTitle: document.querySelector('#page-pane .page-reader-title-block h2')?.textContent?.trim() || null,
-            selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
-            hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
-            chips: Array.from(document.querySelectorAll('[data-page-session-tab-id]')).map((item) => ({
-              tabId: Number(item.dataset.pageSessionTabId),
-              className: item.className,
-              text: item.textContent?.trim() || ''
-            }))
-          });
-        });
-        });
-        return JSON.stringify(diagnostics);
-      })()`).catch((captureError) => JSON.stringify({ captureError: captureError.message }));
-      const timeoutState = JSON.parse(timeoutStateRaw);
-      writeFileSync(resolve(OUT_DIR, "page-session-switcher-activate-timeout.json"), JSON.stringify(timeoutState, null, 2));
-      await side.screenshot(resolve(OUT_DIR, "page-session-switcher-activate-timeout.png")).catch(() => {});
-      throw error;
-    });
-    const switcherActivated = await side.evaluateJson(`(() => ({
-      text: document.querySelector('#page-pane')?.innerText || '',
-      selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
-      hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
-      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null
-    }))()`);
+    await side.evaluate(`document.querySelector('.tab[data-tab="focus"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    await waitFor(side, `(() => document.querySelector('#pageReadSelection')?.disabled === false)()`, 4000, "Web focus selection action enabled on current page");
+    const historyDisplay = await side.evaluateJson(`(() => {
+      const base = globalThis.__trulyHistoryDisplayAudit || {};
+      return {
+        ...base,
+        text: document.querySelector('#page-pane')?.innerText || '',
+        sessionCount: document.querySelectorAll('[data-page-session-tab-id]').length,
+        switcherVisible: Boolean(document.querySelector('.page-reader-switcher')),
+        selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
+        readCurrentVisible: Boolean(document.querySelector('#pageReadCurrent:not([hidden])')),
+        hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
+        activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null
+      };
+    })()`);
+    writeFileSync(resolve(OUT_DIR, "page-web-history-hidden.json"), JSON.stringify(historyDisplay, null, 2));
+    await side.screenshot(resolve(OUT_DIR, "page-web-history-hidden.png")).catch(() => {});
+    const liveArticle = thirdArticle;
 
-    const selectedText = await article.evaluate(`(() => {
+    const selectedText = await liveArticle.evaluate(`(() => {
       const paragraph = document.querySelector('article p:nth-of-type(3)');
       const range = document.createRange();
       range.selectNodeContents(paragraph);
@@ -1488,6 +1448,8 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     await side.evaluate(`document.querySelector('#pageReadSelection')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     await waitFor(side, `(() => {
+      const activeState = globalThis.__trulyPageReadingRuntime?.auditState?.() || null;
+      if (activeState?.displayedSession?.targetKind === 'selection') return true;
       const model = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-model-context');
       const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
@@ -1516,6 +1478,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
             rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
         })),
         advisorStatus: advisor?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim(),
+        activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
       };
     })()`);
     await side.screenshot(resolve(OUT_DIR, "page-selection-target.png"));
@@ -1527,7 +1490,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     if (typeof pointerTab.activeTabId !== "number") {
       throw new Error("Unable to resolve synthetic article tab id for current-region audit");
     }
-    await article.evaluate(`(() => {
+    await liveArticle.evaluate(`(() => {
       const paragraph = document.querySelector('article p:nth-of-type(2)');
       const rect = paragraph.getBoundingClientRect();
       document.dispatchEvent(new MouseEvent('mousemove', {
@@ -1572,24 +1535,24 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     await side.screenshot(resolve(OUT_DIR, "page-point-target.png"));
 
-    await article.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article#comments`)}; undefined`);
+    await liveArticle.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article3?multi=1#comments`)}; undefined`);
     await sleep(500);
     const afterHash = await side.evaluateJson(`(() => ({
-      status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
+      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || '')
     }))()`);
 
-    await article.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article?utm_source=cdp&fbclid=abc`)}; undefined`);
+    await liveArticle.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article3?multi=1&utm_source=cdp&fbclid=abc`)}; undefined`);
     await sleep(500);
     const afterTracking = await side.evaluateJson(`(() => ({
-      status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
+      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || '')
     }))()`);
 
-    await article.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article2`)}; undefined`);
+    await liveArticle.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article2`)}; undefined`);
     await sleep(800);
     const afterMeaningful = await side.evaluateJson(`(() => ({
-      status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
+      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
       stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || ''),
       oldExcerptVisible: /synthetic article for the General Page Reader CDP acceptance test/.test(document.querySelector('#page-pane')?.innerText || ''),
@@ -1605,7 +1568,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       pageBrief,
       responsive,
       copy,
-      switcher: { second: switcherSecond, third: switcherThird, display: switcherDisplay, activated: switcherActivated },
+      history: { second: historySecond, third: historyThird, display: historyDisplay },
       selection: { selectedText, beforeAction: selectionBeforeAction, ...selection },
       pointTarget,
       afterHash,
@@ -1666,9 +1629,11 @@ async function observePageBrief(side, readyScreenshotName) {
       readyHeaderVisible: Boolean(analysisHeader) && getComputedStyle(analysisHeader).display !== 'none',
       primaryActions: {
         hasStandaloneHeader: Boolean(document.querySelector('#page-pane .page-reader-header')),
-        inStatus: Boolean(document.querySelector('#page-pane .page-reader-status #pageReadCurrent')) &&
-          Boolean(document.querySelector('#page-pane .page-reader-status #pageReadSelection')),
-        quiet: Boolean(document.querySelector('#page-pane .page-reader-status .page-reader-actions.is-quiet-ready')),
+        cardScopedReadAction: Boolean(document.querySelector('#page-pane .page-reader-card-header #pageReadCurrent, #page-pane .page-reader-card-header #pageAuthorizeDomain')),
+        hasTopLevelFocusTab: Boolean(document.querySelector('.tab[data-tab="focus"]')),
+        hasInternalWorkspaceTabs: Boolean(document.querySelector('#page-pane .page-reader-workspace-tabs')),
+        selectionInFocus: Boolean(document.querySelector('#page-pane .page-reader-focus-panel #pageReadSelection')),
+        noPaneCommandBar: !document.querySelector('#page-pane .page-reader-command-bar'),
       }
     };
   })()`);
@@ -1781,7 +1746,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
   try {
     await sleep(800);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web noisy fallback ready state").catch(async (error) => {
+    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web noisy fallback ready state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, noisy, null).catch((captureError) => ({
         captureError: captureError.message,
       }));
@@ -1814,7 +1779,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
       const advisor = pane?.querySelector('.page-reader-advisor');
       const pageAnalysis = pane?.querySelector('.page-reader-analysis');
       return {
-        status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
+        status: pane?.querySelector('.page-reader-card-status')?.textContent?.trim() || pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         meta: [...pane?.querySelectorAll('.page-reader-meta div') || []].map((el) => ({
           label: el.querySelector('dt')?.textContent?.trim(),
           value: el.querySelector('dd')?.textContent?.trim()
@@ -1895,7 +1860,7 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
   try {
     await sleep(800);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "candidate block page ready");
+    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "candidate block page ready");
     await waitFor(side, `(() => {
       const analysis = document.querySelector('#page-pane .page-reader-analysis:not(.is-running)');
       if (analysis) return true;
@@ -1920,7 +1885,7 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
       const advisor = pane?.querySelector('.page-reader-advisor');
       const pageAnalysis = pane?.querySelector('.page-reader-analysis');
       return {
-        status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
+        status: pane?.querySelector('.page-reader-card-status')?.textContent?.trim() || pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
         pipelineHidden: !processing && !model && !advisor,
@@ -2005,7 +1970,7 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
       if (!button || button.disabled) return false;
       return button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     })()`);
-    await waitFor(side, `(() => /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "teaser hub page ready").catch(async (error) => {
+    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "teaser hub page ready").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, teaser, null).catch((captureError) => ({
         captureError: captureError.message,
       }));
@@ -2038,7 +2003,7 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
       const advisor = pane?.querySelector('.page-reader-advisor');
       const pageAnalysis = pane?.querySelector('.page-reader-analysis');
       return {
-        status: pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
+        status: pane?.querySelector('.page-reader-card-status')?.textContent?.trim() || pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
         pipelineHidden: !processing && !model && !advisor,
@@ -2148,15 +2113,23 @@ async function auditNoGrantGuidance(extensionId, noGrantBase) {
   const article = connectCdp(articleTarget.webSocketDebuggerUrl);
   try {
     await sleep(800);
-    await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await sleep(700);
+    await side.evaluate(`(() => {
+      const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+      const tab = document.querySelector('[role="tab"][data-tab="page"]') ||
+        Array.from(document.querySelectorAll("button,[role='tab']")).find((el) => /\\bWeb\\b|Page\\/Web/.test(norm(el.textContent || el.getAttribute("aria-label") || "")));
+      tab?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, view: window }));
+    })()`);
+    await sleep(400);
     await side.screenshot(resolve(OUT_DIR, "page-no-grant.png"));
     return await side.evaluateJson(`(() => ({
-      status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
+      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
       error: document.querySelector('#page-pane .page-reader-error')?.textContent?.trim(),
       errorBlockPresent: Boolean(document.querySelector('#page-pane .page-reader-error')),
       emptyBlockPresent: Boolean(document.querySelector('#page-pane .page-reader-empty')),
+      authorizeButtonText: document.querySelector('#pageAuthorizeDomain')?.textContent?.trim() || '',
+      authorizeButtonTitle: document.querySelector('#pageAuthorizeDomain')?.getAttribute('title') || '',
+      hasAuthorizeDomain: Boolean(document.querySelector('#pageAuthorizeDomain')),
       detailHasGuidance: /工具列圖示|toolbar icon/.test(document.querySelector('#page-pane .page-reader-status-detail')?.textContent || ''),
       detailHasGenericRetry: /請重新讀取|Try again after the page finishes loading/.test(document.querySelector('#page-pane .page-reader-status-detail')?.textContent || ''),
       hasGuidance: /工具列圖示|toolbar icon/.test(document.querySelector('#page-pane')?.innerText || ''),
@@ -2186,7 +2159,7 @@ async function inspectUnsupportedPageSidePanel(extensionId, activeUrl, suffix, s
     await sleep(400);
     const state = await side.evaluateJson(`(() => ({
       activeTab: document.querySelector('.tab[aria-selected="true"], [role="tab"][aria-selected="true"]')?.textContent?.trim() || "",
-      status: document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim() || "",
+      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim() || "",
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim() || "",
       empty: document.querySelector('#page-pane .page-reader-empty')?.textContent?.trim() || "",
       error: document.querySelector('#page-pane .page-reader-error')?.textContent?.trim() || "",
@@ -2260,14 +2233,14 @@ function assertAudit(result) {
     if (result.popupRead.before.button !== "讀取此頁" || result.popupRead.before.disabled !== false) {
       errors.push(`popup read path button was not ready: ${result.popupRead.before.button || "(missing)"} / disabled=${result.popupRead.before.disabled}`);
     }
-    if (result.popupRead.sideState.status !== "已讀取" && result.popupRead.sideState.status !== "Ready") {
+    if (!isWebReadyStatus(result.popupRead.sideState.status)) {
       errors.push(`popup read path did not make Web ready: ${result.popupRead.sideState.status || "(missing)"}`);
     }
     if (result.popupRead.sideState.title !== "Synthetic General Page Reader Article") {
       errors.push(`popup read path showed unexpected Web title: ${result.popupRead.sideState.title || "(missing)"}`);
     }
   }
-  if (result.success.ready.status !== "已讀取" && result.success.ready.status !== "Ready") {
+  if (!isWebReadyStatus(result.success.ready.status)) {
     errors.push(`successful read did not reach ready status: ${result.success.ready.status}`);
   }
   if (/秒|\bs\b/.test(result.success.ready.status || "")) {
@@ -2353,26 +2326,21 @@ function assertAudit(result) {
   if (!result.success.copy.hasTitle || !result.success.copy.hasUrl || !result.success.copy.hasExcerpt || result.success.copy.hasFullTail) {
     errors.push("copy metadata boundary failed");
   }
-  if ((result.success.switcher?.third?.sessionCount ?? 0) < 3 || (result.success.switcher?.display?.sessionCount ?? 0) < 3) {
-    errors.push("Web session switcher did not expose three saved page sessions");
-  }
-  if (result.success.switcher?.display?.activeState?.activeTabId !== result.success.switcher?.third?.activeState?.activeTabId) {
-    errors.push("Web saved-session display implicitly changed the active Chrome tab");
-  }
-  if (result.success.switcher?.display?.selectionDisabled !== true || result.success.switcher?.display?.hasActivateButton !== true) {
-    errors.push("Web inactive saved-session display did not gate live selection behind explicit tab activation");
-  }
-  if (!/sr-only/.test(result.success.switcher?.display?.titleClassName || "") ||
-    (result.success.switcher?.display?.titleRect?.width ?? 999) > 2 ||
-    (result.success.switcher?.display?.titleRect?.height ?? 999) > 2) {
-    errors.push("Web session switcher title should be visually hidden while preserving the accessible label");
-  }
   if (
-    result.success.switcher?.activated?.selectionDisabled !== false ||
-    result.success.switcher?.activated?.hasActivateButton !== false ||
-    result.success.switcher?.activated?.activeState?.activeTabId === result.success.switcher?.third?.activeState?.activeTabId
+    result.success.history?.second?.sessionCount !== 0 ||
+    result.success.history?.third?.sessionCount !== 0 ||
+    result.success.history?.display?.sessionCount !== 0 ||
+    result.success.history?.second?.switcherVisible !== false ||
+    result.success.history?.third?.switcherVisible !== false ||
+    result.success.history?.display?.switcherVisible !== false
   ) {
-    errors.push("Web explicit saved-session activation did not restore live page controls");
+    errors.push("Web history UI should remain hidden after multiple page sessions");
+  }
+  if (result.success.history?.display?.selectionDisabled !== false) {
+    errors.push("Web Focus selection action was not available after hiding history UI");
+  }
+  if (result.success.history?.display?.readCurrentVisible !== false || result.success.history?.display?.hasActivateButton !== false) {
+    errors.push("Web hidden-history Focus view should expose selection-only controls");
   }
   if (!result.success.selection?.selectedText || !result.success.selection.excerpt?.includes(result.success.selection.selectedText.slice(0, 60))) {
     errors.push("selection target text was not rendered as the Web preview");
@@ -2383,10 +2351,16 @@ function assertAudit(result) {
   if (result.success.selection?.beforeAction?.targetKind !== "page") {
     errors.push(`selection changed model target before explicit action: ${result.success.selection?.beforeAction?.targetKind || "(missing)"}`);
   }
-  if (!result.success.selection?.modelRows?.some((row) => /目標|Target/.test(row.label || "") && rawRowValue(row) === "selection")) {
+  const selectionTargetKind = result.success.selection?.activeState?.displayedSession?.targetKind ||
+    result.success.selection?.modelRows?.find((row) => /目標|Target/.test(row.label || ""))?.rawValue;
+  if (selectionTargetKind !== "selection") {
     errors.push("selection target did not switch model context targetKind to selection");
   }
-  if (!result.success.selection?.advisorRows?.some((row) => /判斷|Decision/.test(row.label || "") && rawRowValue(row) === "accept_current")) {
+  const activeSelectionAdvisorDecision = result.success.selection?.activeState?.displayedSession?.advisorDecision;
+  const selectionAdvisorDecision = activeSelectionAdvisorDecision && activeSelectionAdvisorDecision !== "none"
+    ? activeSelectionAdvisorDecision
+    : result.success.selection?.advisorRows?.find((row) => /判斷|Decision/.test(row.label || ""))?.rawValue;
+  if (selectionAdvisorDecision !== "accept_current") {
     errors.push("selection target did not preserve accept_current reading context");
   }
   if (result.success.afterHash.stale) errors.push("hash-only URL change incorrectly marked stale");
@@ -2395,7 +2369,7 @@ function assertAudit(result) {
   if (result.success.afterMeaningful.oldExcerptVisible || result.success.afterMeaningful.sourceLinkVisible) {
     errors.push("meaningful URL change did not scrub stale Web surface content");
   }
-  if (result.noisy.ready.status !== "已讀取" && result.noisy.ready.status !== "Ready") {
+  if (!isWebReadyStatus(result.noisy.ready.status)) {
     errors.push(`noisy fallback read did not reach ready status: ${result.noisy.ready.status}`);
   }
   if (!result.noisy.ready.meta?.some((row) => /讀取方式|Reading method/.test(row.label || "") && row.value === "fallback")) {
@@ -2408,8 +2382,17 @@ function assertAudit(result) {
     errors.push("noisy fallback audit did not preserve the real article source link");
   }
   const noisyBriefReady = result.noisy.ready.pipelineHidden === true && result.noisy.ready.pageAnalysis?.ready === true;
-  if (!noisyBriefReady && !/is-ready/.test(result.noisy.ready.modelContext?.className || "")) {
-    errors.push("noisy fallback model context does not use ready UI state");
+  const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
+  const noisyDecision = rawRowValue(noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
+  const noisyUse = rawRowValue(noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
+  const noisyFallbackCleanContext =
+    /page-reader-processing-status/.test(result.noisy.ready.modelContext?.className || "") &&
+    noisyDecision === "accept_current" &&
+    noisyUse === "article_or_selection_analysis" &&
+    result.noisy.ready.modelContext?.diagnosticsOpen === false &&
+    result.noisy.ready.advisor?.diagnosticsOpen === false;
+  if (!noisyBriefReady && !noisyFallbackCleanContext) {
+    errors.push("noisy fallback model context does not show accepted clean context");
   }
   if (!noisyBriefReady && !/page-reader-processing-status/.test(result.noisy.ready.modelContext?.className || "")) {
     errors.push("noisy fallback should render the consolidated page status");
@@ -2432,16 +2415,13 @@ function assertAudit(result) {
   if (!noisyBriefReady && /整理中|Organizing|檢查中|Checking/.test(result.noisy.ready.advisor?.status || "")) {
     errors.push("noisy fallback advisor remained pending");
   }
-  const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
-  const noisyDecision = rawRowValue(noisyAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
-  const noisyUse = rawRowValue(noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   if (!noisyBriefReady && noisyDecision !== "accept_current") {
     errors.push(`noisy fallback advisor did not accept the cleaned fallback context: ${noisyDecision || "(missing)"}`);
   }
   if (!noisyBriefReady && noisyUse !== "article_or_selection_analysis") {
     errors.push(`noisy fallback effective context was not article analysis: ${noisyUse || "(missing)"}`);
   }
-  if (result.candidate.ready.status !== "已讀取" && result.candidate.ready.status !== "Ready") {
+  if (!isWebReadyStatus(result.candidate.ready.status)) {
     errors.push(`candidate block recovery did not reach ready status: ${result.candidate.ready.status}`);
   }
   const candidateBriefReady = result.candidate.ready.pipelineHidden === true && result.candidate.ready.pageAnalysis?.ready === true;
@@ -2487,7 +2467,7 @@ function assertAudit(result) {
   if ((result.candidate.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("candidate block recovery exposes more than six source links");
   }
-  if (result.teaser.ready.status !== "已讀取" && result.teaser.ready.status !== "Ready") {
+  if (!isWebReadyStatus(result.teaser.ready.status)) {
     errors.push(`teaser hub did not reach ready status: ${result.teaser.ready.status}`);
   }
   const teaserBriefReady = result.teaser.ready.pipelineHidden === true && result.teaser.ready.pageAnalysis?.ready === true;
@@ -2549,14 +2529,26 @@ function assertAudit(result) {
     const hits = (result.screenshot?.storageAfter?.hits || []).map((hit) => `${hit.area}:${hit.path}:${hit.kind}`).join(", ");
     errors.push(`screenshot recovery left sensitive data in chrome.storage: ${hits || "(missing details)"}`);
   }
-  if (!result.noGrant.hasGuidance) errors.push("no-grant sidepanel path did not show toolbar activation guidance");
-  if (!result.noGrant.hasAllSitesGuidance) errors.push("no-grant sidepanel path did not mention all-sites settings access");
-  if (!result.noGrant.detailHasGuidance) errors.push("no-grant primary status detail did not show toolbar activation guidance");
+  const noGrantShowsDomainAuthorization = result.noGrant.hasAuthorizeDomain === true &&
+    /授權網域|Authorize domain/.test(result.noGrant.authorizeButtonText || "") &&
+    /允許 Truly 讀取此網域|Allow Truly to read pages on this domain/.test(result.noGrant.authorizeButtonTitle || "");
+  const noGrantShowsUrlUnavailableGuidance = result.noGrant.hasAuthorizeDomain === false &&
+    result.noGrant.hasGuidance === true &&
+    result.noGrant.hasAllSitesGuidance === true &&
+    result.noGrant.detailHasGuidance === true;
+  if (!noGrantShowsDomainAuthorization && !noGrantShowsUrlUnavailableGuidance) {
+    errors.push(`no-grant sidepanel path did not show a valid authorization/guidance state: authorize=${result.noGrant.authorizeButtonText || "(missing)"} toolbarGuidance=${result.noGrant.hasGuidance} allSites=${result.noGrant.hasAllSitesGuidance}`);
+  }
   if (result.noGrant.detailHasGenericRetry) errors.push("no-grant primary status detail still shows generic retry guidance");
   if (result.noGrant.errorBlockPresent) errors.push("no-grant toolbar guidance is duplicated in a separate error block");
-  if (result.noGrant.emptyBlockPresent) errors.push("no-grant guidance is duplicated in a separate empty-state block");
-  if (result.unsupportedPages?.truly?.side?.readDisabled !== true) {
-    errors.push("Truly internal page should keep Web read button disabled");
+  if (noGrantShowsDomainAuthorization && !result.noGrant.emptyBlockPresent) {
+    errors.push("no-grant empty target should explain that the page has not been read yet when a domain grant action is available");
+  }
+  if (noGrantShowsUrlUnavailableGuidance && result.noGrant.emptyBlockPresent) {
+    errors.push("no-grant URL-unavailable guidance should not duplicate the empty target block");
+  }
+  if (result.unsupportedPages?.truly?.side?.readDisabled !== null) {
+    errors.push("Truly internal page should not render a Web read button");
   }
   if (!/不支援此頁|Unsupported page/.test(result.unsupportedPages?.truly?.side?.status || "")) {
     errors.push(`Truly internal page did not render unsupported status: ${result.unsupportedPages?.truly?.side?.status || "(missing)"}`);
@@ -2570,16 +2562,18 @@ function assertAudit(result) {
   if (result.unsupportedPages?.truly?.side?.empty) {
     errors.push("Truly internal page should not render a duplicate empty-state block");
   }
-  if (result.unsupportedPages?.browser?.side?.readDisabled !== true) {
-    errors.push("browser internal page should keep Web read button disabled");
+  if (result.unsupportedPages?.browser?.side?.readDisabled !== null) {
+    errors.push("browser internal page should not render a Web read button");
   }
   if (!/不支援此頁|Unsupported page/.test(result.unsupportedPages?.browser?.side?.status || "")) {
     errors.push(`browser internal page did not render unsupported status: ${result.unsupportedPages?.browser?.side?.status || "(missing)"}`);
   }
-  if (!/瀏覽器內部頁面|Browser internal pages/.test(result.unsupportedPages?.browser?.side?.detail || "")) {
+  const browserUnsupportedDetail = result.unsupportedPages?.browser?.side?.detail || "";
+  const browserShowsUrlUnavailable = /Chrome 沒有提供目前分頁網址|Chrome did not provide the current tab URL/.test(browserUnsupportedDetail);
+  if (!/瀏覽器內部頁面|Browser internal pages|Chrome 沒有提供目前分頁網址|Chrome did not provide the current tab URL/.test(browserUnsupportedDetail)) {
     errors.push(`browser internal page did not explain the unsupported reason: ${result.unsupportedPages?.browser?.side?.detail || "(missing)"}`);
   }
-  if (/工具列圖示|toolbar icon/.test(result.unsupportedPages?.browser?.side?.text || "")) {
+  if (!browserShowsUrlUnavailable && /工具列圖示|toolbar icon/.test(result.unsupportedPages?.browser?.side?.text || "")) {
     errors.push("browser internal page incorrectly shows toolbar activation guidance");
   }
   if (result.unsupportedPages?.browser?.side?.empty) {
@@ -2610,6 +2604,10 @@ function hasSourceHref(links, pattern) {
   return (links || []).some((link) => pattern.test(link.href || ""));
 }
 
+function isWebReadyStatus(status) {
+  return status === "已讀取" || status === "Ready" || status === "已擷取" || status === "Captured";
+}
+
 function qaPass(value) {
   if (value === null) return "SKIP";
   return value ? "PASS" : "FAIL";
@@ -2620,15 +2618,19 @@ function escapeTableCell(value) {
 }
 
 function designRestraint(result) {
-  const readyDiagnosticsCollapsed = result.success.ready.extractionDiagnosticsOpen === false &&
-    result.success.ready.modelContext?.diagnosticsOpen === false &&
-    result.success.ready.advisor?.diagnosticsOpen === false;
+  const cleanBriefPipelineHidden = result.success.pageBrief?.status === "ready" &&
+    result.success.pageBrief?.pipelineHidden === true;
+  const readyDiagnosticsCollapsed = cleanBriefPipelineHidden ||
+    (result.success.ready.extractionDiagnosticsOpen === false &&
+      result.success.ready.modelContext?.diagnosticsOpen === false &&
+      result.success.ready.advisor?.diagnosticsOpen === false);
   const cleanBriefDebugHidden = result.success.pageBrief?.status !== "ready" ||
     (result.success.pageBrief?.pipelineHidden === true &&
       result.success.pageBrief?.diagnosticsHidden === true &&
       !/讀取細節|Reading details|分析準備|Analysis readiness|分析範圍|Analysis scope|頁面狀態|Page status/.test(result.success.responsive?.pageText || ""));
-  const readyPageStatusConsolidated = /page-reader-processing-status/.test(result.success.ready.modelContext?.className || "") &&
-    /頁面狀態|Page status/.test(result.success.ready.processingStatus?.title || result.success.ready.modelContext?.title || "");
+  const readyPageStatusConsolidated = cleanBriefPipelineHidden ||
+    (/page-reader-processing-status/.test(result.success.ready.modelContext?.className || "") &&
+      /頁面狀態|Page status/.test(result.success.ready.processingStatus?.title || result.success.ready.modelContext?.title || ""));
   const readyBriefStatusQuiet = !/is-ready/.test(result.success.ready.pageAnalysis?.className || "") ||
     result.success.ready.pageAnalysis?.statusVisible === false;
   const singleItemBriefSectionsCompact = !/is-ready/.test(result.success.ready.pageAnalysis?.className || "") ||
@@ -2644,9 +2646,11 @@ function designRestraint(result) {
     result.success.ready.cardActions?.footerDownload === true;
   const sourceAndToolsUnifiedFooter = result.success.ready.cardActions?.unifiedFooter === true;
   const cleanReadyPrimaryActions = result.success.pageBrief?.primaryActions || result.success.ready.primaryActions;
-  const primaryActionsMergedIntoStatus = cleanReadyPrimaryActions?.hasStandaloneHeader === false &&
-    cleanReadyPrimaryActions?.inStatus === true &&
-    cleanReadyPrimaryActions?.quiet === true;
+  const primaryActionsScopedToCard = cleanReadyPrimaryActions?.hasStandaloneHeader === false &&
+    cleanReadyPrimaryActions?.cardScopedReadAction === true &&
+    cleanReadyPrimaryActions?.hasTopLevelFocusTab === true &&
+    cleanReadyPrimaryActions?.hasInternalWorkspaceTabs === false &&
+    cleanReadyPrimaryActions?.noPaneCommandBar === true;
   const sourceLinksCapped = (result.success.ready.sourceLinks?.length ?? 0) <= 6;
   const nonCleanTechnicalCollapsed = result.teaser.ready.extractionDiagnosticsOpen === false &&
     result.teaser.ready.modelContext?.diagnosticsOpen === false &&
@@ -2657,7 +2661,7 @@ function designRestraint(result) {
   const interactionAccessible = (result.success.responsive?.unnamedInteractive?.length ?? 0) === 0 &&
     (result.success.responsive?.undersizedControls?.length ?? 0) === 0;
   return {
-    pass: readyDiagnosticsCollapsed && cleanBriefDebugHidden && readyPageStatusConsolidated && readyBriefStatusQuiet && singleItemBriefSectionsCompact && cleanReadyRawExcerptHidden && cleanReadyBriefHeaderHidden && secondaryActionsInFooter && sourceAndToolsUnifiedFooter && primaryActionsMergedIntoStatus && sourceLinksCapped && nonCleanTechnicalCollapsed && responsiveClean && interactionAccessible,
+    pass: readyDiagnosticsCollapsed && cleanBriefDebugHidden && readyPageStatusConsolidated && readyBriefStatusQuiet && singleItemBriefSectionsCompact && cleanReadyRawExcerptHidden && cleanReadyBriefHeaderHidden && secondaryActionsInFooter && sourceAndToolsUnifiedFooter && primaryActionsScopedToCard && sourceLinksCapped && nonCleanTechnicalCollapsed && responsiveClean && interactionAccessible,
     readyDiagnosticsCollapsed,
     cleanBriefDebugHidden,
     readyPageStatusConsolidated,
@@ -2667,7 +2671,7 @@ function designRestraint(result) {
     cleanReadyBriefHeaderHidden,
     secondaryActionsInFooter,
     sourceAndToolsUnifiedFooter,
-    primaryActionsMergedIntoStatus,
+    primaryActionsScopedToCard,
     sourceLinksCapped,
     nonCleanTechnicalCollapsed,
     responsiveClean,
@@ -2688,6 +2692,19 @@ function qaMatrixRows(result) {
   const noisyBriefReady = result.noisy.ready.pipelineHidden === true && result.noisy.ready.pageAnalysis?.ready === true;
   const candidateBriefReady = result.candidate.ready.pipelineHidden === true && result.candidate.ready.pageAnalysis?.ready === true;
   const teaserBriefReady = result.teaser.ready.pipelineHidden === true && result.teaser.ready.pageAnalysis?.ready === true;
+  const noGrantShowsDomainAuthorization = result.noGrant.hasAuthorizeDomain === true &&
+    /授權網域|Authorize domain/.test(result.noGrant.authorizeButtonText || "") &&
+    /允許 Truly 讀取此網域|Allow Truly to read pages on this domain/.test(result.noGrant.authorizeButtonTitle || "") &&
+    result.noGrant.detailHasGenericRetry === false &&
+    result.noGrant.errorBlockPresent === false &&
+    result.noGrant.emptyBlockPresent === true;
+  const noGrantShowsUrlUnavailableGuidance = result.noGrant.hasAuthorizeDomain === false &&
+    result.noGrant.hasGuidance === true &&
+    result.noGrant.hasAllSitesGuidance === true &&
+    result.noGrant.detailHasGuidance === true &&
+    result.noGrant.detailHasGenericRetry === false &&
+    result.noGrant.errorBlockPresent === false &&
+    result.noGrant.emptyBlockPresent === false;
   const restraint = designRestraint(result);
   return [
     [
@@ -2706,7 +2723,7 @@ function qaMatrixRows(result) {
         : result.popupRead.before.activeTab?.url === result.syntheticUrls.popupRead &&
         result.popupRead.before.button === "讀取此頁" &&
         result.popupRead.before.disabled === false &&
-        (result.popupRead.sideState.status === "已讀取" || result.popupRead.sideState.status === "Ready") &&
+        isWebReadyStatus(result.popupRead.sideState.status) &&
         result.popupRead.sideState.title === "Synthetic General Page Reader Article",
       isPopupReadSkipped(result)
         ? `skipped=${result.popupRead.reason || "requested"}`
@@ -2717,7 +2734,7 @@ function qaMatrixRows(result) {
     ],
     [
       "Ordinary article read",
-      result.success.ready.status === "已讀取" &&
+      isWebReadyStatus(result.success.ready.status) &&
         result.success.ready.title === "Synthetic General Page Reader Article" &&
         !result.success.ready.fullTailVisible &&
         result.success.ready.extractionDiagnosticsOpen === false &&
@@ -2780,7 +2797,7 @@ function qaMatrixRows(result) {
         "; cleanReadyBriefHeaderHidden=" + restraint.cleanReadyBriefHeaderHidden +
         "; secondaryActionsInFooter=" + restraint.secondaryActionsInFooter +
         "; sourceAndToolsUnifiedFooter=" + restraint.sourceAndToolsUnifiedFooter +
-        "; primaryActionsMergedIntoStatus=" + restraint.primaryActionsMergedIntoStatus +
+        "; primaryActionsScopedToCard=" + restraint.primaryActionsScopedToCard +
         "; sourceLinksCapped=" + restraint.sourceLinksCapped +
         "; nonCleanTechnicalCollapsed=" + restraint.nonCleanTechnicalCollapsed +
         "; responsiveClean=" + restraint.responsiveClean +
@@ -2794,14 +2811,19 @@ function qaMatrixRows(result) {
         "; undersizedControls=" + (result.success.responsive?.undersizedControls?.length ?? 0),
     ],
     [
-      "Saved-session switching",
-      (result.success.switcher?.display?.sessionCount ?? 0) >= 3 &&
-        result.success.switcher?.display?.selectionDisabled === true &&
-        /sr-only/.test(result.success.switcher?.display?.titleClassName || "") &&
-        result.success.switcher?.activated?.selectionDisabled === false,
-      "sessions=" + (result.success.switcher?.display?.sessionCount ?? 0) +
-        "; titleHidden=" + /sr-only/.test(result.success.switcher?.display?.titleClassName || "") +
-        "; restored=" + (result.success.switcher?.activated?.selectionDisabled === false),
+      "Web history hidden",
+      result.success.history?.second?.sessionCount === 0 &&
+        result.success.history?.third?.sessionCount === 0 &&
+        result.success.history?.display?.sessionCount === 0 &&
+        result.success.history?.second?.switcherVisible === false &&
+        result.success.history?.third?.switcherVisible === false &&
+        result.success.history?.display?.switcherVisible === false &&
+        result.success.history?.display?.selectionDisabled === false &&
+        result.success.history?.display?.readCurrentVisible === false,
+      "secondChips=" + (result.success.history?.second?.sessionCount ?? "missing") +
+        "; thirdChips=" + (result.success.history?.third?.sessionCount ?? "missing") +
+        "; focusSelection=" + (result.success.history?.display?.selectionDisabled === false) +
+        "; focusReadVisible=" + Boolean(result.success.history?.display?.readCurrentVisible),
     ],
     [
       "Selection target",
@@ -2890,13 +2912,9 @@ function qaMatrixRows(result) {
     ],
     [
       "No-grant guidance",
-      result.noGrant.hasGuidance === true &&
-        result.noGrant.hasAllSitesGuidance === true &&
-        result.noGrant.detailHasGuidance === true &&
-        result.noGrant.detailHasGenericRetry === false &&
-        result.noGrant.errorBlockPresent === false &&
-        result.noGrant.emptyBlockPresent === false,
-      "toolbarGuidance=" + result.noGrant.hasGuidance +
+      noGrantShowsDomainAuthorization || noGrantShowsUrlUnavailableGuidance,
+      "authorize=" + result.noGrant.authorizeButtonText +
+        "; toolbarGuidance=" + result.noGrant.hasGuidance +
         "; allSitesGuidance=" + result.noGrant.hasAllSitesGuidance +
         "; primaryDetail=" + result.noGrant.detailHasGuidance +
         "; genericRetry=" + result.noGrant.detailHasGenericRetry +
@@ -2905,16 +2923,19 @@ function qaMatrixRows(result) {
     ],
     [
       "Unsupported page guidance",
-      result.unsupportedPages?.truly?.side?.readDisabled === true &&
-        result.unsupportedPages?.browser?.side?.readDisabled === true &&
+      result.unsupportedPages?.truly?.side?.readDisabled === null &&
+        result.unsupportedPages?.browser?.side?.readDisabled === null &&
         /不支援此頁|Unsupported page/.test(result.unsupportedPages?.truly?.side?.status || "") &&
         /不支援此頁|Unsupported page/.test(result.unsupportedPages?.browser?.side?.status || "") &&
         /Truly.*設定|Truly settings|內部頁面|internal page/.test(result.unsupportedPages?.truly?.side?.detail || "") &&
-        /瀏覽器內部頁面|Browser internal pages/.test(result.unsupportedPages?.browser?.side?.detail || "") &&
+        /瀏覽器內部頁面|Browser internal pages|Chrome 沒有提供目前分頁網址|Chrome did not provide the current tab URL/.test(result.unsupportedPages?.browser?.side?.detail || "") &&
         !result.unsupportedPages?.truly?.side?.empty &&
         !result.unsupportedPages?.browser?.side?.empty &&
         !/工具列圖示|toolbar icon/.test(result.unsupportedPages?.truly?.side?.text || "") &&
-        !/工具列圖示|toolbar icon/.test(result.unsupportedPages?.browser?.side?.text || ""),
+        (
+          /Chrome 沒有提供目前分頁網址|Chrome did not provide the current tab URL/.test(result.unsupportedPages?.browser?.side?.detail || "") ||
+          !/工具列圖示|toolbar icon/.test(result.unsupportedPages?.browser?.side?.text || "")
+        ),
       "truly=" + (result.unsupportedPages?.truly?.side?.detail || "missing") +
         "; browser=" + (result.unsupportedPages?.browser?.side?.detail || "missing"),
     ],
@@ -2989,13 +3010,13 @@ function auditCoverageRows(result) {
       [relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))],
     ),
     row(
-      "多分頁 Web session",
+      "Web history hidden",
       "success",
-      "Saved Web sessions must not activate the wrong browser tab or enable live-target actions against an inactive page.",
-      ["Saved-session switching"],
+      "Multiple Web reads should keep internal session state without adding a visible history strip that competes with the current page brief.",
+      ["Web history hidden"],
       [
-        relative(ROOT, resolve(OUT_DIR, "page-session-switcher-display.png")),
-        relative(ROOT, resolve(OUT_DIR, "page-session-switcher-display.json")),
+        relative(ROOT, resolve(OUT_DIR, "page-web-history-hidden.png")),
+        relative(ROOT, resolve(OUT_DIR, "page-web-history-hidden.json")),
       ],
     ),
     row(
@@ -3107,9 +3128,9 @@ function writeSummary(result, errors) {
     `- Page brief model context status: ${result.success.pageBrief?.modelContextStatus || (result.success.pageBrief?.pipelineHidden ? "hidden" : "(missing)")}`,
     `- Page brief quick mode: ${/快速重點|quick brief/.test(result.success.pageBrief?.text || "")}`,
     `- Responsive Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
-    `- Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; cleanBriefDebugHidden=${restraint.cleanBriefDebugHidden}; pageStatusConsolidated=${restraint.readyPageStatusConsolidated}; readyBriefStatusQuiet=${restraint.readyBriefStatusQuiet}; singleItemBriefSectionsCompact=${restraint.singleItemBriefSectionsCompact}; cleanReadyRawExcerptHidden=${restraint.cleanReadyRawExcerptHidden}; cleanReadyBriefHeaderHidden=${restraint.cleanReadyBriefHeaderHidden}; secondaryActionsInFooter=${restraint.secondaryActionsInFooter}; sourceAndToolsUnifiedFooter=${restraint.sourceAndToolsUnifiedFooter}; primaryActionsMergedIntoStatus=${restraint.primaryActionsMergedIntoStatus}; sourceLinksCapped=${restraint.sourceLinksCapped}; nonCleanTechnicalCollapsed=${restraint.nonCleanTechnicalCollapsed}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
+    `- Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; cleanBriefDebugHidden=${restraint.cleanBriefDebugHidden}; pageStatusConsolidated=${restraint.readyPageStatusConsolidated}; readyBriefStatusQuiet=${restraint.readyBriefStatusQuiet}; singleItemBriefSectionsCompact=${restraint.singleItemBriefSectionsCompact}; cleanReadyRawExcerptHidden=${restraint.cleanReadyRawExcerptHidden}; cleanReadyBriefHeaderHidden=${restraint.cleanReadyBriefHeaderHidden}; secondaryActionsInFooter=${restraint.secondaryActionsInFooter}; sourceAndToolsUnifiedFooter=${restraint.sourceAndToolsUnifiedFooter}; primaryActionsScopedToCard=${restraint.primaryActionsScopedToCard}; sourceLinksCapped=${restraint.sourceLinksCapped}; nonCleanTechnicalCollapsed=${restraint.nonCleanTechnicalCollapsed}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
     `- Web interaction accessibility: unnamed=${result.success.responsive?.unnamedInteractive?.length ?? "(missing)"}; undersizedControls=${result.success.responsive?.undersizedControls?.length ?? "(missing)"}`,
-    `- Saved-page switcher: ${(result.success.switcher?.display?.sessionCount || 0)} sessions / activation restored=${result.success.switcher?.activated?.selectionDisabled === false}`,
+    `- Web history hidden: secondChips=${result.success.history?.second?.sessionCount ?? "(missing)"}; thirdChips=${result.success.history?.third?.sessionCount ?? "(missing)"}; focusSelection=${result.success.history?.display?.selectionDisabled === false}; focusReadVisible=${Boolean(result.success.history?.display?.readCurrentVisible)}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
     `- Current-region target: ${result.success.pointTarget?.targetKind || "(missing)"} / ${result.success.pointTarget?.advisorStatus || "(missing)"}`,
     `- Source links visible: ${result.success.ready.sourceLinks?.length || 0}`,
@@ -3125,8 +3146,8 @@ function writeSummary(result, errors) {
     `- Meaningful URL scrubbed stale surface: ${!result.success.afterMeaningful.oldExcerptVisible && !result.success.afterMeaningful.sourceLinkVisible}`,
     `- Copy info title/url/excerpt: ${result.success.copy.hasTitle}/${result.success.copy.hasUrl}/${result.success.copy.hasExcerpt}`,
     `- Storage privacy probe: ok=${result.storagePrivacy?.ok}; localKeys=${result.storagePrivacy?.localKeyCount ?? "(missing)"}; sessionKeys=${result.storagePrivacy?.sessionKeyCount ?? "(missing)"}; hits=${result.storagePrivacy?.hits?.length ?? "(missing)"}`,
-    `- No-grant guidance: ${result.noGrant.hasGuidance}`,
-    `- No-grant all-sites settings guidance: ${result.noGrant.hasAllSitesGuidance}`,
+    `- No-grant domain authorization: ${result.noGrant.authorizeButtonText || "(missing)"}`,
+    `- No-grant toolbar/all-sites guidance: toolbar=${result.noGrant.hasGuidance}; allSites=${result.noGrant.hasAllSitesGuidance}`,
     `- No-grant primary status guidance: ${result.noGrant.detailHasGuidance}; genericRetry=${result.noGrant.detailHasGenericRetry}; duplicateErrorBlock=${result.noGrant.errorBlockPresent}; duplicateEmptyBlock=${result.noGrant.emptyBlockPresent}`,
     `- Unsupported Truly page: status=${result.unsupportedPages?.truly?.side?.status || "(missing)"}; detail=${result.unsupportedPages?.truly?.side?.detail || "(missing)"}`,
     `- Unsupported browser page: status=${result.unsupportedPages?.browser?.side?.status || "(missing)"}; detail=${result.unsupportedPages?.browser?.side?.detail || "(missing)"}`,
@@ -3140,8 +3161,8 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
     result.success.responsive?.screenshot ? `- ${result.success.responsive.screenshot}` : null,
-    `- ${relative(ROOT, resolve(OUT_DIR, "page-session-switcher-display.png"))}`,
-    `- ${relative(ROOT, resolve(OUT_DIR, "page-session-switcher-display.json"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-web-history-hidden.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-web-history-hidden.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-point-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-noisy-fallback.png"))}`,

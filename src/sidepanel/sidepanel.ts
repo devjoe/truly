@@ -1,7 +1,7 @@
 import type {
   DashboardPostEvent,
 } from "../lib/types";
-import { initTabs } from "./tabs";
+import { initTabs, shouldShowPageReadCurrentAction } from "./tabs";
 import { installTooltips, suppressTooltip } from "./tooltip";
 import { panelState } from "./state";
 // Re-exported so existing importers (e.g. sidepanel-render.test.ts) keep a
@@ -219,7 +219,12 @@ currentViewRuntime.installRefreshListeners();
 const activateTab = initializeSidepanelBootstrap({
   installTooltips,
   installOptionsPageShortcut,
-  initTabs,
+  initTabs: (onActivate) => initTabs((tab) => {
+    pageReadingRuntime.setWorkspace(tab === "focus" ? "focus" : "page");
+    const readButton = document.getElementById("pageReadCurrent");
+    if (readButton) readButton.hidden = !shouldShowPageReadCurrentAction(tab);
+    onActivate(tab);
+  }),
   initializeStorageState: storageRuntime.initializeStorageState,
 });
 tabActivationRuntime.setActivateTab(activateTab);

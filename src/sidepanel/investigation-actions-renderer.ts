@@ -18,8 +18,6 @@ import {
   type ReadingWorkspaceRuntimeState,
 } from "./reading-workspace-decision";
 
-const FEEDBACK_URL = "https://trulyreader.org/feedback/";
-
 export interface InvestigationActionRendererOptions {
   runtimeState: ReadingWorkspaceRuntimeState;
   settings?: Pick<UserSettings, "markdownDownloadMode">;
@@ -219,15 +217,6 @@ export function renderInvestigationActionSection(
   const footer = document.createElement("div");
   footer.className = "investigation-action-footer";
   footer.appendChild(status);
-
-  const feedbackLink = document.createElement("a");
-  feedbackLink.className = "investigation-feedback-link";
-  feedbackLink.href = FEEDBACK_URL;
-  feedbackLink.target = "_blank";
-  feedbackLink.rel = "noopener noreferrer";
-  feedbackLink.textContent = t("sidepanel.dynamic.actions.feedback", lang);
-  feedbackLink.setAttribute("aria-label", t("sidepanel.dynamic.actions.feedbackAria", lang));
-  footer.appendChild(feedbackLink);
 
   section.appendChild(footer);
   return section;

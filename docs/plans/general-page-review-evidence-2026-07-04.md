@@ -70,7 +70,8 @@ General Page Reader audit PASS covered:
 - 430px Page/Web responsive layout.
 - Page/Web design restraint.
 - Interaction accessibility.
-- Saved-session switching across two page sessions.
+- Web history hidden after repeated page reads, while internal session state
+  remains isolated per tab.
 - Selection target.
 - Current-region shortcut.
 - Hash/tracking URL changes ignored and meaningful URL changes marked stale.

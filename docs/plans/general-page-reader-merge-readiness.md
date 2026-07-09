@@ -11,14 +11,15 @@ This document is the current public-safe readiness index for the General Page Re
 - Whole-page, selected-text, and current-region reading paths share the same Page/Web session model and remain session-only.
 - Page/Web model integration uses a single Tier B `GeneralPageBrief` request over the effective reading context, not the raw full DOM or hidden private artifacts.
 - Screenshot-assisted recovery is user-confirmed only, vision-gated, session-only, and never stored in `chrome.storage` or logs.
-- Multi-tab Page/Web sessions can be viewed and activated without implicitly switching the active Chrome tab.
+- Multi-tab Page/Web sessions remain isolated internally, but the primary UI no
+  longer shows a Web history strip or a direct `切到此分頁` activation control.
 - Diagnostics remain inspectable for early users; ordinary ready pages keep analysis readiness as a compact one-line inspection row while caution/recovery states keep expanded diagnostics.
 
 ## Accepted Evaluation Scope
 
 - Public fixtures stay synthetic and anonymous.
 - Real-web observation and 200-target live-DOM product-quality reviews stay under `tmp/` or private repos.
-- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, page brief generation, quick-brief mode, 430px Page/Web responsive overflow, Page/Web design restraint, Page/Web interaction accessibility, session switching, selection, current-region, URL stale handling, noisy fallback, candidate recovery, teaser-hub overview downgrade, no-grant guidance, and storage privacy scanning.
+- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, page brief generation, quick-brief mode, 430px Page/Web responsive overflow, Page/Web design restraint, Page/Web interaction accessibility, hidden Web history, selection, current-region, URL stale handling, noisy fallback, candidate recovery, teaser-hub overview downgrade, no-grant guidance, and storage privacy scanning.
 - `general-page-ui-readiness-review.md` records the current Page/Web component decisions: keep ready pages quiet, expand diagnostics only for caution/recovery, preserve the compact Feed-aligned side-panel style, and avoid decorative reader-mode UI.
 - Long-running `audit:general-page-reader` phases are bounded by phase-level timeouts and write `audit-progress.json` plus `audit-phase-log.json`, so a CDP/browser hang fails with a diagnosable artifact instead of blocking reviewer validation indefinitely. Individual CDP commands also have client-side timeouts so an unresponsive `Runtime.evaluate` cannot bypass the phase's inner diagnostic screenshots and JSON state capture.
 - `check:merge-readiness` verifies that the feature branch is clean, synced with

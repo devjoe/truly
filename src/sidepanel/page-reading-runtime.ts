@@ -60,15 +60,21 @@ import {
   type PageReadabilityPlatform,
   type UnsupportedPageKind,
 } from "../lib/page-readability";
-import { hasGeneralPageAllSitesPermission } from "../lib/general-page-host-permission";
+import {
+  hasGeneralPageAllSitesPermission,
+  hasGeneralPageHostPermission,
+  requestGeneralPageHostPermission,
+} from "../lib/general-page-host-permission";
 import { safeFilenamePart, saveMarkdownTextFile } from "./browser-actions";
 import type { TabId } from "./tabs";
 
 type PagePlatform = PageReadabilityPlatform;
 type PageSessionStatus = "idle" | "loading" | "ready" | "error" | "stale";
 type PageActivationSource = "toolbar" | "popup" | "sidepanel" | "hotkey";
+export type PageWorkspace = "page" | "focus";
 const LOADING_ELAPSED_VISIBLE_THRESHOLD_MS = 2_000;
 const AUTO_READ_DEBOUNCE_MS = 700;
+const PAGE_READER_PREVIEW_COLLAPSE_LENGTH = 360;
 
 interface PageReadingSession {
   tabId: number;
@@ -133,15 +139,6 @@ interface BrowserTab {
   windowId?: number;
 }
 
-interface PageActivationAuditState {
-  tabId: number;
-  existingTabId?: number;
-  updatedTabId?: number;
-  windowId?: number;
-  focused?: boolean;
-  error?: string;
-}
-
 interface TabsApi {
   query(queryInfo: { active?: boolean; currentWindow?: boolean }): Promise<BrowserTab[]>;
   onActivated?: {
@@ -190,18 +187,19 @@ interface ActiveExtensionPageMarker {
 
 export interface SidepanelPageReadingRuntime {
   install(): void;
+  setWorkspace(workspace: PageWorkspace): void;
   requestReadCurrentPage(source?: PageActivationSource): Promise<void>;
   requestPointTarget(tabId: number): Promise<void>;
   auditState(): {
     activeTabId: number | null;
     displayTabId: number | null;
-    lastActivation?: PageActivationAuditState;
     displayedSession?: {
       status: PageSessionStatus;
       hasSurface: boolean;
       screenshotStatus?: PageReadingScreenshotSession["status"];
       screenshotHasDataUrl: boolean;
       advisorStatus?: PageReadingAdvisorStatus;
+      advisorDecision?: GeneralPageParserAdvisorAdvice["decision"] | "none";
       analysisStatus?: PageReadingAnalysisStatus;
       targetKind?: GeneralPageModelContext["targetKind"];
       allowedUse?: GeneralPageEffectiveModelContextUse;
@@ -226,6 +224,10 @@ export interface CreateSidepanelPageReadingRuntimeOptions {
   getVisionSupported?(): boolean;
   /** True when Truly can read general pages without a fresh toolbar activeTab grant. */
   hasAllSitesPermission?(): Promise<boolean>;
+  /** True when Truly has persistent read access to the active page origin. */
+  hasHostPermission?(url: string): Promise<boolean>;
+  /** Requests persistent read access to the active page origin. */
+  requestHostPermission?(url: string): Promise<boolean>;
 }
 
 function escapeHtml(input: string): string {
@@ -329,6 +331,12 @@ function visibleExcerpt(
   const text = displaySafeExcerptText(sourceText || surface.excerpt || surface.mainText || "");
   if (text.length <= 1200) return text;
   return `${text.slice(0, 1197)}...`;
+}
+
+function compactPreviewText(text: string): string {
+  const normalized = displaySafeExcerptText(text || "");
+  if (normalized.length <= PAGE_READER_PREVIEW_COLLAPSE_LENGTH) return normalized;
+  return `${normalized.slice(0, PAGE_READER_PREVIEW_COLLAPSE_LENGTH - 3)}...`;
 }
 
 function displaySafeExcerptText(value: string): string {
@@ -456,6 +464,23 @@ function sourceLinksHtml(links: GeneralPageModelSourceLink[], title: string): st
   `;
 }
 
+function pagePreviewHtml(excerpt: string, tr: (key: string, params?: Record<string, string | number>) => string): string {
+  if (!excerpt) return `<p class="page-reader-empty">${escapeHtml(tr("sidepanel.page.noExcerpt"))}</p>`;
+  const preview = compactPreviewText(excerpt);
+  if (excerpt.length <= PAGE_READER_PREVIEW_COLLAPSE_LENGTH) {
+    return `<p class="page-reader-excerpt">${escapeHtml(preview)}</p>`;
+  }
+  return `
+    <div class="page-reader-preview">
+      <p class="page-reader-excerpt">${escapeHtml(preview)}</p>
+      <details class="page-reader-preview-details">
+        <summary>${escapeHtml(tr("sidepanel.page.preview.expand"))}</summary>
+        <p class="page-reader-excerpt is-full">${escapeHtml(excerpt)}</p>
+      </details>
+    </div>
+  `;
+}
+
 function extractionDiagnosticsHtml(
   surface: ReadingSurface,
   rows: string[][],
@@ -469,6 +494,20 @@ function extractionDiagnosticsHtml(
       <dl class="page-reader-meta">
         ${rows.map(([label, value]) => `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("")}
       </dl>
+    </details>
+  `;
+}
+
+function supplementalDetailsHtml(
+  blocks: string[],
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const body = blocks.filter(Boolean).join("");
+  if (!body) return "";
+  return `
+    <details class="page-reader-supplemental-details">
+      <summary>${escapeHtml(tr("sidepanel.page.details"))}</summary>
+      <div class="page-reader-supplemental-body">${body}</div>
     </details>
   `;
 }
@@ -902,12 +941,17 @@ function analysisHtml(
   if (!analysis || analysis.status === "idle") return "";
   const title = tr("sidepanel.page.analysis.title");
   const statusText = tr(`sidepanel.page.analysis.status.${analysis.status}`);
+  if (analysis.status === "running") {
+    return `
+      <section class="page-reader-analysis is-running" role="status" aria-live="polite" aria-busy="true">
+        <div class="reading-brief-loading">${escapeHtml(tr("sidepanel.page.analysis.running"))}</div>
+      </section>
+    `;
+  }
   const visibleStatus = analysis.status === "ready"
     ? ""
     : `<span>${escapeHtml(statusText)}</span>`;
-  const body = analysis.status === "running"
-    ? `<p>${escapeHtml(tr("sidepanel.page.analysis.running"))}</p>`
-    : analysis.status === "error"
+  const body = analysis.status === "error"
     ? `
       <p>${escapeHtml(generalPageAnalysisErrorText(analysis.error, tr))}</p>
       <button id="pageAnalysisRetry" class="btn-investigation-secondary page-reader-analysis-retry" type="button">${escapeHtml(tr("sidepanel.page.analysis.retry"))}</button>
@@ -991,6 +1035,8 @@ export function createSidepanelPageReadingRuntime({
   sessionStore,
   getVisionSupported = () => false,
   hasAllSitesPermission = hasGeneralPageAllSitesPermission,
+  hasHostPermission = hasGeneralPageHostPermission,
+  requestHostPermission = requestGeneralPageHostPermission,
 }: CreateSidepanelPageReadingRuntimeOptions): SidepanelPageReadingRuntime {
   const sessions = new Map<number, PageReadingSession>();
   let activeTabId: number | null = null;
@@ -1000,11 +1046,15 @@ export function createSidepanelPageReadingRuntime({
   let installed = false;
   let copyState: "idle" | "copied" | "failed" = "idle";
   let downloadState: "idle" | "saved" | "cancelled" | "failed" = "idle";
-  let lastActivation: PageActivationAuditState | undefined;
+  let pageWorkspace: PageWorkspace = "page";
   let loadingTicker: ReturnType<typeof setInterval> | undefined;
   let autoReadTimer: ReturnType<typeof setTimeout> | undefined;
   let autoReadToken = 0;
   let activeExtensionPageMarker: ActiveExtensionPageMarker | undefined;
+  let hostPermissionState: {
+    url: string;
+    status: "unknown" | "checking" | "granted" | "missing" | "requesting" | "failed";
+  } | undefined;
 
   function tr(key: string, params?: Record<string, string | number>): string {
     return t(key, getLang(), params);
@@ -1013,6 +1063,93 @@ export function createSidepanelPageReadingRuntime({
   function currentSession(): PageReadingSession | undefined {
     const tabId = typeof displayTabId === "number" ? displayTabId : activeTabId;
     return typeof tabId === "number" ? sessions.get(tabId) : undefined;
+  }
+
+  function setWorkspace(workspace: PageWorkspace): void {
+    if (pageWorkspace === workspace) return;
+    pageWorkspace = workspace;
+    render();
+  }
+
+  function syncHostPermissionState(url: string, platform: PagePlatform): void {
+    if (platform !== "general" || !url) {
+      if (hostPermissionState) {
+        hostPermissionState = undefined;
+      }
+      return;
+    }
+    if (hostPermissionState?.url === url && hostPermissionState.status !== "unknown") return;
+    hostPermissionState = { url, status: "checking" };
+    void hasHostPermission(url).then((granted) => {
+      if (hostPermissionState?.url !== url) return;
+      hostPermissionState = { url, status: granted ? "granted" : "missing" };
+      render();
+    }).catch(() => {
+      if (hostPermissionState?.url !== url) return;
+      hostPermissionState = { url, status: "missing" };
+      render();
+    });
+  }
+
+  function pageReadActionHtml(canRead: boolean, hasSurface: boolean): string {
+    if (!canRead || pageWorkspace !== "page") return "";
+    const permissionStatus = hostPermissionState?.url === activeUrl ? hostPermissionState.status : "checking";
+    const needsDomainGrant = permissionStatus === "missing" || permissionStatus === "failed";
+    const waitingForDomainGrant = permissionStatus === "checking" || permissionStatus === "requesting";
+    if (needsDomainGrant || waitingForDomainGrant) {
+      const title = tr("sidepanel.page.authorizeDomainTitle");
+      const label = tr("sidepanel.page.authorizeDomain");
+      return `
+        <button
+          id="pageAuthorizeDomain"
+          class="page-reader-target-action is-authorize"
+          type="button"
+          title="${escapeHtml(title)}"
+          aria-label="${escapeHtml(title)}"
+          ${waitingForDomainGrant ? "disabled" : ""}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+            <path d="M12 3v3"></path>
+            <path d="M12 18v3"></path>
+            <path d="M4.2 7.5 6.8 9"></path>
+            <path d="m17.2 15 2.6 1.5"></path>
+            <path d="m4.2 16.5 2.6-1.5"></path>
+            <path d="m17.2 9 2.6-1.5"></path>
+            <path d="M8 12a4 4 0 1 0 8 0 4 4 0 0 0-8 0Z"></path>
+          </svg>
+          <span>${escapeHtml(label)}</span>
+        </button>
+      `;
+    }
+    const title = hasSurface
+      ? tr("sidepanel.page.readCurrentReloadTitle")
+      : tr("sidepanel.page.readCurrentTitle");
+    return `
+      <button
+        id="pageReadCurrent"
+        class="page-reader-target-action is-icon-only"
+        type="button"
+        title="${escapeHtml(title)}"
+        aria-label="${escapeHtml(title)}"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
+          <path d="M21 4v6h-6"></path>
+        </svg>
+        <span>${escapeHtml(title)}</span>
+      </button>
+    `;
+  }
+
+  async function requestActiveDomainAuthorization(): Promise<void> {
+    if (!activeUrl || platformForUrl(activeUrl) !== "general") return;
+    hostPermissionState = { url: activeUrl, status: "requesting" };
+    render();
+    const granted = await requestHostPermission(activeUrl).catch(() => false);
+    if (hostPermissionState?.url !== activeUrl) return;
+    hostPermissionState = { url: activeUrl, status: granted ? "granted" : "failed" };
+    render();
+    if (granted) await requestReadCurrentPage("sidepanel");
   }
 
   function clearAutoReadTimer(): void {
@@ -1228,9 +1365,14 @@ export function createSidepanelPageReadingRuntime({
     const lang = getLang();
     const platform = platformForUrl(activeUrl);
     const session = currentSession();
+    const activeWorkspace = pageWorkspace;
+    const viewSession: PageReadingSession | undefined = session?.surface && activeWorkspace === "page" && session.target
+      ? { ...session, target: undefined, advisor: undefined, analysis: undefined, screenshot: undefined }
+      : session;
     const displayedTabId = session?.tabId ?? displayTabId;
     const displayedSessionIsActive = typeof displayedTabId === "number" && displayedTabId === activeTabId;
     const canRead = platform === "general" && typeof activeTabId === "number";
+    syncHostPermissionState(activeUrl, platform);
     const canUseLiveTarget = canRead && displayedSessionIsActive && Boolean(session?.surface);
     const statusClass = session?.status ? ` page-status-${session.status}` : "";
     const fallbackStatusLabel = platform === "facebook"
@@ -1245,16 +1387,15 @@ export function createSidepanelPageReadingRuntime({
     const statusDetailText = statusDetail(platform, session, displayedSessionIsActive);
     const errorText = session?.status === "error" ? session.error || tr("sidepanel.page.error.unknown") : "";
     const showErrorBlock = Boolean(errorText && errorText !== statusDetailText);
-    const modelContext = session?.surface
-      ? modelContextForSession({ ...session, surface: session.surface })
+    const modelContext = viewSession?.surface
+      ? modelContextForSession({ ...viewSession, surface: viewSession.surface })
       : undefined;
-    const excerpt = session?.surface
-      ? visibleExcerpt(session.surface, modelContext, session.advisor?.effectiveModelContext)
+    const excerpt = viewSession?.surface
+      ? visibleExcerpt(viewSession.surface, modelContext, viewSession.advisor?.effectiveModelContext)
       : "";
-    const hideReadyPipelineState = shouldHideReadyPipelineState(modelContext, session?.advisor, session?.analysis);
-    const hideExtractionDiagnostics = shouldHideCleanExtractionDiagnostics(session?.surface, modelContext, session?.advisor, session?.analysis);
-    const quietReadyStatus = hideReadyPipelineState;
-    const quietReadyActions = hideReadyPipelineState;
+    const hideReadyPipelineState = shouldHideReadyPipelineState(modelContext, viewSession?.advisor, viewSession?.analysis);
+    const hideExtractionDiagnostics = shouldHideCleanExtractionDiagnostics(viewSession?.surface, modelContext, viewSession?.advisor, viewSession?.analysis);
+    const hasReadySurface = Boolean(session?.surface && session.status === "ready");
     const warningText = session?.surface?.extraction.warnings.join(", ") || "";
     const updatedAt = session ? formatUpdatedAt(session.updatedAt, lang) : "";
     const statusTitle = pageStatusTitle(session, updatedAt);
@@ -1274,25 +1415,51 @@ export function createSidepanelPageReadingRuntime({
     const screenshotBlock = session && displayedSessionIsActive ? screenshotHtml(session, tr) : "";
     const prioritizeScreenshotRecovery = Boolean(screenshotBlock);
     const visibleWarningText = prioritizeScreenshotRecovery ? "" : warningText;
-    const modelPipeline = [
-      hideReadyPipelineState || prioritizeScreenshotRecovery ? "" : processingStatusHtml(modelContext, session?.advisor, session?.analysis, tr),
-      screenshotBlock,
-    ].join("");
-    const analysisBlock = analysisHtml(session?.analysis, tr);
+    const shouldShowProcessingStatus = Boolean(
+      !hideReadyPipelineState &&
+        (
+          prioritizeScreenshotRecovery ||
+          modelContext?.modelReadiness !== "ready" ||
+          modelContext?.targetKind !== "page" ||
+          viewSession?.advisor?.status === "checking" ||
+          viewSession?.advisor?.status === "error" ||
+          viewSession?.advisor?.effectiveModelContext?.allowedUse === "page_overview_only" ||
+          viewSession?.advisor?.effectiveModelContext?.allowedUse === "requires_user_target" ||
+          viewSession?.advisor?.effectiveModelContext?.allowedUse === "blocked" ||
+          viewSession?.analysis?.status === "running" ||
+          viewSession?.analysis?.status === "error"
+        ),
+    );
+    const analysisBlock = analysisHtml(viewSession?.analysis, tr);
     const sourceLinksBlock = sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"));
     const cleanReadyBodyOrder = hideReadyPipelineState;
-    const excerptBlock = cleanReadyBodyOrder
+    const shouldPrioritizeAnalysis = Boolean(analysisBlock && viewSession?.analysis?.status !== "idle");
+    const processingStatusBlock = shouldShowProcessingStatus
+      ? processingStatusHtml(modelContext, viewSession?.advisor, viewSession?.analysis, tr)
+      : "";
+    const modelPipeline = [
+      processingStatusBlock,
+      screenshotBlock,
+    ].join("");
+    const supplementalProcessingStatus = shouldPrioritizeAnalysis && shouldShowProcessingStatus
+      ? processingStatusBlock
+      : !shouldShowProcessingStatus && !hideReadyPipelineState
+      ? processingStatusHtml(modelContext, viewSession?.advisor, viewSession?.analysis, tr)
+      : "";
+    const shouldFoldPreviewIntoDetails = Boolean(
+      !cleanReadyBodyOrder &&
+        (
+          shouldPrioritizeAnalysis ||
+          viewSession?.advisor?.effectiveModelContext?.allowedUse === "page_overview_only" ||
+          viewSession?.advisor?.effectiveModelContext?.allowedUse === "requires_user_target"
+        ),
+    );
+    const previewBlock = pagePreviewHtml(excerpt, tr);
+    const excerptBlock = cleanReadyBodyOrder || shouldFoldPreviewIntoDetails
       ? ""
-      : excerpt
-      ? `<p class="page-reader-excerpt">${escapeHtml(excerpt)}</p>`
-      : `<p class="page-reader-empty">${escapeHtml(tr("sidepanel.page.noExcerpt"))}</p>`;
-    const cardHeaderActions = !session?.surface || displayedSessionIsActive
-      ? ""
-      : `
-        <div class="page-reader-card-actions">
-          <button id="pageActivateDisplayedTab" class="btn-investigation-secondary page-reader-card-action" type="button">${escapeHtml(tr("sidepanel.page.switcher.activate"))}</button>
-        </div>
-      `;
+      : previewBlock;
+    const supplementalPreviewBlock = shouldFoldPreviewIntoDetails ? previewBlock : "";
+    const cardHeaderActions = pageReadActionHtml(canRead && displayedSessionIsActive, Boolean(session?.surface));
     const cardFooterActions = session?.surface
       ? `
         <div class="page-reader-card-tools">
@@ -1301,69 +1468,81 @@ export function createSidepanelPageReadingRuntime({
         </div>
       `
       : "";
-    const cardFooterBlock = sourceLinksBlock || cardFooterActions
-      ? `<footer class="page-reader-card-footer">${sourceLinksBlock}${cardFooterActions}</footer>`
+    const warningBlock = visibleWarningText
+      ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(visibleWarningText)}</div>`
+      : "";
+    const supplementalBlock = supplementalDetailsHtml([supplementalPreviewBlock, sourceLinksBlock, extractionDiagnostics, supplementalProcessingStatus, warningBlock], tr);
+    const cardFooterBlock = supplementalBlock || cardFooterActions
+      ? `<footer class="page-reader-card-footer">${supplementalBlock}${cardFooterActions}</footer>`
       : "";
     const emptyBodyBlock = !session?.surface && !showErrorBlock && session?.status !== "loading" && platform === "general"
-      ? emptyBody(platform, canRead)
+      ? emptyBody(platform, canRead, title, source || (url ? hostnameForUrl(url) : ""), cardHeaderActions)
       : "";
-    const pageActionsHtml = `
-      <div class="page-reader-actions${quietReadyActions ? " is-quiet-ready" : ""}">
-        <button id="pageReadCurrent" class="btn-investigation-secondary" type="button" ${canRead ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.readCurrent"))}</button>
-        <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.useSelection"))}</button>
-      </div>
-    `;
+    const focusWorkspaceBlock = session?.surface && activeWorkspace === "focus"
+      ? `
+        <section class="page-reader-focus-panel">
+          <div>
+            <h3 class="page-reader-focus-title">${escapeHtml(tr("sidepanel.page.focus.title"))}</h3>
+            <div class="page-reader-focus-detail">${escapeHtml(session.target ? tr("sidepanel.page.focus.ready") : tr("sidepanel.page.focus.empty"))}</div>
+          </div>
+          <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(session.target ? tr("sidepanel.page.focus.update") : tr("sidepanel.page.useSelection"))}</button>
+        </section>
+      `
+      : "";
+    const cardStatusText = session?.status === "ready"
+      ? tr("sidepanel.page.status.extracted")
+      : statusLabel;
+    const cardMetaHtml = session?.surface
+      ? `
+        <div class="page-reader-card-meta"${statusTitle ? ` title="${escapeHtml(statusTitle)}"` : ""}>
+          ${source || url ? `<span>${escapeHtml(source || hostnameForUrl(url))}</span>` : ""}
+          <span class="page-reader-card-status">${escapeHtml(cardStatusText)}</span>
+          ${updatedAt ? `<span>${escapeHtml(updatedAt)}</span>` : ""}
+        </div>
+      `
+      : "";
+    const statusBlock = hasReadySurface
+      ? ""
+      : `
+        <section class="page-reader-status${statusClass}"${statusTitle ? ` title="${escapeHtml(statusTitle)}" aria-label="${escapeHtml(statusTitle)}"` : ""} aria-live="polite">
+          <div class="page-reader-status-main">
+            <div class="page-reader-status-label">${escapeHtml(statusLabel)}</div>
+            <div class="page-reader-status-detail">${escapeHtml(statusDetailText)}</div>
+          </div>
+        </section>
+      `;
 
     pagePaneEl.innerHTML = `
-      <section class="page-reader-status${statusClass}${quietReadyStatus ? " is-quiet-ready" : ""}"${statusTitle ? ` title="${escapeHtml(statusTitle)}" aria-label="${escapeHtml(statusTitle)}"` : ""} aria-live="polite">
-        <div class="page-reader-status-main">
-          <div class="page-reader-status-label">${escapeHtml(statusLabel)}</div>
-          <div class="page-reader-status-detail">${escapeHtml(statusDetailText)}</div>
-        </div>
-        ${pageActionsHtml}
-      </section>
-      ${sessionSwitcherHtml(session)}
+      ${statusBlock}
       ${showErrorBlock ? `<section class="page-reader-error">${escapeHtml(errorText)}</section>` : ""}
-      ${session?.surface ? `
+      ${focusWorkspaceBlock}
+      ${session?.surface && (activeWorkspace === "page" || session.target || !displayedSessionIsActive) ? `
         <article class="page-reader-card">
           <div class="page-reader-card-header">
             <div class="page-reader-title-block">
               <h2>${escapeHtml(title)}</h2>
-              <div class="page-reader-url">${escapeHtml(source || url)}</div>
+              ${cardMetaHtml}
             </div>
             ${cardHeaderActions}
           </div>
           ${excerptBlock}
-          ${cleanReadyBodyOrder ? analysisBlock : extractionDiagnostics}
-          ${cleanReadyBodyOrder ? extractionDiagnostics : modelPipeline}
-          ${cleanReadyBodyOrder ? "" : analysisBlock}
+          ${shouldPrioritizeAnalysis && !cleanReadyBodyOrder ? analysisBlock : ""}
+          ${cleanReadyBodyOrder || shouldPrioritizeAnalysis ? "" : modelPipeline}
+          ${cleanReadyBodyOrder || !shouldPrioritizeAnalysis ? analysisBlock : ""}
           ${cardFooterBlock}
-          ${visibleWarningText ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(visibleWarningText)}</div>` : ""}
         </article>
       ` : emptyBodyBlock}
     `;
     syncLoadingTicker(session?.status === "loading");
 
-    pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.addEventListener("click", () => {
-      void requestReadCurrentPage("sidepanel");
-    });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.addEventListener("click", () => {
       void requestSelectionTarget("sidepanel");
     });
-    pagePaneEl.querySelectorAll<HTMLButtonElement>("[data-page-session-tab-id]").forEach((button) => {
-      button.addEventListener("click", () => {
-        const tabId = Number(button.dataset.pageSessionTabId);
-        if (!Number.isFinite(tabId) || !sessions.has(tabId)) return;
-        displayTabId = tabId;
-        copyState = "idle";
-        downloadState = "idle";
-        activateTab("page");
-        render();
-      });
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.addEventListener("click", () => {
+      void requestReadCurrentPage("sidepanel");
     });
-    pagePaneEl.querySelector<HTMLButtonElement>("#pageActivateDisplayedTab")?.addEventListener("click", () => {
-      if (typeof displayedTabId !== "number") return;
-      void activateDisplayedBrowserTab(displayedTabId);
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageAuthorizeDomain")?.addEventListener("click", () => {
+      void requestActiveDomainAuthorization();
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageCopyMetadata")?.addEventListener("click", async () => {
       const latest = currentSession();
@@ -1411,87 +1590,6 @@ export function createSidepanelPageReadingRuntime({
     });
   }
 
-  function sessionSwitcherHtml(activeSession: PageReadingSession | undefined): string {
-    const items = Array.from(sessions.values())
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .slice(0, 6);
-    if (items.length <= 1) return "";
-    return `
-      <section class="page-reader-switcher" aria-label="${escapeHtml(tr("sidepanel.page.switcher.label"))}">
-        <div class="page-reader-switcher-title sr-only">${escapeHtml(tr("sidepanel.page.switcher.title"))}</div>
-        <div class="page-reader-switcher-list">
-          ${items.map((item) => {
-            const selected = item.tabId === activeSession?.tabId;
-            const live = item.tabId === activeTabId;
-            const label = item.surface?.title || item.title || hostnameForUrl(item.url);
-            const meta = live ? tr("sidepanel.page.switcher.live") : hostnameForUrl(item.surface?.canonicalUrl || item.surface?.url || item.url);
-            return `
-              <button
-                class="page-reader-switcher-item${selected ? " is-selected" : ""}${live ? " is-live" : ""}"
-                type="button"
-                data-page-session-tab-id="${escapeHtml(String(item.tabId))}"
-                aria-pressed="${selected ? "true" : "false"}"
-              >
-                <span>${escapeHtml(label)}</span>
-                <small>${escapeHtml(meta)}</small>
-              </button>
-            `;
-          }).join("")}
-        </div>
-      </section>
-    `;
-  }
-
-  async function activateDisplayedBrowserTab(tabId: number): Promise<void> {
-    const activationAudit: PageActivationAuditState = { tabId };
-    lastActivation = activationAudit;
-    try {
-      const existingTab = tabs.get ? await tabs.get(tabId).catch(() => undefined) : undefined;
-      activationAudit.existingTabId = existingTab?.id;
-      const updatedTab = tabs.update
-        ? await tabs.update(tabId, { active: true })
-        : existingTab;
-      activationAudit.updatedTabId = updatedTab?.id;
-      const fallbackSession = sessions.get(tabId);
-      const windowId = typeof updatedTab?.windowId === "number"
-        ? updatedTab.windowId
-        : typeof existingTab?.windowId === "number"
-        ? existingTab.windowId
-        : undefined;
-      activationAudit.windowId = windowId;
-      if (typeof windowId === "number") {
-        await tabs.focusWindow?.(windowId).then(() => {
-          activationAudit.focused = true;
-        }).catch((error) => {
-          activationAudit.error = errorMessage(error);
-        });
-      }
-      const tab = updatedTab
-        ? {
-            ...updatedTab,
-            id: tabId,
-            url: updatedTab.url || fallbackSession?.url,
-            title: updatedTab.title || fallbackSession?.title,
-            active: true,
-          }
-        : fallbackSession
-        ? {
-            id: tabId,
-            url: fallbackSession.url,
-            title: fallbackSession.title,
-            active: true,
-          }
-        : undefined;
-      displayTabId = tabId;
-      if (tab) setActiveTab(tab, true, "manual-activation");
-      else render();
-    } catch (error) {
-      activationAudit.error = errorMessage(error);
-      displayTabId = tabId;
-      render();
-    }
-  }
-
   function statusDetail(
     platform: PagePlatform,
     session: PageReadingSession | undefined,
@@ -1518,15 +1616,32 @@ export function createSidepanelPageReadingRuntime({
       typeof activeTabId === "number" &&
       activeExtensionPageMarker.tabId === activeTabId
     ) return "truly_extension";
-    return "browser_internal";
+    return "url_unavailable";
   }
 
-  function emptyBody(platform: PagePlatform, canRead: boolean): string {
+  function emptyBody(
+    platform: PagePlatform,
+    canRead: boolean,
+    targetTitle = "",
+    targetMeta = "",
+    actionHtml = "",
+  ): string {
     if (platform === "facebook")
       return `<section class="page-reader-empty">${escapeHtml(tr("sidepanel.page.empty.facebook"))}</section>`;
     if (!canRead)
       return `<section class="page-reader-empty">${escapeHtml(tr("sidepanel.page.empty.unsupported"))}</section>`;
-    return `<section class="page-reader-empty">${escapeHtml(tr("sidepanel.page.empty.general"))}</section>`;
+    return `
+      <article class="page-reader-card is-empty-target">
+        <div class="page-reader-card-header">
+          <div class="page-reader-title-block">
+            <h2>${escapeHtml(targetTitle || tr("sidepanel.page.untitled"))}</h2>
+            ${targetMeta ? `<div class="page-reader-card-meta"><span>${escapeHtml(targetMeta)}</span></div>` : ""}
+          </div>
+          ${actionHtml}
+        </div>
+        <section class="page-reader-empty">${escapeHtml(tr("sidepanel.page.empty.general"))}</section>
+      </article>
+    `;
   }
 
   function unsupportedDetailKey(kind: UnsupportedPageKind): string {
@@ -2017,6 +2132,8 @@ export function createSidepanelPageReadingRuntime({
 
   async function requestSelectionTarget(source: PageActivationSource = "sidepanel"): Promise<void> {
     try {
+      pageWorkspace = "focus";
+      activateTab("focus");
       const tab = await refreshActiveTab(false);
       const tabId = typeof tab?.id === "number" ? tab.id : activeTabId;
       if (typeof tabId !== "number") return;
@@ -2033,7 +2150,7 @@ export function createSidepanelPageReadingRuntime({
           candidateBlocks: undefined,
           advisor: undefined,
           analysis: undefined,
-      screenshot: undefined,
+          screenshot: undefined,
           status: "stale",
           url: tab?.url ?? session.url,
           updatedAt: now(),
@@ -2076,6 +2193,8 @@ export function createSidepanelPageReadingRuntime({
 
   async function requestPointTarget(tabId: number): Promise<void> {
     try {
+      pageWorkspace = "focus";
+      activateTab("focus");
       const session = sessions.get(tabId);
       if (!session?.surface || session.status === "stale") {
         // Hotkey without a live read session: no activeTab grant is implied,
@@ -2248,8 +2367,10 @@ export function createSidepanelPageReadingRuntime({
       ? existing.screenshot
       : undefined;
     const preserveRecoveryState = Boolean(preserveScreenshot);
+    const revealIncoming = shouldRevealIncomingPageRead(tabId);
     copyState = "idle";
     downloadState = "idle";
+    if (revealIncoming || tabId === activeTabId || tabId === displayTabId) pageWorkspace = "page";
     sessions.set(tabId, {
       tabId,
       url: message.surface.url,
@@ -2268,7 +2389,7 @@ export function createSidepanelPageReadingRuntime({
       analysis: preserveRecoveryState ? existing?.analysis : undefined,
       screenshot: preserveScreenshot,
     });
-    if (shouldRevealIncomingPageRead(tabId)) {
+    if (revealIncoming) {
       displayTabId = tabId;
     }
     if (tabId === activeTabId || displayTabId === tabId) {
@@ -2304,6 +2425,8 @@ export function createSidepanelPageReadingRuntime({
     });
     copyState = "idle";
     downloadState = "idle";
+    pageWorkspace = "focus";
+    activateTab("focus");
     if (tabId === activeTabId || tabId === displayTabId) render();
     startParserAdvisor(tabId, existing.surface, {
       target: message.target,
@@ -2410,6 +2533,7 @@ export function createSidepanelPageReadingRuntime({
 
   return {
     install,
+    setWorkspace,
     requestReadCurrentPage,
     requestPointTarget,
     auditState: () => {
@@ -2417,7 +2541,6 @@ export function createSidepanelPageReadingRuntime({
       return {
         activeTabId,
         displayTabId,
-        lastActivation,
         displayedSession: session
           ? {
               status: session.status,
@@ -2425,6 +2548,7 @@ export function createSidepanelPageReadingRuntime({
               screenshotStatus: session.screenshot?.status,
               screenshotHasDataUrl: Boolean(session.screenshot?.dataUrl),
               advisorStatus: session.advisor?.status,
+              advisorDecision: session.advisor?.advice?.decision ?? "none",
               analysisStatus: session.analysis?.status,
               targetKind: session.surface ? modelContextForSession({ ...session, surface: session.surface }).targetKind : undefined,
               allowedUse: session.advisor?.effectiveModelContext?.allowedUse,

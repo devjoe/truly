@@ -1,7 +1,7 @@
-export type TabId = "analysis" | "page" | "settings";
+export type TabId = "analysis" | "page" | "focus" | "settings";
 
 const STORAGE_KEY = "truly-active-tab";
-const VALID: readonly TabId[] = ["analysis", "page"] as const;
+const VALID: readonly TabId[] = ["analysis", "page", "focus"] as const;
 
 function isTabId(x: unknown): x is TabId {
   return typeof x === "string" && (VALID as readonly string[]).includes(x);
@@ -57,7 +57,8 @@ export function initTabs(
   for (const btn of buttons) {
     const tab = btn.dataset.tab;
     if (!isTabId(tab)) continue;
-    const panel = panels.find((p) => p.dataset.tab === tab);
+    const panelTab = btn.dataset.panelTab || tab;
+    const panel = panels.find((p) => p.dataset.tab === panelTab);
     if (!panel) continue;
     if (!btn.id) btn.id = `tab-${tab}`;
     if (!panel.id) panel.id = `${tab}-panel`;
@@ -84,8 +85,9 @@ export function initTabs(
       if (match) btn.tabIndex = 0;
       else btn.tabIndex = -1;
     }
+    const activePanelTab = buttons.find((btn) => btn.dataset.tab === tab)?.dataset.panelTab || tab;
     for (const panel of panels) {
-      const match = panel.dataset.tab === tab;
+      const match = panel.dataset.tab === activePanelTab;
       if (match) panel.removeAttribute("hidden");
       else panel.setAttribute("hidden", "");
     }
@@ -126,4 +128,8 @@ export function initTabs(
 
 export function getStoredTab(): TabId {
   return readStoredTab() ?? "analysis";
+}
+
+export function shouldShowPageReadCurrentAction(tab: TabId): boolean {
+  return tab === "page";
 }

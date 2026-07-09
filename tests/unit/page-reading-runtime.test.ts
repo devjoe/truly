@@ -19,6 +19,10 @@ function setupDom(): HTMLElement {
   return dom.window.document.getElementById("page-pane")!;
 }
 
+function readCurrentButton(pagePaneEl: HTMLElement): HTMLButtonElement | null {
+  return pagePaneEl.ownerDocument.querySelector<HTMLButtonElement>("#pageReadCurrent");
+}
+
 function surface(overrides: Partial<ReadingSurface> = {}): ReadingSurface {
   return {
     id: "general:https://example.test/article",
@@ -170,7 +174,7 @@ describe("sidepanel page reading runtime", () => {
       expect(pagePaneEl.textContent).toContain("這是 Truly 的設定或內部頁面");
       expect(pagePaneEl.textContent).not.toContain("讀取失敗");
       expect(pagePaneEl.textContent).not.toContain("請先在目標網頁上點 Truly 工具列圖示");
-      expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.disabled).toBe(true);
+      expect(readCurrentButton(pagePaneEl)).toBeNull();
     } finally {
       Reflect.deleteProperty(globalThis, "chrome");
     }
@@ -211,7 +215,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("不支援此頁");
     expect(pagePaneEl.textContent).toContain("這是 Truly 的設定或內部頁面");
     expect(pagePaneEl.textContent).not.toContain("請先在目標網頁上點 Truly 工具列圖示");
-    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.disabled).toBe(true);
+    expect(readCurrentButton(pagePaneEl)).toBeNull();
   });
 
   it("does not reuse the previous page URL when Chrome hides the newly active tab URL", async () => {
@@ -257,11 +261,12 @@ describe("sidepanel page reading runtime", () => {
     await flushMicrotasks();
 
     expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("不支援此頁");
-    expect(pagePaneEl.textContent).toContain("瀏覽器內部頁面無法由擴充功能讀取");
+    expect(pagePaneEl.textContent).toContain("Chrome 沒有提供目前分頁網址");
+    expect(pagePaneEl.textContent).toContain("請先點 Truly 工具列圖示");
     expect(pagePaneEl.textContent).not.toContain("讀取失敗");
     expect(pagePaneEl.textContent).not.toContain("Synthetic News");
     expect(pagePaneEl.textContent).not.toContain("news.example.test");
-    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.disabled).toBe(true);
+    expect(readCurrentButton(pagePaneEl)).toBeNull();
   });
 
   it("maps page-access errors to a friendly retry explanation", async () => {
@@ -330,15 +335,13 @@ describe("sidepanel page reading runtime", () => {
 
     await runtime.requestReadCurrentPage("sidepanel");
 
-    expect(pagePaneEl.textContent).toContain("已讀取");
-    expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("已讀取");
-    expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).not.toContain("秒");
-    expect(pagePaneEl.querySelector(".page-reader-status")?.getAttribute("title")).toContain("讀取耗時 1.8 秒");
+    expect(pagePaneEl.querySelector(".page-reader-status")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card-status")?.textContent).toBe("已擷取");
+    expect(pagePaneEl.querySelector(".page-reader-card-meta")?.getAttribute("title")).toContain("讀取耗時 1.8 秒");
     expect(pagePaneEl.textContent).toContain("Runtime Fixture");
     expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
     expect(pagePaneEl.textContent).toContain("頁面狀態");
-    expect(pagePaneEl.textContent).toContain("可用");
-    expect(pagePaneEl.querySelector(".page-reader-processing-status")?.classList.contains("is-ready")).toBe(true);
+    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-processing-status")).not.toBeNull();
     expect(pagePaneEl.textContent).toContain("文字門檻");
     expect(pagePaneEl.textContent).toContain("來源連結");
     expect(pagePaneEl.textContent).toContain("example.test");
@@ -373,13 +376,13 @@ describe("sidepanel page reading runtime", () => {
 
     await runtime.requestReadCurrentPage("sidepanel");
 
-    const title = pagePaneEl.querySelector(".page-reader-status")?.getAttribute("title") || "";
-    expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("已讀取");
+    const title = pagePaneEl.querySelector(".page-reader-card-meta")?.getAttribute("title") || "";
+    expect(pagePaneEl.querySelector(".page-reader-card-status")?.textContent).toBe("已擷取");
     expect(title).toContain("讀取耗時 少於 0.1 秒");
     expect(title).not.toContain("讀取耗時 0 秒");
   });
 
-  it("switches among saved page sessions without implicitly activating Chrome tabs", async () => {
+  it("keeps saved page sessions internal without rendering a Web history switcher", async () => {
     const pagePaneEl = setupDom();
     let activeId = 42;
     let onActivated: ((activeInfo: { tabId: number; windowId: number }) => void) | undefined;
@@ -388,19 +391,14 @@ describe("sidepanel page reading runtime", () => {
       [43, { id: 43, url: "https://second.example.test/article", title: "Second Article", windowId: 7 }],
       [44, { id: 44, url: "https://third.example.test/article", title: "Third Article", windowId: 7 }],
     ]);
-    const update = vi.fn(async (tabId: number, updateProperties: { active?: boolean }) => {
-      if (updateProperties.active) activeId = tabId;
-      return tabsById.get(tabId)!;
-    });
-    const focusWindow = vi.fn(async () => undefined);
     const runtime = createSidepanelPageReadingRuntime({
       pagePaneEl,
       runtime: { sendMessage: vi.fn() },
       tabs: {
         query: vi.fn(async () => [tabsById.get(activeId)!]),
         get: vi.fn(async (tabId: number) => tabsById.get(tabId)!),
-        update,
-        focusWindow,
+        update: vi.fn(async (tabId: number) => tabsById.get(tabId)!),
+        focusWindow: vi.fn(async () => undefined),
         onActivated: {
           addListener(listener) {
             onActivated = listener;
@@ -441,9 +439,10 @@ describe("sidepanel page reading runtime", () => {
       }),
     });
 
-    expect(pagePaneEl.querySelector(".page-reader-switcher")?.getAttribute("aria-label")).toBe("切換已讀網頁");
-    expect(pagePaneEl.querySelector(".page-reader-switcher-title")?.classList.contains("sr-only")).toBe(true);
     expect(pagePaneEl.textContent).toContain("Second saved excerpt.");
+    expect(pagePaneEl.querySelector(".page-reader-switcher")).toBeNull();
+    expect(pagePaneEl.querySelectorAll("[data-page-session-tab-id]")).toHaveLength(0);
+    expect(pagePaneEl.textContent).not.toContain("First Article");
 
     activeId = 44;
     onActivated?.({ tabId: 44, windowId: 7 });
@@ -461,17 +460,14 @@ describe("sidepanel page reading runtime", () => {
     });
 
     expect(pagePaneEl.textContent).toContain("Third saved excerpt.");
-
-    const firstButton = Array.from(pagePaneEl.querySelectorAll<HTMLButtonElement>("[data-page-session-tab-id]"))
-      .find((button) => button.textContent?.includes("First Article"));
-    firstButton?.click();
-
-    expect(pagePaneEl.textContent).toContain("First saved excerpt.");
-    expect(update).not.toHaveBeenCalled();
-    expect(focusWindow).not.toHaveBeenCalled();
+    expect(pagePaneEl.querySelector(".page-reader-switcher")).toBeNull();
+    expect(pagePaneEl.querySelectorAll("[data-page-session-tab-id]")).toHaveLength(0);
+    expect(pagePaneEl.textContent).not.toContain("Second Article");
+    expect(pagePaneEl.textContent).not.toContain("First saved excerpt.");
     expect(runtime.auditState().activeTabId).toBe(44);
-    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.disabled).toBe(true);
-    expect(pagePaneEl.textContent).toContain("切到此分頁");
+    runtime.setWorkspace("focus");
+    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.disabled).toBe(false);
+    expect(pagePaneEl.textContent).not.toContain("切到此分頁");
 
     runtime.handlePageReadingResult({
       type: "PAGE_READING_RESULT",
@@ -485,19 +481,11 @@ describe("sidepanel page reading runtime", () => {
       }),
     });
 
-    expect(pagePaneEl.textContent).toContain("First saved excerpt.");
-    expect(pagePaneEl.textContent).not.toContain("Third late result excerpt.");
+    runtime.setWorkspace("page");
+    expect(pagePaneEl.textContent).toContain("Third late result excerpt.");
+    expect(pagePaneEl.textContent).not.toContain("First saved excerpt.");
     expect(runtime.auditState().activeTabId).toBe(44);
-    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.disabled).toBe(true);
-    expect(pagePaneEl.textContent).toContain("切到此分頁");
-
-    pagePaneEl.querySelector<HTMLButtonElement>("#pageActivateDisplayedTab")?.click();
-    await flushMicrotasks();
-    await flushMicrotasks();
-
-    expect(update).toHaveBeenCalledWith(42, { active: true });
-    expect(focusWindow).toHaveBeenCalledWith(7);
-    expect(runtime.auditState().activeTabId).toBe(42);
+    runtime.setWorkspace("focus");
     expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.disabled).toBe(false);
   });
 
@@ -528,11 +516,9 @@ describe("sidepanel page reading runtime", () => {
 
     expect(sendMessage).toHaveBeenCalledTimes(1);
     expect(pagePaneEl.textContent).toContain("頁面狀態");
-    expect(pagePaneEl.textContent).toContain("可用");
     expect(pagePaneEl.textContent).toContain("使用目前內容");
     expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("accept_current");
-    expect(pagePaneEl.querySelector(".page-reader-processing-status")?.classList.contains("is-ready")).toBe(true);
-    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-processing-status details")?.open).toBe(false);
+    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-processing-status")).not.toBeNull();
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(false);
   });
 
@@ -618,14 +604,71 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-card-tools #pageCopyMetadata")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card-tools #pageDownloadMarkdown")).not.toBeNull();
     expect(pagePaneEl.textContent).not.toContain("讀取細節");
-    expect(pagePaneEl.querySelector(".page-reader-status")?.classList.contains("is-quiet-ready")).toBe(true);
+    expect(pagePaneEl.querySelector(".page-reader-status")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-command-bar")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-header")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-actions")?.classList.contains("is-quiet-ready")).toBe(true);
     expect(pagePaneEl.textContent).not.toContain("分析準備");
     expect(pagePaneEl.textContent).not.toContain("分析範圍");
     expect(pagePaneEl.querySelector(".page-reader-model-context")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-advisor")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-extraction-diagnostics")).toBeNull();
+  });
+
+  it("keeps raw page preview and status folded while a General Page brief is running", async () => {
+    const pagePaneEl = setupDom();
+    const sendMessage = vi.fn((message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return Promise.resolve({
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface({
+            excerpt: "Runtime fixture excerpt that should not flash as the primary body while the model is still running.",
+          }),
+        } satisfies TrulyMessage);
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        return new Promise<TrulyMessage>(() => {
+          /* Keep the brief in the running state for this UI regression. */
+        });
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    expect(pagePaneEl.textContent).toContain("正在準備頁面重點");
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis .reading-brief-loading")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis-header")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-preview")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-processing-status")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-excerpt")?.textContent)
+      .toContain("Runtime fixture excerpt");
+    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-processing-status")).not.toBeNull();
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-supplemental-details")?.open).toBe(false);
   });
 
   it("renders General Page brief format failures as user-facing copy", async () => {
@@ -705,10 +748,60 @@ describe("sidepanel page reading runtime", () => {
       await flushMicrotasks();
 
       expect(sendMessage).not.toHaveBeenCalled();
-      expect(pagePaneEl.textContent).toContain("讀取此頁");
+      expect(pagePaneEl.textContent).toContain("授權網域");
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("requests domain authorization from the page card before reading without persistent access", async () => {
+    const pagePaneEl = setupDom();
+    const requestHostPermission = vi.fn(async () => true);
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return {
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface(),
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+      hasAllSitesPermission: vi.fn(async () => false),
+      hasHostPermission: vi.fn(async () => false),
+      requestHostPermission,
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(pagePaneEl.textContent).toContain("授權網域");
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageAuthorizeDomain")?.click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(requestHostPermission).toHaveBeenCalledWith("https://example.test/article");
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "PAGE_READING_REQUEST",
+      tabId: 42,
+      inject: true,
+    }));
+    expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
+    expect(pagePaneEl.querySelector("#pageReadCurrent")).not.toBeNull();
   });
 
   it("auto-reads the active general page when all-sites access is available", async () => {
@@ -1129,6 +1222,11 @@ describe("sidepanel page reading runtime", () => {
     expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("downgrade_to_index_or_feed");
     expect(diagnosticRawValue(pagePaneEl, /用途/)).toBe("page_overview_only");
     expect(pagePaneEl.textContent).toContain("只適合頁面總覽");
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-preview")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-excerpt")?.textContent)
+      .toContain("首頁 分類 熱門");
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-supplemental-details")?.open).toBe(false);
   });
 
   it("uses Tier B provider settings for parser advisor before falling back to local baseline", async () => {
@@ -1253,6 +1351,14 @@ describe("sidepanel page reading runtime", () => {
     expect(diagnosticRawValue(pagePaneEl, /用途/)).toBe("page_overview_only");
     expect(pagePaneEl.textContent).toContain("Synthetic overview generated after a scope check.");
     expect(pagePaneEl.textContent).not.toContain("This claim should be stripped");
+    const card = pagePaneEl.querySelector(".page-reader-card");
+    expect(card?.children[1]?.classList.contains("page-reader-analysis")).toBe(true);
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-preview")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-excerpt")?.textContent)
+      .toContain("首頁 分類 熱門");
+    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-processing-status")).not.toBeNull();
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-supplemental-details")?.open).toBe(false);
   });
 
   it("does not send General Page brief requests when advisor requires a user target", async () => {
@@ -1492,6 +1598,7 @@ describe("sidepanel page reading runtime", () => {
     });
 
     await runtime.requestReadCurrentPage("sidepanel");
+    runtime.setWorkspace("focus");
     pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.click();
     await flushMicrotasks();
     await flushMicrotasks();
