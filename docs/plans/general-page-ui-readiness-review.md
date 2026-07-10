@@ -2,6 +2,7 @@
 
 Status: current Page/Web UI is ready for focused reviewer validation
 Date: 2026-07-04
+Last refreshed: 2026-07-10
 
 This review records the current UI/UX decision for the General Page Reader
 branch. It is based on the Page/Web CDP audit screenshots under `tmp/`; those
@@ -61,6 +62,42 @@ and what the next model-facing context would be.
   scope`, `Page brief`, and `Page context`. Internal routing values such as
   advisor decisions and allowed-use enums remain available only as
   `data-raw-value` diagnostics for automated audit assertions.
+
+### UI convergence checkpoint (2026-07-10)
+
+The latest reviewer-driven pass aligned Web more closely with Feed while
+preserving the product rule that ordinary ready states stay quiet and caution
+states explain themselves:
+
+- Feed is unavailable on ordinary web pages and Web is unavailable on
+  Facebook; disabled tabs use a quiet borderless treatment and expose the
+  reason through their accessible tooltip. Focus remains available wherever a
+  user can explicitly select text for analysis.
+- Completed Heads-up cards use a 14px neutral check control, matching the
+  collapse-label scale instead of introducing a competing success badge.
+- Web cards replace the green `Captured` pill with compact source and
+  `Last read HH:MM` metadata. The reread action sits next to that timestamp and
+  briefly changes to a neutral check only after a user-triggered reread.
+- Domain-scoped permission is requested through an in-card
+  `Allow reading on this domain` action only when that grant is actually
+  missing. Permission checking does not flash a disabled action.
+- Page-overview analysis names its scope in the section heading instead of a
+  separate chip. Reading context, items to verify, and follow-up questions use
+  one typographic hierarchy; content-specific caveats and model attribution
+  form a quiet right-aligned closing cluster.
+- A new-page read renders the final Web card structure immediately: known page
+  title and source, a disabled Page context position, a Reading context heading,
+  and two static reserve lines. Ready content fades in over 150ms, with motion
+  disabled under `prefers-reduced-motion`, so the top-level structure no longer
+  flashes from a standalone status into a different card.
+
+Private no-focus CDP evidence remains under
+`tmp/web-loading-continuity-audit-2026-07-10T15-14-11-875Z`. The temporary
+side-panel target reported `visibilityState: hidden` and `hasFocus: false`;
+loading and ready card/header/context positions differed by about 1.7px. The
+430px loading and ready screenshots were inspected locally and are intentionally
+not committed. The verified build was
+`1783696183145-bed0fe4-dirty`.
 
 ## Current Non-Changes
 

@@ -76,6 +76,7 @@ type PageActivationSource = "toolbar" | "popup" | "sidepanel" | "hotkey";
 export type PageWorkspace = "page" | "focus";
 const LOADING_ELAPSED_VISIBLE_THRESHOLD_MS = 2_000;
 const AUTO_READ_DEBOUNCE_MS = 700;
+const READ_SUCCESS_FEEDBACK_MS = 1_800;
 const PAGE_READER_PREVIEW_COLLAPSE_LENGTH = 360;
 
 interface PageReadingSession {
@@ -254,10 +255,14 @@ function formatUpdatedAt(timestamp: number, lang: Lang): string {
     return new Intl.DateTimeFormat(lang, {
       hour: "2-digit",
       minute: "2-digit",
-      second: "2-digit",
+      hourCycle: "h23",
     }).format(new Date(timestamp));
   } catch {
-    return new Date(timestamp).toLocaleTimeString();
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
   }
 }
 
@@ -441,6 +446,7 @@ function generalPageBriefCopyLines(
   }
   if (brief.note) lines.push("", `Note: ${brief.note}`);
   lines.push("", `Analyzed by: ${brief.model}${brief.elapsedMs ? ` (${Math.round(brief.elapsedMs / 100) / 10}s)` : ""}`);
+  lines.push("AI preview: Please rely on the original text and your own judgement.");
   return lines;
 }
 
@@ -968,22 +974,20 @@ function analysisHtml(
   pageTitle?: string,
 ): string {
   if (!analysis || analysis.status === "idle") return "";
-  const title = tr("sidepanel.page.analysis.title");
+  const overview = analysis.allowedUse === "page_overview_only";
+  const title = tr(overview ? "sidepanel.page.analysis.overview" : "sidepanel.page.analysis.title");
   const statusText = tr(`sidepanel.page.analysis.status.${analysis.status}`);
   if (analysis.status === "running") {
     return `
       <section class="page-reader-analysis is-running" role="status" aria-live="polite" aria-busy="true">
         <div class="page-reader-analysis-header">
           <h3>${escapeHtml(title)}</h3>
+          <div class="reading-brief-loading page-reader-analysis-loading">${escapeHtml(tr("sidepanel.page.analysis.running"))}</div>
         </div>
-        <div class="reading-brief-loading">${escapeHtml(tr("sidepanel.page.analysis.running"))}</div>
       </section>
     `;
   }
-  const overview = analysis.allowedUse === "page_overview_only";
-  const visibleStatus = analysis.status === "ready" && overview
-    ? `<span class="page-reader-analysis-scope">${escapeHtml(tr("sidepanel.page.analysis.overview"))}</span>`
-    : analysis.status === "ready"
+  const visibleStatus = analysis.status === "ready"
     ? ""
     : `<span>${escapeHtml(statusText)}</span>`;
   const body = analysis.status === "error"
@@ -1020,21 +1024,21 @@ function briefHtml(
       })
     : tr("sidepanel.dynamic.readingBrief.modelNoteNoElapsed", { model: modelLabel });
   const overview = allowedUse === "page_overview_only";
-  // The model note is a scope explanation: for overview briefs it renders
-  // directly under the section header and scope chip so the analysis boundary
-  // reads as one cluster; ordinary briefs keep it with the low-priority notes.
+  // Keep content-specific caveats next to the summary they qualify. Model
+  // provenance remains a separate, compact footer.
   const noteHtml = brief.note
-    ? `<p class="page-reader-analysis-note${overview ? " page-reader-analysis-scope-note" : ""}">${escapeHtml(brief.note)}</p>`
+    ? `<p class="page-reader-analysis-note">${escapeHtml(brief.note)}</p>`
     : "";
+  const attribution = tr("sidepanel.page.analysis.attribution", { model: modelLabel });
   return `
-    ${overview ? noteHtml : ""}
     <p class="page-reader-analysis-summary">${escapeHtml(brief.summary)}</p>
     ${briefSectionHtml("", brief.bg?.map((item) => `${item.t}: ${item.why}${item.q ? ` ${item.q}` : ""}`) ?? [])}
     ${overview ? "" : briefSectionHtml(tr("sidepanel.dynamic.readingBrief.verify"), brief.claims?.map((claim) => tr("sidepanel.dynamic.readingBrief.needEvidence", { claim: claim.c, need: claim.need })) ?? [])}
     ${briefQuestionsHtml(brief.qs ?? [], pageTitle, tr)}
-    ${overview ? "" : noteHtml}
-    ${brief.mode === "quick" ? `<p class="page-reader-analysis-note page-reader-analysis-quick-note">${escapeHtml(tr("sidepanel.page.analysis.quickDisclaimer"))}</p>` : ""}
-    <div class="sidepanel-attribution reading-brief-model-note" title="${escapeHtml(attributionTitle)}">${escapeHtml(tr("sidepanel.dynamic.readingBrief.modelNote", { model: modelLabel }))}</div>
+    <div class="page-reader-analysis-closing">
+      ${noteHtml}
+      <p class="page-reader-analysis-footer reading-brief-model-note" role="note" title="${escapeHtml(attributionTitle)}" aria-label="${escapeHtml(attributionTitle)}">${escapeHtml(attribution)}</p>
+    </div>
   `;
 }
 
@@ -1128,6 +1132,9 @@ export function createSidepanelPageReadingRuntime({
   let loadingTicker: ReturnType<typeof setInterval> | undefined;
   let autoReadTimer: ReturnType<typeof setTimeout> | undefined;
   let autoReadToken = 0;
+  const pendingRereadFeedback = new Set<number>();
+  let readSuccessFeedbackTabId: number | undefined;
+  let readSuccessFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let activeExtensionPageMarker: ActiveExtensionPageMarker | undefined;
   let hostPermissionState: {
     url: string;
@@ -1169,12 +1176,22 @@ export function createSidepanelPageReadingRuntime({
     });
   }
 
-  function pageReadActionHtml(canRead: boolean, hasSurface: boolean): string {
+  function activePagePermissionStatus(): "unknown" | "checking" | "granted" | "missing" | "requesting" | "failed" {
+    return hostPermissionState?.url === activeUrl ? hostPermissionState.status : "checking";
+  }
+
+  function activePageNeedsDomainGrant(): boolean {
+    const permissionStatus = activePagePermissionStatus();
+    return permissionStatus === "missing" || permissionStatus === "failed";
+  }
+
+  function pageReadActionHtml(canRead: boolean, hasSurface: boolean, showReadSuccess: boolean): string {
     if (!canRead || pageWorkspace !== "page") return "";
-    const permissionStatus = hostPermissionState?.url === activeUrl ? hostPermissionState.status : "checking";
+    const permissionStatus = activePagePermissionStatus();
     const needsDomainGrant = permissionStatus === "missing" || permissionStatus === "failed";
     const waitingForDomainGrant = permissionStatus === "checking" || permissionStatus === "requesting";
-    if (needsDomainGrant || waitingForDomainGrant) {
+    if (waitingForDomainGrant) return "";
+    if (needsDomainGrant) {
       const title = tr("sidepanel.page.authorizeDomainTitle");
       const label = tr("sidepanel.page.authorizeDomain");
       return `
@@ -1184,7 +1201,6 @@ export function createSidepanelPageReadingRuntime({
           type="button"
           title="${escapeHtml(title)}"
           aria-label="${escapeHtml(title)}"
-          ${waitingForDomainGrant ? "disabled" : ""}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
             <path d="M12 3v3"></path>
@@ -1199,24 +1215,45 @@ export function createSidepanelPageReadingRuntime({
         </button>
       `;
     }
-    const title = hasSurface
-      ? tr("sidepanel.page.readCurrentReloadTitle")
-      : tr("sidepanel.page.readCurrentTitle");
+    const title = showReadSuccess
+      ? tr("sidepanel.page.readCurrentSuccess")
+      : hasSurface
+        ? tr("sidepanel.page.readCurrentReloadTitle")
+        : tr("sidepanel.page.readCurrentTitle");
+    const label = hasSurface ? title : tr("sidepanel.page.readCurrent");
     return `
       <button
         id="pageReadCurrent"
-        class="page-reader-target-action is-icon-only"
+        class="page-reader-target-action${hasSurface ? " is-icon-only" : " is-read"}${showReadSuccess ? " is-read-success" : ""}"
         type="button"
         title="${escapeHtml(title)}"
         aria-label="${escapeHtml(title)}"
+        aria-live="polite"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
-          <path d="M21 12a9 9 0 1 1-2.64-6.36"></path>
-          <path d="M21 4v6h-6"></path>
-        </svg>
-        <span>${escapeHtml(title)}</span>
+        ${showReadSuccess
+          ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="m5 12.5 4.25 4.25L19 7"></path></svg>`
+          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg>`}
+        <span>${escapeHtml(label)}</span>
       </button>
     `;
+  }
+
+  function clearReadSuccessFeedback(tabId?: number): void {
+    if (typeof tabId === "number" && readSuccessFeedbackTabId !== tabId) return;
+    if (readSuccessFeedbackTimer) clearTimeout(readSuccessFeedbackTimer);
+    readSuccessFeedbackTimer = undefined;
+    readSuccessFeedbackTabId = undefined;
+  }
+
+  function showReadSuccessFeedback(tabId: number): void {
+    clearReadSuccessFeedback();
+    readSuccessFeedbackTabId = tabId;
+    readSuccessFeedbackTimer = setTimeout(() => {
+      readSuccessFeedbackTimer = undefined;
+      if (readSuccessFeedbackTabId !== tabId) return;
+      readSuccessFeedbackTabId = undefined;
+      if (tabId === activeTabId || tabId === displayTabId) render();
+    }, READ_SUCCESS_FEEDBACK_MS);
   }
 
   async function requestActiveDomainAuthorization(): Promise<void> {
@@ -1336,7 +1373,9 @@ export function createSidepanelPageReadingRuntime({
   function updateLoadingElapsedStatus(): void {
     const session = currentSession();
     if (session?.status !== "loading") return;
-    const label = pagePaneEl.querySelector<HTMLElement>(".page-reader-status-label");
+    const label = pagePaneEl.querySelector<HTMLElement>(
+      ".page-reader-card-loading-status, .page-reader-status-label",
+    );
     if (!label) return;
     label.textContent = pageStatusLabel(session, tr("sidepanel.page.status.loading"));
   }
@@ -1608,7 +1647,11 @@ export function createSidepanelPageReadingRuntime({
     const modelPipeline = screenshotBlock;
     const previewBlock = pagePreviewHtml(excerpt, tr);
     const pageContextPreviewBlock = hidePendingAdvisorState ? "" : previewBlock;
-    const cardHeaderActions = pageReadActionHtml(canRead && displayedSessionIsActive, Boolean(session?.surface));
+    const pageReadAction = pageReadActionHtml(
+      canRead && displayedSessionIsActive,
+      Boolean(session?.surface),
+      Boolean(session?.surface && readSuccessFeedbackTabId === displayedTabId),
+    );
     const cardFooterActions = session?.surface
       ? `
         <footer class="page-reader-card-footer page-reader-external-tools">
@@ -1630,7 +1673,22 @@ export function createSidepanelPageReadingRuntime({
       tr,
     );
     const emptyBodyBlock = !session?.surface && !showErrorBlock && session?.status !== "loading" && platform === "general"
-      ? emptyBody(platform, canRead, title, source || (url ? hostnameForUrl(url) : ""), cardHeaderActions)
+      ? emptyBody(
+          platform,
+          canRead,
+          title,
+          source || (url ? hostnameForUrl(url) : ""),
+          pageReadAction,
+          activePageNeedsDomainGrant(),
+        )
+      : "";
+    const loadingBodyBlock = !session?.surface && session?.status === "loading" &&
+      platform === "general" && activeWorkspace === "page"
+      ? loadingBody(
+          title,
+          source || (url ? hostnameForUrl(url) : ""),
+          statusLabel,
+        )
       : "";
     const focusTargetError = typeof displayedTabId === "number" ? focusTargetErrors.get(displayedTabId) : undefined;
     const focusWorkspaceBlock = activeWorkspace === "focus" &&
@@ -1646,19 +1704,18 @@ export function createSidepanelPageReadingRuntime({
         </section>
       `
       : "";
-    const cardStatusText = session?.status === "ready"
-      ? tr("sidepanel.page.status.extracted")
-      : statusLabel;
     const cardMetaHtml = session?.surface
       ? `
         <div class="page-reader-card-meta"${statusTitle ? ` title="${escapeHtml(statusTitle)}"` : ""}>
           ${source || url ? `<span>${escapeHtml(source || hostnameForUrl(url))}</span>` : ""}
-          <span class="page-reader-card-status">${escapeHtml(cardStatusText)}</span>
-          ${updatedAt ? `<span>${escapeHtml(updatedAt)}</span>` : ""}
+          ${updatedAt ? `<span>${escapeHtml(tr("sidepanel.page.status.lastRead", { updatedAt }))}</span>` : ""}
+          ${pageReadAction}
         </div>
       `
       : "";
-    const statusBlock = hasReadySurface || (activeWorkspace === "focus" && session?.status !== "error")
+    const hasQuietEmptyBody = Boolean(emptyBodyBlock) && (!session || session.status === "idle");
+    const statusBlock = hasReadySurface || hasQuietEmptyBody || Boolean(loadingBodyBlock) ||
+      (activeWorkspace === "focus" && session?.status !== "error")
       ? ""
       : `
         <section class="page-reader-status${statusClass}${session?.surface ? "" : " is-standalone"}"${statusTitle ? ` title="${escapeHtml(statusTitle)}" aria-label="${escapeHtml(statusTitle)}"` : ""} aria-live="polite">
@@ -1680,7 +1737,6 @@ export function createSidepanelPageReadingRuntime({
               <h2>${escapeHtml(title)}</h2>
               ${cardMetaHtml}
             </div>
-            ${cardHeaderActions}
           </div>
           ${pageContextBlock}
           ${shouldPrioritizeAnalysis && !cleanReadyBodyOrder ? analysisBlock : ""}
@@ -1688,7 +1744,7 @@ export function createSidepanelPageReadingRuntime({
           ${cleanReadyBodyOrder || !shouldPrioritizeAnalysis ? analysisBlock : ""}
           ${cardFooterActions}
         </article>
-      ` : emptyBodyBlock}
+      ` : loadingBodyBlock || emptyBodyBlock}
     `;
     syncLoadingTicker(session?.status === "loading");
 
@@ -1789,6 +1845,7 @@ export function createSidepanelPageReadingRuntime({
     targetTitle = "",
     targetMeta = "",
     actionHtml = "",
+    needsDomainGrant = false,
   ): string {
     if (platform === "facebook")
       return `<section class="page-reader-empty">${escapeHtml(tr("sidepanel.page.empty.facebook"))}</section>`;
@@ -1801,9 +1858,40 @@ export function createSidepanelPageReadingRuntime({
             <h2>${escapeHtml(targetTitle || tr("sidepanel.page.untitled"))}</h2>
             ${targetMeta ? `<div class="page-reader-card-meta"><span>${escapeHtml(targetMeta)}</span></div>` : ""}
           </div>
-          ${actionHtml}
         </div>
-        <section class="page-reader-empty">${escapeHtml(tr("sidepanel.page.empty.general"))}</section>
+        <section class="page-reader-empty page-reader-empty-state">
+          <p>${escapeHtml(tr(needsDomainGrant ? "sidepanel.page.empty.permission" : "sidepanel.page.empty.general"))}</p>
+          ${actionHtml}
+        </section>
+      </article>
+    `;
+  }
+
+  function loadingBody(targetTitle: string, targetMeta: string, loadingLabel: string): string {
+    return `
+      <article class="page-reader-card is-loading-target" aria-busy="true">
+        <div class="page-reader-card-header">
+          <div class="page-reader-title-block">
+            <h2>${escapeHtml(targetTitle || tr("sidepanel.page.untitled"))}</h2>
+            <div class="page-reader-card-meta">
+              ${targetMeta ? `<span>${escapeHtml(targetMeta)}</span>` : ""}
+              <span class="page-reader-card-loading-status" role="status" aria-live="polite">${escapeHtml(loadingLabel)}</span>
+            </div>
+          </div>
+        </div>
+        <div class="page-reader-loading-context" aria-disabled="true">
+          <span>${escapeHtml(tr("sidepanel.page.details"))}</span>
+        </div>
+        <section class="page-reader-analysis is-running page-reader-loading-analysis" aria-live="polite" aria-busy="true">
+          <div class="page-reader-analysis-header">
+            <h3>${escapeHtml(tr("sidepanel.page.analysis.title"))}</h3>
+            <div class="reading-brief-loading page-reader-analysis-loading">${escapeHtml(tr("sidepanel.page.analysis.running"))}</div>
+          </div>
+          <div class="page-reader-loading-reserve" aria-hidden="true">
+            <span></span>
+            <span></span>
+          </div>
+        </section>
       </article>
     `;
   }
@@ -2475,6 +2563,13 @@ export function createSidepanelPageReadingRuntime({
       displayTabId = tab.id;
       activeUrl = tabUrl;
       activeTitle = tab.title ?? "";
+      const previousSession = sessions.get(tab.id);
+      if (previousSession?.surface && previousSession.status === "ready") {
+        pendingRereadFeedback.add(tab.id);
+      } else {
+        pendingRereadFeedback.delete(tab.id);
+      }
+      clearReadSuccessFeedback(tab.id);
       const startedAt = now();
       sessions.set(tab.id, {
         tabId: tab.id,
@@ -2528,6 +2623,7 @@ export function createSidepanelPageReadingRuntime({
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
     const existing = sessions.get(tabId);
+    const shouldShowRereadSuccess = pendingRereadFeedback.delete(tabId);
     const duplicateReadySurface = existing?.status === "ready" &&
       existing.surface?.id === message.surface.id &&
       isMeaningfullySamePage(existing.identity, message.surface.url) &&
@@ -2576,6 +2672,7 @@ export function createSidepanelPageReadingRuntime({
     if (revealIncoming) {
       displayTabId = tabId;
     }
+    if (shouldShowRereadSuccess) showReadSuccessFeedback(tabId);
     if (!preserveRecoveryState) {
       startParserAdvisor(tabId, message.surface, {
         candidateBlocks: message.candidateBlocks ?? [],
@@ -2685,6 +2782,8 @@ export function createSidepanelPageReadingRuntime({
   function handlePageReadingError(message: PageReadingErrorMsg): void {
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
+    pendingRereadFeedback.delete(tabId);
+    clearReadSuccessFeedback(tabId);
     const existing = sessions.get(tabId);
     const completedAt = now();
     const elapsedMs = typeof message.elapsedMs === "number" && Number.isFinite(message.elapsedMs)

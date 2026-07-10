@@ -94,16 +94,24 @@ describe("sidepanel page reading runtime", () => {
       const pendingRead = runtime.requestReadCurrentPage("sidepanel");
       await flushMicrotasks();
 
-      expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中");
-      expect(pagePaneEl.querySelector(".page-reader-status")?.getAttribute("title")).toBeNull();
+      const loadingCard = pagePaneEl.querySelector(".page-reader-card.is-loading-target");
+      expect(loadingCard).not.toBeNull();
+      expect(pagePaneEl.querySelector(".page-reader-status")).toBeNull();
+      expect(loadingCard?.querySelector(".page-reader-title-block h2")?.textContent).toBe("Runtime Fixture");
+      expect(loadingCard?.querySelector(".page-reader-card-meta")?.textContent).toContain("example.test");
+      expect(loadingCard?.querySelector(".page-reader-card-loading-status")?.textContent).toBe("讀取中");
+      expect(loadingCard?.querySelector(".page-reader-loading-context")?.getAttribute("aria-disabled")).toBe("true");
+      expect(loadingCard?.querySelector(".page-reader-loading-analysis h3")?.textContent).toBe("閱讀脈絡");
+      expect(loadingCard?.querySelector(".page-reader-analysis-loading")?.textContent).toBe("整理中…");
+      expect(loadingCard?.querySelectorAll(".page-reader-loading-reserve span")).toHaveLength(2);
 
       nowMs = 3_500;
-      const statusNode = pagePaneEl.querySelector(".page-reader-status");
+      const statusNode = pagePaneEl.querySelector(".page-reader-card-loading-status");
       vi.advanceTimersByTime(2_500);
       await flushMicrotasks();
 
-      expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中 · 2.5 秒");
-      expect(pagePaneEl.querySelector(".page-reader-status")).toBe(statusNode);
+      expect(pagePaneEl.querySelector(".page-reader-card-loading-status")?.textContent).toBe("讀取中 · 2.5 秒");
+      expect(pagePaneEl.querySelector(".page-reader-card-loading-status")).toBe(statusNode);
 
       resolveRead?.({
         type: "PAGE_READING_RESULT",
@@ -112,6 +120,10 @@ describe("sidepanel page reading runtime", () => {
         elapsedMs: 2_500,
       } satisfies TrulyMessage);
       await pendingRead;
+
+      expect(pagePaneEl.querySelector(".page-reader-card")).not.toBeNull();
+      expect(pagePaneEl.querySelector(".page-reader-card-header")).not.toBeNull();
+      expect(pagePaneEl.querySelector(".page-reader-loading-context")).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -512,7 +524,8 @@ describe("sidepanel page reading runtime", () => {
     await runtime.requestReadCurrentPage("sidepanel");
 
     expect(pagePaneEl.querySelector(".page-reader-status")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-card-status")?.textContent).toBe("已擷取");
+    expect(pagePaneEl.querySelector(".page-reader-card-meta")?.textContent).toContain("上次讀取");
+    expect(pagePaneEl.querySelector(".page-reader-card-meta")?.textContent).not.toContain("已擷取");
     expect(pagePaneEl.querySelector(".page-reader-card-meta")?.getAttribute("title")).toContain("讀取耗時 1.8 秒");
     expect(pagePaneEl.textContent).toContain("Runtime Fixture");
     expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
@@ -553,9 +566,54 @@ describe("sidepanel page reading runtime", () => {
     await runtime.requestReadCurrentPage("sidepanel");
 
     const title = pagePaneEl.querySelector(".page-reader-card-meta")?.getAttribute("title") || "";
-    expect(pagePaneEl.querySelector(".page-reader-card-status")?.textContent).toBe("已擷取");
+    expect(pagePaneEl.querySelector(".page-reader-card-meta")?.textContent).toContain("上次讀取");
     expect(title).toContain("讀取耗時 少於 0.1 秒");
     expect(title).not.toContain("讀取耗時 0 秒");
+  });
+
+  it("briefly replaces the reread action with neutral success feedback", async () => {
+    vi.useFakeTimers();
+    try {
+      const pagePaneEl = setupDom();
+      const runtime = createSidepanelPageReadingRuntime({
+        pagePaneEl,
+        runtime: {
+          sendMessage: vi.fn(async () => ({
+            type: "PAGE_READING_RESULT",
+            tabId: 42,
+            surface: surface(),
+            elapsedMs: 200,
+          } satisfies TrulyMessage)),
+        },
+        tabs: {
+          query: vi.fn(async () => [{
+            id: 42,
+            url: "https://example.test/article",
+            title: "Runtime Fixture",
+          }]),
+        },
+        activateTab: vi.fn(),
+        getLang: () => "zh-TW",
+        now: () => 1_000,
+        hasHostPermission: vi.fn(async () => true),
+      });
+
+      await runtime.requestReadCurrentPage("sidepanel");
+      await flushMicrotasks();
+      expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("重新讀取此頁");
+      expect(readCurrentButton(pagePaneEl)?.parentElement?.classList.contains("page-reader-card-meta")).toBe(true);
+
+      await runtime.requestReadCurrentPage("sidepanel");
+      await flushMicrotasks();
+      expect(readCurrentButton(pagePaneEl)?.classList.contains("is-read-success")).toBe(true);
+      expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("讀取完成");
+
+      await vi.advanceTimersByTimeAsync(1_800);
+      expect(readCurrentButton(pagePaneEl)?.classList.contains("is-read-success")).toBe(false);
+      expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("重新讀取此頁");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps saved page sessions internal without rendering a Web history switcher", async () => {
@@ -724,6 +782,7 @@ describe("sidepanel page reading runtime", () => {
             bg: [{ t: "Context", why: "The page is a synthetic runtime article." }],
             claims: [{ c: "Runtime claim", why: "It is central to the sample.", need: "Check the source." }],
             qs: [{ q: "What source supports the runtime claim?", kind: "source" }],
+            note: "Synthetic content-specific caveat.",
             model: "brief-model",
             outputLang: "zh-TW",
             elapsedMs: 1200,
@@ -770,14 +829,21 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("閱讀脈絡");
     expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
     expect(pagePaneEl.textContent).toContain("Runtime claim");
-    // Quick briefs stay visibly marked as previews, while the model
-    // attribution matches the Feed pane: "Analyzed by …" with the elapsed
-    // sentence in the tooltip instead of inline prose.
-    expect(pagePaneEl.textContent).toContain("快速重點僅供預覽");
-    expect(pagePaneEl.textContent).toContain("Analyzed by brief-model");
-    expect(
-      pagePaneEl.querySelector(".page-reader-analysis .reading-brief-model-note")?.getAttribute("title"),
-    ).toContain("1.2");
+    // Quick briefs use one quiet footer for both model transparency and the
+    // preview disclaimer instead of competing left/right notes.
+    expect(pagePaneEl.textContent).toContain("brief-model 協助整理");
+    expect(pagePaneEl.textContent).not.toContain("Analyzed by brief-model");
+    const contentNote = pagePaneEl.querySelector(".page-reader-analysis-note");
+    expect(contentNote?.textContent).toBe("Synthetic content-specific caveat.");
+    const modelNote = pagePaneEl.querySelector(".page-reader-analysis .reading-brief-model-note");
+    const questions = pagePaneEl.querySelector(".page-reader-analysis-questions");
+    const closing = pagePaneEl.querySelector(".page-reader-analysis-closing");
+    expect(questions?.nextElementSibling).toBe(closing);
+    expect(closing?.querySelector(".page-reader-analysis-note")).toBe(contentNote);
+    expect(closing?.querySelector(".page-reader-analysis-footer")).toBe(modelNote);
+    expect(contentNote?.nextElementSibling).toBe(modelNote);
+    expect(modelNote?.getAttribute("title")).toContain("1.2");
+    expect(modelNote?.getAttribute("aria-label")).toContain("請以原文與你的思考為準");
     // Follow-up questions carry Feed-style per-question actions.
     expect(pagePaneEl.querySelector(".page-reader-analysis-questions .page-analysis-question-copy")).not.toBeNull();
     const askLink = pagePaneEl.querySelector<HTMLAnchorElement>(".page-reader-analysis-questions .reading-brief-google-link");
@@ -849,9 +915,12 @@ describe("sidepanel page reading runtime", () => {
     await runtime.requestReadCurrentPage("sidepanel");
     await flushMicrotasks();
 
-    expect(pagePaneEl.textContent).toContain("正在準備頁面重點");
+    expect(pagePaneEl.textContent).toContain("整理中…");
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis")).not.toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis .reading-brief-loading")).not.toBeNull();
+    const loadingHeader = pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis .page-reader-analysis-header");
+    expect(loadingHeader?.textContent).toContain("閱讀脈絡");
+    expect(loadingHeader?.querySelector(".page-reader-analysis-loading")?.textContent).toBe("整理中…");
+    expect(pagePaneEl.querySelector(".page-reader-analysis.is-running")?.children).toHaveLength(1);
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis-header")).toBeNull();
     // While a clean page's brief is running, the pane already uses the final
     // The extracted preview is available only inside the collapsed page-context
@@ -925,7 +994,7 @@ describe("sidepanel page reading runtime", () => {
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: "GENERAL_PAGE_PARSER_ADVISOR_REQUEST",
     }));
-    expect(pagePaneEl.textContent).toContain("正在準備頁面重點");
+    expect(pagePaneEl.textContent).toContain("整理中…");
     expect(pagePaneEl.querySelector(".page-reader-analysis.is-running")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-processing-status")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-extraction-diagnostics")).toBeNull();
@@ -1013,7 +1082,10 @@ describe("sidepanel page reading runtime", () => {
       await flushMicrotasks();
 
       expect(sendMessage).not.toHaveBeenCalled();
-      expect(pagePaneEl.textContent).toContain("授權網域");
+      expect(pagePaneEl.textContent).toContain("允許讀取此網域");
+      expect(pagePaneEl.textContent).toContain("Truly 尚未取得此網站的讀取權限");
+      expect(pagePaneEl.querySelector(".page-reader-empty-state #pageAuthorizeDomain")).not.toBeNull();
+      expect(pagePaneEl.querySelector(".page-reader-status")).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -1054,7 +1126,9 @@ describe("sidepanel page reading runtime", () => {
     await flushMicrotasks();
     await flushMicrotasks();
 
-    expect(pagePaneEl.textContent).toContain("授權網域");
+    expect(pagePaneEl.textContent).toContain("允許讀取此網域");
+    expect(pagePaneEl.querySelector(".page-reader-card-header #pageAuthorizeDomain")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-empty-state #pageAuthorizeDomain")).not.toBeNull();
     pagePaneEl.querySelector<HTMLButtonElement>("#pageAuthorizeDomain")?.click();
     await flushMicrotasks();
     await flushMicrotasks();
@@ -1066,7 +1140,7 @@ describe("sidepanel page reading runtime", () => {
       inject: true,
     }));
     expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
-    expect(pagePaneEl.querySelector("#pageReadCurrent")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card-meta #pageReadCurrent")).not.toBeNull();
   });
 
   it("auto-reads the active general page when all-sites access is available", async () => {
@@ -1106,7 +1180,7 @@ describe("sidepanel page reading runtime", () => {
       // already present a neutral loading state. Do not flash the manual
       // "not read" guidance while waiting for the page DOM to settle.
       expect(sendMessage).not.toHaveBeenCalled();
-      expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中");
+      expect(pagePaneEl.querySelector(".page-reader-card-loading-status")?.textContent).toBe("讀取中");
       expect(pagePaneEl.textContent).not.toContain("尚未讀取此頁");
 
       vi.advanceTimersByTime(1_000);
@@ -1248,7 +1322,7 @@ describe("sidepanel page reading runtime", () => {
       onUpdated?.(42, { url: tab.url }, tab);
       await flushMicrotasks();
 
-      expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中");
+      expect(pagePaneEl.querySelector(".page-reader-card-loading-status")?.textContent).toBe("讀取中");
       expect(pagePaneEl.textContent).not.toContain("頁面已變更");
       expect(pagePaneEl.textContent).not.toContain("First Runtime Fixture excerpt.");
       expect(pagePaneEl.querySelector(".page-reader-processing-status")).toBeNull();
@@ -1699,6 +1773,8 @@ describe("sidepanel page reading runtime", () => {
     }));
     expect(pagePaneEl.textContent).toContain("OpenAI 相容端點 / advisor-model");
     expect(pagePaneEl.textContent).toContain("頁面總覽");
+    expect(pagePaneEl.querySelector(".page-reader-analysis-header h3")?.textContent).toBe("頁面總覽");
+    expect(pagePaneEl.querySelector(".page-reader-analysis-scope")).toBeNull();
     expect(diagnosticRawValue(pagePaneEl, /用途/)).toBe("page_overview_only");
     expect(pagePaneEl.textContent).toContain("Synthetic overview generated after a scope check.");
     expect(pagePaneEl.textContent).not.toContain("This claim should be stripped");
