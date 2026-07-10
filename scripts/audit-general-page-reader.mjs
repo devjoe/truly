@@ -11,6 +11,7 @@ const CDP_PORT = Number(process.env.CDP_PORT || 9222);
 const CDP_BASE = `http://127.0.0.1:${CDP_PORT}`;
 const AUTO_RELOAD = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_AUTO_RELOAD || "");
 const SKIP_POPUP_READ = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_SKIP_POPUP_READ || "");
+const ALLOW_WINDOW_FOCUS = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_ALLOW_WINDOW_FOCUS || "");
 const EXTENSION_ID = (process.env.TRULY_EXTENSION_ID || "").trim();
 const STAMP = new Date().toISOString().replace(/[:.]/g, "-");
 const OUT_DIR = resolve(ROOT, "tmp", `general-page-reader-audit-${STAMP}`);
@@ -42,6 +43,8 @@ Environment:
   TRULY_AUDIT_SKIP_POPUP_READ=1
                                skip the real chrome.action.openPopup read-click path
                                when the host OS cannot provide an active browser window
+  TRULY_AUDIT_ALLOW_WINDOW_FOCUS=1
+                               allow the popup-read phase to focus Chrome; off by default
   TRULY_EXTENSION_ID=<id>     audit a specific loaded Truly extension id
 `);
 }
@@ -486,9 +489,61 @@ async function startSyntheticServer() {
 }
 
 async function createTarget(url) {
-  const target = await fetchJson(`${CDP_BASE}/json/new?${encodeURIComponent(url)}`, { method: "PUT" }, 5000);
-  if (!target?.webSocketDebuggerUrl) throw new Error(`Unable to create CDP target for ${url}`);
-  return target;
+  const browserInfo = await fetchJson(`${CDP_BASE}/json/version`, {}, 5000);
+  if (!browserInfo?.webSocketDebuggerUrl) throw new Error("Unable to connect to the CDP browser target");
+  const browser = connectCdp(browserInfo.webSocketDebuggerUrl);
+  let targetId;
+  try {
+    const created = await browser.send("Target.createTarget", { url, background: true });
+    targetId = created?.targetId;
+  } finally {
+    browser.close();
+  }
+  if (!targetId) throw new Error(`Unable to create background CDP target for ${url}`);
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const target = (await listTargets()).find((entry) => entry.id === targetId);
+    if (target?.webSocketDebuggerUrl) return target;
+    await sleep(50);
+  }
+  throw new Error(`Background CDP target did not become inspectable for ${url}`);
+}
+
+async function activateTabWithoutWindowFocus(extensionPage, targetUrl) {
+  let result;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    result = await extensionPage.evaluateJson(`(() => new Promise((resolve) => {
+      chrome.tabs.query({}, (tabs) => {
+        const urlFor = (candidate) => candidate.url || candidate.pendingUrl || "";
+        const tab = tabs.find((candidate) => urlFor(candidate) === ${JSON.stringify(targetUrl)}) ||
+          tabs.find((candidate) => ${JSON.stringify(targetUrl)} && urlFor(candidate).startsWith(${JSON.stringify(targetUrl)}));
+        if (!tab?.id) {
+          resolve({
+            ok: false,
+            error: "tab_not_found",
+            targetUrl: ${JSON.stringify(targetUrl)},
+            observed: tabs.slice(-8).map((candidate) => ({
+              id: candidate.id,
+              url: candidate.url || "",
+              pendingUrl: candidate.pendingUrl || "",
+            })),
+          });
+          return;
+        }
+        chrome.tabs.update(tab.id, { active: true }, (updated) => {
+          resolve({
+            ok: !chrome.runtime.lastError,
+            error: chrome.runtime.lastError?.message || "",
+            tabId: updated?.id ?? tab.id,
+            windowId: updated?.windowId ?? tab.windowId,
+            url: updated?.url || tab.url || tab.pendingUrl || "",
+          });
+        });
+      });
+    }))()`);
+    if (result?.ok) return result;
+    await sleep(50);
+  }
+  throw new Error(`Unable to activate background audit tab: ${result?.error || "unknown"}; target=${targetUrl}; observed=${JSON.stringify(result?.observed || [])}`);
 }
 
 async function listTargets() {
@@ -575,17 +630,25 @@ async function reloadExtension(extensionId) {
   await sleep(1500);
 }
 
-async function openSidePanelTestPage(extensionId, activePageTarget, suffix) {
+async function openSidePanelTestPage(extensionId, activePageTarget, suffix, activeTabId) {
   const helperUrl = `chrome-extension://${extensionId}/options/options.html?generalPageReaderAuditHelper=${suffix}`;
   const helperTarget = await createTarget(helperUrl);
   const helper = connectCdp(helperTarget.webSocketDebuggerUrl);
   try {
     await sleep(300);
-    const page = connectCdp(activePageTarget.webSocketDebuggerUrl);
-    try {
-      await page.send("Page.bringToFront");
-    } finally {
-      page.close();
+    if (typeof activeTabId === "number") {
+      const activated = await helper.evaluateJson(`(() => new Promise((resolve) => {
+        chrome.tabs.update(${JSON.stringify(activeTabId)}, { active: true }, (updated) => {
+          resolve({
+            ok: !chrome.runtime.lastError,
+            error: chrome.runtime.lastError?.message || "",
+            tabId: updated?.id ?? ${JSON.stringify(activeTabId)},
+          });
+        });
+      }))()`);
+      if (!activated?.ok) throw new Error(`Unable to activate background audit tab id ${activeTabId}: ${activated?.error || "unknown"}`);
+    } else {
+      await activateTabWithoutWindowFocus(helper, activePageTarget.url || "");
     }
     const sideUrl = `chrome-extension://${extensionId}/sidepanel/sidepanel.html?generalPageReaderAudit=${suffix}`;
     await helper.evaluate(`new Promise((resolve) => {
@@ -616,6 +679,22 @@ async function openInactiveExtensionPage(extensionId, url, suffix) {
     await helper.closeTarget().catch(() => {});
     helper.close();
   }
+}
+
+async function createInactiveAuditTab(extensionId, url, suffix) {
+  const beforeIds = new Set((await listTargets()).map((target) => target.id));
+  const tab = await openInactiveExtensionPage(extensionId, url, suffix);
+  if (typeof tab?.id !== "number") throw new Error(`Unable to create inactive audit tab for ${url}`);
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const target = (await listTargets()).find((entry) =>
+      !beforeIds.has(entry.id) &&
+      entry.type === "page" &&
+      entry.webSocketDebuggerUrl &&
+      (entry.url === url || entry.url?.startsWith(url)));
+    if (target) return { tab, target };
+    await sleep(50);
+  }
+  throw new Error(`Inactive audit tab did not expose a CDP target for ${url}`);
 }
 
 async function findPageTargetByUrlPrefix(urlPrefix) {
@@ -652,27 +731,15 @@ async function openActionPopup(extensionId, activePageTarget, suffix) {
   const helperUrl = `chrome-extension://${extensionId}/options/options.html?actionPopupHelper=${suffix}`;
   const helperTarget = await createTarget(helperUrl);
   const helper = connectCdp(helperTarget.webSocketDebuggerUrl);
-  const activePage = connectCdp(activePageTarget.webSocketDebuggerUrl);
   try {
     await sleep(300);
-    await activePage.send("Page.bringToFront");
-    const tabFocus = await helper.evaluateJson(`(async () => {
-      const targetUrl = ${JSON.stringify(activePageTarget.url || "")};
-      const tabs = await new Promise((resolve) => chrome.tabs.query({}, resolve));
-      const tab = tabs.find((candidate) => candidate.url === targetUrl) ||
-        tabs.find((candidate) => targetUrl && candidate.url?.startsWith(targetUrl));
-      if (!tab?.id) return { ok: false, reason: "tab_not_found", targetUrl };
-      await new Promise((resolve) => chrome.tabs.update(tab.id, { active: true }, () => resolve(undefined)));
-      if (typeof tab.windowId === "number") {
-        await new Promise((resolve) => chrome.windows.update(tab.windowId, { focused: true }, () => resolve(undefined)));
-      }
-      return {
-        ok: true,
-        tabId: tab.id,
-        windowId: tab.windowId,
-        tabError: chrome.runtime.lastError?.message || "",
-      };
-    })()`).catch((error) => ({ ok: false, reason: error.message }));
+    const tabFocus = await activateTabWithoutWindowFocus(helper, activePageTarget.url || "")
+      .catch((error) => ({ ok: false, reason: error.message }));
+    if (ALLOW_WINDOW_FOCUS && typeof tabFocus?.windowId === "number") {
+      await helper.evaluate(`new Promise((resolve) => {
+        chrome.windows.update(${JSON.stringify(tabFocus.windowId)}, { focused: true }, () => resolve(undefined));
+      })`);
+    }
     await sleep(300);
     const openResult = await helper.evaluateJson(`(async () => {
       const windowId = ${JSON.stringify(typeof tabFocus?.windowId === "number" ? tabFocus.windowId : null)};
@@ -704,7 +771,6 @@ async function openActionPopup(extensionId, activePageTarget, suffix) {
   } finally {
     await helper.closeTarget().catch(() => {});
     helper.close();
-    activePage.close();
   }
 }
 
@@ -1143,6 +1209,49 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
   let thirdArticle;
 
   try {
+    await side.evaluate(`(() => {
+      const startedAt = performance.now();
+      const entries = [];
+      let lastSignature = "";
+      const norm = (value) => (value || "").replace(/\\s+/g, " ").trim();
+      const capture = () => {
+        const pane = document.querySelector("#page-pane");
+        const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.() || null;
+        const entry = {
+          elapsedMs: Math.round(performance.now() - startedAt),
+          status: norm(pane?.querySelector(".page-reader-card-status")?.textContent || pane?.querySelector(".page-reader-status-label")?.textContent),
+          detail: norm(pane?.querySelector(".page-reader-status-detail")?.textContent),
+          title: norm(pane?.querySelector(".page-reader-title-block h2")?.textContent),
+          text: norm(pane?.innerText).slice(0, 1200),
+          extractionDiagnosticsPresent: Boolean(pane?.querySelector(".page-reader-extraction-diagnostics")),
+          extractionDiagnosticsOpen: pane?.querySelector(".page-reader-extraction-diagnostics")?.hasAttribute("open") ?? null,
+          processingStatusPresent: Boolean(pane?.querySelector(".page-reader-processing-status")),
+          modelContextPresent: Boolean(pane?.querySelector(".page-reader-model-context")),
+          advisorPresent: Boolean(pane?.querySelector(".page-reader-advisor")),
+          previewPresent: Boolean(pane?.querySelector(".page-reader-excerpt, .page-reader-preview")),
+          analysisClass: pane?.querySelector(".page-reader-analysis")?.className || "",
+          supplementalDetailsOpen: pane?.querySelector(".page-reader-supplemental-details")?.hasAttribute("open") ?? null,
+          runtimeState,
+        };
+        const signature = JSON.stringify({ ...entry, elapsedMs: 0 });
+        if (signature === lastSignature) return;
+        lastSignature = signature;
+        entries.push(entry);
+      };
+      const observer = new MutationObserver(capture);
+      observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+      const interval = setInterval(capture, 50);
+      globalThis.__trulyPagePaneTimeline = {
+        entries,
+        stop() {
+          capture();
+          observer.disconnect();
+          clearInterval(interval);
+          return entries;
+        },
+      };
+      capture();
+    })()`);
     await sleep(800);
     const initial = await side.evaluateJson(`(() => ({
       activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
@@ -1302,6 +1411,11 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
 
     const pageBrief = await observePageBrief(side, "page-analysis-ready.png");
+    const initialLoadTimeline = await side.evaluateJson(`(() => {
+      const timeline = globalThis.__trulyPagePaneTimeline;
+      return timeline?.stop?.() || timeline?.entries || [];
+    })()`);
+    writeFileSync(resolve(OUT_DIR, "page-initial-load-timeline.json"), JSON.stringify(initialLoadTimeline, null, 2));
     const responsive = await auditResponsivePageWebLayout(side, "page-responsive-430.png");
 
     const copyRaw = await side.evaluate(`(async () => {
@@ -1328,7 +1442,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
 
     const secondArticleTarget = await createTarget(`${allowedBase}/article2?multi=1`);
     secondArticle = connectCdp(secondArticleTarget.webSocketDebuggerUrl);
-    await secondArticle.send("Page.bringToFront");
+    await activateTabWithoutWindowFocus(side, secondArticleTarget.url || "");
     await sleep(600);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     await waitFor(side, `(() => /Second Synthetic Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web second session ready").catch(async (error) => {
@@ -1344,7 +1458,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     }))()`);
     const thirdArticleTarget = await createTarget(`${allowedBase}/article3?multi=1`);
     thirdArticle = connectCdp(thirdArticleTarget.webSocketDebuggerUrl);
-    await thirdArticle.send("Page.bringToFront");
+    await activateTabWithoutWindowFocus(side, thirdArticleTarget.url || "");
     await sleep(600);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     await waitFor(side, `(() => /Third Synthetic Article/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web third session ready").catch(async (error) => {
@@ -1555,6 +1669,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
       detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
       stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || ''),
+      loading: /讀取中|Reading/.test(document.querySelector('#page-pane .page-reader-status-label')?.textContent || ''),
       oldExcerptVisible: /synthetic article for the General Page Reader CDP acceptance test/.test(document.querySelector('#page-pane')?.innerText || ''),
       sourceLinkVisible: Boolean(document.querySelector('#page-pane .page-reader-source-links a[href$="/source"]'))
     }))()`);
@@ -1563,6 +1678,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
 
     return {
       initial,
+      initialLoadTimeline,
       autoRead,
       ready,
       pageBrief,
@@ -1737,6 +1853,55 @@ async function auditResponsivePageWebLayout(side, screenshotName) {
   }
 }
 
+async function installAdvisorTransitionTimeline(side) {
+  await side.evaluate(`(() => {
+    const startedAt = performance.now();
+    const entries = [];
+    let lastSignature = "";
+    const norm = (value) => (value || "").replace(/\\s+/g, " ").trim();
+    const capture = () => {
+      const pane = document.querySelector("#page-pane");
+      const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.() || null;
+      const entry = {
+        elapsedMs: Math.round(performance.now() - startedAt),
+        status: norm(pane?.querySelector(".page-reader-card-status")?.textContent || pane?.querySelector(".page-reader-status-label")?.textContent),
+        text: norm(pane?.innerText).slice(0, 1200),
+        extractionDiagnosticsPresent: Boolean(pane?.querySelector(".page-reader-extraction-diagnostics")),
+        processingStatusPresent: Boolean(pane?.querySelector(".page-reader-processing-status")),
+        modelContextPresent: Boolean(pane?.querySelector(".page-reader-model-context")),
+        advisorPresent: Boolean(pane?.querySelector(".page-reader-advisor")),
+        previewPresent: Boolean(pane?.querySelector(".page-reader-excerpt, .page-reader-preview")),
+        supplementalDetailsPresent: Boolean(pane?.querySelector(".page-reader-supplemental-details")),
+        analysisClass: pane?.querySelector(".page-reader-analysis")?.className || "",
+        runtimeState,
+      };
+      const signature = JSON.stringify({ ...entry, elapsedMs: 0 });
+      if (signature === lastSignature) return;
+      lastSignature = signature;
+      entries.push(entry);
+    };
+    const observer = new MutationObserver(capture);
+    observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+    const interval = setInterval(capture, 25);
+    globalThis.__trulyPageAdvisorTimeline = {
+      entries,
+      stop() {
+        capture();
+        observer.disconnect();
+        clearInterval(interval);
+        return entries;
+      },
+    };
+    capture();
+  })()`);
+}
+
+async function stopAdvisorTransitionTimeline(side, artifactName) {
+  const entries = await side.evaluateJson(`(() => globalThis.__trulyPageAdvisorTimeline?.stop?.() || [])()`);
+  writeFileSync(resolve(OUT_DIR, artifactName), JSON.stringify(entries, null, 2));
+  return entries;
+}
+
 async function auditNoisyFallbackRead(extensionId, allowedBase) {
   const noisyTarget = await createTarget(`${allowedBase}/noisy`);
   const sideTarget = await openSidePanelTestPage(extensionId, noisyTarget, "noisy");
@@ -1745,6 +1910,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
 
   try {
     await sleep(800);
+    await installAdvisorTransitionTimeline(side);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web noisy fallback ready state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, noisy, null).catch((captureError) => ({
@@ -1766,6 +1932,9 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
       await side.screenshot(resolve(OUT_DIR, "page-noisy-advisor-timeout.png")).catch(() => {});
       throw error;
     });
+
+    const advisorTimeline = await side.evaluateJson(`(() => globalThis.__trulyPageAdvisorTimeline?.stop?.() || [])()`);
+    writeFileSync(resolve(OUT_DIR, "page-noisy-transition-timeline.json"), JSON.stringify(advisorTimeline, null, 2));
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
@@ -1842,7 +2011,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
       };
     })()`);
     await side.screenshot(resolve(OUT_DIR, "page-noisy-fallback.png"));
-    return { ready };
+    return { ready, advisorTimeline };
   } finally {
     await side.closeTarget().catch(() => {});
     await noisy.closeTarget().catch(() => {});
@@ -1965,6 +2134,7 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
       const button = document.querySelector('#pageReadCurrent');
       return Boolean(button && !button.disabled);
     })()`, 10000, "teaser hub read button ready");
+    await installAdvisorTransitionTimeline(side);
     await side.evaluate(`(() => {
       const button = document.querySelector('#pageReadCurrent');
       if (!button || button.disabled) return false;
@@ -1990,6 +2160,8 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
       await side.screenshot(resolve(OUT_DIR, "page-teaser-hub-advisor-timeout.png")).catch(() => {});
       throw error;
     });
+
+    const advisorTimeline = await stopAdvisorTransitionTimeline(side, "page-advisor-transition-timeline.json");
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
@@ -2062,7 +2234,7 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
       };
     })()`);
     await side.screenshot(resolve(OUT_DIR, "page-teaser-hub-overview.png"));
-    return { ready };
+    return { ready, advisorTimeline };
   } finally {
     await side.closeTarget().catch(() => {});
     await teaser.closeTarget().catch(() => {});
@@ -2144,8 +2316,9 @@ async function auditNoGrantGuidance(extensionId, noGrantBase) {
 }
 
 async function inspectUnsupportedPageSidePanel(extensionId, activeUrl, suffix, screenshotName) {
-  const activeTarget = await createTarget(activeUrl);
-  const sideTarget = await openSidePanelTestPage(extensionId, activeTarget, suffix);
+  const created = await createInactiveAuditTab(extensionId, activeUrl, `active-${suffix}`);
+  const activeTarget = created.target;
+  const sideTarget = await openSidePanelTestPage(extensionId, activeTarget, suffix, created.tab.id);
   const side = connectCdp(sideTarget.webSocketDebuggerUrl);
   const active = connectCdp(activeTarget.webSocketDebuggerUrl);
   try {
@@ -2255,6 +2428,10 @@ function assertAudit(result) {
   if (result.success.autoRead?.allSites && !result.success.autoRead?.observed) {
     errors.push(`all-sites sidepanel auto-read did not reach ready status: ${result.success.autoRead.error || "(no details)"}`);
   }
+  const autoReadTransition = autoReadTransitionState(result);
+  if (result.success.autoRead?.allSites && !autoReadTransition.pass) {
+    errors.push(`all-sites auto-read exposed intermediate UI before loading: firstLoadingMs=${autoReadTransition.firstLoadingMs ?? "missing"}; technicalStates=${autoReadTransition.technicalStateCount}`);
+  }
   if (result.success.ready.title !== "Synthetic General Page Reader Article") {
     errors.push(`unexpected extracted title: ${result.success.ready.title}`);
   }
@@ -2284,7 +2461,9 @@ function assertAudit(result) {
   if (!hasSourceHref(result.success.ready.sourceLinks, /\/source$/)) {
     errors.push("Web pane does not expose extracted source links for early inspection");
   }
-  if (result.success.ready.extractionDiagnosticsOpen !== false) {
+  if (cleanBriefHidesPipeline
+    ? result.success.ready.extractionDiagnosticsOpen === true
+    : result.success.ready.extractionDiagnosticsOpen !== false) {
     errors.push("successful read should keep extraction diagnostics collapsed by default");
   }
   if (!cleanBriefHidesPipeline) {
@@ -2365,7 +2544,13 @@ function assertAudit(result) {
   }
   if (result.success.afterHash.stale) errors.push("hash-only URL change incorrectly marked stale");
   if (result.success.afterTracking.stale) errors.push("tracking-only query change incorrectly marked stale");
-  if (!result.success.afterMeaningful.stale) errors.push("meaningful URL change did not mark stale");
+  if (result.success.autoRead?.allSites) {
+    if (!result.success.afterMeaningful.loading || result.success.afterMeaningful.stale) {
+      errors.push("meaningful URL change did not enter clean auto-read loading state");
+    }
+  } else if (!result.success.afterMeaningful.stale) {
+    errors.push("meaningful URL change without auto-read did not mark stale");
+  }
   if (result.success.afterMeaningful.oldExcerptVisible || result.success.afterMeaningful.sourceLinkVisible) {
     errors.push("meaningful URL change did not scrub stale Web surface content");
   }
@@ -2679,6 +2864,62 @@ function designRestraint(result) {
   };
 }
 
+function ordinaryArticleReadPasses(result) {
+  const cleanBriefPipelineHidden = result.success.pageBrief?.status === "ready" &&
+    result.success.pageBrief?.pipelineHidden === true &&
+    result.success.pageBrief?.diagnosticsHidden === true;
+  const diagnosticsSafe = cleanBriefPipelineHidden
+    ? result.success.ready.extractionDiagnosticsOpen !== true
+    : result.success.ready.extractionDiagnosticsOpen === false &&
+      result.success.ready.modelContext?.diagnosticsOpen === false &&
+      /page-reader-processing-status/.test(result.success.ready.modelContext?.className || "") &&
+      result.success.ready.advisor?.diagnosticsOpen === false;
+  return isWebReadyStatus(result.success.ready.status) &&
+    result.success.ready.title === "Synthetic General Page Reader Article" &&
+    !result.success.ready.fullTailVisible &&
+    diagnosticsSafe &&
+    (result.success.ready.sourceLinks?.length ?? 0) <= 6;
+}
+
+function autoReadTransitionState(result) {
+  const entries = Array.isArray(result.success.initialLoadTimeline)
+    ? result.success.initialLoadTimeline
+    : [];
+  const firstLoading = entries.find((entry) => /讀取中|Reading/.test(entry.status || ""));
+  const firstAnalysis = entries.find((entry) => /page-reader-analysis is-(?:running|ready)/.test(entry.analysisClass || ""));
+  const technicalStates = entries.filter((entry) =>
+    (firstAnalysis ? entry.elapsedMs <= firstAnalysis.elapsedMs : true) &&
+    (entry.extractionDiagnosticsPresent || entry.processingStatusPresent || entry.modelContextPresent || entry.advisorPresent || entry.previewPresent));
+  const firstLoadingMs = typeof firstLoading?.elapsedMs === "number" ? firstLoading.elapsedMs : undefined;
+  return {
+    pass: typeof firstLoadingMs === "number" && firstLoadingMs <= 100 && technicalStates.length === 0,
+    firstLoadingMs,
+    technicalStateCount: technicalStates.length,
+  };
+}
+
+function advisorTransitionState(result) {
+  const entries = Array.isArray(result.teaser?.advisorTimeline)
+    ? result.teaser.advisorTimeline
+    : [];
+  const checkingEntries = entries.filter((entry) =>
+    entry.runtimeState?.displayedSession?.advisorStatus === "checking");
+  const unsafeEntries = checkingEntries.filter((entry) =>
+    entry.extractionDiagnosticsPresent ||
+    entry.processingStatusPresent ||
+    entry.modelContextPresent ||
+    entry.advisorPresent ||
+    entry.previewPresent ||
+    entry.supplementalDetailsPresent ||
+    !/page-reader-analysis is-running/.test(entry.analysisClass || "") ||
+    !/正在準備頁面重點|Preparing page brief/.test(entry.text || ""));
+  return {
+    pass: checkingEntries.length > 0 && unsafeEntries.length === 0,
+    checkingStateCount: checkingEntries.length,
+    unsafeStateCount: unsafeEntries.length,
+  };
+}
+
 function qaMatrixRows(result) {
   const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
@@ -2734,15 +2975,8 @@ function qaMatrixRows(result) {
     ],
     [
       "Ordinary article read",
-      isWebReadyStatus(result.success.ready.status) &&
-        result.success.ready.title === "Synthetic General Page Reader Article" &&
-        !result.success.ready.fullTailVisible &&
-        result.success.ready.extractionDiagnosticsOpen === false &&
-        result.success.ready.modelContext?.diagnosticsOpen === false &&
-        /page-reader-processing-status/.test(result.success.ready.modelContext?.className || "") &&
-        result.success.ready.advisor?.diagnosticsOpen === false &&
-        (result.success.ready.sourceLinks?.length ?? 0) <= 6,
-      "title=" + result.success.ready.title + "; links=" + (result.success.ready.sourceLinks?.length ?? 0) + "; diagnosticsCollapsed=" + (result.success.ready.extractionDiagnosticsOpen === false),
+      ordinaryArticleReadPasses(result),
+      "title=" + result.success.ready.title + "; links=" + (result.success.ready.sourceLinks?.length ?? 0) + "; diagnosticsSafe=" + (result.success.ready.extractionDiagnosticsOpen !== true),
     ],
     [
       "Read elapsed display",
@@ -2760,6 +2994,18 @@ function qaMatrixRows(result) {
       "allSites=" + Boolean(result.success.autoRead?.allSites) +
         "; observed=" + Boolean(result.success.autoRead?.observed) +
         (result.success.autoRead?.error ? "; error=" + result.success.autoRead.error : ""),
+    ],
+    [
+      "Auto-read transitional UI",
+      result.success.autoRead?.allSites ? autoReadTransitionState(result).pass : true,
+      "firstLoadingMs=" + (autoReadTransitionState(result).firstLoadingMs ?? "missing") +
+        "; technicalStates=" + autoReadTransitionState(result).technicalStateCount,
+    ],
+    [
+      "Advisor transitional UI",
+      advisorTransitionState(result).pass,
+      "checkingStates=" + advisorTransitionState(result).checkingStateCount +
+        "; unsafeStates=" + advisorTransitionState(result).unsafeStateCount,
     ],
     [
       "Page brief generation",
@@ -2841,13 +3087,18 @@ function qaMatrixRows(result) {
       "target=" + (result.success.pointTarget?.targetKind || "missing") + "; advisor=" + (result.success.pointTarget?.advisorStatus || "missing"),
     ],
     [
-      "URL identity and stale scrub",
+      "URL identity and navigation scrub",
       !result.success.afterHash.stale &&
         !result.success.afterTracking.stale &&
-        result.success.afterMeaningful.stale &&
+        (result.success.autoRead?.allSites
+          ? result.success.afterMeaningful.loading && !result.success.afterMeaningful.stale
+          : result.success.afterMeaningful.stale) &&
         !result.success.afterMeaningful.oldExcerptVisible &&
         !result.success.afterMeaningful.sourceLinkVisible,
-      "hash=" + result.success.afterHash.stale + "; tracking=" + result.success.afterTracking.stale + "; meaningful=" + result.success.afterMeaningful.stale,
+      "hashStale=" + result.success.afterHash.stale +
+        "; trackingStale=" + result.success.afterTracking.stale +
+        "; meaningfulStale=" + result.success.afterMeaningful.stale +
+        "; meaningfulLoading=" + result.success.afterMeaningful.loading,
     ],
     [
       "Noisy fallback clean context",
@@ -3023,7 +3274,7 @@ function auditCoverageRows(result) {
       "URL meaningful change",
       "success",
       "Hash/tracking changes should not stale the session, while meaningful URL changes must scrub old page content.",
-      ["URL identity and stale scrub"],
+      ["URL identity and navigation scrub"],
       [relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))],
     ),
     row(
@@ -3142,7 +3393,7 @@ function writeSummary(result, errors) {
     `- Screenshot recovery: offer=${result.screenshot?.offer?.state || "(missing)"}; preview=${result.screenshot?.preview?.state || "(missing)"}/${Math.round(result.screenshot?.preview?.previewRect?.height ?? 0)}px; sentImage=${Boolean(result.screenshot?.requests?.some((request) => request.kind === "screenshot-brief" && request.hasImageUrl === true))}; storageHits=${result.screenshot?.storageAfter?.hits?.length ?? "(missing)"}`,
     `- Hash-only stale: ${result.success.afterHash.stale}`,
     `- Tracking-only stale: ${result.success.afterTracking.stale}`,
-    `- Meaningful URL stale: ${result.success.afterMeaningful.stale}`,
+    `- Meaningful URL transition: stale=${result.success.afterMeaningful.stale}; loading=${result.success.afterMeaningful.loading}`,
     `- Meaningful URL scrubbed stale surface: ${!result.success.afterMeaningful.oldExcerptVisible && !result.success.afterMeaningful.sourceLinkVisible}`,
     `- Copy info title/url/excerpt: ${result.success.copy.hasTitle}/${result.success.copy.hasUrl}/${result.success.copy.hasExcerpt}`,
     `- Storage privacy probe: ok=${result.storagePrivacy?.ok}; localKeys=${result.storagePrivacy?.localKeyCount ?? "(missing)"}; sessionKeys=${result.storagePrivacy?.sessionKeyCount ?? "(missing)"}; hits=${result.storagePrivacy?.hits?.length ?? "(missing)"}`,

@@ -65,7 +65,9 @@ import {
   hasGeneralPageHostPermission,
   requestGeneralPageHostPermission,
 } from "../lib/general-page-host-permission";
-import { safeFilenamePart, saveMarkdownTextFile } from "./browser-actions";
+import { copyReadingBriefQuestion, safeFilenamePart, saveMarkdownTextFile } from "./browser-actions";
+import { googleSearchUrl, readingBriefQuestionDisplay } from "./reading-brief-text";
+import { modelDisplayIdentity } from "../lib/model-display";
 import type { TabId } from "./tabs";
 
 type PagePlatform = PageReadabilityPlatform;
@@ -91,6 +93,8 @@ interface PageReadingSession {
   completedAt?: number;
   elapsedMs?: number;
   activationSource: PageActivationSource;
+  /** True while an all-sites auto-read is waiting for the DOM-settle debounce. */
+  autoReadPending?: boolean;
   advisor?: PageReadingAdvisorSession;
   analysis?: PageReadingAnalysisSession;
   screenshot?: PageReadingScreenshotSession;
@@ -710,7 +714,12 @@ function shouldHideReadyPipelineState(
   advisor: PageReadingAdvisorSession | undefined,
   analysis: PageReadingAnalysisSession | undefined,
 ): boolean {
-  if (!context || !advisor || analysis?.status !== "ready") return false;
+  // "running" counts as clean-ready too: while the quick brief is being
+  // generated for an otherwise clean page, the pane keeps the final compact
+  // layout (title + loading line) instead of flashing pipeline diagnostics
+  // for a few seconds and then collapsing them when the brief arrives.
+  // Errors flip status to "error", which brings the diagnostics back.
+  if (!context || !advisor || (analysis?.status !== "ready" && analysis?.status !== "running")) return false;
   if (context.modelReadiness !== "ready" || context.targetKind !== "page") return false;
   const effective = advisor.effectiveModelContext;
   const cleanScope = advisor.status === "not_needed" ||
@@ -718,6 +727,17 @@ function shouldHideReadyPipelineState(
       advisor.advice?.decision === "accept_current" &&
       effective?.allowedUse === "article_or_selection_analysis");
   return cleanScope;
+}
+
+function shouldHidePendingPageAdvisorState(
+  context: GeneralPageModelContext | undefined,
+  advisor: PageReadingAdvisorSession | undefined,
+): boolean {
+  // Scope classification is an internal transition, not a user decision.
+  // Keep whole-page reads on the same neutral loading surface used by brief
+  // generation until the advisor produces a durable result. Final caution,
+  // blocked, and recovery states remain visible after checking completes.
+  return context?.targetKind === "page" && advisor?.status === "checking";
 }
 
 function shouldHideCleanExtractionDiagnostics(
@@ -934,9 +954,15 @@ function advisorHtml(
   `;
 }
 
+// Inline SVG strings mirror the Feed renderers' createCopyIcon /
+// createDownloadIcon so Page/Web actions look identical to Feed actions.
+const COPY_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="11" height="11" rx="2"></rect><rect x="9" y="9" width="11" height="11" rx="2"></rect></svg>`;
+const DOWNLOAD_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="M8 11l4 4 4-4"></path><path d="M5 21h14"></path></svg>`;
+
 function analysisHtml(
   analysis: PageReadingAnalysisSession | undefined,
   tr: (key: string, params?: Record<string, string | number>) => string,
+  pageTitle?: string,
 ): string {
   if (!analysis || analysis.status === "idle") return "";
   const title = tr("sidepanel.page.analysis.title");
@@ -957,10 +983,11 @@ function analysisHtml(
       <button id="pageAnalysisRetry" class="btn-investigation-secondary page-reader-analysis-retry" type="button">${escapeHtml(tr("sidepanel.page.analysis.retry"))}</button>
     `
     : analysis.brief
-    ? briefHtml(analysis.brief, analysis.allowedUse, tr)
+    ? briefHtml(analysis.brief, analysis.allowedUse, tr, pageTitle)
     : "";
+  const overviewClass = analysis.allowedUse === "page_overview_only" ? " is-overview" : "";
   return `
-    <section class="page-reader-analysis is-${escapeHtml(analysis.status)}">
+    <section class="page-reader-analysis is-${escapeHtml(analysis.status)}${overviewClass}">
       <div class="page-reader-analysis-header">
         <h3>${escapeHtml(title)}</h3>
         ${visibleStatus}
@@ -974,27 +1001,68 @@ function briefHtml(
   brief: GeneralPageBrief,
   allowedUse: GeneralPageEffectiveModelContextUse | undefined,
   tr: (key: string, params?: Record<string, string | number>) => string,
+  pageTitle?: string,
 ): string {
-  const noteKey = brief.mode === "quick"
-    ? "sidepanel.page.analysis.quickModelNote"
-    : "sidepanel.page.analysis.modelNote";
-  const noteWithElapsedKey = brief.mode === "quick"
-    ? "sidepanel.page.analysis.quickModelNoteWithElapsed"
-    : "sidepanel.page.analysis.modelNoteWithElapsed";
-  const modelNote = brief.elapsedMs
-    ? tr(noteWithElapsedKey, {
-        model: brief.model,
+  const modelLabel = modelDisplayIdentity(brief.model).label || brief.model;
+  const attributionTitle = brief.elapsedMs
+    ? tr("sidepanel.dynamic.readingBrief.modelNoteWithElapsed", {
+        model: modelLabel,
         elapsed: Math.round(brief.elapsedMs / 100) / 10,
       })
-    : tr(noteKey, { model: brief.model });
+    : tr("sidepanel.dynamic.readingBrief.modelNoteNoElapsed", { model: modelLabel });
+  const overview = allowedUse === "page_overview_only";
+  // The model note is a scope explanation: for overview briefs it renders
+  // directly under the badge so "what kind of analysis this is" reads as
+  // one cluster; ordinary briefs keep it at the bottom with the other
+  // low-priority notes.
+  const noteHtml = brief.note
+    ? `<p class="page-reader-analysis-note${overview ? " page-reader-analysis-scope-note" : ""}">${escapeHtml(brief.note)}</p>`
+    : "";
   return `
-    ${allowedUse === "page_overview_only" ? `<div class="page-reader-analysis-badge">${escapeHtml(tr("sidepanel.page.analysis.overview"))}</div>` : ""}
+    ${overview ? `<div class="page-reader-analysis-badge">${escapeHtml(tr("sidepanel.page.analysis.overview"))}</div>` : ""}
+    ${overview ? noteHtml : ""}
     <p class="page-reader-analysis-summary">${escapeHtml(brief.summary)}</p>
     ${briefSectionHtml(tr("sidepanel.page.analysis.context"), brief.bg?.map((item) => `${item.t}: ${item.why}${item.q ? ` ${item.q}` : ""}`) ?? [])}
-    ${allowedUse === "page_overview_only" ? "" : briefSectionHtml(tr("sidepanel.page.analysis.claims"), brief.claims?.map((claim) => `${claim.c}: ${claim.why} ${claim.need}`) ?? [])}
-    ${briefSectionHtml(tr("sidepanel.page.analysis.questions"), brief.qs?.map((question) => question.q) ?? [])}
-    ${brief.note ? `<p class="page-reader-analysis-note">${escapeHtml(brief.note)}</p>` : ""}
-    <div class="page-reader-analysis-model">${escapeHtml(modelNote)}</div>
+    ${overview ? "" : briefSectionHtml(tr("sidepanel.dynamic.readingBrief.verify"), brief.claims?.map((claim) => tr("sidepanel.dynamic.readingBrief.needEvidence", { claim: claim.c, need: claim.need })) ?? [])}
+    ${briefQuestionsHtml(brief.qs ?? [], pageTitle, tr)}
+    ${overview ? "" : noteHtml}
+    ${brief.mode === "quick" ? `<p class="page-reader-analysis-note page-reader-analysis-quick-note">${escapeHtml(tr("sidepanel.page.analysis.quickDisclaimer"))}</p>` : ""}
+    <div class="sidepanel-attribution reading-brief-model-note" title="${escapeHtml(attributionTitle)}">${escapeHtml(tr("sidepanel.dynamic.readingBrief.modelNote", { model: modelLabel }))}</div>
+  `;
+}
+
+/**
+ * Questions render as Feed-style rows with per-question copy and
+ * "Ask Gemini" actions, reusing the Feed reading-brief classes so both
+ * panes stay visually aligned. Rows use divs (not ul) so the audit's
+ * design-restraint list-section counting keeps treating single-item
+ * sections as compact.
+ */
+function briefQuestionsHtml(
+  questions: Array<{ q: string }>,
+  pageTitle: string | undefined,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (questions.length === 0) return "";
+  const rows = questions.map((question) => {
+    const display = readingBriefQuestionDisplay(question.q);
+    const query = [display, pageTitle?.trim()].filter(Boolean).join(" ").slice(0, 200);
+    return `
+      <div class="reading-brief-question-row">
+        <span class="reading-brief-question-text">${escapeHtml(display)}</span>
+        <span class="reading-brief-question-actions">
+          <button type="button" class="reading-brief-copy-btn page-analysis-question-copy" data-question="${escapeHtml(display)}" title="${escapeHtml(tr("sidepanel.dynamic.readingBrief.copyQuestion"))}" aria-label="${escapeHtml(tr("sidepanel.dynamic.readingBrief.copyQuestionAria", { question: display }))}">${COPY_ICON_SVG}</button>
+          <a class="reading-brief-google-link" href="${escapeHtml(googleSearchUrl(query))}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(tr("sidepanel.dynamic.readingBrief.askGeminiTitle"))}" aria-label="${escapeHtml(tr("sidepanel.dynamic.readingBrief.askGeminiAria", { query }))}">${escapeHtml(tr("sidepanel.dynamic.readingBrief.askGemini"))}</a>
+        </span>
+      </div>
+    `;
+  }).join("");
+  const singleClass = questions.length === 1 ? " is-single" : "";
+  return `
+    <div class="page-reader-analysis-section page-reader-analysis-questions${singleClass}">
+      <h4>${escapeHtml(tr("sidepanel.page.analysis.questions"))}</h4>
+      ${rows}
+    </div>
   `;
 }
 
@@ -1163,40 +1231,72 @@ export function createSidepanelPageReadingRuntime({
     autoReadToken += 1;
   }
 
-  function shouldAutoReadActivePage(): boolean {
+  function shouldAutoReadActivePage(includePending = false): boolean {
     if (typeof activeTabId !== "number") return false;
     if (platformForUrl(activeUrl) !== "general") return false;
     const session = sessions.get(activeTabId);
     if (!session) return true;
-    if (session.status === "loading") return false;
+    if (session.status === "loading") return includePending && session.autoReadPending === true;
     const samePage = isMeaningfullySamePage(session.identity, activeUrl);
     if (samePage && session.surface && session.status !== "stale") return false;
     return true;
   }
 
+  function showPendingAutoRead(tabId: number, url: string): void {
+    const existing = sessions.get(tabId);
+    const startedAt = existing?.autoReadPending && typeof existing.startedAt === "number"
+      ? existing.startedAt
+      : now();
+    sessions.set(tabId, {
+      ...(existing ?? {
+        tabId,
+        activationSource: "sidepanel" as const,
+      }),
+      url,
+      identity: pageUrlIdentity(url),
+      title: activeTitle || existing?.title,
+      surface: undefined,
+      target: undefined,
+      candidateBlocks: undefined,
+      status: "loading",
+      error: undefined,
+      updatedAt: startedAt,
+      startedAt,
+      completedAt: undefined,
+      elapsedMs: undefined,
+      activationSource: "sidepanel",
+      autoReadPending: true,
+      advisor: undefined,
+      analysis: undefined,
+      screenshot: undefined,
+    });
+    if (tabId === activeTabId || tabId === displayTabId) render();
+  }
+
   async function maybeAutoReadActivePage(token: number, expectedTabId: number, expectedUrl: string): Promise<void> {
     if (token !== autoReadToken) return;
-    if (activeTabId !== expectedTabId || activeUrl !== expectedUrl || !shouldAutoReadActivePage()) return;
-    const hasPermission = await hasAllSitesPermission().catch(() => false);
-    if (!hasPermission) return;
-    if (token !== autoReadToken) return;
-    if (activeTabId !== expectedTabId || activeUrl !== expectedUrl || !shouldAutoReadActivePage()) return;
+    if (activeTabId !== expectedTabId || activeUrl !== expectedUrl || !shouldAutoReadActivePage(true)) return;
     await requestReadCurrentPage("sidepanel");
   }
 
   function scheduleAutoReadActivePage(): void {
     clearAutoReadTimer();
     autoReadToken += 1;
-    if (!installed || !shouldAutoReadActivePage()) return;
+    if (!installed || !shouldAutoReadActivePage(true)) return;
     const expectedTabId = activeTabId;
     const expectedUrl = activeUrl;
     if (typeof expectedTabId !== "number") return;
     const token = autoReadToken;
-    autoReadTimer = setTimeout(() => {
-      autoReadTimer = undefined;
-      void maybeAutoReadActivePage(token, expectedTabId, expectedUrl);
-    }, AUTO_READ_DEBOUNCE_MS);
-    (autoReadTimer as { unref?: () => void }).unref?.();
+    void hasAllSitesPermission().then((hasPermission) => {
+      if (!hasPermission || token !== autoReadToken) return;
+      if (activeTabId !== expectedTabId || activeUrl !== expectedUrl || !shouldAutoReadActivePage(true)) return;
+      showPendingAutoRead(expectedTabId, expectedUrl);
+      autoReadTimer = setTimeout(() => {
+        autoReadTimer = undefined;
+        void maybeAutoReadActivePage(token, expectedTabId, expectedUrl);
+      }, AUTO_READ_DEBOUNCE_MS);
+      (autoReadTimer as { unref?: () => void }).unref?.();
+    }).catch(() => {});
   }
 
   function friendlyPageReadingError(error: string): string {
@@ -1294,6 +1394,7 @@ export function createSidepanelPageReadingRuntime({
       session.candidateBlocks = undefined;
       session.advisor = undefined;
       session.analysis = undefined;
+      session.autoReadPending = undefined;
       session.updatedAt = now();
     }
     render();
@@ -1316,6 +1417,7 @@ export function createSidepanelPageReadingRuntime({
       analysis: undefined,
       screenshot: undefined,
       status: "stale",
+      autoReadPending: undefined,
       updatedAt: now(),
     });
     if (tabId === displayTabId) render();
@@ -1393,8 +1495,11 @@ export function createSidepanelPageReadingRuntime({
     const excerpt = viewSession?.surface
       ? visibleExcerpt(viewSession.surface, modelContext, viewSession.advisor?.effectiveModelContext)
       : "";
-    const hideReadyPipelineState = shouldHideReadyPipelineState(modelContext, viewSession?.advisor, viewSession?.analysis);
-    const hideExtractionDiagnostics = shouldHideCleanExtractionDiagnostics(viewSession?.surface, modelContext, viewSession?.advisor, viewSession?.analysis);
+    const hidePendingAdvisorState = shouldHidePendingPageAdvisorState(modelContext, viewSession?.advisor);
+    const hideReadyPipelineState = hidePendingAdvisorState ||
+      shouldHideReadyPipelineState(modelContext, viewSession?.advisor, viewSession?.analysis);
+    const hideExtractionDiagnostics = hidePendingAdvisorState ||
+      shouldHideCleanExtractionDiagnostics(viewSession?.surface, modelContext, viewSession?.advisor, viewSession?.analysis);
     const hasReadySurface = Boolean(session?.surface && session.status === "ready");
     const warningText = session?.surface?.extraction.warnings.join(", ") || "";
     const updatedAt = session ? formatUpdatedAt(session.updatedAt, lang) : "";
@@ -1414,7 +1519,7 @@ export function createSidepanelPageReadingRuntime({
       : "";
     const screenshotBlock = session && displayedSessionIsActive ? screenshotHtml(session, tr) : "";
     const prioritizeScreenshotRecovery = Boolean(screenshotBlock);
-    const visibleWarningText = prioritizeScreenshotRecovery ? "" : warningText;
+    const visibleWarningText = prioritizeScreenshotRecovery || hidePendingAdvisorState ? "" : warningText;
     const shouldShowProcessingStatus = Boolean(
       !hideReadyPipelineState &&
         (
@@ -1430,10 +1535,15 @@ export function createSidepanelPageReadingRuntime({
           viewSession?.analysis?.status === "error"
         ),
     );
-    const analysisBlock = analysisHtml(viewSession?.analysis, tr);
-    const sourceLinksBlock = sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"));
+    const displayedAnalysis: PageReadingAnalysisSession | undefined = hidePendingAdvisorState
+      ? { status: "running", updatedAt: viewSession?.advisor?.updatedAt ?? now() }
+      : viewSession?.analysis;
+    const analysisBlock = analysisHtml(displayedAnalysis, tr, viewSession?.surface?.title || viewSession?.title);
+    const sourceLinksBlock = hidePendingAdvisorState
+      ? ""
+      : sourceLinksHtml(modelContext?.links ?? [], tr("sidepanel.page.sourceLinks"));
     const cleanReadyBodyOrder = hideReadyPipelineState;
-    const shouldPrioritizeAnalysis = Boolean(analysisBlock && viewSession?.analysis?.status !== "idle");
+    const shouldPrioritizeAnalysis = Boolean(analysisBlock && displayedAnalysis?.status !== "idle");
     const processingStatusBlock = shouldShowProcessingStatus
       ? processingStatusHtml(modelContext, viewSession?.advisor, viewSession?.analysis, tr)
       : "";
@@ -1463,8 +1573,8 @@ export function createSidepanelPageReadingRuntime({
     const cardFooterActions = session?.surface
       ? `
         <div class="page-reader-card-tools">
-          <button id="pageCopyMetadata" class="btn-investigation-secondary page-reader-card-action" type="button">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</button>
-          <button id="pageDownloadMarkdown" class="btn-investigation-secondary page-reader-card-action" type="button">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</button>
+          <button id="pageCopyMetadata" class="btn-investigation-secondary page-reader-card-action" type="button">${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</span></button>
+          <button id="pageDownloadMarkdown" class="btn-investigation-secondary page-reader-card-action" type="button">${DOWNLOAD_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</span></button>
         </div>
       `
       : "";
@@ -1504,7 +1614,7 @@ export function createSidepanelPageReadingRuntime({
     const statusBlock = hasReadySurface
       ? ""
       : `
-        <section class="page-reader-status${statusClass}"${statusTitle ? ` title="${escapeHtml(statusTitle)}" aria-label="${escapeHtml(statusTitle)}"` : ""} aria-live="polite">
+        <section class="page-reader-status${statusClass}${session?.surface ? "" : " is-standalone"}"${statusTitle ? ` title="${escapeHtml(statusTitle)}" aria-label="${escapeHtml(statusTitle)}"` : ""} aria-live="polite">
           <div class="page-reader-status-main">
             <div class="page-reader-status-label">${escapeHtml(statusLabel)}</div>
             <div class="page-reader-status-detail">${escapeHtml(statusDetailText)}</div>
@@ -1576,6 +1686,12 @@ export function createSidepanelPageReadingRuntime({
       if (!latest) return;
       runGeneralPageAnalysisIfEligible(latest.tabId, latest, true);
     });
+    for (const questionCopyBtn of pagePaneEl.querySelectorAll<HTMLButtonElement>(".page-analysis-question-copy")) {
+      questionCopyBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        copyReadingBriefQuestion(questionCopyBtn, questionCopyBtn.dataset.question || "", getLang());
+      });
+    }
     pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCapture")?.addEventListener("click", () => {
       if (typeof displayedTabId !== "number" || displayedTabId !== activeTabId) return;
       void captureScreenshotPreview(displayedTabId);
@@ -1855,8 +1971,8 @@ export function createSidepanelPageReadingRuntime({
       updatedAt: session.updatedAt,
     };
     sessions.set(tabId, nextSession);
-    if (tabId === activeTabId || tabId === displayTabId) render();
     if (advisor.effectiveModelContext) runGeneralPageAnalysisIfEligible(tabId, nextSession, false);
+    if (tabId === activeTabId || tabId === displayTabId) render();
   }
 
   function runGeneralPageAnalysisIfEligible(
@@ -2392,13 +2508,12 @@ export function createSidepanelPageReadingRuntime({
     if (revealIncoming) {
       displayTabId = tabId;
     }
-    if (tabId === activeTabId || displayTabId === tabId) {
-      render();
-    }
     if (!preserveRecoveryState) {
       startParserAdvisor(tabId, message.surface, {
         candidateBlocks: message.candidateBlocks ?? [],
       });
+    } else if (tabId === activeTabId || displayTabId === tabId) {
+      render();
     }
   }
 
@@ -2550,6 +2665,7 @@ export function createSidepanelPageReadingRuntime({
               advisorStatus: session.advisor?.status,
               advisorDecision: session.advisor?.advice?.decision ?? "none",
               analysisStatus: session.analysis?.status,
+              autoReadPending: session.autoReadPending,
               targetKind: session.surface ? modelContextForSession({ ...session, surface: session.surface }).targetKind : undefined,
               allowedUse: session.advisor?.effectiveModelContext?.allowedUse,
             }

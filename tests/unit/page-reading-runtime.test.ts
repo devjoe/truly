@@ -594,7 +594,18 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("頁面重點");
     expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
     expect(pagePaneEl.textContent).toContain("Runtime claim");
-    expect(pagePaneEl.textContent).toContain("brief-model 使用 1.2 秒產生快速重點");
+    // Quick briefs stay visibly marked as previews, while the model
+    // attribution matches the Feed pane: "Analyzed by …" with the elapsed
+    // sentence in the tooltip instead of inline prose.
+    expect(pagePaneEl.textContent).toContain("快速重點僅供預覽");
+    expect(pagePaneEl.textContent).toContain("Analyzed by brief-model");
+    expect(
+      pagePaneEl.querySelector(".page-reader-analysis .reading-brief-model-note")?.getAttribute("title"),
+    ).toContain("1.2");
+    // Follow-up questions carry Feed-style per-question actions.
+    expect(pagePaneEl.querySelector(".page-reader-analysis-questions .page-analysis-question-copy")).not.toBeNull();
+    const askLink = pagePaneEl.querySelector<HTMLAnchorElement>(".page-reader-analysis-questions .reading-brief-google-link");
+    expect(askLink?.href).toContain("google.com/search");
     expect(pagePaneEl.querySelector(".page-reader-analysis-header span")).toBeNull();
     expect(pagePaneEl.querySelectorAll(".page-reader-analysis-section.is-single")).toHaveLength(3);
     expect(pagePaneEl.querySelector(".page-reader-analysis-section ul")).toBeNull();
@@ -662,13 +673,87 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis .reading-brief-loading")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis-header")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-preview")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-processing-status")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-excerpt")?.textContent)
-      .toContain("Runtime fixture excerpt");
-    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-processing-status")).not.toBeNull();
-    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-supplemental-details")?.open).toBe(false);
+    // While a clean page's brief is running, the pane already uses the final
+    // compact ready layout: no raw excerpt/preview and no pipeline status
+    // blocks anywhere, so nothing collapses or jumps when the brief arrives.
+    expect(pagePaneEl.querySelector(".page-reader-excerpt")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-preview")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-processing-status")).toBeNull();
+    const supplemental = pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-supplemental-details");
+    if (supplemental) expect(supplemental.open).toBe(false);
+  });
+
+  it("keeps advisor checking behind a neutral page-brief loading state", async () => {
+    const pagePaneEl = setupDom();
+    const weakSurface = surface({
+      mainText: [
+        "Navigation Search Login Subscribe and several unrelated synthetic cards.",
+        "Synthetic card one contains only a short teaser and a link.",
+        "Synthetic card two contains another unrelated teaser and a link.",
+      ].join(" "),
+      excerpt: "Raw advisor-checking excerpt that must not flash before scope is decided.",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["large-navigation-noise", "no-main-content"],
+      },
+      links: Array.from({ length: 18 }, (_, index) => ({
+        href: `https://example.test/link-${index}`,
+        text: `Link ${index}`,
+      })),
+    });
+    const sendMessage = vi.fn((message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return Promise.resolve({
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: weakSurface,
+        } satisfies TrulyMessage);
+      }
+      if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+        return new Promise<TrulyMessage>(() => {
+          /* Keep scope classification pending for this transitional UI regression. */
+        });
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "advisor-model",
+      }),
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "GENERAL_PAGE_PARSER_ADVISOR_REQUEST",
+    }));
+    expect(pagePaneEl.textContent).toContain("正在準備頁面重點");
+    expect(pagePaneEl.querySelector(".page-reader-analysis.is-running")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-processing-status")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-extraction-diagnostics")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-model-context")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-advisor")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-excerpt, .page-reader-preview")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-supplemental-details")).toBeNull();
+    expect(pagePaneEl.textContent).not.toContain("Raw advisor-checking excerpt");
   });
 
   it("renders General Page brief format failures as user-facing copy", async () => {
@@ -836,6 +921,14 @@ describe("sidepanel page reading runtime", () => {
 
       runtime.install();
       await flushMicrotasks();
+
+      // Once all-sites access is confirmed, the auto-read debounce should
+      // already present a neutral loading state. Do not flash the manual
+      // "not read" guidance while waiting for the page DOM to settle.
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中");
+      expect(pagePaneEl.textContent).not.toContain("尚未讀取此頁");
+
       vi.advanceTimersByTime(1_000);
       await flushMicrotasks();
       await flushMicrotasks();
@@ -910,6 +1003,84 @@ describe("sidepanel page reading runtime", () => {
 
       expect(sendMessage.mock.calls.filter(([message]) => message.type === "PAGE_READING_REQUEST")).toHaveLength(1);
       expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("shows neutral loading instead of stale guidance while an all-sites reread is debounced", async () => {
+    vi.useFakeTimers();
+    try {
+      const pagePaneEl = setupDom();
+      let onUpdated: ((tabId: number, changeInfo: { url?: string; status?: string }, tab: { id: number; url: string; title: string }) => void) | undefined;
+      let tab = {
+        id: 42,
+        url: "https://example.test/article",
+        title: "First Runtime Fixture",
+      };
+      const sendMessage = vi.fn(async (message: TrulyMessage) => {
+        if (message.type === "PAGE_READING_REQUEST") {
+          return {
+            type: "PAGE_READING_RESULT",
+            tabId: 42,
+            surface: surface({
+              id: `general:${tab.url}`,
+              url: tab.url,
+              canonicalUrl: tab.url,
+              title: tab.title,
+              excerpt: `${tab.title} excerpt.`,
+            }),
+          } satisfies TrulyMessage;
+        }
+        throw new Error(`unexpected message ${(message as { type: string }).type}`);
+      });
+      const runtime = createSidepanelPageReadingRuntime({
+        pagePaneEl,
+        runtime: { sendMessage },
+        tabs: {
+          query: vi.fn(async () => [tab]),
+          onUpdated: {
+            addListener(listener) {
+              onUpdated = listener;
+            },
+          },
+        },
+        activateTab: vi.fn(),
+        getLang: () => "zh-TW",
+        now: () => 1_000,
+        hasAllSitesPermission: vi.fn(async () => true),
+      });
+
+      runtime.install();
+      await flushMicrotasks();
+      vi.advanceTimersByTime(1_000);
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      expect(pagePaneEl.textContent).toContain("First Runtime Fixture excerpt.");
+      expect(sendMessage.mock.calls.filter(([message]) => message.type === "PAGE_READING_REQUEST")).toHaveLength(1);
+
+      tab = {
+        id: 42,
+        url: "https://example.test/other-article",
+        title: "Second Runtime Fixture",
+      };
+      onUpdated?.(42, { url: tab.url }, tab);
+      await flushMicrotasks();
+
+      expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中");
+      expect(pagePaneEl.textContent).not.toContain("頁面已變更");
+      expect(pagePaneEl.textContent).not.toContain("First Runtime Fixture excerpt.");
+      expect(pagePaneEl.querySelector(".page-reader-processing-status")).toBeNull();
+      expect(pagePaneEl.querySelector(".page-reader-extraction-diagnostics")).toBeNull();
+      expect(sendMessage.mock.calls.filter(([message]) => message.type === "PAGE_READING_REQUEST")).toHaveLength(1);
+
+      vi.advanceTimersByTime(1_000);
+      await flushMicrotasks();
+      await flushMicrotasks();
+
+      expect(sendMessage.mock.calls.filter(([message]) => message.type === "PAGE_READING_REQUEST")).toHaveLength(2);
+      expect(pagePaneEl.textContent).toContain("Second Runtime Fixture excerpt.");
     } finally {
       vi.useRealTimers();
     }
@@ -1729,7 +1900,7 @@ describe("sidepanel page reading runtime", () => {
       type: "PAGE_READING_RESULT",
       tabId: 42,
       surface: surface({
-        mainText: "Sensitive stale runtime fixture text.",
+        mainText: `${surface().mainText} Sensitive stale runtime fixture text.`,
         excerpt: "Sensitive stale excerpt.",
       }),
     });

@@ -239,6 +239,13 @@
       padding: 0 10px;
       margin-top: -2px;
     }
+    /* Without a session card the status is the whole pane content, so it
+       keeps the Feed inset-card look instead of floating bare text. */
+    .page-reader-status.is-standalone {
+      padding: 7px 10px;
+      border-color: var(--truly-sidepanel-soft-border);
+      background: var(--truly-sidepanel-muted-surface);
+    }
     .page-reader-status.is-quiet-ready .page-reader-status-detail {
       display: none;
     }
@@ -304,20 +311,17 @@
       gap: 2px 6px;
       flex: 0 0 auto;
     }
+    /* Card actions keep the Feed external-tools button look (bordered
+       icon+label secondary buttons) so Web and Feed actions match. */
     .page-reader-card-action {
+      gap: 5px;
       min-height: 28px;
-      padding: 3px 7px;
-      border-color: transparent;
-      background: transparent;
-      color: var(--truly-sidepanel-muted-text);
-      font-size: 11px;
-      font-weight: 500;
-      box-shadow: none;
+      padding: 3px 9px;
     }
-    .page-reader-card-action:hover:not(:disabled) {
-      border-color: var(--truly-sidepanel-soft-border);
-      background: var(--truly-sidepanel-muted-surface);
-      color: var(--truly-sidepanel-text);
+    .page-reader-card-action svg {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 auto;
     }
     .page-reader-target-action {
       display: inline-flex;
@@ -649,20 +653,14 @@
       font-size: 10px;
       overflow-wrap: anywhere;
     }
+    /* Status blocks reuse the Feed reference-context inset-card look
+       (muted surface, small radius) instead of a colored accent bar.
+       Severity stays on the status text color. */
     .page-reader-processing-status {
       margin-top: 10px;
-      padding: 1px 0 1px 10px;
-      border-left: 2px solid var(--truly-sidepanel-soft-border);
-      background: transparent;
-    }
-    .page-reader-processing-status.is-ready {
-      border-left-color: color-mix(in srgb, #146c43 36%, var(--truly-sidepanel-soft-border));
-    }
-    .page-reader-processing-status.is-caution {
-      border-left-color: color-mix(in srgb, #8a6d1f 42%, var(--truly-sidepanel-soft-border));
-    }
-    .page-reader-processing-status.is-blocked {
-      border-left-color: color-mix(in srgb, #b42318 42%, var(--truly-sidepanel-soft-border));
+      padding: 7px 9px;
+      border-radius: 7px;
+      background: var(--truly-sidepanel-muted-surface);
     }
     .page-reader-processing-status-header {
       display: flex;
@@ -829,9 +827,13 @@
     }
     .page-reader-analysis {
       margin-top: 12px;
-      padding: 1px 0 1px 10px;
-      border-left: 2px solid color-mix(in srgb, #146c43 34%, var(--truly-sidepanel-soft-border));
+      padding: 1px 0;
       background: transparent;
+    }
+    /* Scope stays signalled by the overview badge alone; only error keeps
+       an accent bar. All briefs stay flat like the Feed pane. */
+    .page-reader-analysis-scope-note {
+      margin: -2px 0 6px !important;
     }
     .page-reader-analysis-header {
       display: flex;
@@ -856,7 +858,7 @@
     .page-reader-analysis h4 {
       margin: 7px 0 2px;
       color: var(--truly-sidepanel-muted-text);
-      font-size: 10px;
+      font-size: 11px;
     }
     .page-reader-analysis-header span {
       color: #146c43;
@@ -872,7 +874,8 @@
       margin-top: 2px;
     }
     .page-reader-analysis.is-error {
-      border-left-color: color-mix(in srgb, #b42318 45%, var(--truly-sidepanel-soft-border));
+      padding: 1px 0 1px 10px;
+      border-left: 2px solid color-mix(in srgb, #b42318 45%, var(--truly-sidepanel-soft-border));
     }
     .page-reader-analysis.is-error .page-reader-analysis-header span {
       color: #b42318;
@@ -880,7 +883,7 @@
     .page-reader-analysis p {
       margin: 0;
       color: var(--truly-sidepanel-muted-text);
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1.45;
     }
     .page-reader-analysis-summary {
@@ -904,7 +907,7 @@
       margin: 0;
       padding-left: 15px;
       color: var(--truly-sidepanel-text);
-      font-size: 11px;
+      font-size: 12px;
       line-height: 1.4;
     }
     .page-reader-analysis-section.is-single {
@@ -913,7 +916,13 @@
     }
     .page-reader-analysis-section.is-single p {
       color: var(--truly-sidepanel-text);
-      font-size: 11px;
+      font-size: 12px;
+      line-height: 1.42;
+    }
+    .page-reader-analysis-questions .reading-brief-question-row {
+      margin: 2px 0 0;
+      color: var(--truly-sidepanel-text);
+      font-size: 12px;
       line-height: 1.42;
     }
     .page-reader-analysis-note,
@@ -1648,6 +1657,14 @@
       height: 14px;
       display: block;
     }
+    .page-reader-analysis .page-analysis-question-copy {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 30px;
+      min-height: 30px;
+      padding: 7px;
+    }
     .reading-brief-copy-btn:hover,
     .reading-brief-copy-btn:focus-visible,
     .reading-brief-google-link:hover,
@@ -2003,16 +2020,6 @@
       background: #3a3b3c;
       border-color: #5b5c60;
     }
-    html[data-truly-theme="dark"] .page-reader-card-action {
-      background: transparent;
-      border-color: transparent;
-      color: var(--truly-sidepanel-muted-text);
-    }
-    html[data-truly-theme="dark"] .page-reader-card-action:hover:not(:disabled) {
-      background: var(--truly-sidepanel-muted-surface);
-      border-color: var(--truly-sidepanel-soft-border);
-      color: var(--truly-sidepanel-text);
-    }
     html[data-truly-theme="dark"] .btn-investigation-secondary-warning {
       background: var(--truly-sidepanel-muted-surface);
       border-color: var(--truly-sidepanel-control-border);
@@ -2141,16 +2148,6 @@
     html[data-truly-theme="light"] .btn-investigation-secondary:hover:not(:disabled) {
       background: #f5f6f7;
       border-color: #bec3c9;
-    }
-    html[data-truly-theme="light"] .page-reader-card-action {
-      background: transparent;
-      border-color: transparent;
-      color: var(--truly-sidepanel-muted-text);
-    }
-    html[data-truly-theme="light"] .page-reader-card-action:hover:not(:disabled) {
-      background: var(--truly-sidepanel-muted-surface);
-      border-color: var(--truly-sidepanel-soft-border);
-      color: var(--truly-sidepanel-text);
     }
     html[data-truly-theme="light"] .btn-investigation-secondary-warning {
       background: var(--truly-sidepanel-subtle-surface);
