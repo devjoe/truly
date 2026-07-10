@@ -767,7 +767,7 @@ describe("sidepanel page reading runtime", () => {
         model: "brief-model",
       }),
     }));
-    expect(pagePaneEl.textContent).toContain("頁面重點");
+    expect(pagePaneEl.textContent).toContain("閱讀脈絡");
     expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
     expect(pagePaneEl.textContent).toContain("Runtime claim");
     // Quick briefs stay visibly marked as previews, while the model
@@ -785,9 +785,13 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-analysis-header span")).toBeNull();
     expect(pagePaneEl.querySelectorAll(".page-reader-analysis-section.is-single")).toHaveLength(3);
     expect(pagePaneEl.querySelector(".page-reader-analysis-section ul")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-excerpt")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-context-details .page-reader-excerpt")).not.toBeNull();
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-context-details")?.open).toBe(false);
     expect(pagePaneEl.querySelector(".page-reader-card-header #pageCopyMetadata")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-card-footer .page-reader-source-links")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-context-details .page-reader-source-links")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-analysis-header h3")?.textContent).toBe("閱讀脈絡");
+    expect(pagePaneEl.querySelector(".page-reader-external-tools-label")?.textContent).toBe("外部工具整合");
     expect(pagePaneEl.querySelector(".page-reader-card-tools #pageCopyMetadata")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card-tools #pageDownloadMarkdown")).not.toBeNull();
     expect(pagePaneEl.textContent).not.toContain("讀取細節");
@@ -850,10 +854,10 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis .reading-brief-loading")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis-header")).toBeNull();
     // While a clean page's brief is running, the pane already uses the final
-    // compact ready layout: no raw excerpt/preview and no pipeline status
-    // blocks anywhere, so nothing collapses or jumps when the brief arrives.
-    expect(pagePaneEl.querySelector(".page-reader-excerpt")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-preview")).toBeNull();
+    // The extracted preview is available only inside the collapsed page-context
+    // disclosure, while the reading-context loading state remains primary.
+    expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-context-details .page-reader-excerpt")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-processing-status")).toBeNull();
     const supplemental = pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-supplemental-details");
     if (supplemental) expect(supplemental.open).toBe(false);
@@ -1699,7 +1703,8 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("Synthetic overview generated after a scope check.");
     expect(pagePaneEl.textContent).not.toContain("This claim should be stripped");
     const card = pagePaneEl.querySelector(".page-reader-card");
-    expect(card?.children[1]?.classList.contains("page-reader-analysis")).toBe(true);
+    expect(card?.children[1]?.classList.contains("page-reader-context-details")).toBe(true);
+    expect(card?.children[2]?.classList.contains("page-reader-analysis")).toBe(true);
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-preview")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-excerpt")?.textContent)

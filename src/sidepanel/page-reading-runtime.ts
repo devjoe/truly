@@ -504,16 +504,17 @@ function extractionDiagnosticsHtml(
   `;
 }
 
-function supplementalDetailsHtml(
+function pageContextHtml(
   blocks: string[],
+  open: boolean,
   tr: (key: string, params?: Record<string, string | number>) => string,
 ): string {
   const body = blocks.filter(Boolean).join("");
   if (!body) return "";
   return `
-    <details class="page-reader-supplemental-details">
+    <details class="page-reader-context-details page-reader-supplemental-details"${open ? " open" : ""}>
       <summary>${escapeHtml(tr("sidepanel.page.details"))}</summary>
-      <div class="page-reader-supplemental-body">${body}</div>
+      <div class="page-reader-context-body page-reader-supplemental-body">${body}</div>
     </details>
   `;
 }
@@ -972,11 +973,17 @@ function analysisHtml(
   if (analysis.status === "running") {
     return `
       <section class="page-reader-analysis is-running" role="status" aria-live="polite" aria-busy="true">
+        <div class="page-reader-analysis-header">
+          <h3>${escapeHtml(title)}</h3>
+        </div>
         <div class="reading-brief-loading">${escapeHtml(tr("sidepanel.page.analysis.running"))}</div>
       </section>
     `;
   }
-  const visibleStatus = analysis.status === "ready"
+  const overview = analysis.allowedUse === "page_overview_only";
+  const visibleStatus = analysis.status === "ready" && overview
+    ? `<span class="page-reader-analysis-scope">${escapeHtml(tr("sidepanel.page.analysis.overview"))}</span>`
+    : analysis.status === "ready"
     ? ""
     : `<span>${escapeHtml(statusText)}</span>`;
   const body = analysis.status === "error"
@@ -987,7 +994,7 @@ function analysisHtml(
     : analysis.brief
     ? briefHtml(analysis.brief, analysis.allowedUse, tr, pageTitle)
     : "";
-  const overviewClass = analysis.allowedUse === "page_overview_only" ? " is-overview" : "";
+  const overviewClass = overview ? " is-overview" : "";
   return `
     <section class="page-reader-analysis is-${escapeHtml(analysis.status)}${overviewClass}">
       <div class="page-reader-analysis-header">
@@ -1014,17 +1021,15 @@ function briefHtml(
     : tr("sidepanel.dynamic.readingBrief.modelNoteNoElapsed", { model: modelLabel });
   const overview = allowedUse === "page_overview_only";
   // The model note is a scope explanation: for overview briefs it renders
-  // directly under the badge so "what kind of analysis this is" reads as
-  // one cluster; ordinary briefs keep it at the bottom with the other
-  // low-priority notes.
+  // directly under the section header and scope chip so the analysis boundary
+  // reads as one cluster; ordinary briefs keep it with the low-priority notes.
   const noteHtml = brief.note
     ? `<p class="page-reader-analysis-note${overview ? " page-reader-analysis-scope-note" : ""}">${escapeHtml(brief.note)}</p>`
     : "";
   return `
-    ${overview ? `<div class="page-reader-analysis-badge">${escapeHtml(tr("sidepanel.page.analysis.overview"))}</div>` : ""}
     ${overview ? noteHtml : ""}
     <p class="page-reader-analysis-summary">${escapeHtml(brief.summary)}</p>
-    ${briefSectionHtml(tr("sidepanel.page.analysis.context"), brief.bg?.map((item) => `${item.t}: ${item.why}${item.q ? ` ${item.q}` : ""}`) ?? [])}
+    ${briefSectionHtml("", brief.bg?.map((item) => `${item.t}: ${item.why}${item.q ? ` ${item.q}` : ""}`) ?? [])}
     ${overview ? "" : briefSectionHtml(tr("sidepanel.dynamic.readingBrief.verify"), brief.claims?.map((claim) => tr("sidepanel.dynamic.readingBrief.needEvidence", { claim: claim.c, need: claim.need })) ?? [])}
     ${briefQuestionsHtml(brief.qs ?? [], pageTitle, tr)}
     ${overview ? "" : noteHtml}
@@ -1070,17 +1075,18 @@ function briefQuestionsHtml(
 
 function briefSectionHtml(title: string, items: string[]): string {
   if (items.length === 0) return "";
+  const heading = title ? `<h4>${escapeHtml(title)}</h4>` : "";
   if (items.length === 1) {
     return `
       <div class="page-reader-analysis-section is-single">
-        <h4>${escapeHtml(title)}</h4>
+        ${heading}
         <p>${escapeHtml(items[0])}</p>
       </div>
     `;
   }
   return `
     <div class="page-reader-analysis-section">
-      <h4>${escapeHtml(title)}</h4>
+      ${heading}
       <ul>
         ${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
       </ul>
@@ -1596,44 +1602,33 @@ export function createSidepanelPageReadingRuntime({
     const processingStatusBlock = shouldShowProcessingStatus
       ? processingStatusHtml(modelContext, viewSession?.advisor, viewSession?.analysis, tr)
       : "";
-    const modelPipeline = [
-      processingStatusBlock,
-      screenshotBlock,
-    ].join("");
-    const supplementalProcessingStatus = shouldPrioritizeAnalysis && shouldShowProcessingStatus
-      ? processingStatusBlock
-      : !shouldShowProcessingStatus && !hideReadyPipelineState
+    const pageContextProcessingStatus = processingStatusBlock || (!hideReadyPipelineState
       ? processingStatusHtml(modelContext, viewSession?.advisor, viewSession?.analysis, tr)
-      : "";
-    const shouldFoldPreviewIntoDetails = Boolean(
-      !cleanReadyBodyOrder &&
-        (
-          shouldPrioritizeAnalysis ||
-          viewSession?.advisor?.effectiveModelContext?.allowedUse === "page_overview_only" ||
-          viewSession?.advisor?.effectiveModelContext?.allowedUse === "requires_user_target"
-        ),
-    );
+      : "");
+    const modelPipeline = screenshotBlock;
     const previewBlock = pagePreviewHtml(excerpt, tr);
-    const excerptBlock = cleanReadyBodyOrder || shouldFoldPreviewIntoDetails
-      ? ""
-      : previewBlock;
-    const supplementalPreviewBlock = shouldFoldPreviewIntoDetails ? previewBlock : "";
+    const pageContextPreviewBlock = hidePendingAdvisorState ? "" : previewBlock;
     const cardHeaderActions = pageReadActionHtml(canRead && displayedSessionIsActive, Boolean(session?.surface));
     const cardFooterActions = session?.surface
       ? `
-        <div class="page-reader-card-tools">
-          <button id="pageCopyMetadata" class="btn-investigation-secondary page-reader-card-action" type="button">${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</span></button>
-          <button id="pageDownloadMarkdown" class="btn-investigation-secondary page-reader-card-action" type="button">${DOWNLOAD_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</span></button>
-        </div>
+        <footer class="page-reader-card-footer page-reader-external-tools">
+          <div class="page-reader-external-tools-label">${escapeHtml(tr("sidepanel.dynamic.actions.title"))}</div>
+          <div class="page-reader-external-tools-hint">${escapeHtml(tr("sidepanel.dynamic.actions.hint"))}</div>
+          <div class="page-reader-card-tools">
+            <button id="pageCopyMetadata" class="btn-investigation-secondary page-reader-card-action" type="button">${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</span></button>
+            <button id="pageDownloadMarkdown" class="btn-investigation-secondary page-reader-card-action" type="button">${DOWNLOAD_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</span></button>
+          </div>
+        </footer>
       `
       : "";
     const warningBlock = visibleWarningText
       ? `<div class="page-reader-warnings"><span>${escapeHtml(tr("sidepanel.page.warnings"))}</span>${escapeHtml(visibleWarningText)}</div>`
       : "";
-    const supplementalBlock = supplementalDetailsHtml([supplementalPreviewBlock, sourceLinksBlock, extractionDiagnostics, supplementalProcessingStatus, warningBlock], tr);
-    const cardFooterBlock = supplementalBlock || cardFooterActions
-      ? `<footer class="page-reader-card-footer">${supplementalBlock}${cardFooterActions}</footer>`
-      : "";
+    const pageContextBlock = pageContextHtml(
+      [pageContextPreviewBlock, sourceLinksBlock, extractionDiagnostics, pageContextProcessingStatus, warningBlock],
+      false,
+      tr,
+    );
     const emptyBodyBlock = !session?.surface && !showErrorBlock && session?.status !== "loading" && platform === "general"
       ? emptyBody(platform, canRead, title, source || (url ? hostnameForUrl(url) : ""), cardHeaderActions)
       : "";
@@ -1687,11 +1682,11 @@ export function createSidepanelPageReadingRuntime({
             </div>
             ${cardHeaderActions}
           </div>
-          ${excerptBlock}
+          ${pageContextBlock}
           ${shouldPrioritizeAnalysis && !cleanReadyBodyOrder ? analysisBlock : ""}
           ${cleanReadyBodyOrder || shouldPrioritizeAnalysis ? "" : modelPipeline}
           ${cleanReadyBodyOrder || !shouldPrioritizeAnalysis ? analysisBlock : ""}
-          ${cardFooterBlock}
+          ${cardFooterActions}
         </article>
       ` : emptyBodyBlock}
     `;

@@ -1266,6 +1266,9 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           modelContextPresent: Boolean(pane?.querySelector(".page-reader-model-context")),
           advisorPresent: Boolean(pane?.querySelector(".page-reader-advisor")),
           previewPresent: Boolean(pane?.querySelector(".page-reader-excerpt, .page-reader-preview")),
+          previewDirectPresent: Boolean(pane?.querySelector(".page-reader-card > .page-reader-excerpt, .page-reader-card > .page-reader-preview")),
+          pageContextPresent: Boolean(pane?.querySelector(".page-reader-context-details")),
+          pageContextOpen: pane?.querySelector(".page-reader-context-details")?.hasAttribute("open") ?? null,
           analysisClass: pane?.querySelector(".page-reader-analysis")?.className || "",
           supplementalDetailsOpen: pane?.querySelector(".page-reader-supplemental-details")?.hasAttribute("open") ?? null,
           runtimeState,
@@ -1424,7 +1427,8 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           return el ? {
             className: el.className,
             title: el.querySelector('h3')?.textContent?.trim(),
-            statusVisible: Boolean(el.querySelector('.page-reader-analysis-header span')),
+            statusVisible: Boolean(el.querySelector('.page-reader-analysis-header span:not(.page-reader-analysis-scope)')),
+            scope: el.querySelector('.page-reader-analysis-scope')?.textContent?.trim() || '',
             singleSectionCount: el.querySelectorAll('.page-reader-analysis-section.is-single').length,
             listSectionCount: el.querySelectorAll('.page-reader-analysis-section:not(.is-single) ul').length,
           } : null;
@@ -1434,10 +1438,26 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           headerDownload: Boolean(pane?.querySelector('.page-reader-card-header #pageDownloadMarkdown')),
           footerCopy: Boolean(pane?.querySelector('.page-reader-card-tools #pageCopyMetadata')),
           footerDownload: Boolean(pane?.querySelector('.page-reader-card-tools #pageDownloadMarkdown')),
-          unifiedFooter: Boolean(pane?.querySelector('.page-reader-card-footer .page-reader-source-links a')) &&
+          contextSourceLinks: Boolean(pane?.querySelector('.page-reader-context-details .page-reader-source-links a')),
+          externalToolsFooter: Boolean(pane?.querySelector('.page-reader-external-tools .page-reader-external-tools-label')) &&
             Boolean(pane?.querySelector('.page-reader-card-footer .page-reader-card-tools #pageCopyMetadata')) &&
             Boolean(pane?.querySelector('.page-reader-card-footer .page-reader-card-tools #pageDownloadMarkdown')),
         },
+        informationArchitecture: (() => {
+          const card = pane?.querySelector('.page-reader-card');
+          const context = card?.querySelector(':scope > .page-reader-context-details');
+          const analysis = card?.querySelector(':scope > .page-reader-analysis');
+          const tools = card?.querySelector(':scope > .page-reader-external-tools');
+          const children = card ? [...card.children] : [];
+          return {
+            contextTitle: context?.querySelector(':scope > summary')?.textContent?.trim() || '',
+            readingTitle: analysis?.querySelector('.page-reader-analysis-header h3')?.textContent?.trim() || '',
+            toolsTitle: tools?.querySelector('.page-reader-external-tools-label')?.textContent?.trim() || '',
+            contextCollapsed: context ? !context.hasAttribute('open') : null,
+            contextBeforeReading: Boolean(context && analysis && children.indexOf(context) < children.indexOf(analysis)),
+            readingBeforeTools: Boolean(analysis && tools && children.indexOf(analysis) < children.indexOf(tools)),
+          };
+        })(),
         sourceLinks: [...pane?.querySelectorAll('.page-reader-source-links a') || []].map((el) => ({
           label: el.textContent?.trim(),
           href: el.href
@@ -1454,6 +1474,24 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     writeFileSync(resolve(OUT_DIR, "page-initial-load-timeline.json"), JSON.stringify(initialLoadTimeline, null, 2));
     const responsive = await auditResponsivePageWebLayout(side, "page-responsive-430.png");
+    const pageContext = await side.evaluateJson(`(() => {
+      const details = document.querySelector('#page-pane .page-reader-context-details');
+      if (!details) return { present: false };
+      details.open = true;
+      return {
+        present: true,
+        open: details.open,
+        title: details.querySelector(':scope > summary')?.textContent?.trim() || '',
+        hasPreview: Boolean(details.querySelector('.page-reader-excerpt, .page-reader-preview')),
+        sourceLinkCount: details.querySelectorAll('.page-reader-source-links a').length,
+        technicalDetailsCollapsed: [...details.querySelectorAll('.page-reader-diagnostics')].every((item) => !item.open),
+      };
+    })()`);
+    await side.screenshot(resolve(OUT_DIR, "page-context-expanded.png"));
+    await side.evaluate(`(() => {
+      const details = document.querySelector('#page-pane .page-reader-context-details');
+      if (details) details.open = false;
+    })()`);
 
     const copyRaw = await side.evaluate(`(async () => {
       globalThis.__trulyCopiedText = null;
@@ -1720,6 +1758,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       ready,
       pageBrief,
       responsive,
+      pageContext,
       copy,
       history: { second: historySecond, third: historyThird, display: historyDisplay },
       selection: { selectedText, beforeAction: selectionBeforeAction, ...selection },
@@ -1745,11 +1784,15 @@ async function observePageBrief(side, readyScreenshotName) {
     status: "not_observed",
     screenshot: null,
     text: "",
+    header: "",
     modelContextStatus: "",
     pipelineHidden: false,
     diagnosticsHidden: false,
     primaryActions: null,
     rawExcerptVisible: false,
+    rawExcerptDirectVisible: false,
+    rawExcerptContextualized: false,
+    contextDetailsOpen: null,
     readyHeaderVisible: false,
   };
   try {
@@ -1779,6 +1822,9 @@ async function observePageBrief(side, readyScreenshotName) {
       pipelineHidden: !modelContext && !advisor,
       diagnosticsHidden: !extractionDiagnostics,
       rawExcerptVisible: Boolean(document.querySelector('#page-pane .page-reader-excerpt')),
+      rawExcerptDirectVisible: Boolean(document.querySelector('#page-pane .page-reader-card > .page-reader-excerpt, #page-pane .page-reader-card > .page-reader-preview')),
+      rawExcerptContextualized: Boolean(document.querySelector('#page-pane .page-reader-context-details .page-reader-excerpt, #page-pane .page-reader-context-details .page-reader-preview')),
+      contextDetailsOpen: document.querySelector('#page-pane .page-reader-context-details')?.hasAttribute('open') ?? null,
       readyHeaderVisible: Boolean(analysisHeader) && getComputedStyle(analysisHeader).display !== 'none',
       primaryActions: {
         hasStandaloneHeader: Boolean(document.querySelector('#page-pane .page-reader-header')),
@@ -1792,10 +1838,14 @@ async function observePageBrief(side, readyScreenshotName) {
   })()`);
   observation.status = /is-ready/.test(state?.className || "") ? "ready" : /is-error/.test(state?.className || "") ? "error" : "unknown";
   observation.text = state?.text || "";
+  observation.header = state?.header || "";
   observation.modelContextStatus = state?.modelContextStatus || "";
   observation.pipelineHidden = Boolean(state?.pipelineHidden);
   observation.diagnosticsHidden = Boolean(state?.diagnosticsHidden);
   observation.rawExcerptVisible = Boolean(state?.rawExcerptVisible);
+  observation.rawExcerptDirectVisible = Boolean(state?.rawExcerptDirectVisible);
+  observation.rawExcerptContextualized = Boolean(state?.rawExcerptContextualized);
+  observation.contextDetailsOpen = state?.contextDetailsOpen ?? null;
   observation.readyHeaderVisible = Boolean(state?.readyHeaderVisible);
   observation.primaryActions = state?.primaryActions || null;
   await side.screenshot(resolve(OUT_DIR, readyScreenshotName)).catch(() => {});
@@ -2858,15 +2908,32 @@ function designRestraint(result) {
   const singleItemBriefSectionsCompact = !/is-ready/.test(result.success.ready.pageAnalysis?.className || "") ||
     ((result.success.ready.pageAnalysis?.singleSectionCount ?? 0) >= 1 &&
       (result.success.ready.pageAnalysis?.listSectionCount ?? 0) === 0);
-  const cleanReadyRawExcerptHidden = result.success.pageBrief?.status !== "ready" ||
-    result.success.pageBrief?.rawExcerptVisible === false;
-  const cleanReadyBriefHeaderHidden = result.success.pageBrief?.status !== "ready" ||
-    result.success.pageBrief?.readyHeaderVisible === false;
+  const cleanReadyRawExcerptContextualized = result.success.pageBrief?.status !== "ready" ||
+    (result.success.pageBrief?.rawExcerptVisible === true &&
+      result.success.pageBrief?.rawExcerptDirectVisible === false &&
+      result.success.pageBrief?.rawExcerptContextualized === true &&
+      result.success.pageBrief?.contextDetailsOpen === false);
+  const cleanReadyBriefHeaderAligned = result.success.pageBrief?.status !== "ready" ||
+    (result.success.pageBrief?.readyHeaderVisible === true &&
+      /閱讀脈絡|Reading context/.test(result.success.pageBrief?.header || ""));
   const secondaryActionsInFooter = result.success.ready.cardActions?.headerCopy === false &&
     result.success.ready.cardActions?.headerDownload === false &&
     result.success.ready.cardActions?.footerCopy === true &&
     result.success.ready.cardActions?.footerDownload === true;
-  const sourceAndToolsUnifiedFooter = result.success.ready.cardActions?.unifiedFooter === true;
+  const sourceContextAndToolsSeparated = result.success.ready.cardActions?.contextSourceLinks === true &&
+    result.success.ready.cardActions?.externalToolsFooter === true;
+  const sharedReadingSkeleton = /頁面脈絡|Page context/.test(result.success.ready.informationArchitecture?.contextTitle || "") &&
+    /閱讀脈絡|Reading context/.test(result.success.ready.informationArchitecture?.readingTitle || "") &&
+    /外部工具整合|External Tool Integration/.test(result.success.ready.informationArchitecture?.toolsTitle || "") &&
+    result.success.ready.informationArchitecture?.contextCollapsed === true &&
+    result.success.ready.informationArchitecture?.contextBeforeReading === true &&
+    result.success.ready.informationArchitecture?.readingBeforeTools === true;
+  const pageContextExpandedHealthy = result.success.pageContext?.present === true &&
+    result.success.pageContext?.open === true &&
+    /頁面脈絡|Page context/.test(result.success.pageContext?.title || "") &&
+    result.success.pageContext?.hasPreview === true &&
+    (result.success.pageContext?.sourceLinkCount ?? 0) >= 1 &&
+    result.success.pageContext?.technicalDetailsCollapsed === true;
   const cleanReadyPrimaryActions = result.success.pageBrief?.primaryActions || result.success.ready.primaryActions;
   const primaryActionsScopedToCard = cleanReadyPrimaryActions?.hasStandaloneHeader === false &&
     cleanReadyPrimaryActions?.cardScopedReadAction === true &&
@@ -2883,16 +2950,18 @@ function designRestraint(result) {
   const interactionAccessible = (result.success.responsive?.unnamedInteractive?.length ?? 0) === 0 &&
     (result.success.responsive?.undersizedControls?.length ?? 0) === 0;
   return {
-    pass: readyDiagnosticsCollapsed && cleanBriefDebugHidden && readyPageStatusConsolidated && readyBriefStatusQuiet && singleItemBriefSectionsCompact && cleanReadyRawExcerptHidden && cleanReadyBriefHeaderHidden && secondaryActionsInFooter && sourceAndToolsUnifiedFooter && primaryActionsScopedToCard && sourceLinksCapped && nonCleanTechnicalCollapsed && responsiveClean && interactionAccessible,
+    pass: readyDiagnosticsCollapsed && cleanBriefDebugHidden && readyPageStatusConsolidated && readyBriefStatusQuiet && singleItemBriefSectionsCompact && cleanReadyRawExcerptContextualized && cleanReadyBriefHeaderAligned && secondaryActionsInFooter && sourceContextAndToolsSeparated && sharedReadingSkeleton && pageContextExpandedHealthy && primaryActionsScopedToCard && sourceLinksCapped && nonCleanTechnicalCollapsed && responsiveClean && interactionAccessible,
     readyDiagnosticsCollapsed,
     cleanBriefDebugHidden,
     readyPageStatusConsolidated,
     readyBriefStatusQuiet,
     singleItemBriefSectionsCompact,
-    cleanReadyRawExcerptHidden,
-    cleanReadyBriefHeaderHidden,
+    cleanReadyRawExcerptContextualized,
+    cleanReadyBriefHeaderAligned,
     secondaryActionsInFooter,
-    sourceAndToolsUnifiedFooter,
+    sourceContextAndToolsSeparated,
+    sharedReadingSkeleton,
+    pageContextExpandedHealthy,
     primaryActionsScopedToCard,
     sourceLinksCapped,
     nonCleanTechnicalCollapsed,
@@ -2926,7 +2995,15 @@ function autoReadTransitionState(result) {
   const firstAnalysis = entries.find((entry) => /page-reader-analysis is-(?:running|ready)/.test(entry.analysisClass || ""));
   const technicalStates = entries.filter((entry) =>
     (firstAnalysis ? entry.elapsedMs <= firstAnalysis.elapsedMs : true) &&
-    (entry.extractionDiagnosticsPresent || entry.processingStatusPresent || entry.modelContextPresent || entry.advisorPresent || entry.previewPresent));
+    (
+      entry.extractionDiagnosticsPresent ||
+      entry.processingStatusPresent ||
+      entry.modelContextPresent ||
+      entry.advisorPresent ||
+      entry.previewDirectPresent ||
+      entry.pageContextOpen === true ||
+      (entry.previewPresent && !entry.pageContextPresent)
+    ));
   const firstLoadingMs = typeof firstLoading?.elapsedMs === "number" ? firstLoading.elapsedMs : undefined;
   return {
     pass: typeof firstLoadingMs === "number" && firstLoadingMs <= 100 && technicalStates.length === 0,
@@ -3097,10 +3174,12 @@ function qaMatrixRows(result) {
         "; pageStatusConsolidated=" + restraint.readyPageStatusConsolidated +
         "; readyBriefStatusQuiet=" + restraint.readyBriefStatusQuiet +
         "; singleItemBriefSectionsCompact=" + restraint.singleItemBriefSectionsCompact +
-        "; cleanReadyRawExcerptHidden=" + restraint.cleanReadyRawExcerptHidden +
-        "; cleanReadyBriefHeaderHidden=" + restraint.cleanReadyBriefHeaderHidden +
+        "; cleanReadyRawExcerptContextualized=" + restraint.cleanReadyRawExcerptContextualized +
+        "; cleanReadyBriefHeaderAligned=" + restraint.cleanReadyBriefHeaderAligned +
         "; secondaryActionsInFooter=" + restraint.secondaryActionsInFooter +
-        "; sourceAndToolsUnifiedFooter=" + restraint.sourceAndToolsUnifiedFooter +
+        "; sourceContextAndToolsSeparated=" + restraint.sourceContextAndToolsSeparated +
+        "; sharedReadingSkeleton=" + restraint.sharedReadingSkeleton +
+        "; pageContextExpandedHealthy=" + restraint.pageContextExpandedHealthy +
         "; primaryActionsScopedToCard=" + restraint.primaryActionsScopedToCard +
         "; sourceLinksCapped=" + restraint.sourceLinksCapped +
         "; nonCleanTechnicalCollapsed=" + restraint.nonCleanTechnicalCollapsed +
@@ -3439,7 +3518,8 @@ function writeSummary(result, errors) {
     `- Page brief model context status: ${result.success.pageBrief?.modelContextStatus || (result.success.pageBrief?.pipelineHidden ? "hidden" : "(missing)")}`,
     `- Page brief quick mode: ${/快速重點|quick brief/.test(result.success.pageBrief?.text || "")}`,
     `- Responsive Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
-    `- Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; cleanBriefDebugHidden=${restraint.cleanBriefDebugHidden}; pageStatusConsolidated=${restraint.readyPageStatusConsolidated}; readyBriefStatusQuiet=${restraint.readyBriefStatusQuiet}; singleItemBriefSectionsCompact=${restraint.singleItemBriefSectionsCompact}; cleanReadyRawExcerptHidden=${restraint.cleanReadyRawExcerptHidden}; cleanReadyBriefHeaderHidden=${restraint.cleanReadyBriefHeaderHidden}; secondaryActionsInFooter=${restraint.secondaryActionsInFooter}; sourceAndToolsUnifiedFooter=${restraint.sourceAndToolsUnifiedFooter}; primaryActionsScopedToCard=${restraint.primaryActionsScopedToCard}; sourceLinksCapped=${restraint.sourceLinksCapped}; nonCleanTechnicalCollapsed=${restraint.nonCleanTechnicalCollapsed}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
+    `- Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; cleanBriefDebugHidden=${restraint.cleanBriefDebugHidden}; pageStatusConsolidated=${restraint.readyPageStatusConsolidated}; readyBriefStatusQuiet=${restraint.readyBriefStatusQuiet}; singleItemBriefSectionsCompact=${restraint.singleItemBriefSectionsCompact}; cleanReadyRawExcerptContextualized=${restraint.cleanReadyRawExcerptContextualized}; cleanReadyBriefHeaderAligned=${restraint.cleanReadyBriefHeaderAligned}; secondaryActionsInFooter=${restraint.secondaryActionsInFooter}; sourceContextAndToolsSeparated=${restraint.sourceContextAndToolsSeparated}; sharedReadingSkeleton=${restraint.sharedReadingSkeleton}; pageContextExpandedHealthy=${restraint.pageContextExpandedHealthy}; primaryActionsScopedToCard=${restraint.primaryActionsScopedToCard}; sourceLinksCapped=${restraint.sourceLinksCapped}; nonCleanTechnicalCollapsed=${restraint.nonCleanTechnicalCollapsed}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
+    `- Page context expanded: present=${result.success.pageContext?.present}; open=${result.success.pageContext?.open}; preview=${result.success.pageContext?.hasPreview}; links=${result.success.pageContext?.sourceLinkCount ?? "(missing)"}; technicalCollapsed=${result.success.pageContext?.technicalDetailsCollapsed}`,
     `- Web interaction accessibility: unnamed=${result.success.responsive?.unnamedInteractive?.length ?? "(missing)"}; undersizedControls=${result.success.responsive?.undersizedControls?.length ?? "(missing)"}`,
     `- Web history hidden: secondChips=${result.success.history?.second?.sessionCount ?? "(missing)"}; thirdChips=${result.success.history?.third?.sessionCount ?? "(missing)"}; focusSelection=${result.success.history?.display?.selectionDisabled === false}; focusReadVisible=${Boolean(result.success.history?.display?.readCurrentVisible)}`,
     `- Selection target: ${result.success.selection?.advisorStatus || "(missing)"}`,
@@ -3473,6 +3553,7 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
     result.success.responsive?.screenshot ? `- ${result.success.responsive.screenshot}` : null,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-context-expanded.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-web-history-hidden.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-web-history-hidden.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
