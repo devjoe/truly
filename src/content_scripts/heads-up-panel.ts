@@ -567,7 +567,7 @@ function buildTierABadge(decision: FilterDecision, lang: Lang): HTMLElement | nu
   return el;
 }
 
-function buildTierBBadge(decision: FilterDecision, lang: Lang): HTMLElement | null {
+export function buildTierBBadge(decision: FilterDecision, lang: Lang): HTMLElement | null {
   const hasDeep = !!decision.deepClassification;
   const hasError = !!decision.tierBError;
   const isPending = decision.tierBPending && !hasError;
@@ -593,8 +593,9 @@ function buildTierBBadge(decision: FilterDecision, lang: Lang): HTMLElement | nu
       return el;
     }
     el.classList.add("truly-badge-complete");
-    el.textContent = t("content.headsup.tierB.complete", lang);
-    const tooltip = buildAnalysisCompletionTooltip(decision, lang);
+    el.textContent = "✓";
+    const completionLabel = t("content.headsup.tierB.complete", lang);
+    const tooltip = `${completionLabel}\n${buildAnalysisCompletionTooltip(decision, lang)}`;
     el.title = tooltip;
     el.setAttribute("aria-label", tooltip);
   }

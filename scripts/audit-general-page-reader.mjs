@@ -5,6 +5,11 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  isFacebookPageTarget,
+  reloadStaleExtensionWithFacebookRecovery,
+} from "./lib/general-page-audit-runtime-reload.mjs";
+
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DIST_BUILD_ID = resolve(ROOT, "dist", "build-id.txt");
 const CDP_PORT = Number(process.env.CDP_PORT || 9222);
@@ -39,7 +44,7 @@ Artifacts are written under tmp/ and must not be committed.
 
 Environment:
   CDP_PORT=9222
-  TRULY_AUDIT_AUTO_RELOAD=1   reload the loaded Truly extension before auditing
+  TRULY_AUDIT_AUTO_RELOAD=1   reload stale Truly runtime and recover stale Facebook tabs
   TRULY_AUDIT_SKIP_POPUP_READ=1
                                skip the real chrome.action.openPopup read-click path
                                when the host OS cannot provide an active browser window
@@ -148,6 +153,9 @@ function connectCdp(webSocketDebuggerUrl) {
     },
     async clearViewport() {
       await send("Emulation.clearDeviceMetricsOverride").catch(() => {});
+    },
+    async reload() {
+      await send("Page.reload", { ignoreCache: true });
     },
     async closeTarget() {
       await send("Page.close").catch(() => {});
@@ -628,6 +636,35 @@ async function reloadExtension(extensionId) {
     helper.close();
   }
   await sleep(1500);
+}
+
+async function facebookTargetsWithContentScriptBuildIds(targets) {
+  const annotated = [];
+  for (const target of targets) {
+    if (!isFacebookPageTarget(target)) {
+      annotated.push(target);
+      continue;
+    }
+    const page = connectCdp(target.webSocketDebuggerUrl);
+    try {
+      const contentScriptBuildId = await page.evaluate(
+        "document.documentElement.dataset.trulyBuildId || null",
+      ).catch(() => null);
+      annotated.push({ ...target, contentScriptBuildId });
+    } finally {
+      page.close();
+    }
+  }
+  return annotated;
+}
+
+async function reloadFacebookTarget(target) {
+  const page = connectCdp(target.webSocketDebuggerUrl);
+  try {
+    await page.reload();
+  } finally {
+    page.close();
+  }
 }
 
 async function openSidePanelTestPage(extensionId, activePageTarget, suffix, activeTabId) {
@@ -2920,6 +2957,16 @@ function advisorTransitionState(result) {
   };
 }
 
+function runtimeReloadSafety(result) {
+  const reload = result.runtimeReload || {};
+  if (!reload.requested) return true;
+  const expectedFacebookReloads = reload.extensionReloaded
+    ? reload.facebookTabsFound
+    : reload.facebookTabsStale;
+  return reload.facebookTabsReloaded === expectedFacebookReloads &&
+    (expectedFacebookReloads > 0 || reload.skippedReason === "already_fresh");
+}
+
 function qaMatrixRows(result) {
   const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
@@ -2948,6 +2995,17 @@ function qaMatrixRows(result) {
     result.noGrant.emptyBlockPresent === false;
   const restraint = designRestraint(result);
   return [
+    [
+      "Runtime reload safety",
+      runtimeReloadSafety(result),
+      "requested=" + Boolean(result.runtimeReload?.requested) +
+        "; extensionStale=" + Boolean(result.runtimeReload?.extensionStale) +
+        "; extensionReloaded=" + Boolean(result.runtimeReload?.extensionReloaded) +
+        "; facebookFound=" + (result.runtimeReload?.facebookTabsFound ?? "missing") +
+        "; facebookStale=" + (result.runtimeReload?.facebookTabsStale ?? "missing") +
+        "; facebookReloaded=" + (result.runtimeReload?.facebookTabsReloaded ?? "missing") +
+        "; skipped=" + (result.runtimeReload?.skippedReason || "none"),
+    ],
     [
       "Popup activation",
       result.popup.general.button === "讀取此頁" &&
@@ -3319,8 +3377,8 @@ function auditCoverageRows(result) {
     row(
       "Audit 工具",
       "all phases",
-      "The audit itself must expose phase timing, QA evidence, private artifacts, and a feature-to-risk coverage map for review.",
-      ["Popup activation", "Ordinary article read", "Screenshot recovery", "Unsupported page guidance", "Storage privacy probe"],
+      "The audit must preserve loaded Facebook content scripts across runtime reloads and expose phase timing, QA evidence, private artifacts, and coverage.",
+      ["Runtime reload safety", "Popup activation", "Ordinary article read", "Screenshot recovery", "Unsupported page guidance", "Storage privacy probe"],
       [
         relative(ROOT, resolve(OUT_DIR, "audit.json")),
         relative(ROOT, PHASE_LOG_PATH),
@@ -3350,6 +3408,7 @@ function writeSummary(result, errors) {
     `- Captured at: ${result.capturedAt}`,
     `- Expected buildId: ${result.expectedBuildId}`,
     `- Live buildId: ${result.version?.buildId || "(missing)"}`,
+    `- Runtime reload: extensionReloaded=${Boolean(result.runtimeReload?.extensionReloaded)}; Facebook ${result.runtimeReload?.facebookTabsReloaded ?? 0}/${result.runtimeReload?.facebookTabsFound ?? 0}`,
     `- Verdict: ${errors.length === 0 ? "PASS" : "FAIL"}`,
     "",
     "## QA Matrix",
@@ -3366,6 +3425,7 @@ function writeSummary(result, errors) {
     "",
     "## Checks",
     "",
+    `- Runtime reload safety: requested=${Boolean(result.runtimeReload?.requested)}; extensionStale=${Boolean(result.runtimeReload?.extensionStale)}; extensionReloaded=${Boolean(result.runtimeReload?.extensionReloaded)}; Facebook found/stale/reloaded=${result.runtimeReload?.facebookTabsFound ?? 0}/${result.runtimeReload?.facebookTabsStale ?? 0}/${result.runtimeReload?.facebookTabsReloaded ?? 0}; skipped=${result.runtimeReload?.skippedReason || "none"}`,
     `- Popup general page: ${result.popup.general.button} / disabled=${result.popup.general.disabled}`,
     `- Popup unsupported page disabled: ${result.popup.unsupported.disabled}`,
     isPopupReadSkipped(result)
@@ -3408,6 +3468,7 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "audit.json"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "audit-coverage.json"))}`,
     `- ${relative(ROOT, PHASE_LOG_PATH)}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "runtime-reload.json"))}`,
     isPopupReadSkipped(result) ? null : `- ${relative(ROOT, resolve(OUT_DIR, "page-popup-read-result.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
@@ -3446,7 +3507,17 @@ try {
   const targets = await listTargets();
   const extension = await findTrulyExtension(targets, expectedBuildId, { allowStale: AUTO_RELOAD, extensionId: EXTENSION_ID });
   const extensionId = extension.meta.id;
-  if (AUTO_RELOAD) await reloadExtension(extensionId);
+  const runtimeTargets = await facebookTargetsWithContentScriptBuildIds(targets);
+  const runtimeReload = await reloadStaleExtensionWithFacebookRecovery({
+    autoReload: AUTO_RELOAD,
+    expectedBuildId,
+    liveBuildId: extension.meta.buildId,
+    targets: runtimeTargets,
+    reloadExtension: () => reloadExtension(extensionId),
+    reloadFacebookTarget,
+    settleAfterFacebookReload: () => sleep(3500),
+  });
+  writeFileSync(resolve(OUT_DIR, "runtime-reload.json"), `${JSON.stringify(runtimeReload, null, 2)}\n`);
   const version = await currentVersion(extensionId);
 
   const result = {
@@ -3455,6 +3526,7 @@ try {
     extensionId,
     expectedBuildId,
     version,
+    runtimeReload,
     syntheticUrls: {
       allowed: `${server.allowedBase}/article`,
       popupRead: `${server.allowedBase}/article?popup=1`,

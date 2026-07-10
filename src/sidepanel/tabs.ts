@@ -7,6 +7,27 @@ function isTabId(x: unknown): x is TabId {
   return typeof x === "string" && (VALID as readonly string[]).includes(x);
 }
 
+/** Update a tab's contextual availability. Returns whether the tab was selected
+ * when it became unavailable so the caller can move users to the appropriate
+ * surface without disturbing a still-valid selection such as Focus. */
+export function setTabAvailability(tab: TabId, available: boolean, reason = ""): boolean {
+  const button = document.querySelector<HTMLButtonElement>(`.tab[data-tab='${tab}']`);
+  if (!button) return false;
+  if (available) {
+    button.removeAttribute("aria-disabled");
+    button.removeAttribute("aria-label");
+    button.removeAttribute("data-tooltip");
+    return false;
+  }
+  const wasSelected = button.getAttribute("aria-selected") === "true";
+  const label = button.textContent?.trim() || tab;
+  button.setAttribute("aria-disabled", "true");
+  button.setAttribute("aria-label", reason ? `${label} — ${reason}` : label);
+  if (reason) button.dataset.tooltip = reason;
+  else button.removeAttribute("data-tooltip");
+  return wasSelected;
+}
+
 /** Read the stored tab id, migrating the legacy `"feed"` value (used
  *  before the 2026-04-29 sidepanel-analysis-tab redesign) to
  *  `"analysis"` so users with a stored selection don't lose context. */
@@ -66,9 +87,10 @@ export function initTabs(
     panel.setAttribute("aria-labelledby", btn.id);
   }
 
-  function visibleButtons(): HTMLButtonElement[] {
+  function availableButtons(): HTMLButtonElement[] {
     return buttons.filter((btn) => {
       if (btn.hidden || btn.getAttribute("aria-hidden") === "true") return false;
+      if (btn.getAttribute("aria-disabled") === "true") return false;
       return getComputedStyle(btn).display !== "none";
     });
   }
@@ -76,8 +98,14 @@ export function initTabs(
   function activate(tab: TabId): void {
     if (!isTabId(tab)) tab = "analysis";
     const targetButton = buttons.find((btn) => btn.dataset.tab === tab);
-    if (!targetButton || targetButton.hidden || targetButton.getAttribute("aria-hidden") === "true") {
-      tab = "analysis";
+    if (
+      !targetButton ||
+      targetButton.hidden ||
+      targetButton.getAttribute("aria-hidden") === "true" ||
+      targetButton.getAttribute("aria-disabled") === "true"
+    ) {
+      const firstAvailableTab = availableButtons()[0]?.dataset.tab;
+      tab = isTabId(firstAvailableTab) ? firstAvailableTab : "analysis";
     }
     for (const btn of buttons) {
       const match = btn.dataset.tab === tab;
@@ -101,13 +129,14 @@ export function initTabs(
 
   for (const btn of buttons) {
     btn.addEventListener("click", () => {
+      if (btn.getAttribute("aria-disabled") === "true") return;
       const tab = btn.dataset.tab;
       if (isTabId(tab)) activate(tab);
     });
     btn.addEventListener("keydown", (e) => {
       if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
       e.preventDefault();
-      const available = visibleButtons();
+      const available = availableButtons();
       const idx = available.indexOf(btn);
       if (idx < 0) return;
       const next =

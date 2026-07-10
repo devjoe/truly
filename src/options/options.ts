@@ -96,18 +96,19 @@ async function sessionStorageRemove(keys: string[]): Promise<void> {
 }
 
 function markActiveExtensionPage(): void {
-  if (document.visibilityState === "hidden") return;
   void browser.tabs.getCurrent().catch(() => undefined).then((tab) =>
-    sessionStorageSet({
-      [ACTIVE_EXTENSION_PAGE_MARKER_KEY]: {
-        kind: "options",
-        tabId: tab?.id,
-        title: document.title,
-        url: location.href,
-        ts: Date.now(),
-        buildId: __TRULY_BUILD_ID__,
-      },
-    }),
+    document.visibilityState === "hidden" && tab?.active !== true
+      ? undefined
+      : sessionStorageSet({
+          [ACTIVE_EXTENSION_PAGE_MARKER_KEY]: {
+            kind: "options",
+            tabId: tab?.id,
+            title: document.title,
+            url: location.href,
+            ts: Date.now(),
+            buildId: __TRULY_BUILD_ID__,
+          },
+        }),
   );
 }
 

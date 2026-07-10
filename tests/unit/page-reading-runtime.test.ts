@@ -5,6 +5,7 @@ import type { TrulyMessage } from "@src/lib/messages";
 import type { ReadingSurface } from "@src/lib/reading-surface-types";
 import { DEFAULT_SETTINGS } from "@src/lib/types";
 import { createSidepanelPageReadingRuntime } from "@src/sidepanel/page-reading-runtime";
+import type { TabId } from "@src/sidepanel/tabs";
 
 function setupDom(): HTMLElement {
   const dom = new JSDOM("<!doctype html><div id=\"page-pane\"></div>", {
@@ -97,10 +98,12 @@ describe("sidepanel page reading runtime", () => {
       expect(pagePaneEl.querySelector(".page-reader-status")?.getAttribute("title")).toBeNull();
 
       nowMs = 3_500;
+      const statusNode = pagePaneEl.querySelector(".page-reader-status");
       vi.advanceTimersByTime(2_500);
       await flushMicrotasks();
 
       expect(pagePaneEl.querySelector(".page-reader-status-label")?.textContent).toBe("讀取中 · 2.5 秒");
+      expect(pagePaneEl.querySelector(".page-reader-status")).toBe(statusNode);
 
       resolveRead?.({
         type: "PAGE_READING_RESULT",
@@ -112,6 +115,128 @@ describe("sidepanel page reading runtime", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("keeps Focus available on Facebook and analyzes only an explicit selection", async () => {
+    const pagePaneEl = setupDom();
+    const selectedText = [
+      "This explicitly selected Facebook passage is long enough for the Focus analysis contract.",
+      "Only this passage and its immediate context should become the temporary reading surface.",
+    ].join(" ");
+    const activateTab = vi.fn();
+    const setTabAvailability = vi.fn();
+    let lang: "en" | "zh-TW" = "en";
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "READING_TARGET_REQUEST") {
+        expect(message.surfaceId).toBeUndefined();
+        return {
+          type: "READING_TARGET_RESULT",
+          tabId: 42,
+          target: {
+            id: "target:selection:facebook",
+            surfaceId: "general:https://www.facebook.com/selection",
+            kind: "selection",
+            text: selectedText,
+            surroundingText: "Synthetic Facebook context around the explicit selection.",
+            extraction: {
+              method: "selection",
+              status: "complete",
+              warnings: [],
+            },
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://www.facebook.com/",
+          title: "Facebook",
+        }]),
+      },
+      activateTab,
+      setTabAvailability,
+      getLang: () => lang,
+      now: () => 1_000,
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    expect(setTabAvailability).toHaveBeenCalledWith(
+      "page",
+      false,
+      "Facebook content is available in the Feed tab.",
+    );
+    lang = "zh-TW";
+    runtime.refresh();
+    runtime.setWorkspace("focus");
+
+    const useSelection = pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection");
+    expect(useSelection?.disabled).toBe(false);
+    expect(setTabAvailability).toHaveBeenCalledWith(
+      "page",
+      false,
+      "Facebook 內容請在「Feed」分頁查看。",
+    );
+    expect(pagePaneEl.textContent).toContain("先在頁面選取一段文字");
+    expect(pagePaneEl.textContent).not.toContain("Facebook 內容會顯示在");
+
+    useSelection?.click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "READING_TARGET_REQUEST",
+      tabId: 42,
+      trigger: "selection",
+      activation: {
+        source: "sidepanel",
+        targetKind: "selection",
+        action: "read",
+      },
+    }));
+    expect(pagePaneEl.textContent).toContain("範圍：選取文字");
+    expect(pagePaneEl.textContent).toContain(selectedText);
+    expect(pagePaneEl.textContent).not.toContain("目前使用你指定的文字或區域");
+  });
+
+  it("makes Web the primary surface on general pages without disabling Focus", async () => {
+    const pagePaneEl = setupDom();
+    const activateTab = vi.fn();
+    const setTabAvailability = vi.fn((tab: TabId, available: boolean) => (
+      tab === "analysis" && !available
+    ));
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage: vi.fn() },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.com/article",
+          title: "Example article",
+        }]),
+      },
+      activateTab,
+      setTabAvailability,
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+
+    expect(setTabAvailability).toHaveBeenCalledWith("page", true);
+    expect(setTabAvailability).toHaveBeenCalledWith("focus", true);
+    expect(setTabAvailability).toHaveBeenCalledWith(
+      "analysis",
+      false,
+      "Feed 僅適用於支援的 Facebook 頁面。",
+    );
+    expect(activateTab).toHaveBeenCalledWith("page");
   });
 
   it("shows toolbar activation guidance when the active tab URL is hidden", async () => {
@@ -216,6 +341,57 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("這是 Truly 的設定或內部頁面");
     expect(pagePaneEl.textContent).not.toContain("請先在目標網頁上點 Truly 工具列圖示");
     expect(readCurrentButton(pagePaneEl)).toBeNull();
+  });
+
+  it("refreshes unsupported-page guidance when the Truly page marker arrives late", async () => {
+    const pagePaneEl = setupDom();
+    let storageListener: ((changes: Record<string, { newValue?: unknown }>, areaName: string) => void) | undefined;
+    let marker: Record<string, unknown> = {};
+    const sessionStore = {
+      get: vi.fn(async () => marker),
+      remove: vi.fn(async () => undefined),
+      onChanged: {
+        addListener: vi.fn((listener) => {
+          storageListener = listener;
+        }),
+      },
+    };
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage: vi.fn() },
+      tabs: {
+        query: vi.fn(async () => [{ id: 77 }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+      sessionStore,
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    expect(pagePaneEl.textContent).toContain("Chrome 沒有提供目前分頁網址");
+
+    marker = {
+      trulyActiveExtensionPage: {
+        kind: "options",
+        tabId: 77,
+        title: "Truly 設定",
+        url: "chrome-extension://truly-test/options/options.html",
+        ts: 1_000,
+        buildId: "test-build",
+      },
+    };
+    storageListener?.({
+      trulyActiveExtensionPage: {
+        newValue: marker.trulyActiveExtensionPage,
+      },
+    }, "session");
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(pagePaneEl.textContent).toContain("這是 Truly 的設定或內部頁面");
+    expect(pagePaneEl.textContent).not.toContain("Chrome 沒有提供目前分頁網址");
   });
 
   it("does not reuse the previous page URL when Chrome hides the newly active tab URL", async () => {
@@ -1792,6 +1968,16 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("可用");
     expect(diagnosticRawValue(pagePaneEl, /目標/)).toBe("selection");
     expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("accept_current");
+
+    runtime.handlePageReadingResult({
+      type: "PAGE_READING_RESULT",
+      tabId: 42,
+      surface: baseSurface,
+    });
+
+    expect(pagePaneEl.textContent).toContain("範圍：選取文字");
+    expect(pagePaneEl.textContent).toContain(selectedText);
+    expect(diagnosticRawValue(pagePaneEl, /目標/)).toBe("selection");
   });
 
   it("fails closed with toolbar guidance for current-region hotkey without a live read session", async () => {

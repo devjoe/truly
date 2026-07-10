@@ -191,6 +191,7 @@ interface ActiveExtensionPageMarker {
 
 export interface SidepanelPageReadingRuntime {
   install(): void;
+  refresh(): void;
   setWorkspace(workspace: PageWorkspace): void;
   requestReadCurrentPage(source?: PageActivationSource): Promise<void>;
   requestPointTarget(tabId: number): Promise<void>;
@@ -218,6 +219,7 @@ export interface CreateSidepanelPageReadingRuntimeOptions {
   runtime: RuntimeApi;
   tabs: TabsApi;
   activateTab(tab: TabId): void;
+  setTabAvailability?(tab: TabId, available: boolean, reason?: string): boolean | void;
   getLang(): Lang;
   getSettings?(): UserSettings;
   getTierAEndpoint?(): string | undefined;
@@ -1095,6 +1097,7 @@ export function createSidepanelPageReadingRuntime({
   runtime,
   tabs,
   activateTab,
+  setTabAvailability,
   getLang,
   getSettings = () => DEFAULT_SETTINGS,
   getTierAEndpoint = () => undefined,
@@ -1107,6 +1110,7 @@ export function createSidepanelPageReadingRuntime({
   requestHostPermission = requestGeneralPageHostPermission,
 }: CreateSidepanelPageReadingRuntimeOptions): SidepanelPageReadingRuntime {
   const sessions = new Map<number, PageReadingSession>();
+  const focusTargetErrors = new Map<number, string>();
   let activeTabId: number | null = null;
   let displayTabId: number | null = null;
   let activeUrl = "";
@@ -1312,7 +1316,7 @@ export function createSidepanelPageReadingRuntime({
   function syncLoadingTicker(active: boolean): void {
     if (active && !loadingTicker) {
       loadingTicker = setInterval(() => {
-        if (currentSession()?.status === "loading") render();
+        if (currentSession()?.status === "loading") updateLoadingElapsedStatus();
         else syncLoadingTicker(false);
       }, 1_000);
       return;
@@ -1321,6 +1325,14 @@ export function createSidepanelPageReadingRuntime({
       clearInterval(loadingTicker);
       loadingTicker = undefined;
     }
+  }
+
+  function updateLoadingElapsedStatus(): void {
+    const session = currentSession();
+    if (session?.status !== "loading") return;
+    const label = pagePaneEl.querySelector<HTMLElement>(".page-reader-status-label");
+    if (!label) return;
+    label.textContent = pageStatusLabel(session, tr("sidepanel.page.status.loading"));
   }
 
   function pageStatusLabel(session: PageReadingSession | undefined, fallback: string): string {
@@ -1386,6 +1398,7 @@ export function createSidepanelPageReadingRuntime({
     }
     const session = typeof nextTabId === "number" ? sessions.get(nextTabId) : undefined;
     if (session && activeUrl && !isMeaningfullySamePage(session.identity, activeUrl)) {
+      if (typeof nextTabId === "number") focusTargetErrors.delete(nextTabId);
       session.status = "stale";
       session.url = activeUrl;
       session.title = activeTitle || session.title;
@@ -1406,6 +1419,7 @@ export function createSidepanelPageReadingRuntime({
     const session = sessions.get(tabId);
     const nextUrl = tab.url;
     if (!session || !nextUrl || isMeaningfullySamePage(session.identity, nextUrl)) return;
+    focusTargetErrors.delete(tabId);
     sessions.set(tabId, {
       ...session,
       url: nextUrl,
@@ -1474,8 +1488,43 @@ export function createSidepanelPageReadingRuntime({
     const displayedTabId = session?.tabId ?? displayTabId;
     const displayedSessionIsActive = typeof displayedTabId === "number" && displayedTabId === activeTabId;
     const canRead = platform === "general" && typeof activeTabId === "number";
+    let availabilityFallback: TabId | undefined;
+    if (platform === "facebook") {
+      setTabAvailability?.("analysis", true);
+      setTabAvailability?.("focus", true);
+      if (setTabAvailability?.(
+        "page",
+        false,
+        tr("sidepanel.tab.pageUnavailableFacebook"),
+      )) availabilityFallback = "analysis";
+    } else if (platform === "general") {
+      setTabAvailability?.("page", true);
+      setTabAvailability?.("focus", true);
+      if (setTabAvailability?.(
+        "analysis",
+        false,
+        tr("sidepanel.tab.feedUnavailableWeb"),
+      )) availabilityFallback = "page";
+    } else {
+      // Keep Web available as the explanatory surface for browser, extension,
+      // and other protected pages; Feed and selection analysis cannot act here.
+      setTabAvailability?.("page", true);
+      const feedWasSelected = setTabAvailability?.(
+        "analysis",
+        false,
+        tr("sidepanel.tab.feedUnavailableWeb"),
+      );
+      const focusWasSelected = setTabAvailability?.(
+        "focus",
+        false,
+        tr("sidepanel.tab.focusUnavailablePage"),
+      );
+      if (feedWasSelected || focusWasSelected) availabilityFallback = "page";
+    }
     syncHostPermissionState(activeUrl, platform);
-    const canUseLiveTarget = canRead && displayedSessionIsActive && Boolean(session?.surface);
+    const canUseLiveTarget = displayedSessionIsActive && (
+      (canRead && Boolean(session?.surface)) || platform === "facebook"
+    );
     const statusClass = session?.status ? ` page-status-${session.status}` : "";
     const fallbackStatusLabel = platform === "facebook"
       ? tr("sidepanel.page.status.facebook")
@@ -1588,14 +1637,17 @@ export function createSidepanelPageReadingRuntime({
     const emptyBodyBlock = !session?.surface && !showErrorBlock && session?.status !== "loading" && platform === "general"
       ? emptyBody(platform, canRead, title, source || (url ? hostnameForUrl(url) : ""), cardHeaderActions)
       : "";
-    const focusWorkspaceBlock = session?.surface && activeWorkspace === "focus"
+    const focusTargetError = typeof displayedTabId === "number" ? focusTargetErrors.get(displayedTabId) : undefined;
+    const focusWorkspaceBlock = activeWorkspace === "focus" &&
+      typeof activeTabId === "number" &&
+      (platform === "general" || platform === "facebook")
       ? `
-        <section class="page-reader-focus-panel">
+        <section class="page-reader-focus-panel" data-state="${focusTargetError ? "error" : session?.target ? "ready" : "empty"}">
           <div>
             <h3 class="page-reader-focus-title">${escapeHtml(tr("sidepanel.page.focus.title"))}</h3>
-            <div class="page-reader-focus-detail">${escapeHtml(session.target ? tr("sidepanel.page.focus.ready") : tr("sidepanel.page.focus.empty"))}</div>
+            <div class="page-reader-focus-detail">${escapeHtml(focusTargetError || (session?.target ? tr("sidepanel.page.focus.ready") : tr("sidepanel.page.focus.empty")))}</div>
           </div>
-          <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(session.target ? tr("sidepanel.page.focus.update") : tr("sidepanel.page.useSelection"))}</button>
+          <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(session?.target ? tr("sidepanel.page.focus.update") : tr("sidepanel.page.useSelection"))}</button>
         </section>
       `
       : "";
@@ -1611,7 +1663,7 @@ export function createSidepanelPageReadingRuntime({
         </div>
       `
       : "";
-    const statusBlock = hasReadySurface
+    const statusBlock = hasReadySurface || (activeWorkspace === "focus" && session?.status !== "error")
       ? ""
       : `
         <section class="page-reader-status${statusClass}${session?.surface ? "" : " is-standalone"}"${statusTitle ? ` title="${escapeHtml(statusTitle)}" aria-label="${escapeHtml(statusTitle)}"` : ""} aria-live="polite">
@@ -1704,6 +1756,7 @@ export function createSidepanelPageReadingRuntime({
       if (typeof displayedTabId !== "number" || displayedTabId !== activeTabId) return;
       setScreenshot(displayedTabId, undefined);
     });
+    if (availabilityFallback) activateTab(availabilityFallback);
   }
 
   function statusDetail(
@@ -2254,11 +2307,13 @@ export function createSidepanelPageReadingRuntime({
       const tabId = typeof tab?.id === "number" ? tab.id : activeTabId;
       if (typeof tabId !== "number") return;
       const session = sessions.get(tabId);
-      if (!session?.surface || session.status === "stale") {
+      const platform = platformForUrl(tab?.url ?? activeUrl);
+      const canBootstrapSelection = platform === "facebook";
+      if ((!session?.surface && !canBootstrapSelection) || session?.status === "stale") {
         render();
         return;
       }
-      if (!isMeaningfullySamePage(session.identity, tab?.url ?? session.url)) {
+      if (session?.surface && !isMeaningfullySamePage(session.identity, tab?.url ?? session.url)) {
         sessions.set(tabId, {
           ...session,
           surface: undefined,
@@ -2274,16 +2329,21 @@ export function createSidepanelPageReadingRuntime({
         render();
         return;
       }
-      setAdvisor(tabId, {
-        status: "checking",
-        providerRuntime: resolveAdvisorProviderRuntime(getSettings(), getTierAEndpoint(), getTierAModel()),
-        updatedAt: now(),
-      });
+      focusTargetErrors.delete(tabId);
+      if (session?.surface) {
+        setAdvisor(tabId, {
+          status: "checking",
+          providerRuntime: resolveAdvisorProviderRuntime(getSettings(), getTierAEndpoint(), getTierAModel()),
+          updatedAt: now(),
+        });
+      } else {
+        render();
+      }
       const response = await runtime.sendMessage({
         type: "READING_TARGET_REQUEST",
         tabId,
         trigger: "selection",
-        surfaceId: session.surface.id,
+        surfaceId: session?.surface?.id,
         activation: {
           source,
           targetKind: "selection",
@@ -2375,6 +2435,9 @@ export function createSidepanelPageReadingRuntime({
     }).catch(() => {});
     sessionStore.onChanged?.addListener((changes, areaName) => {
       if (areaName !== "session") return;
+      if (changes[ACTIVE_EXTENSION_PAGE_MARKER_KEY]) {
+        void refreshActiveExtensionPageMarker();
+      }
       const change = changes[PENDING_CURRENT_REGION_READ_KEY];
       if (!change || change.newValue === undefined) return;
       consumePendingCurrentRegionRead(change.newValue);
@@ -2470,6 +2533,16 @@ export function createSidepanelPageReadingRuntime({
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
     const existing = sessions.get(tabId);
+    const duplicateReadySurface = existing?.status === "ready" &&
+      existing.surface?.id === message.surface.id &&
+      isMeaningfullySamePage(existing.identity, message.surface.url) &&
+      existing.surface.mainText === message.surface.mainText &&
+      existing.surface.excerpt === message.surface.excerpt &&
+      existing.surface.selectedText === message.surface.selectedText &&
+      existing.surface.extraction.method === message.surface.extraction.method &&
+      existing.surface.extraction.status === message.surface.extraction.status &&
+      existing.surface.extraction.warnings.join("|") === message.surface.extraction.warnings.join("|");
+    if (duplicateReadySurface) return;
     const completedAt = now();
     const elapsedMs = typeof message.elapsedMs === "number" && Number.isFinite(message.elapsedMs)
       ? Math.max(0, message.elapsedMs)
@@ -2521,8 +2594,27 @@ export function createSidepanelPageReadingRuntime({
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
     const existing = sessions.get(tabId);
-    if (!existing?.surface || existing.status === "stale") return;
-    if (message.target.surfaceId !== existing.surface.id) {
+    if (existing?.status === "stale") return;
+    const canBootstrapSelection = tabId === activeTabId && platformForUrl(activeUrl) === "facebook";
+    if (!existing?.surface && !canBootstrapSelection) return;
+    const selectionSurface: ReadingSurface = existing?.surface ?? {
+      id: message.target.surfaceId,
+      kind: "web-page",
+      source: "general",
+      url: activeUrl,
+      canonicalUrl: activeUrl,
+      title: activeTitle || tr("sidepanel.page.focus.title"),
+      sourceName: hostnameForUrl(activeUrl),
+      mainText: message.target.text,
+      selectedText: message.target.text,
+      excerpt: message.target.text,
+      extraction: {
+        method: "selection",
+        status: "complete",
+        warnings: ["selection-only"],
+      },
+    };
+    if (message.target.surfaceId !== selectionSurface.id) {
       handleReadingTargetError({
         type: "READING_TARGET_ERROR",
         tabId,
@@ -2530,8 +2622,20 @@ export function createSidepanelPageReadingRuntime({
       });
       return;
     }
+    const nextSession: PageReadingSession = existing?.surface ? existing : {
+      tabId,
+      url: activeUrl,
+      identity: pageUrlIdentity(activeUrl),
+      title: activeTitle,
+      surface: selectionSurface,
+      status: "ready",
+      updatedAt: now(),
+      completedAt: now(),
+      activationSource: "sidepanel",
+    };
     sessions.set(tabId, {
-      ...existing,
+      ...nextSession,
+      surface: selectionSurface,
       target: message.target,
       status: "ready",
       updatedAt: now(),
@@ -2540,12 +2644,14 @@ export function createSidepanelPageReadingRuntime({
     });
     copyState = "idle";
     downloadState = "idle";
+    focusTargetErrors.delete(tabId);
+    displayTabId = tabId;
     pageWorkspace = "focus";
     activateTab("focus");
     if (tabId === activeTabId || tabId === displayTabId) render();
-    startParserAdvisor(tabId, existing.surface, {
+    startParserAdvisor(tabId, selectionSurface, {
       target: message.target,
-      candidateBlocks: existing.candidateBlocks,
+      candidateBlocks: nextSession.candidateBlocks,
     });
   }
 
@@ -2553,7 +2659,13 @@ export function createSidepanelPageReadingRuntime({
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
     const existing = sessions.get(tabId);
-    if (!existing?.surface) return;
+    focusTargetErrors.set(tabId, friendlyTargetError(message.error));
+    if (!existing?.surface) {
+      pageWorkspace = "focus";
+      activateTab("focus");
+      if (tabId === activeTabId || tabId === displayTabId) render();
+      return;
+    }
     sessions.set(tabId, {
       ...existing,
       advisor: {
@@ -2634,6 +2746,7 @@ export function createSidepanelPageReadingRuntime({
     });
     tabs.onRemoved?.addListener((tabId) => {
       const wasDisplayed = tabId === displayTabId;
+      focusTargetErrors.delete(tabId);
       sessions.delete(tabId);
       if (tabId === displayTabId) {
         displayTabId = typeof activeTabId === "number" && sessions.has(activeTabId)
@@ -2648,6 +2761,7 @@ export function createSidepanelPageReadingRuntime({
 
   return {
     install,
+    refresh: render,
     setWorkspace,
     requestReadCurrentPage,
     requestPointTarget,

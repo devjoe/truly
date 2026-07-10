@@ -114,7 +114,7 @@ export function normalizePreviewText(raw: string): string {
 
 export function cleanPreviewText(raw: string, limit = 260): string {
   const cleaned = normalizePreviewText(raw);
-  return cleaned.length > limit ? `${cleaned.slice(0, limit).trim()}……` : cleaned;
+  return cleaned.length > limit ? `${cleaned.slice(0, limit).trim()}…` : cleaned;
 }
 
 export function stripSearchContextWrapper(raw: string): string {

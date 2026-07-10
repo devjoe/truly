@@ -1,7 +1,7 @@
 import type {
   DashboardPostEvent,
 } from "../lib/types";
-import { initTabs, shouldShowPageReadCurrentAction } from "./tabs";
+import { initTabs, setTabAvailability, shouldShowPageReadCurrentAction } from "./tabs";
 import { installTooltips, suppressTooltip } from "./tooltip";
 import { panelState } from "./state";
 // Re-exported so existing importers (e.g. sidepanel-render.test.ts) keep a
@@ -117,6 +117,7 @@ const pageReadingRuntime = createSidepanelPageReadingRuntime({
     onRemoved: chrome.tabs.onRemoved,
   },
   activateTab: tabActivationRuntime.activateTab,
+  setTabAvailability,
   getLang: () => languageController.current(),
   getSettings: () => panelState.cachedSettings,
   getTierAEndpoint: () => panelState.cachedTierAEndpoint,
@@ -168,6 +169,7 @@ const storageRuntime = createSidepanelStorageRuntimeController({
   applyTheme: (settings: UserSettings) => {
     themeController.setMode(settings.themeMode);
     languageController.setLanguage(settings.language);
+    pageReadingRuntime.refresh();
   },
   renderAnalysisPane,
 });
@@ -192,6 +194,7 @@ installSidepanelRuntimeMessageListener({
   applyTheme: (settings) => {
     themeController.setMode(settings.themeMode);
     languageController.setLanguage(settings.language);
+    pageReadingRuntime.refresh();
   },
   addPost: postRuntimeController.addPost,
   replayDashboardEvents: dashboardReplayRuntime.replayDashboardEvents,
