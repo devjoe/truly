@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := help
 
-.PHONY: help resume build build-dev verify check-public check-build release-preview release-review release-review-local-limited-context release-review-github release-review-local-repo-read release-review-local-read release-bump-cws-preview cws-review cws-review-local-limited-context cws-review-github cws-review-local-repo-read cws-review-local-read \
+.PHONY: help resume build build-dev verify check-public check-build gpr-check release-preview release-review release-review-local-limited-context release-review-github release-review-local-repo-read release-review-local-read release-bump-cws-preview cws-review cws-review-local-limited-context cws-review-github cws-review-local-repo-read cws-review-local-read \
 	dev dev-all dev-daemon dev-reload dev-status dev-check dev-stop sync-headsup-css \
 	test-watch smoke-ollama-vision
 
@@ -9,6 +9,7 @@ help:
 	@echo ""
 	@echo "  make resume              Show repo state and common next commands"
 	@echo "  make verify              Run the public gate"
+	@echo "  make gpr-check           Run the fast General Page Reader development gate"
 	@echo "  make build               Build the clean extension"
 	@echo "  make build-dev           Build and patch local dev shortcut"
 	@echo "  make dev-all             Run watch build + reload server"
@@ -54,6 +55,9 @@ verify check-public:
 
 check-build:
 	npm run check:build
+
+gpr-check:
+	npm run check:gpr
 
 release-preview:
 	npm run release:preview

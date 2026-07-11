@@ -23,6 +23,28 @@ The public gate runs:
 Pure unit tests also cover small UI policy decisions that can be represented
 without DOM or private feed captures, such as Heads-up chip deduplication.
 
+## General Page Reader Fast Gate
+
+Use the focused General Page Reader gate during implementation:
+
+```bash
+make gpr-check
+```
+
+The target runs the General Page Reader contract, runtime, model-integration,
+permission, URL-identity, readability, screenshot-boundary, and UI/i18n tests,
+followed by the TypeScript typecheck. The test list has one owner in the
+`test:gpr` package script; the Make target is intentionally only a thin alias.
+
+This is a fast development check, not a release or merge gate. It intentionally
+does not run the production build, release metadata and bundle audits, readiness
+documentation checks, the full parser corpus, or live CDP review. Before a
+checkpoint, push, merge, or release, still run:
+
+```bash
+make verify
+```
+
 Sponsored detection regressions must prefer precision over recall. The public
 suite uses synthetic GraphQL-style post records to verify that a sponsored
 signal does not create author-level memory and collapse unrelated posts from

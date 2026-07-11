@@ -2,7 +2,7 @@
 
 Status: current Page/Web UI is ready for focused reviewer validation
 Date: 2026-07-04
-Last refreshed: 2026-07-10
+Last refreshed: 2026-07-11
 
 This review records the current UI/UX decision for the General Page Reader
 branch. It is based on the Page/Web CDP audit screenshots under `tmp/`; those
@@ -22,13 +22,13 @@ and what the next model-facing context would be.
 | --- | --- | --- |
 | Feed / Page-Web tabs | Keep | They preserve the existing side panel navigation model and make Page/Web an extension of Truly rather than a separate product. |
 | Page/Web header actions | Keep | `讀取此頁` and `使用選取文字` are the minimum explicit actions needed for activeTab and target intent. |
-| Status banner | Keep | It is the fastest scan point for read, stale, no-grant, and failure states. |
-| Extracted page card | Keep | Early users need title/source/excerpt plus copy/download affordances to judge extraction quality. |
-| Extraction diagnostics | Keep collapsed for ready, expanded for caution/recovery | This matches the product need: ordinary pages stay quiet; uncertain pages expose enough detail for review. |
-| Analysis readiness card | Keep compact for ready, expanded for blocked/caution | It separates raw extraction eligibility from the later analysis-scope decision. This is necessary while the scope-check path is still being validated. |
-| Analysis scope card | Keep | It is the single place that explains whether the next model-facing context is article analysis, page overview only, a candidate block, or requires a user target. |
+| Status banner | Keep for actionable top-level states | Stale, no-grant, read failure, and other states that require action remain easy to scan. Successful internal pipeline states stay silent. |
+| Extracted page card | Keep | Early users need title/source plus copy/download affordances. Parser text lives under a nested, collapsed `Page text` disclosure instead of taking over the card. |
+| Extraction diagnostics | Keep collapsed under Technical details | Uncertain pages summarize their user impact before Page text; raw parser, advisor, and budget values remain available without becoming default UI. |
+| Analysis readiness card | Fold into Page context presentation and diagnostics | Separate ready/caution cards repeated the same meaning as parser warnings and advisor decisions. The presentation layer now emits at most one user-facing summary. |
+| Analysis scope card | Fold into Page context presentation and Focus scope | Page overview, blocked, and target-required decisions become a concise Page context summary. Explicit selections and current regions use the dedicated Focus `Analysis scope`. |
 | Page brief card | Keep | It proves the model-facing context is usable without storing the full page body. Overview pages suppress claims through deterministic guards. |
-| Source links | Keep capped and bottom-aligned | Source links are useful for early inspection, but the cap prevents navigation/sidebar links from taking over the panel. |
+| Source links | Keep capped inside Page context | External and same-site related links stay available for inspection, while the cap prevents navigation/sidebar links from taking over the panel. |
 | Web history switcher | Hide from primary UI | Multi-tab Page/Web sessions remain internal for current-tab lifecycle, stale detection, and result isolation. A visible history strip made Web feel busier than Feed and competed with the page brief. Multi-page recall should return later only as a deliberate workspace, not default chrome. |
 
 ## Visual Review Notes
@@ -41,9 +41,13 @@ and what the next model-facing context would be.
 - Ready pages keep analysis readiness compact and diagnostics collapsed. This is
   the main evidence that Page/Web has not become a developer console by
   default.
-- Caution, noisy fallback, candidate-block recovery, and teaser-hub overview
-  pages expand diagnostics. The extra density is justified because those states
-  are precisely where early reviewers must inspect why the context changed.
+- Caution, noisy fallback, and teaser-hub overview pages show one concise Page
+  context summary. Technical details remain collapsed but available for early
+  reviewers who need to inspect why the context changed. Successful
+  candidate-block recovery stays quiet.
+- The `caution/recovery` reviewer gate remains explicit: user impact is visible
+  in the synthesized summary, while raw diagnostics stay opt-in under Technical
+  details instead of expanding another pipeline card.
 - The dark, low-contrast surfaces, 6-8px radius, restrained blue accent, and
   compact typography remain aligned with the current Feed overlay/side-panel
   style.
@@ -99,11 +103,49 @@ loading and ready card/header/context positions differed by about 1.7px. The
 not committed. The verified build was
 `1783696183145-bed0fe4-dirty`.
 
+### Page context presentation checkpoint (2026-07-11)
+
+The reviewer-driven Page context and Focus pass replaced duplicated pipeline
+cards with one user-impact presentation layer:
+
+- Clean article reads do not render a success summary, `Page status`, `Usable`,
+  or `Organized`. The Page context summary and its information icon exist only
+  when the reader needs guidance.
+- Parser warnings and advisor decisions resolve through one priority order.
+  Explicit advisor outcomes such as page-overview-only or requires-user-target
+  take precedence over lower-level parser readiness. Overview pages therefore
+  render one sentence explaining that navigation-heavy pages are suitable for
+  topic browsing and that full reports should be opened from their headlines.
+- Blocked and target-required states add a concrete status such as
+  `Not analyzing` or `Select a passage`; warning and overview states do not add
+  generic labels such as `Needs review`.
+- Model notes that repeat index, feed, aggregation, navigation-noise, or source-
+  link guidance are suppressed when Page context already communicates the same
+  user impact. Content-specific caveats remain in the analysis closing area.
+- Page context opens with the synthesized summary, followed by a nested,
+  collapsed `Page text`, source links, and collapsed Technical details. The
+  summary uses a low-contrast tinted surface rather than the solid source-header
+  surface.
+- Focus never renders whole-page Page context. It shows `Analysis scope`, the
+  target kind and character count, a two-line preview, and a collapsed selected
+  text or paragraph disclosure.
+- Feed and Web analysis typography now share 12px body text with an 18px line
+  height, 11px muted subsection labels, aligned question indentation, and the
+  same compact, right-aligned model-attribution role.
+
+The focused gate is `make gpr-check`; it owns the General Page Reader contract,
+runtime, permission, i18n, and typecheck matrix through the `test:gpr` package
+script. The final local build for this checkpoint was
+`1783757269974-651a62e-dirty`. Private no-focus CDP screenshots were inspected
+locally as `truly-gpr-context-presentation-overview-ready-2026-07-11.png` and
+`truly-gpr-context-presentation-focus-2026-07-11.png`; neither artifact is
+committed. Runtime probes reported `document.hasFocus() === false`.
+
 ## Current Non-Changes
 
-- Do not hide diagnostics globally. The feature is still in early product
-  validation, and the maintainer needs visible evidence to judge extraction
-  quality.
+- Do not remove diagnostics globally. The feature is still in early product
+  validation, and the maintainer needs opt-in evidence to judge extraction
+  quality; keep that evidence collapsed under Technical details.
 - Do not add decorative visual polish, gradients, or large reader-mode
   typography. Page/Web is an operational inspection surface, not an immersive
   reading destination.

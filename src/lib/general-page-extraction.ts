@@ -23,7 +23,7 @@ export interface GeneralPageExtractionOptions {
 const DEFAULT_MIN_MAIN_TEXT_LENGTH = 240;
 export const GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH = 80;
 const DEFAULT_MAX_LINKS = 24;
-const DEFAULT_MAX_IMAGES = 12;
+export const GENERAL_PAGE_DEFAULT_MAX_IMAGES = 12;
 const EXCERPT_LENGTH = 240;
 
 const MAIN_ROOT_SELECTORS = [
@@ -290,7 +290,7 @@ export function extractGeneralPageSurface(
   const minMainTextLength = options.minMainTextLength ?? DEFAULT_MIN_MAIN_TEXT_LENGTH;
   const minSelectedTextLength = options.minSelectedTextLength ?? GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH;
   const maxLinks = options.maxLinks ?? DEFAULT_MAX_LINKS;
-  const maxImages = options.maxImages ?? DEFAULT_MAX_IMAGES;
+  const maxImages = options.maxImages ?? GENERAL_PAGE_DEFAULT_MAX_IMAGES;
 
   const currentUrl = normalizeUrl(input.url) ?? input.url;
   const rawCanonicalUrl = firstAttribute(input.document, [

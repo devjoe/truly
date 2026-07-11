@@ -211,7 +211,11 @@ describe("sidepanel page reading runtime", () => {
         action: "read",
       },
     }));
-    expect(pagePaneEl.textContent).toContain("範圍：選取文字");
+    expect(pagePaneEl.querySelector(".page-reader-focus-title")?.textContent).toBe("分析範圍");
+    expect(pagePaneEl.querySelector(".page-reader-focus-meta")?.textContent).toContain("選取文字");
+    expect(pagePaneEl.querySelector(".page-reader-focus-preview")?.textContent).toContain("This explicitly selected Facebook passage");
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-focus-text")?.open).toBe(false);
+    expect(pagePaneEl.querySelector(".page-reader-context-details")).toBeNull();
     expect(pagePaneEl.textContent).toContain(selectedText);
     expect(pagePaneEl.textContent).not.toContain("目前使用你指定的文字或區域");
   });
@@ -529,14 +533,104 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-card-meta")?.getAttribute("title")).toContain("讀取耗時 1.8 秒");
     expect(pagePaneEl.textContent).toContain("Runtime Fixture");
     expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
-    expect(pagePaneEl.textContent).toContain("頁面狀態");
-    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-processing-status")).not.toBeNull();
-    expect(pagePaneEl.textContent).toContain("文字門檻");
-    expect(pagePaneEl.textContent).toContain("來源連結");
+    expect(pagePaneEl.textContent).not.toContain("頁面狀態");
+    expect(pagePaneEl.querySelector(".page-reader-context-summary")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-context-indicator")).toBeNull();
+    expect(pagePaneEl.textContent).toContain("相關連結");
     expect(pagePaneEl.textContent).toContain("example.test");
-    expect(pagePaneEl.textContent).not.toContain("Synthetic source");
-    expect(pagePaneEl.textContent).toContain("讀取細節");
-    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(false);
+    expect(pagePaneEl.textContent).toContain("Synthetic source");
+    expect(pagePaneEl.textContent).toContain("技術細節");
+    expect(pagePaneEl.textContent).toContain("擷取文字");
+    expect(pagePaneEl.textContent).toContain("擷取連結");
+    expect(pagePaneEl.textContent).toContain("擷取圖片");
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-technical-details")?.open).toBe(false);
+    expect(pagePaneEl.querySelector(".page-reader-preview-details")).toBeNull();
+  });
+
+  it("shows one extended preview inside Page context without a nested disclosure", async () => {
+    const pagePaneEl = setupDom();
+    const longExcerpt = Array.from({ length: 20 }, (_, index) => `Synthetic preview sentence ${index + 1}.`).join(" ");
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: {
+        sendMessage: vi.fn(async () => ({
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface({
+            excerpt: longExcerpt,
+            links: [
+              { href: "https://example.test/related", text: "Local evidence report" },
+              { href: "https://source.example/report", text: "▪ Original report" },
+            ],
+          }),
+        } satisfies TrulyMessage)),
+      },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+
+    const excerpts = pagePaneEl.querySelectorAll(".page-reader-context-details .page-reader-excerpt");
+    expect(excerpts).toHaveLength(1);
+    expect(excerpts[0]?.textContent).toBe(longExcerpt);
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-page-text")?.open).toBe(false);
+    expect(pagePaneEl.querySelector(".page-reader-page-text > summary")?.textContent).toBe("頁面文字");
+    expect(pagePaneEl.querySelector(".page-reader-preview-details")).toBeNull();
+    expect(pagePaneEl.textContent).not.toContain("展開預覽");
+    expect(Array.from(pagePaneEl.querySelectorAll(".page-reader-source-links h3")).map((node) => node.textContent))
+      .toEqual(["外部來源", "相關連結"]);
+    expect(pagePaneEl.querySelector<HTMLAnchorElement>('a[aria-label="Original report (source.example)"]')).not.toBeNull();
+    expect(pagePaneEl.querySelector<HTMLAnchorElement>('a[aria-label="Local evidence report (example.test)"]')).not.toBeNull();
+  });
+
+  it("labels images as parser captures and discloses the collection limit", async () => {
+    const pagePaneEl = setupDom();
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: {
+        sendMessage: vi.fn(async () => ({
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface({
+            images: Array.from({ length: 12 }, (_, index) => ({
+              src: `https://example.test/image-${index + 1}.jpg`,
+              alt: `Synthetic image ${index + 1}`,
+            })),
+            extraction: {
+              method: "fallback",
+              status: "partial",
+              warnings: ["large-navigation-noise"],
+            },
+          }),
+        } satisfies TrulyMessage)),
+      },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+
+    const imageRow = Array.from(pagePaneEl.querySelectorAll(".page-reader-technical-details dl div"))
+      .find((row) => row.querySelector("dt")?.textContent === "擷取圖片");
+    expect(imageRow?.querySelector("dd")?.textContent).toBe("12（已達上限）");
+    expect(pagePaneEl.textContent).toContain("可用圖片文字");
   });
 
   it("formats very fast page reads as less than 0.1 seconds in the hover title", async () => {
@@ -749,11 +843,11 @@ describe("sidepanel page reading runtime", () => {
     await flushMicrotasks();
 
     expect(sendMessage).toHaveBeenCalledTimes(1);
-    expect(pagePaneEl.textContent).toContain("頁面狀態");
+    expect(pagePaneEl.textContent).not.toContain("頁面狀態");
     expect(pagePaneEl.textContent).toContain("使用目前內容");
     expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("accept_current");
-    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-processing-status")).not.toBeNull();
-    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(false);
+    expect(pagePaneEl.querySelector(".page-reader-context-summary")).toBeNull();
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-technical-details")?.open).toBe(false);
   });
 
   it("auto-generates a session-only General Page brief when Tier B is available", async () => {
@@ -854,13 +948,14 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-context-details .page-reader-excerpt")).not.toBeNull();
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-context-details")?.open).toBe(false);
+    expect(pagePaneEl.querySelector(".page-reader-context-indicator")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card-header #pageCopyMetadata")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-context-details .page-reader-source-links")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-analysis-header h3")?.textContent).toBe("閱讀脈絡");
     expect(pagePaneEl.querySelector(".page-reader-external-tools-label")?.textContent).toBe("外部工具整合");
     expect(pagePaneEl.querySelector(".page-reader-card-tools #pageCopyMetadata")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card-tools #pageDownloadMarkdown")).not.toBeNull();
-    expect(pagePaneEl.textContent).not.toContain("讀取細節");
+    expect(pagePaneEl.textContent).not.toContain("技術細節");
     expect(pagePaneEl.querySelector(".page-reader-status")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-command-bar")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-header")).toBeNull();
@@ -868,7 +963,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).not.toContain("分析範圍");
     expect(pagePaneEl.querySelector(".page-reader-model-context")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-advisor")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-extraction-diagnostics")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-technical-details")).toBeNull();
   });
 
   it("keeps raw page preview and status folded while a General Page brief is running", async () => {
@@ -997,7 +1092,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("整理中…");
     expect(pagePaneEl.querySelector(".page-reader-analysis.is-running")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-processing-status")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-reader-extraction-diagnostics")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-technical-details")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-model-context")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-advisor")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-excerpt, .page-reader-preview")).toBeNull();
@@ -1326,7 +1421,7 @@ describe("sidepanel page reading runtime", () => {
       expect(pagePaneEl.textContent).not.toContain("頁面已變更");
       expect(pagePaneEl.textContent).not.toContain("First Runtime Fixture excerpt.");
       expect(pagePaneEl.querySelector(".page-reader-processing-status")).toBeNull();
-      expect(pagePaneEl.querySelector(".page-reader-extraction-diagnostics")).toBeNull();
+      expect(pagePaneEl.querySelector(".page-reader-technical-details")).toBeNull();
       expect(sendMessage.mock.calls.filter(([message]) => message.type === "PAGE_READING_REQUEST")).toHaveLength(1);
 
       vi.advanceTimersByTime(1_000);
@@ -1449,13 +1544,14 @@ describe("sidepanel page reading runtime", () => {
 
     await runtime.requestReadCurrentPage("sidepanel");
 
-    expect(pagePaneEl.textContent).toContain("頁面狀態");
+    expect(pagePaneEl.textContent).not.toContain("頁面狀態");
     expect(pagePaneEl.textContent).toContain("暫不分析");
-    expect(pagePaneEl.textContent).toContain("可讀文字低於目前門檻");
+    expect(pagePaneEl.querySelector(".page-reader-context-summary-status")?.textContent).toBe("暫不分析");
+    expect(pagePaneEl.querySelector(".page-reader-context-summary p")?.textContent)
+      .toBe("目前讀到的文字較少，請開啟原文或指定段落後再分析。");
     expect(pagePaneEl.textContent).not.toContain("parser_advisor_no_response");
-    expect(pagePaneEl.querySelector(".page-reader-processing-status")?.classList.contains("is-blocked")).toBe(true);
-    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-processing-status details")?.open).toBe(false);
-    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-extraction-diagnostics")?.open).toBe(false);
+    expect(pagePaneEl.querySelector(".page-reader-context-summary")?.classList.contains("is-action-required")).toBe(true);
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-technical-details")?.open).toBe(false);
   });
 
   it("downgrades noisy fallback extraction and hides navigation download links from source context", async () => {
@@ -1504,16 +1600,19 @@ describe("sidepanel page reading runtime", () => {
 
     await runtime.requestReadCurrentPage("sidepanel");
 
-    expect(pagePaneEl.textContent).toContain("需留意");
-    expect(pagePaneEl.textContent).toContain("目前只能用備用讀取方式");
-    expect(pagePaneEl.textContent).toContain("偵測到大量導覽噪音");
+    expect(pagePaneEl.textContent).not.toContain("頁面狀態");
+    expect(pagePaneEl.textContent).not.toContain("需留意");
+    expect(pagePaneEl.querySelector(".page-reader-context-summary p")?.textContent)
+      .toBe("頁面含大量導航雜訊，建議直接點擊標題閱讀完整報導。");
     expect(pagePaneEl.textContent).not.toContain("parser_advisor_no_response");
-    expect(pagePaneEl.querySelector(".page-reader-processing-status")?.classList.contains("is-caution")).toBe(true);
-    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-processing-status details")?.open).toBe(false);
+    expect(pagePaneEl.querySelector(".page-reader-context-summary")?.classList.contains("is-caution")).toBe(true);
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-technical-details")?.open).toBe(false);
     const sourceLink = pagePaneEl.querySelector<HTMLAnchorElement>(".page-reader-source-links a");
-    expect(sourceLink?.textContent).toBe("example.test");
+    expect(sourceLink?.querySelector("span")?.textContent).toBe("Article source");
+    expect(sourceLink?.querySelector(".page-reader-source-link-host")?.textContent).toBe("example.test");
     expect(sourceLink?.href).toBe("https://example.test/source");
-    expect(pagePaneEl.textContent).not.toContain("Article source");
+    expect(pagePaneEl.textContent).toContain("Article source");
+    expect(pagePaneEl.textContent).toContain("相關連結");
     expect(pagePaneEl.textContent).not.toContain("請至 Edge 官網下載");
     expect(pagePaneEl.textContent).not.toContain("請至 Firefox 官網下載");
   });
@@ -1641,12 +1740,13 @@ describe("sidepanel page reading runtime", () => {
         mode: "rule-based-runtime-baseline",
       }),
     }));
-    expect(pagePaneEl.textContent).toContain("頁面狀態");
-    expect(pagePaneEl.textContent).toContain("需留意");
+    expect(pagePaneEl.textContent).not.toContain("頁面狀態");
+    expect(pagePaneEl.textContent).not.toContain("需留意");
     expect(pagePaneEl.textContent).toContain("只做頁面總覽");
     expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("downgrade_to_index_or_feed");
     expect(diagnosticRawValue(pagePaneEl, /用途/)).toBe("page_overview_only");
-    expect(pagePaneEl.textContent).toContain("只適合頁面總覽");
+    expect(pagePaneEl.querySelector(".page-reader-context-summary p")?.textContent)
+      .toBe("此頁導覽內容較多，適合瀏覽主題概況；若要閱讀完整報導，請點擊新聞標題。");
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-preview")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-excerpt")?.textContent)
@@ -1731,6 +1831,7 @@ describe("sidepanel page reading runtime", () => {
               need: "No claim needed.",
             }],
             qs: [{ q: "Which linked card should the reader inspect?", kind: "source" }],
+            note: "此為新聞彙整頁面，建議點擊各來源連結以獲取詳細報導。",
             model: "advisor-model",
             outputLang: "zh-TW",
           },
@@ -1783,9 +1884,19 @@ describe("sidepanel page reading runtime", () => {
     expect(card?.children[2]?.classList.contains("page-reader-analysis")).toBe(true);
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-preview")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-context-indicator")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-context-details > summary")?.getAttribute("aria-label"))
+      .toContain("有閱讀提示");
+    expect(pagePaneEl.querySelector(".page-reader-context-summary p")?.textContent)
+      .toBe("此頁導覽內容較多，適合瀏覽主題概況；若要閱讀完整報導，請點擊新聞標題。");
+    expect(pagePaneEl.querySelector(".page-reader-analysis-note")).toBeNull();
+    expect(pagePaneEl.textContent).not.toContain("此為新聞彙整頁面");
     expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-excerpt")?.textContent)
       .toContain("首頁 分類 熱門");
-    expect(pagePaneEl.querySelector(".page-reader-supplemental-details .page-reader-processing-status")).not.toBeNull();
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-page-text")?.open).toBe(false);
+    const contextBody = pagePaneEl.querySelector(".page-reader-context-body");
+    expect(contextBody?.firstElementChild?.classList.contains("page-reader-context-summary")).toBe(true);
+    expect(contextBody?.children[1]?.classList.contains("page-reader-page-text")).toBe(true);
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-supplemental-details")?.open).toBe(false);
   });
 
@@ -1872,7 +1983,9 @@ describe("sidepanel page reading runtime", () => {
     }));
     expect(pagePaneEl.textContent).toContain("需要指定目標");
     expect(diagnosticRawValue(pagePaneEl, /用途/)).toBe("requires_user_target");
-    expect(pagePaneEl.textContent).toContain("需要使用者選取段落");
+    expect(pagePaneEl.querySelector(".page-reader-context-summary-status")?.textContent).toBe("需要指定段落");
+    expect(pagePaneEl.querySelector(".page-reader-context-summary p")?.textContent)
+      .toBe("這頁無法辨識明確正文，請選取想分析的段落。");
   });
 
   it("re-extracts full candidate block text before applying prefer-candidate context", async () => {
@@ -2043,12 +2156,13 @@ describe("sidepanel page reading runtime", () => {
       },
     }));
     expect(pagePaneEl.textContent).toContain(selectedText);
-    expect(pagePaneEl.textContent).toContain("目標");
-    expect(pagePaneEl.textContent).toContain("選取文字");
-    expect(pagePaneEl.textContent).toContain("頁面狀態");
-    expect(pagePaneEl.textContent).toContain("可用");
-    expect(diagnosticRawValue(pagePaneEl, /目標/)).toBe("selection");
-    expect(diagnosticRawValue(pagePaneEl, /判斷/)).toBe("accept_current");
+    expect(pagePaneEl.querySelector(".page-reader-focus-title")?.textContent).toBe("分析範圍");
+    expect(pagePaneEl.querySelector(".page-reader-focus-meta")?.textContent).toContain("選取文字");
+    expect(pagePaneEl.querySelector(".page-reader-focus-preview")?.textContent).toContain("This selected runtime passage");
+    expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-focus-text")?.open).toBe(false);
+    expect(pagePaneEl.querySelector(".page-reader-context-details")).toBeNull();
+    expect(pagePaneEl.textContent).not.toContain("頁面狀態");
+    expect(diagnosticRawValue(pagePaneEl, /目標/)).toBeUndefined();
 
     runtime.handlePageReadingResult({
       type: "PAGE_READING_RESULT",
@@ -2056,9 +2170,9 @@ describe("sidepanel page reading runtime", () => {
       surface: baseSurface,
     });
 
-    expect(pagePaneEl.textContent).toContain("範圍：選取文字");
+    expect(pagePaneEl.querySelector(".page-reader-focus-meta")?.textContent).toContain("選取文字");
     expect(pagePaneEl.textContent).toContain(selectedText);
-    expect(diagnosticRawValue(pagePaneEl, /目標/)).toBe("selection");
+    expect(pagePaneEl.querySelector(".page-reader-context-details")).toBeNull();
   });
 
   it("fails closed with toolbar guidance for current-region hotkey without a live read session", async () => {

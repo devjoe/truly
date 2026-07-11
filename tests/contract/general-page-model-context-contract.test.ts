@@ -114,6 +114,8 @@ describe("general page model context contract", () => {
       ...surface,
       links: [
         { href: "https://example.test/source/one", text: "Source one" },
+        { href: "https://example.test/source/one#notes", text: "Duplicate fragment" },
+        { href: "https://example.test/source/one?utm_source=reader", text: "Duplicate tracking URL" },
         { href: "https://example.test/source/two", text: "Source two" },
         { href: "https://example.test/source/three", text: "Source three" },
         { href: "https://example.test/source/four", text: "Source four" },

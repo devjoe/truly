@@ -285,9 +285,10 @@ function cleanLinks(
   const clean: GeneralPageModelSourceLink[] = [];
   for (const link of links ?? []) {
     const href = link.href.trim();
-    if (!isHttpLikeUrl(href) || seen.has(href)) continue;
+    const identity = normalizedLinkIdentity(href);
+    if (!identity || seen.has(identity)) continue;
     if (isLikelyNavigationOrDownloadLink(link, pageUrl)) continue;
-    seen.add(href);
+    seen.add(identity);
     clean.push({
       href,
       text: cleanOptional(link.text),
@@ -295,6 +296,24 @@ function cleanLinks(
     if (clean.length >= maxLinks) break;
   }
   return clean;
+}
+
+function normalizedLinkIdentity(rawUrl: string): string | undefined {
+  try {
+    const url = new URL(rawUrl);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return undefined;
+    url.hash = "";
+    for (const key of Array.from(url.searchParams.keys())) {
+      if (/^(?:utm_.+|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid)$/i.test(key))
+        url.searchParams.delete(key);
+    }
+    url.searchParams.sort();
+    if (url.pathname.length > 1)
+      url.pathname = url.pathname.replace(/\/+$/, "");
+    return url.toString();
+  } catch {
+    return undefined;
+  }
 }
 
 function isLikelyNavigationOrDownloadLink(link: ReadingSurfaceLink, pageUrl: string): boolean {
