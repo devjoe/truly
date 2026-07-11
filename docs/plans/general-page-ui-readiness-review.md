@@ -2,7 +2,7 @@
 
 Status: current Page/Web UI is ready for focused reviewer validation
 Date: 2026-07-04
-Last refreshed: 2026-07-11
+Last refreshed: 2026-07-12
 
 This review records the current UI/UX decision for the General Page Reader
 branch. It is based on the Page/Web CDP audit screenshots under `tmp/`; those
@@ -231,6 +231,32 @@ scope from canonical runtime state instead of requiring quiet pipeline labels
 to remain visible. Its 430px accessibility gate also verifies a 30px minimum
 hit area for the compact reread icon while keeping the icon itself visually
 small.
+
+### Page Context semantic de-duplication checkpoint (2026-07-12)
+
+Search, tool, and app-shell pages no longer repeat a model-generated page-form
+classification below the analysis when Page Context already owns the same user
+impact. Structured advisor `pageType` and `allowedUse` remain the primary
+signals. A constrained text fallback handles short model wording variations
+only when the page is limited to overview or requires a user target; notes that
+mention sources, evidence, recency, risk, warnings, publication details, or
+specific result ordering remain visible as content-specific caveats.
+
+Page Context distinguishes two outcomes. Overview-capable shells explain that
+only a page overview is available and invite the reader to select specific
+content for deeper analysis. Target-required shells explain that no clear
+article body was found and ask the reader to select the content to analyze.
+Focus does not inherit this whole-page classification.
+
+`make gpr-check` passed 28 files and 262 tests plus TypeScript checking.
+`make verify` passed the public boundary and release metadata checks, 119
+contract tests, 205 public unit tests, the production build, and release-bundle
+audit. The final no-focus UI audit passed under
+`tmp/general-page-ui-check-2026-07-11T18-31-02-415Z`. A provider-backed Ollama
+review confirmed the merged Page Context copy, absence of a duplicate analysis
+note, no horizontal overflow, and `document.hasFocus() === false`; its private
+evidence remains under
+`tmp/live-gpr-semantic-dedupe-retry-2026-07-12` and is not committed.
 
 ## Current Non-Changes
 

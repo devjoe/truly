@@ -77,6 +77,159 @@ describe("page reading presentation projection", () => {
     expect(result.omitBriefNote).toBe(true);
   });
 
+  it("promotes an app-shell classification into Page Context and suppresses only the duplicate note", () => {
+    const result = projectPageReadingPresentation({
+      workspace: "page",
+      surface: surface(["dynamic-content-partial"]),
+      context: context(),
+      advisor: {
+        status: "ready",
+        advice: { pageType: "app_shell", decision: "request_user_selection" } as never,
+        effectiveModelContext: {
+          allowedUse: "requires_user_target",
+          pageType: "app_shell",
+        } as never,
+        updatedAt: 1,
+      },
+      analysis: {
+        status: "ready",
+        allowedUse: "requires_user_target",
+        updatedAt: 2,
+        brief: { schemaVersion: 1, summary: "Search results", note: "此為搜尋介面，非文章頁面。" },
+      },
+      tr,
+    });
+    expect(result.pageContext).toEqual({
+      tone: "action-required",
+      status: "sidepanel.page.context.status.needsTarget",
+      summary: "sidepanel.page.context.summary.appShellRequiresTarget",
+    });
+    expect(result.omitBriefNote).toBe(true);
+  });
+
+  it("keeps an app-shell note when it adds content-specific information", () => {
+    const result = projectPageReadingPresentation({
+      workspace: "page",
+      surface: surface(["dynamic-content-partial"]),
+      context: context(),
+      advisor: {
+        status: "ready",
+        advice: { pageType: "app_shell", decision: "request_user_selection" } as never,
+        effectiveModelContext: {
+          allowedUse: "requires_user_target",
+          pageType: "app_shell",
+        } as never,
+        updatedAt: 1,
+      },
+      analysis: {
+        status: "ready",
+        allowedUse: "requires_user_target",
+        updatedAt: 2,
+        brief: {
+          schemaVersion: 1,
+          summary: "Search results",
+          note: "此為搜尋介面，非文章頁面；前三筆結果來自官方文件。",
+        },
+      },
+      tr,
+    });
+    expect(result.pageContext?.summary).toBe("sidepanel.page.context.summary.appShellRequiresTarget");
+    expect(result.omitBriefNote).toBe(false);
+  });
+
+  it("keeps an app-shell overview while moving its duplicate classification into Page Context", () => {
+    const result = projectPageReadingPresentation({
+      workspace: "page",
+      surface: surface(["dynamic-content-partial"]),
+      context: context(),
+      advisor: {
+        status: "ready",
+        advice: { pageType: "index_or_feed", decision: "downgrade_to_index_or_feed" } as never,
+        effectiveModelContext: {
+          allowedUse: "page_overview_only",
+          pageType: "index_or_feed",
+        } as never,
+        updatedAt: 1,
+      },
+      analysis: {
+        status: "ready",
+        allowedUse: "page_overview_only",
+        updatedAt: 2,
+        brief: {
+          schemaVersion: 1,
+          summary: "Ollama model search overview",
+          note: "此為搜尋入口，非詳細說明頁面。",
+        },
+      },
+      tr,
+    });
+    expect(result.pageContext).toEqual({
+      tone: "info",
+      summary: "sidepanel.page.context.summary.appShellOverview",
+    });
+    expect(result.omitBriefNote).toBe(true);
+  });
+
+  it("does not treat an ordinary article mentioning a search interface as duplicate chrome", () => {
+    const result = projectPageReadingPresentation({
+      workspace: "page",
+      surface: surface(),
+      context: context(),
+      advisor: {
+        status: "ready",
+        advice: { pageType: "article", decision: "accept_current" } as never,
+        effectiveModelContext: {
+          allowedUse: "article_or_selection_analysis",
+          pageType: "article",
+        } as never,
+        updatedAt: 1,
+      },
+      analysis: {
+        status: "ready",
+        allowedUse: "article_or_selection_analysis",
+        updatedAt: 2,
+        brief: { schemaVersion: 1, summary: "Article", note: "文章介紹一個新的搜尋介面。" },
+      },
+      tr,
+    });
+    expect(result.pageContext).toBeUndefined();
+    expect(result.omitBriefNote).toBe(false);
+  });
+
+  it("does not promote a Web-level app-shell classification inside Focus", () => {
+    const result = projectPageReadingPresentation({
+      workspace: "focus",
+      surface: surface(["dynamic-content-partial"]),
+      context: context("selection"),
+      target: {
+        id: "target:selection",
+        surfaceId: "surface:fixture",
+        kind: "selection",
+        text: "A selected synthetic passage.",
+        extraction: { method: "selection", status: "complete", warnings: [] },
+      },
+      advisor: {
+        status: "ready",
+        advice: { pageType: "app_shell", decision: "request_user_selection" } as never,
+        effectiveModelContext: {
+          allowedUse: "article_or_selection_analysis",
+          pageType: "app_shell",
+        } as never,
+        updatedAt: 1,
+      },
+      analysis: {
+        status: "ready",
+        allowedUse: "article_or_selection_analysis",
+        updatedAt: 2,
+        brief: { schemaVersion: 1, summary: "Selection", note: "此為搜尋介面，非文章頁面。" },
+      },
+      tr,
+    });
+    expect(result.pageContext).toBeUndefined();
+    expect(result.focusAdvisory).toBeUndefined();
+    expect(result.omitBriefNote).toBe(false);
+  });
+
   it("maps a selected Focus target to a quiet overview and aggregation advisory", () => {
     const result = projectPageReadingPresentation({
       workspace: "focus",

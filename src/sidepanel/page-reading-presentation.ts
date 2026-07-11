@@ -36,6 +36,21 @@ function aggregationGuidance(note: string | undefined): boolean {
     /新聞(?:彙整|聚合)頁面|索引|列表|(?:各)?來源連結|news aggregation|index|feed|source links?/iu.test(note ?? "");
 }
 
+function pureAppShellClassification(note: string | undefined): boolean {
+  if (!note) return false;
+  const normalized = note.trim().replace(/\s+/g, " ");
+  const strictMatch = [
+    /^(?:此|這)(?:頁|頁面)?(?:為|是)(?:一個)?(?:搜尋|搜索|動態應用程式|應用程式|瀏覽器(?:操作|設定)?)(?:介面|頁面)(?:，|,)?(?:並)?(?:非|不是|並非)(?:一般)?文章(?:頁面)?[。.!]?$/u,
+    /^(?:此|這)(?:頁|頁面)?(?:為|是)(?:一個)?(?:搜尋|搜索|動態應用程式|應用程式|瀏覽器(?:操作|設定)?)(?:介面|頁面)[。.!]?$/u,
+    /^(?:this|the current)(?: page)? is (?:an? )?(?:search interface|dynamic app(?:lication)? shell|application interface|browser (?:instruction|settings?) page)(?:,? (?:and is )?not (?:an? )?article(?: page)?)?[.!]?$/iu,
+  ].some((pattern) => pattern.test(normalized));
+  if (strictMatch) return true;
+  if (normalized.length > 140) return false;
+  const shellClassification = /(?:搜尋|搜索|工具|應用程式|瀏覽器|索引|列表).{0,12}(?:介面|頁面|入口|功能)|(?:search|tool|application|browser|index|listing).{0,14}(?:interface|shell|page|entry point)/iu.test(normalized);
+  const hasContentSpecificDetail = /官方|來源|證據|時效|過時|風險|警告|日期|發布|最新|[：:]|、|前[一二三四五六七八九十\d]|第[一二三四五六七八九十\d]|結果來自|official|source|evidence|outdated|risk|warning|published|latest|first \d/iu.test(normalized);
+  return shellClassification && !hasContentSpecificDetail;
+}
+
 function noteMatchesPageContext(
   note: string | undefined,
   warnings: ReadingExtractionWarning[],
@@ -57,11 +72,14 @@ function contextPresentation(
   surface: ReadingSurface,
   context: GeneralPageModelContext | undefined,
   advisor: PageReadingAdvisorSession | undefined,
+  analysisNote: string | undefined,
   tr: Translate,
 ): PageContextPresentation | undefined {
   const warnings = surface.extraction.warnings;
   const effective = advisor?.effectiveModelContext;
   const allowedUse = effective?.allowedUse;
+  const pageType = effective?.pageType ?? advisor?.advice?.pageType;
+  const appShellContext = pageType === "app_shell" || pureAppShellClassification(analysisNote);
   if (effective?.source === "candidate-block" && allowedUse === "article_or_selection_analysis") return undefined;
   if (warnings.includes("login-or-paywall-like")) {
     return {
@@ -81,13 +99,17 @@ function contextPresentation(
     return {
       tone: "action-required",
       status: tr("sidepanel.page.context.status.needsTarget"),
-      summary: tr("sidepanel.page.context.summary.requiresTarget"),
+      summary: tr(appShellContext
+        ? "sidepanel.page.context.summary.appShellRequiresTarget"
+        : "sidepanel.page.context.summary.requiresTarget"),
     };
   }
   if (allowedUse === "page_overview_only") {
     return {
       tone: "info",
-      summary: tr(warnings.includes("large-navigation-noise")
+      summary: tr(appShellContext
+        ? "sidepanel.page.context.summary.appShellOverview"
+        : warnings.includes("large-navigation-noise")
         ? "sidepanel.page.context.summary.overviewNavigation"
         : "sidepanel.page.context.summary.overview"),
     };
@@ -152,7 +174,7 @@ export function projectPageReadingPresentation(input: {
     warnings.length === 0,
   );
   const pageContext = input.workspace === "page" && !hidePendingAdvisorState && input.surface
-    ? contextPresentation(input.surface, input.context, input.advisor, input.tr)
+    ? contextPresentation(input.surface, input.context, input.advisor, note, input.tr)
     : undefined;
   const focusAdvisory = input.workspace !== "focus"
     ? undefined
@@ -163,6 +185,11 @@ export function projectPageReadingPresentation(input: {
     : undefined;
   const omitBriefNote = Boolean(
     input.workspace === "page" && pageContext && note && noteMatchesPageContext(note, warnings, allowedUse),
+  ) || Boolean(
+    input.workspace === "page" &&
+    pageContext &&
+    (allowedUse === "requires_user_target" || allowedUse === "page_overview_only") &&
+    pureAppShellClassification(note),
   ) || Boolean(focusAdvisory);
   const surfaceState = input.surface
     ? "ready"
