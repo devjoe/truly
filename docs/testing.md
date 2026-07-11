@@ -72,6 +72,13 @@ results, Focus caption typography, and localized action copy. Screenshots,
 audit JSON, and a short summary are written under
 `tmp/general-page-ui-check-*` and must not be committed.
 
+The Web/Focus continuity flow is a scenario-owned tracer slice under
+`scripts/lib/general-page-audit-scenarios/`: it owns its actions, observations,
+artifact names, assertions, and summary projection. The top-level audit owns
+only browser lifecycle, shared timeouts, and aggregate reporting; migrate other
+flows to this shape when they need substantive changes rather than rewriting
+the whole audit at once.
+
 `npm run dev:check` now also verifies source freshness before comparing dist,
 reload-server, service-worker, and Facebook content-script build IDs. Use
 `npm run dev:check:source` when only the local source-to-dist freshness check is

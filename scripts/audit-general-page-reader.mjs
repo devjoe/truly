@@ -10,6 +10,11 @@ import {
   reloadStaleExtensionWithFacebookRecovery,
 } from "./lib/general-page-audit-runtime-reload.mjs";
 import { connectCdp as connectCdpClient } from "./lib/cdp-client.mjs";
+import {
+  assertWebFocusContinuity,
+  runWebFocusContinuityScenario,
+  webFocusContinuitySummary,
+} from "./lib/general-page-audit-scenarios/web-focus-continuity.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DIST_BUILD_ID = resolve(ROOT, "dist", "build-id.txt");
@@ -1536,167 +1541,15 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       await side.screenshot(resolve(OUT_DIR, "page-web-history-hidden-timeout.png")).catch(() => {});
       throw error;
     });
-    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 20000, "Web analysis before Focus switch");
-    const webBeforeFocus = await side.evaluateJson(`(() => ({
-      documentHasFocus: document.hasFocus(),
-      summary: document.querySelector('#page-pane .page-reader-analysis-summary')?.textContent?.trim() || null,
-      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
-    }))()`);
-    await waitFor(side, `(() => document.querySelector('.tab[data-tab="focus"]')?.getAttribute('aria-disabled') !== 'true')()`, 4000, "Web Focus tab available");
-    await side.evaluate(`document.querySelector('.tab[data-tab="focus"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    const focusActivationState = await side.evaluateJson(`(() => {
-      return {
-        activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim() || null,
-        selectionButton: Boolean(document.querySelector('#pageReadSelection')),
-        paneText: document.querySelector('#page-pane')?.innerText || '',
-        runtime: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
-      };
-    })()`);
-    writeFileSync(resolve(OUT_DIR, "page-focus-activation.json"), JSON.stringify(focusActivationState, null, 2));
-    await waitFor(side, `(() => document.querySelector('#pageReadSelection')?.disabled === false)()`, 4000, "Web focus selection action enabled on current page").catch(async (error) => {
-      const timeoutState = await side.evaluateJson(`(() => ({
-        activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim() || null,
-        focusAvailability: document.querySelector('.tab[data-tab="focus"]')?.getAttribute('aria-disabled'),
-        selectionButton: (() => {
-          const button = document.querySelector('#pageReadSelection');
-          return button ? { text: button.textContent?.trim(), disabled: button.disabled } : null;
-        })(),
-        paneText: document.querySelector('#page-pane')?.innerText || '',
-        activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
-      }))()`);
-      writeFileSync(resolve(OUT_DIR, "page-focus-ready-timeout.json"), JSON.stringify(timeoutState, null, 2));
-      await side.screenshot(resolve(OUT_DIR, "page-focus-ready-timeout.png")).catch(() => {});
-      throw error;
-    });
-    const historyDisplay = await side.evaluateJson(`(() => {
-      const base = globalThis.__trulyHistoryDisplayAudit || {};
-      return {
-        ...base,
-        text: document.querySelector('#page-pane')?.innerText || '',
-        sessionCount: document.querySelectorAll('[data-page-session-tab-id]').length,
-        switcherVisible: Boolean(document.querySelector('.page-reader-switcher')),
-        selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
-        readCurrentVisible: Boolean(document.querySelector('#pageReadCurrent:not([hidden])')),
-        hasActivateButton: Boolean(document.querySelector('#pageActivateDisplayedTab')),
-        activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null
-      };
-    })()`);
-    writeFileSync(resolve(OUT_DIR, "page-web-history-hidden.json"), JSON.stringify(historyDisplay, null, 2));
-    await side.screenshot(resolve(OUT_DIR, "page-web-history-hidden.png")).catch(() => {});
     const liveArticle = thirdArticle;
-
-    const selectedText = await liveArticle.evaluate(`(() => {
-      const paragraph = document.querySelector('article p:nth-of-type(3)');
-      const range = document.createRange();
-      range.selectNodeContents(paragraph);
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-      return selection.toString().replace(/\\s+/g, ' ').trim();
-    })()`);
-    const selectionBeforeAction = await side.evaluateJson(`(() => {
-      const pane = document.querySelector('#page-pane');
-      const model = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-model-context');
-      const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
-        label: row.querySelector('dt')?.textContent?.trim(),
-        value: row.querySelector('dd')?.textContent?.trim(),
-        rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
-      }));
-      const activeState = globalThis.__trulyPageReadingRuntime?.auditState?.() || null;
-      return {
-        excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
-        selectionDisabled: document.querySelector('#pageReadSelection')?.disabled ?? null,
-        targetKind: activeState?.displayedSession?.targetKind ||
-          rows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.rawValue ||
-          null,
-        pipelineHidden: !model && !pane?.querySelector('.page-reader-advisor'),
-        activeState,
-      };
-    })()`);
-    await side.evaluate(`document.querySelector('#pageReadSelection')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => {
-      const activeState = globalThis.__trulyPageReadingRuntime?.auditState?.() || null;
-      if (activeState?.displayedSession?.targetKind === 'selection') return true;
-      const model = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-model-context');
-      const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
-        label: row.querySelector('dt')?.textContent?.trim(),
-        value: row.querySelector('dd')?.textContent?.trim(),
-            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
-      }));
-      return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && (row.rawValue || row.value) === 'selection');
-    })()`, 10000, "Web selection target").catch(async (error) => {
-      await side.screenshot(resolve(OUT_DIR, "page-selection-timeout.png")).catch(() => {});
-      throw error;
+    const webFocusScenario = await runWebFocusContinuityScenario({
+      side,
+      article: liveArticle,
+      waitFor,
+      artifactPath: (name) => resolve(OUT_DIR, name),
     });
-    const selection = await side.evaluateJson(`(() => {
-      const pane = document.querySelector('#page-pane');
-      const model = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-model-context');
-      const advisor = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-advisor');
-      return {
-        excerpt: pane?.querySelector('.page-reader-focus-preview')?.textContent?.trim(),
-        focusPanelCount: pane?.querySelectorAll('.page-reader-focus-panel').length || 0,
-        hasPageCard: Boolean(pane?.querySelector('.page-reader-card')),
-        analysisTitle: pane?.querySelector('.page-reader-focus-analysis .page-reader-analysis-header h3')?.textContent?.trim(),
-        hasLastRead: /上次讀取|Last read/.test(pane?.innerText || ''),
-        hasExternalToolsLabel: /外部工具整合|External Tool Integration/.test(pane?.innerText || ''),
-        focusToolCount: pane?.querySelectorAll('.page-reader-focus-tools .page-reader-card-action').length || 0,
-        modelRows: [...model?.querySelectorAll('dl div') || []].map((row) => ({
-          label: row.querySelector('dt')?.textContent?.trim(),
-          value: row.querySelector('dd')?.textContent?.trim(),
-            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
-        })),
-        advisorRows: [...advisor?.querySelectorAll('dl div') || []].map((row) => ({
-          label: row.querySelector('dt')?.textContent?.trim(),
-          value: row.querySelector('dd')?.textContent?.trim(),
-            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
-        })),
-        advisorStatus: advisor?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim(),
-        activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
-      };
-    })()`);
-    await side.screenshot(resolve(OUT_DIR, "page-selection-target.png"));
-
-    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-focus-analysis .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 20000, "Focus analysis before Web switch");
-    const focusBeforeWeb = await side.evaluateJson(`(() => {
-      const pane = document.querySelector('#page-pane');
-      const heading = pane?.querySelector('.page-reader-focus-analysis .page-reader-analysis-header h3');
-      const reference = pane?.querySelector('.page-reader-analysis h4');
-      const headingStyle = heading ? getComputedStyle(heading) : null;
-      const referenceStyle = reference ? getComputedStyle(reference) : null;
-      return {
-        documentHasFocus: document.hasFocus(),
-        summary: pane?.querySelector('.page-reader-analysis-summary')?.textContent?.trim() || null,
-        updateButtonText: pane?.querySelector('#pageReadSelection')?.textContent?.trim() || null,
-        headingStyle: headingStyle ? {
-          color: headingStyle.color,
-          fontSize: headingStyle.fontSize,
-          fontWeight: headingStyle.fontWeight,
-        } : null,
-        referenceStyle: referenceStyle ? {
-          color: referenceStyle.color,
-          fontSize: referenceStyle.fontSize,
-          fontWeight: referenceStyle.fontWeight,
-        } : null,
-        activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
-      };
-    })()`);
-    await side.evaluate(`document.querySelector('.tab[data-tab="page"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 8000, "restored Web analysis");
-    const webAfterFocus = await side.evaluateJson(`(() => ({
-      documentHasFocus: document.hasFocus(),
-      summary: document.querySelector('#page-pane .page-reader-analysis-summary')?.textContent?.trim() || null,
-      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
-    }))()`);
-    await side.screenshot(resolve(OUT_DIR, "page-web-restored-after-focus.png"));
-    await side.evaluate(`document.querySelector('.tab[data-tab="focus"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-focus-analysis .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 8000, "restored Focus analysis");
-    const focusAfterWeb = await side.evaluateJson(`(() => ({
-      documentHasFocus: document.hasFocus(),
-      summary: document.querySelector('#page-pane .page-reader-analysis-summary')?.textContent?.trim() || null,
-      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
-    }))()`);
-    await side.screenshot(resolve(OUT_DIR, "page-focus-restored-after-web.png"));
-    const continuity = { webBeforeFocus, focusBeforeWeb, webAfterFocus, focusAfterWeb };
+    const { continuity, selection } = webFocusScenario;
+    const historyDisplay = webFocusScenario.historyDisplay;
 
     // Slice 6b: current-region hotkey flow. Simulate pointer movement over a
     // paragraph, then set the same session marker the SW command handler
@@ -1785,7 +1638,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       pageContext,
       copy,
       history: { second: historySecond, third: historyThird, display: historyDisplay },
-      selection: { selectedText, beforeAction: selectionBeforeAction, ...selection },
+      selection,
       continuity,
       pointTarget,
       afterHash,
@@ -3628,40 +3481,12 @@ function writeSummary(result, errors) {
 function assertUiOnlyAudit(result) {
   const errors = [];
   const success = result.success;
-  const continuity = success?.continuity;
-  const focus = continuity?.focusBeforeWeb;
-  const focusStates = [
-    continuity?.webBeforeFocus,
-    continuity?.focusBeforeWeb,
-    continuity?.webAfterFocus,
-    continuity?.focusAfterWeb,
-  ];
 
   if (success?.pageBrief?.status !== "ready") errors.push("Web analysis did not reach the ready state");
   if (success?.responsive?.horizontalOverflow) errors.push("430px Web layout has horizontal overflow");
   if ((success?.responsive?.interactiveOverflows?.length ?? 0) > 0) errors.push("430px Web layout clips interactive controls");
   if ((success?.responsive?.unnamedInteractive?.length ?? 0) > 0) errors.push("Web layout contains unnamed interactive controls");
-  if (success?.selection?.focusPanelCount !== 1 || success?.selection?.hasPageCard !== false) {
-    errors.push("Focus did not preserve the single-card target-centric information architecture");
-  }
-  if (!continuity?.webBeforeFocus?.summary || continuity.webAfterFocus?.summary !== continuity.webBeforeFocus.summary) {
-    errors.push("Web analysis was not preserved across the Focus switch");
-  }
-  if (!focus?.summary || continuity.focusAfterWeb?.summary !== focus.summary) {
-    errors.push("Focus analysis was not preserved across the Web switch");
-  }
-  if (continuity?.webBeforeFocus?.summary === focus?.summary) {
-    errors.push("deterministic Web and Focus summaries were not distinct");
-  }
-  if (JSON.stringify(focus?.headingStyle) !== JSON.stringify(focus?.referenceStyle)) {
-    errors.push("Focus overview typography does not match the subsection hierarchy");
-  }
-  if (!/^(套用選取內容|Apply selected content)$/.test(focus?.updateButtonText || "")) {
-    errors.push(`unexpected Focus action copy: ${focus?.updateButtonText || "(missing)"}`);
-  }
-  if (focusStates.some((state) => state?.documentHasFocus !== false)) {
-    errors.push("background CDP UI check unexpectedly focused its Side Panel target");
-  }
+  errors.push(...assertWebFocusContinuity(success ?? {}));
   return errors;
 }
 
@@ -3688,21 +3513,17 @@ async function auditUiOnly(extensionId, allowedBase) {
 
 function writeUiOnlySummary(result, errors) {
   const continuity = result.success?.continuity;
+  const scenario = webFocusContinuitySummary(continuity);
   const lines = [
     "# General Page Reader UI Check",
     "",
     `- Result: ${errors.length === 0 ? "pass" : "fail"}`,
     `- Build: ${result.expectedBuildId}`,
-    `- Web preserved: ${continuity?.webAfterFocus?.summary === continuity?.webBeforeFocus?.summary}`,
-    `- Focus preserved: ${continuity?.focusAfterWeb?.summary === continuity?.focusBeforeWeb?.summary}`,
-    `- Typography aligned: ${JSON.stringify(continuity?.focusBeforeWeb?.headingStyle) === JSON.stringify(continuity?.focusBeforeWeb?.referenceStyle)}`,
-    `- Focus action: ${continuity?.focusBeforeWeb?.updateButtonText || "(missing)"}`,
-    `- Side Panel focus states: ${[
-      continuity?.webBeforeFocus,
-      continuity?.focusBeforeWeb,
-      continuity?.webAfterFocus,
-      continuity?.focusAfterWeb,
-    ].map((state) => String(state?.documentHasFocus)).join(", ")}`,
+    `- Web preserved: ${scenario.webPreserved}`,
+    `- Focus preserved: ${scenario.focusPreserved}`,
+    `- Typography aligned: ${scenario.typographyAligned}`,
+    `- Focus action: ${scenario.focusAction}`,
+    `- Side Panel focus states: ${scenario.documentFocusStates.join(", ")}`,
     "",
     "## Screenshots",
     "",
