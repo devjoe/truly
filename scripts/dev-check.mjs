@@ -3,12 +3,15 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { inspectBuildFreshness } from "./lib/dev-build-freshness.mjs";
+
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DIST_BUILD_ID = resolve(ROOT, "dist", "build-id.txt");
 const RELOAD_PORT = Number(process.env.TRULY_DEV_RELOAD_PORT || 9012);
 const RELOAD_URL = `http://127.0.0.1:${RELOAD_PORT}/`;
 const CDP_PORT = Number(process.env.CDP_PORT || 9222);
 const CDP_BASE = `http://127.0.0.1:${CDP_PORT}`;
+const SOURCE_ONLY = /^(1|true|yes)$/i.test(process.env.TRULY_DEV_CHECK_SOURCE_ONLY || "");
 
 const checks = [];
 
@@ -31,6 +34,22 @@ function readDistBuildId() {
     record("dist build id", false, `${DIST_BUILD_ID}: ${error.message}`);
     return null;
   }
+}
+
+function checkDistBuildFreshness() {
+  const freshness = inspectBuildFreshness({ root: ROOT, markerPath: DIST_BUILD_ID });
+  const newer = freshness.newerInputs
+    .slice(0, 3)
+    .map((path) => path.replace(`${ROOT}/`, ""));
+  const overflow = freshness.newerInputs.length > newer.length
+    ? ` (+${freshness.newerInputs.length - newer.length} more)`
+    : "";
+  const detail = freshness.fresh
+    ? "dist/build-id.txt is newer than extension build inputs"
+    : freshness.reason === "missing_build_marker"
+    ? "dist/build-id.txt is missing; run npm run build:dev"
+    : `source is newer than dist/build-id.txt: ${newer.join(", ")}${overflow}; run npm run build:dev`;
+  record("dist source freshness", freshness.fresh, detail);
 }
 
 async function fetchJson(url, timeoutMs = 1500) {
@@ -226,6 +245,16 @@ function compareBuildIds(label, leftName, left, rightName, right) {
 }
 
 const distBuildId = readDistBuildId();
+checkDistBuildFreshness();
+if (SOURCE_ONLY) {
+  const failed = checks.filter((check) => !check.ok);
+  if (failed.length > 0) {
+    console.error(`dev source check failed: ${failed.length} failed check(s)`);
+    process.exit(1);
+  }
+  console.log("dev source check ok");
+  process.exit(0);
+}
 const reloadBuildId = await readReloadServerBuildId();
 checkReloadPortOwner();
 compareBuildIds("dist vs reload", "dist", distBuildId, "reload", reloadBuildId);

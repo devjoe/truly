@@ -45,6 +45,33 @@ checkpoint, push, merge, or release, still run:
 make verify
 ```
 
+## General Page Reader UI Gate
+
+After changing the Web or Focus information architecture, build the development
+extension and run the deterministic background-CDP gate:
+
+```bash
+make build-dev
+make gpr-ui-check
+```
+
+`gpr-ui-check` first rejects a dist build when an extension input under `src/`,
+`public/`, or the build configuration is newer than `dist/build-id.txt`. It then
+uses the existing Chrome remote debugger, reloads a stale Truly runtime when
+needed, and exercises synthetic local pages with deterministic model responses.
+It does not call `bringToFront` or intentionally focus Chrome.
+
+The gate checks the 430px layout, accessible controls, the Focus single-card
+information architecture, Web/Focus analysis preservation, distinct scope
+results, Focus caption typography, and localized action copy. Screenshots,
+audit JSON, and a short summary are written under
+`tmp/general-page-ui-check-*` and must not be committed.
+
+`npm run dev:check` now also verifies source freshness before comparing dist,
+reload-server, service-worker, and Facebook content-script build IDs. Use
+`npm run dev:check:source` when only the local source-to-dist freshness check is
+needed.
+
 Sponsored detection regressions must prefer precision over recall. The public
 suite uses synthetic GraphQL-style post records to verify that a sponsored
 signal does not create author-level memory and collapse unrelated posts from

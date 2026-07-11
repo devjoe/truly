@@ -169,6 +169,13 @@ and `document.hasFocus() === false` throughout. The inspected development build
 was `1783767511170-810a603-dirty`. The private screenshots and audit JSON remain
 uncommitted.
 
+The repeatable UI gate for this contract is now `make gpr-ui-check`. It runs
+against synthetic local pages and deterministic scope-specific model responses,
+auto-recovers a stale loaded extension, and keeps all evidence under
+`tmp/general-page-ui-check-*`. Before attaching to Chrome it rejects a dist
+build whose marker predates the extension source, preventing a mutually
+consistent but stale dist/reload/runtime build from passing review.
+
 ## Current Non-Changes
 
 - Do not remove diagnostics globally. The feature is still in early product

@@ -17,9 +17,10 @@ const CDP_BASE = `http://127.0.0.1:${CDP_PORT}`;
 const AUTO_RELOAD = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_AUTO_RELOAD || "");
 const SKIP_POPUP_READ = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_SKIP_POPUP_READ || "");
 const ALLOW_WINDOW_FOCUS = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_ALLOW_WINDOW_FOCUS || "");
+const UI_ONLY = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_UI_ONLY || "");
 const EXTENSION_ID = (process.env.TRULY_EXTENSION_ID || "").trim();
 const STAMP = new Date().toISOString().replace(/[:.]/g, "-");
-const OUT_DIR = resolve(ROOT, "tmp", `general-page-reader-audit-${STAMP}`);
+const OUT_DIR = resolve(ROOT, "tmp", `${UI_ONLY ? "general-page-ui-check" : "general-page-reader-audit"}-${STAMP}`);
 const PHASE_LOG_PATH = resolve(OUT_DIR, "audit-phase-log.json");
 const PHASE_TIMEOUT_MS = {
   popup: 20_000,
@@ -56,6 +57,7 @@ Environment:
                                when the host OS cannot provide an active browser window
   TRULY_AUDIT_ALLOW_WINDOW_FOCUS=1
                                allow the popup-read phase to focus Chrome; off by default
+  TRULY_AUDIT_UI_ONLY=1       run deterministic Web/Focus IA and visual checks only
   TRULY_EXTENSION_ID=<id>     audit a specific loaded Truly extension id
 `);
 }
@@ -423,12 +425,26 @@ async function startMockOpenAiEndpoint() {
         rationale: "The synthetic fixture needs visible screenshot grounding.",
       });
     } else {
+      const targetKind = /targetKind:\s*selection/i.test(userText)
+        ? "selection"
+        : /targetKind:\s*current-region/i.test(userText)
+        ? "current-region"
+        : "page";
+      const summary = targetKind === "selection"
+        ? "Deterministic selected-content overview."
+        : targetKind === "current-region"
+        ? "Deterministic paragraph overview."
+        : "Deterministic whole-page overview.";
       content = JSON.stringify({
         schemaVersion: 1,
-        summary: "Screenshot-grounded synthetic summary.",
-        bg: [{ t: "Visual context", why: "The confirmed screenshot was included." }],
-        claims: [{ c: "The page needs visual grounding.", why: "The text extraction was too sparse.", need: "Use the confirmed screenshot." }],
-        qs: [{ q: "What does the visible card show?", kind: "understand" }],
+        summary: hasImageUrl ? "Screenshot-grounded synthetic summary." : summary,
+        bg: hasImageUrl
+          ? [{ t: "Visual context", why: "The confirmed screenshot was included." }]
+          : [{ t: "Synthetic scope", why: "This deterministic response verifies the UI state." }],
+        claims: hasImageUrl
+          ? [{ c: "The page needs visual grounding.", why: "The text extraction was too sparse.", need: "Use the confirmed screenshot." }]
+          : [{ c: "The analyzed content is synthetic.", why: "The UI check must not depend on live page content.", need: "Confirm the expected scope." }],
+        qs: [{ q: hasImageUrl ? "What does the visible card show?" : "Which analysis scope is active?", kind: "understand" }],
       });
     }
     res.writeHead(200, { "content-type": "application/json" });
@@ -1599,6 +1615,12 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       await side.screenshot(resolve(OUT_DIR, "page-web-history-hidden-timeout.png")).catch(() => {});
       throw error;
     });
+    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 20000, "Web analysis before Focus switch");
+    const webBeforeFocus = await side.evaluateJson(`(() => ({
+      documentHasFocus: document.hasFocus(),
+      summary: document.querySelector('#page-pane .page-reader-analysis-summary')?.textContent?.trim() || null,
+      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
+    }))()`);
     await waitFor(side, `(() => document.querySelector('.tab[data-tab="focus"]')?.getAttribute('aria-disabled') !== 'true')()`, 4000, "Web Focus tab available");
     await side.evaluate(`document.querySelector('.tab[data-tab="focus"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     const focusActivationState = await side.evaluateJson(`(() => {
@@ -1713,6 +1735,48 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     await side.screenshot(resolve(OUT_DIR, "page-selection-target.png"));
 
+    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-focus-analysis .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 20000, "Focus analysis before Web switch");
+    const focusBeforeWeb = await side.evaluateJson(`(() => {
+      const pane = document.querySelector('#page-pane');
+      const heading = pane?.querySelector('.page-reader-focus-analysis .page-reader-analysis-header h3');
+      const reference = pane?.querySelector('.page-reader-analysis h4');
+      const headingStyle = heading ? getComputedStyle(heading) : null;
+      const referenceStyle = reference ? getComputedStyle(reference) : null;
+      return {
+        documentHasFocus: document.hasFocus(),
+        summary: pane?.querySelector('.page-reader-analysis-summary')?.textContent?.trim() || null,
+        updateButtonText: pane?.querySelector('#pageReadSelection')?.textContent?.trim() || null,
+        headingStyle: headingStyle ? {
+          color: headingStyle.color,
+          fontSize: headingStyle.fontSize,
+          fontWeight: headingStyle.fontWeight,
+        } : null,
+        referenceStyle: referenceStyle ? {
+          color: referenceStyle.color,
+          fontSize: referenceStyle.fontSize,
+          fontWeight: referenceStyle.fontWeight,
+        } : null,
+        activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
+      };
+    })()`);
+    await side.evaluate(`document.querySelector('.tab[data-tab="page"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 8000, "restored Web analysis");
+    const webAfterFocus = await side.evaluateJson(`(() => ({
+      documentHasFocus: document.hasFocus(),
+      summary: document.querySelector('#page-pane .page-reader-analysis-summary')?.textContent?.trim() || null,
+      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
+    }))()`);
+    await side.screenshot(resolve(OUT_DIR, "page-web-restored-after-focus.png"));
+    await side.evaluate(`document.querySelector('.tab[data-tab="focus"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
+    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-focus-analysis .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 8000, "restored Focus analysis");
+    const focusAfterWeb = await side.evaluateJson(`(() => ({
+      documentHasFocus: document.hasFocus(),
+      summary: document.querySelector('#page-pane .page-reader-analysis-summary')?.textContent?.trim() || null,
+      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
+    }))()`);
+    await side.screenshot(resolve(OUT_DIR, "page-focus-restored-after-web.png"));
+    const continuity = { webBeforeFocus, focusBeforeWeb, webAfterFocus, focusAfterWeb };
+
     // Slice 6b: current-region hotkey flow. Simulate pointer movement over a
     // paragraph, then set the same session marker the SW command handler
     // writes; the panel consumes it and requests a point target.
@@ -1801,6 +1865,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       copy,
       history: { second: historySecond, third: historyThird, display: historyDisplay },
       selection: { selectedText, beforeAction: selectionBeforeAction, ...selection },
+      continuity,
       pointTarget,
       afterHash,
       afterTracking,
@@ -3639,6 +3704,99 @@ function writeSummary(result, errors) {
   writeFileSync(resolve(OUT_DIR, "summary.md"), `${lines.filter((line) => line !== null).join("\n")}\n`);
 }
 
+function assertUiOnlyAudit(result) {
+  const errors = [];
+  const success = result.success;
+  const continuity = success?.continuity;
+  const focus = continuity?.focusBeforeWeb;
+  const focusStates = [
+    continuity?.webBeforeFocus,
+    continuity?.focusBeforeWeb,
+    continuity?.webAfterFocus,
+    continuity?.focusAfterWeb,
+  ];
+
+  if (success?.pageBrief?.status !== "ready") errors.push("Web analysis did not reach the ready state");
+  if (success?.responsive?.horizontalOverflow) errors.push("430px Web layout has horizontal overflow");
+  if ((success?.responsive?.interactiveOverflows?.length ?? 0) > 0) errors.push("430px Web layout clips interactive controls");
+  if ((success?.responsive?.unnamedInteractive?.length ?? 0) > 0) errors.push("Web layout contains unnamed interactive controls");
+  if (success?.selection?.focusPanelCount !== 1 || success?.selection?.hasPageCard !== false) {
+    errors.push("Focus did not preserve the single-card target-centric information architecture");
+  }
+  if (!continuity?.webBeforeFocus?.summary || continuity.webAfterFocus?.summary !== continuity.webBeforeFocus.summary) {
+    errors.push("Web analysis was not preserved across the Focus switch");
+  }
+  if (!focus?.summary || continuity.focusAfterWeb?.summary !== focus.summary) {
+    errors.push("Focus analysis was not preserved across the Web switch");
+  }
+  if (continuity?.webBeforeFocus?.summary === focus?.summary) {
+    errors.push("deterministic Web and Focus summaries were not distinct");
+  }
+  if (JSON.stringify(focus?.headingStyle) !== JSON.stringify(focus?.referenceStyle)) {
+    errors.push("Focus overview typography does not match the subsection hierarchy");
+  }
+  if (!/^(套用選取內容|Apply selected content)$/.test(focus?.updateButtonText || "")) {
+    errors.push(`unexpected Focus action copy: ${focus?.updateButtonText || "(missing)"}`);
+  }
+  if (focusStates.some((state) => state?.documentHasFocus !== false)) {
+    errors.push("background CDP UI check unexpectedly focused its Side Panel target");
+  }
+  return errors;
+}
+
+async function auditUiOnly(extensionId, allowedBase) {
+  const mockEndpoint = await startMockOpenAiEndpoint();
+  let storageSnapshot;
+  try {
+    storageSnapshot = await configureScreenshotRecoveryAudit(extensionId, mockEndpoint.endpoint);
+    const success = await runAuditPhase("ui-success", PHASE_TIMEOUT_MS.success, () =>
+      auditSuccessfulRead(extensionId, allowedBase));
+    return {
+      success,
+      mockEndpoint: mockEndpoint.endpoint.replace(/:\d+\/v1$/, ":<port>/v1"),
+      mockRequests: mockEndpoint.requests.map((request) => ({
+        kind: request.kind,
+        hasImageUrl: request.hasImageUrl,
+      })),
+    };
+  } finally {
+    await restoreScreenshotRecoveryAudit(extensionId, storageSnapshot).catch(() => {});
+    await mockEndpoint.close();
+  }
+}
+
+function writeUiOnlySummary(result, errors) {
+  const continuity = result.success?.continuity;
+  const lines = [
+    "# General Page Reader UI Check",
+    "",
+    `- Result: ${errors.length === 0 ? "pass" : "fail"}`,
+    `- Build: ${result.expectedBuildId}`,
+    `- Web preserved: ${continuity?.webAfterFocus?.summary === continuity?.webBeforeFocus?.summary}`,
+    `- Focus preserved: ${continuity?.focusAfterWeb?.summary === continuity?.focusBeforeWeb?.summary}`,
+    `- Typography aligned: ${JSON.stringify(continuity?.focusBeforeWeb?.headingStyle) === JSON.stringify(continuity?.focusBeforeWeb?.referenceStyle)}`,
+    `- Focus action: ${continuity?.focusBeforeWeb?.updateButtonText || "(missing)"}`,
+    `- Side Panel focus states: ${[
+      continuity?.webBeforeFocus,
+      continuity?.focusBeforeWeb,
+      continuity?.webAfterFocus,
+      continuity?.focusAfterWeb,
+    ].map((state) => String(state?.documentHasFocus)).join(", ")}`,
+    "",
+    "## Screenshots",
+    "",
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-analysis-ready.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-responsive-430.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-web-restored-after-focus.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-focus-restored-after-web.png"))}`,
+    "",
+    "Synthetic pages and deterministic model responses only. Keep this tmp artifact private.",
+  ];
+  if (errors.length > 0) lines.push("", "## Errors", "", ...errors.map((error) => `- ${error}`));
+  writeFileSync(resolve(OUT_DIR, "summary.md"), `${lines.join("\n")}\n`);
+}
+
 mkdirSync(OUT_DIR, { recursive: true });
 const expectedBuildId = readExpectedBuildId();
 const server = await startSyntheticServer();
@@ -3661,7 +3819,30 @@ try {
   writeFileSync(resolve(OUT_DIR, "runtime-reload.json"), `${JSON.stringify(runtimeReload, null, 2)}\n`);
   const version = await currentVersion(extensionId);
 
-  const result = {
+  if (UI_ONLY) {
+    const ui = await auditUiOnly(extensionId, server.allowedBase);
+    const result = {
+      capturedAt: new Date().toISOString(),
+      mode: "ui-only",
+      cdpBase: CDP_BASE,
+      extensionId,
+      expectedBuildId,
+      version,
+      runtimeReload,
+      syntheticUrl: `${server.allowedBase}/article`,
+      ...ui,
+      artifactDir: relative(ROOT, OUT_DIR),
+    };
+    const errors = assertUiOnlyAudit(result);
+    result.ok = errors.length === 0;
+    result.errors = errors;
+    writeFileSync(resolve(OUT_DIR, "audit.json"), `${JSON.stringify(result, null, 2)}\n`);
+    writeUiOnlySummary(result, errors);
+    console.log(`General Page Reader UI check ${result.ok ? "passed" : "failed"}`);
+    console.log(`artifact: ${relative(ROOT, OUT_DIR)}`);
+    if (!result.ok) exitCode = 1;
+  } else {
+    const result = {
     capturedAt: new Date().toISOString(),
     cdpBase: CDP_BASE,
     extensionId,
@@ -3699,14 +3880,15 @@ try {
     artifactDir: relative(ROOT, OUT_DIR),
   };
 
-  const errors = assertAudit(result);
-  result.ok = errors.length === 0;
-  result.errors = errors;
-  writeFileSync(resolve(OUT_DIR, "audit.json"), JSON.stringify(result, null, 2));
-  writeSummary(result, errors);
-  console.log(`General Page Reader CDP audit ${result.ok ? "passed" : "failed"}`);
-  console.log(`artifact: ${relative(ROOT, OUT_DIR)}`);
-  if (!result.ok) exitCode = 1;
+    const errors = assertAudit(result);
+    result.ok = errors.length === 0;
+    result.errors = errors;
+    writeFileSync(resolve(OUT_DIR, "audit.json"), JSON.stringify(result, null, 2));
+    writeSummary(result, errors);
+    console.log(`General Page Reader CDP audit ${result.ok ? "passed" : "failed"}`);
+    console.log(`artifact: ${relative(ROOT, OUT_DIR)}`);
+    if (!result.ok) exitCode = 1;
+  }
 } catch (error) {
   const failure = {
     capturedAt: new Date().toISOString(),
