@@ -33,6 +33,7 @@ import type { LlmPostContext } from "./ollama-client";
 import type { ReadingSurface } from "./reading-surface-types";
 import type { ReadingTarget, ReadingTargetErrorReason } from "./reading-target-types";
 import type { ReadingActivation } from "./reading-action-types";
+import type { ReadingCommandEnvelope } from "./reading-command-envelope";
 import type { GeneralPageAnalysisMode, GeneralPageBrief } from "./general-page-analysis";
 import type { GeneralPageModelContext } from "./general-page-model-context";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./readiness";
@@ -91,8 +92,27 @@ export interface ManualViewPostMsg {
 // General page reader seams
 // ---------------------------------------------------------------------------
 
+export interface QueuePageReadingCommandMsg {
+  type: "QUEUE_PAGE_READING_COMMAND";
+  envelope: ReadingCommandEnvelope;
+}
+
+export interface QueuePageReadingCommandResultMsg {
+  type: "QUEUE_PAGE_READING_COMMAND_RESULT";
+  requestId: string;
+  ok: boolean;
+  error?: string;
+}
+
+export interface ReadingCommandAvailableMsg {
+  type: "READING_COMMAND_AVAILABLE";
+  requestId: string;
+  tabId: number;
+}
+
 export interface PageReadingRequestMsg {
   type: "PAGE_READING_REQUEST";
+  requestId?: string;
   tabId?: number;
   inject?: boolean;
   activation?: ReadingActivation;
@@ -100,6 +120,7 @@ export interface PageReadingRequestMsg {
 
 export interface PageReadingResultMsg {
   type: "PAGE_READING_RESULT";
+  requestId?: string;
   surface: ReadingSurface;
   candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
   tabId?: number;
@@ -108,6 +129,7 @@ export interface PageReadingResultMsg {
 
 export interface PageReadingErrorMsg {
   type: "PAGE_READING_ERROR";
+  requestId?: string;
   error: string;
   tabId?: number;
   elapsedMs?: number;
@@ -546,6 +568,9 @@ export type TrulyMessage =
   | CurrentViewPostMsg
   | RequestCurrentViewPostMsg
   | ManualViewPostMsg
+  | QueuePageReadingCommandMsg
+  | QueuePageReadingCommandResultMsg
+  | ReadingCommandAvailableMsg
   | PageReadingRequestMsg
   | PageReadingResultMsg
   | PageReadingErrorMsg

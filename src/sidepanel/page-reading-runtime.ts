@@ -72,6 +72,11 @@ import { copyReadingBriefQuestion, safeFilenamePart, saveMarkdownTextFile } from
 import { googleSearchUrl, readingBriefQuestionDisplay } from "./reading-brief-text";
 import { modelDisplayIdentity } from "../lib/model-display";
 import type { TabId } from "./tabs";
+import {
+  createReadingRequestId,
+  PENDING_PAGE_READING_COMMAND_KEY,
+  parseReadingCommandEnvelope,
+} from "../lib/reading-command-envelope";
 
 type PagePlatform = PageReadabilityPlatform;
 type PageSessionStatus = "idle" | "loading" | "ready" | "error" | "stale";
@@ -82,6 +87,7 @@ const AUTO_READ_DEBOUNCE_MS = 700;
 const READ_SUCCESS_FEEDBACK_MS = 1_800;
 
 interface PageReadingSession {
+  requestId?: string;
   tabId: number;
   url: string;
   identity: PageUrlIdentity;
@@ -268,6 +274,7 @@ export interface SidepanelPageReadingRuntime {
     activeTabId: number | null;
     displayTabId: number | null;
     displayedSession?: {
+      requestId?: string;
       status: PageSessionStatus;
       hasSurface: boolean;
       screenshotStatus?: PageReadingScreenshotSession["status"];
@@ -1328,6 +1335,7 @@ export function createSidepanelPageReadingRuntime({
   let autoReadTimer: ReturnType<typeof setTimeout> | undefined;
   let autoReadToken = 0;
   const pendingRereadFeedback = new Set<number>();
+  const consumedReadingCommandIds = new Set<string>();
   let readSuccessFeedbackTabId: number | undefined;
   let readSuccessFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let activeExtensionPageMarker: ActiveExtensionPageMarker | undefined;
@@ -2770,6 +2778,9 @@ export function createSidepanelPageReadingRuntime({
 
   function installPendingCurrentRegionListener(): void {
     if (!sessionStore) return;
+    void sessionStore.get(PENDING_PAGE_READING_COMMAND_KEY).then((result) => {
+      consumePendingPageReadingCommand(result?.[PENDING_PAGE_READING_COMMAND_KEY]);
+    }).catch(() => {});
     void sessionStore.get(PENDING_CURRENT_REGION_READ_KEY).then((result) => {
       consumePendingCurrentRegionRead(result?.[PENDING_CURRENT_REGION_READ_KEY]);
     }).catch(() => {});
@@ -2778,20 +2789,42 @@ export function createSidepanelPageReadingRuntime({
       if (changes[ACTIVE_EXTENSION_PAGE_MARKER_KEY]) {
         void refreshActiveExtensionPageMarker();
       }
+      const pageCommandChange = changes[PENDING_PAGE_READING_COMMAND_KEY];
+      if (pageCommandChange?.newValue !== undefined) {
+        consumePendingPageReadingCommand(pageCommandChange.newValue);
+      }
       const change = changes[PENDING_CURRENT_REGION_READ_KEY];
       if (!change || change.newValue === undefined) return;
       consumePendingCurrentRegionRead(change.newValue);
     });
   }
 
+  function consumePendingPageReadingCommand(raw: unknown): void {
+    const envelope = parseReadingCommandEnvelope(raw, now());
+    void sessionStore?.remove(PENDING_PAGE_READING_COMMAND_KEY);
+    if (!envelope || consumedReadingCommandIds.has(envelope.requestId)) return;
+    consumedReadingCommandIds.add(envelope.requestId);
+    void (async () => {
+      const tab = tabs.get ? await tabs.get(envelope.tabId).catch(() => undefined) : undefined;
+      if (!tab || typeof tab.id !== "number" || !tab.url) return;
+      if (!isMeaningfullySamePage(pageUrlIdentity(envelope.url), tab.url)) return;
+      if (platformForUrl(tab.url) !== "general") return;
+      await requestReadCurrentPage(envelope.activation.source, {
+        tab,
+        requestId: envelope.requestId,
+      });
+    })();
+  }
+
   async function requestReadCurrentPage(
     source: PageActivationSource = "sidepanel",
-    options: { activateWorkspace?: boolean } = {},
+    options: { activateWorkspace?: boolean; tab?: BrowserTab; requestId?: string } = {},
   ): Promise<void> {
     clearAutoReadTimer();
     autoReadToken += 1;
+    let requestId = options.requestId;
     try {
-      const tab = await refreshActiveTab(false);
+      const tab = options.tab ?? await refreshActiveTab(false);
       if (typeof tab?.id !== "number") {
         render();
         return;
@@ -2835,7 +2868,9 @@ export function createSidepanelPageReadingRuntime({
       }
       clearReadSuccessFeedback(tab.id);
       const startedAt = now();
+      requestId ??= createReadingRequestId();
       sessions.set(tab.id, {
+        requestId,
         tabId: tab.id,
         url: activeUrl,
         identity: pageUrlIdentity(activeUrl),
@@ -2855,6 +2890,7 @@ export function createSidepanelPageReadingRuntime({
       render();
       const response = await runtime.sendMessage({
         type: "PAGE_READING_REQUEST",
+        requestId,
         tabId: tab.id,
         inject: true,
         activation: {
@@ -2872,6 +2908,7 @@ export function createSidepanelPageReadingRuntime({
       if (typeof activeTabId === "number") {
         handlePageReadingError({
           type: "PAGE_READING_ERROR",
+          requestId,
           tabId: activeTabId,
           error: errorMessage(error),
         });
@@ -2889,6 +2926,7 @@ export function createSidepanelPageReadingRuntime({
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
     const existing = sessions.get(tabId);
+    if (message.requestId && existing?.requestId && message.requestId !== existing.requestId) return;
     const preservePendingFocus = pageWorkspace === "focus" && existing?.status === "loading";
     const shouldShowRereadSuccess = pendingRereadFeedback.delete(tabId);
     const duplicateReadySurface = existing?.status === "ready" &&
@@ -2927,6 +2965,7 @@ export function createSidepanelPageReadingRuntime({
       pageWorkspace = "page";
     }
     sessions.set(tabId, {
+      requestId: message.requestId ?? existing?.requestId,
       tabId,
       url: message.surface.url,
       identity: nextIdentity,
@@ -3060,6 +3099,7 @@ export function createSidepanelPageReadingRuntime({
     pendingRereadFeedback.delete(tabId);
     clearReadSuccessFeedback(tabId);
     const existing = sessions.get(tabId);
+    if (message.requestId && existing?.requestId && message.requestId !== existing.requestId) return;
     const completedAt = now();
     const elapsedMs = typeof message.elapsedMs === "number" && Number.isFinite(message.elapsedMs)
       ? Math.max(0, message.elapsedMs)
@@ -3073,6 +3113,7 @@ export function createSidepanelPageReadingRuntime({
       return;
     }
     sessions.set(tabId, {
+      requestId: message.requestId ?? existing?.requestId,
       tabId,
       url: sessionUrl,
       identity: existing?.identity || pageUrlIdentity(sessionUrl),
@@ -3146,6 +3187,7 @@ export function createSidepanelPageReadingRuntime({
         displayTabId,
         displayedSession: scopedSession
           ? {
+              requestId: scopedSession.requestId,
               status: scopedSession.status,
               hasSurface: Boolean(scopedSession.surface),
               screenshotStatus: scopedSession.screenshot?.status,

@@ -53,6 +53,8 @@ import {
   type StoredModelRuntimeInput,
 } from "./trusted-model-runtime";
 import { isSupportedScreenshotDataUrl } from "../lib/screenshot-data-url";
+import { queueReadingCommand } from "./reading-command-mailbox";
+import { createPageReaderTabTransport } from "./page-reader-tab-transport";
 
 // Capture console output for the debug snapshot bundle. Idempotent — if
 // the SW wakes from suspension this is a no-op. See lib/log-buffer.ts.
@@ -105,33 +107,6 @@ async function tierBApiKeyForProvider(
 ): Promise<string | undefined> {
   if (provider !== OPENAI_COMPAT_PROVIDER) return undefined;
   return storedSecretString(["tierBApiKey"]);
-}
-
-function isPageReadingReply(value: unknown): value is Extract<TrulyMessage, { type: "PAGE_READING_RESULT" | "PAGE_READING_ERROR" }> {
-  return !!value &&
-    typeof value === "object" &&
-    ((value as { type?: unknown }).type === "PAGE_READING_RESULT" ||
-      (value as { type?: unknown }).type === "PAGE_READING_ERROR");
-}
-
-function isReadingTargetReply(value: unknown): value is Extract<TrulyMessage, { type: "READING_TARGET_RESULT" | "READING_TARGET_ERROR" }> {
-  return !!value &&
-    typeof value === "object" &&
-    ((value as { type?: unknown }).type === "READING_TARGET_RESULT" ||
-      (value as { type?: unknown }).type === "READING_TARGET_ERROR");
-}
-
-function isCandidateBlockTextReply(value: unknown): value is Extract<TrulyMessage, { type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT" | "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR" }> {
-  return !!value &&
-    typeof value === "object" &&
-    ((value as { type?: unknown }).type === "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT" ||
-      (value as { type?: unknown }).type === "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR");
-}
-
-function broadcastPageReadingReply(message: Extract<TrulyMessage, { type: "PAGE_READING_RESULT" | "PAGE_READING_ERROR" }>): void {
-  chrome.runtime.sendMessage(message).catch(() => {});
-  setTimeout(() => chrome.runtime.sendMessage(message).catch(() => {}), 250);
-  setTimeout(() => chrome.runtime.sendMessage(message).catch(() => {}), 900);
 }
 
 async function clearPersistedClassificationCache(reason: string): Promise<void> {
@@ -206,6 +181,11 @@ if (__TRULY_DEV_BUILD__) {
 // every intermediate update.
 
 const dashboardState = new DashboardRuntimeState(300);
+const pageReaderTabTransport = createPageReaderTabTransport({
+  scripting: chrome.scripting,
+  tabs: chrome.tabs,
+  expectedBuildId: __TRULY_BUILD_ID__,
+});
 
 function broadcastOpenDashboardForPost(id: string): void {
   const msg = { type: "OPEN_DASHBOARD_FOR_POST", id } satisfies TrulyMessage;
@@ -240,6 +220,29 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
     };
     try { sendResponse(reply); } catch {}
     return false;
+  }
+
+  if (message.type === "QUEUE_PAGE_READING_COMMAND") {
+    void queueReadingCommand({
+      message,
+      sender,
+      extensionId: chrome.runtime.id,
+      storage: chrome.storage.session,
+      notify: (hint) => chrome.runtime.sendMessage(hint),
+      now: Date.now,
+    }).then((result) => {
+      try { sendResponse(result); } catch {}
+    }).catch((error) => {
+      try {
+        sendResponse({
+          type: "QUEUE_PAGE_READING_COMMAND_RESULT",
+          requestId: message.envelope?.requestId || "",
+          ok: false,
+          error: error instanceof Error ? error.message.slice(0, 200) : "reading_command_queue_failed",
+        } satisfies TrulyMessage);
+      } catch {}
+    });
+    return true;
   }
 
   if (message.type === "POST_CLASSIFIED") {
@@ -283,68 +286,12 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
       return false;
     }
 
-    const tabId = message.tabId;
-    (async () => {
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          files: ["content_scripts/page-reader.js"],
-        });
-        const reply = await chrome.tabs.sendMessage(tabId, message);
-        const routedReply = isReadingTargetReply(reply)
-          ? { ...reply, tabId }
-          : {
-              type: "READING_TARGET_ERROR",
-              tabId,
-              error: "target_extraction_failed",
-            } satisfies TrulyMessage;
-        sendResponse(routedReply);
-      } catch (error) {
-        const errorText = error instanceof Error ? error.message : String(error);
-        sendResponse({
-          type: "READING_TARGET_ERROR",
-          tabId,
-          error: errorText.includes("Cannot access contents of the page")
-            ? "page_grant_missing"
-            : "target_extraction_failed",
-        } satisfies TrulyMessage);
-      }
-    })();
+    void pageReaderTabTransport.requestTarget(message).then((reply) => sendResponse(reply));
     return true;
   }
 
   if (message.type === "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST") {
-    const tabId = message.tabId;
-    (async () => {
-      try {
-        await chrome.scripting.executeScript({
-          target: { tabId },
-          files: ["content_scripts/page-reader.js"],
-        });
-        const reply = await chrome.tabs.sendMessage(tabId, message);
-        const routedReply = isCandidateBlockTextReply(reply)
-          ? { ...reply, tabId }
-          : {
-              type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR",
-              tabId,
-              surfaceId: message.surfaceId,
-              blockId: message.blockId,
-              error: "candidate_block_extraction_failed",
-            } satisfies TrulyMessage;
-        sendResponse(routedReply);
-      } catch (error) {
-        const errorText = error instanceof Error ? error.message : String(error);
-        sendResponse({
-          type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR",
-          tabId,
-          surfaceId: message.surfaceId,
-          blockId: message.blockId,
-          error: errorText.includes("Cannot access contents of the page")
-            ? "page_grant_missing"
-            : "candidate_block_extraction_failed",
-        } satisfies TrulyMessage);
-      }
-    })();
+    void pageReaderTabTransport.requestCandidateBlock(message).then((reply) => sendResponse(reply));
     return true;
   }
 
@@ -472,55 +419,9 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   }
 
   if (message.type === "PAGE_READING_REQUEST") {
-    if (typeof message.tabId !== "number") {
-      try {
-        sendResponse({
-          type: "PAGE_READING_ERROR",
-          error: "page_reading_missing_tab_id",
-        } satisfies TrulyMessage);
-      } catch {}
-      return false;
-    }
-
-    const tabId = message.tabId;
-    (async () => {
-      const startedAt = Date.now();
-      try {
-        if (message.inject === true) {
-          await chrome.scripting.executeScript({
-            target: { tabId },
-            files: ["content_scripts/page-reader.js"],
-          });
-        }
-        const reply = await chrome.tabs.sendMessage(tabId, {
-          type: "PAGE_READING_REQUEST",
-          activation: message.activation,
-        } satisfies TrulyMessage);
-        const routedReply = isPageReadingReply(reply)
-          ? { ...reply, tabId, elapsedMs: Date.now() - startedAt }
-          : reply;
-        try {
-          sendResponse(routedReply);
-        } catch {}
-        if (isPageReadingReply(routedReply)) {
-          broadcastPageReadingReply(routedReply);
-        }
-      } catch (error) {
-        const errorText = error instanceof Error ? error.message : String(error);
-        const reply = {
-          type: "PAGE_READING_ERROR",
-          tabId,
-          elapsedMs: Date.now() - startedAt,
-          error: errorText.includes("Cannot access contents of the page")
-            ? "page_grant_missing"
-            : errorText.slice(0, 200) || "page_reader_unavailable",
-        } satisfies TrulyMessage;
-        try {
-          sendResponse(reply);
-        } catch {}
-        broadcastPageReadingReply(reply);
-      }
-    })();
+    void pageReaderTabTransport.requestPage(message).then((reply) => {
+      try { sendResponse(reply); } catch {}
+    });
     return true;
   }
 

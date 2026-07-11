@@ -4,6 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import type { TrulyMessage } from "@src/lib/messages";
 import type { ReadingSurface } from "@src/lib/reading-surface-types";
 import { DEFAULT_SETTINGS } from "@src/lib/types";
+import {
+  createReadingCommandEnvelope,
+  PENDING_PAGE_READING_COMMAND_KEY,
+} from "@src/lib/reading-command-envelope";
 import { createSidepanelPageReadingRuntime } from "@src/sidepanel/page-reading-runtime";
 import type { TabId } from "@src/sidepanel/tabs";
 
@@ -2554,6 +2558,112 @@ describe("sidepanel page reading runtime", () => {
     }));
     expect(pagePaneEl.textContent).toContain("讀取失敗");
     expect(pagePaneEl.textContent).toContain("請先在目標網頁上點 Truly 工具列圖示");
+  });
+
+  it("consumes a cold-open popup command once and starts the addressed page read", async () => {
+    const pagePaneEl = setupDom();
+    const command = createReadingCommandEnvelope({
+      requestId: "page-read:cold-open-12345678",
+      tabId: 42,
+      url: "https://example.test/article",
+      activation: { source: "popup", targetKind: "page", action: "read" },
+      createdAt: 1_000,
+    });
+    const sessionStore = {
+      get: vi.fn(async (key: string) => key === PENDING_PAGE_READING_COMMAND_KEY
+        ? { [PENDING_PAGE_READING_COMMAND_KEY]: command }
+        : {}),
+      remove: vi.fn(async () => undefined),
+    };
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type !== "PAGE_READING_REQUEST") throw new Error(`unexpected ${message.type}`);
+      return {
+        type: "PAGE_READING_RESULT",
+        requestId: message.requestId,
+        tabId: 42,
+        surface: surface(),
+      } satisfies TrulyMessage;
+    });
+    const targetTab = {
+      id: 42,
+      url: "https://example.test/article",
+      title: "Runtime Fixture",
+    };
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [targetTab]),
+        get: vi.fn(async () => targetTab),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_100,
+      sessionStore,
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(sessionStore.remove).toHaveBeenCalledWith(PENDING_PAGE_READING_COMMAND_KEY);
+    expect(sendMessage).toHaveBeenCalledTimes(1);
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "PAGE_READING_REQUEST",
+      requestId: command.requestId,
+      tabId: 42,
+      inject: true,
+    }));
+    expect(pagePaneEl.textContent).toContain("Runtime Fixture");
+  });
+
+  it("ignores a stale page response after a newer request identity takes ownership", async () => {
+    const pagePaneEl = setupDom();
+    const pending: Array<{ message: Extract<TrulyMessage, { type: "PAGE_READING_REQUEST" }>; resolve(value: TrulyMessage): void }> = [];
+    const sendMessage = vi.fn((message: TrulyMessage) => {
+      if (message.type !== "PAGE_READING_REQUEST") return Promise.resolve(undefined);
+      return new Promise<TrulyMessage>((resolve) => pending.push({ message, resolve }));
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 2_000,
+    });
+
+    const first = runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    const second = runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    expect(pending).toHaveLength(2);
+    expect(pending[0].message.requestId).not.toBe(pending[1].message.requestId);
+
+    pending[1].resolve({
+      type: "PAGE_READING_RESULT",
+      requestId: pending[1].message.requestId,
+      tabId: 42,
+      surface: surface({ title: "Newer Result" }),
+    });
+    await second;
+    pending[0].resolve({
+      type: "PAGE_READING_RESULT",
+      requestId: pending[0].message.requestId,
+      tabId: 42,
+      surface: surface({ title: "Stale Result" }),
+    });
+    await first;
+
+    expect(pagePaneEl.textContent).toContain("Newer Result");
+    expect(pagePaneEl.textContent).not.toContain("Stale Result");
   });
 
   it("shows a friendly explanation for reserved actions that are not enabled", async () => {

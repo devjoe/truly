@@ -176,6 +176,21 @@ auto-recovers a stale loaded extension, and keeps all evidence under
 build whose marker predates the extension source, preventing a mutually
 consistent but stale dist/reload/runtime build from passing review.
 
+### Cold-open command handoff checkpoint (2026-07-11)
+
+Popup-triggered Web reads no longer depend on repeated result broadcasts while
+the Side Panel starts. The popup queues a consume-once Reading Command Envelope
+with request, tab, activation, URL, and timestamp metadata; the Side Panel
+removes it before starting extraction. Page text, model input, screenshots, and
+analysis results never cross this storage seam. Page-read request identities
+also prevent a late response from replacing a newer read on the same tab.
+
+The service worker now delegates page, target, and candidate-block delivery to
+one Page Reader tab transport. It probes the installed content-script build,
+injects only when absent or stale, and normalizes restricted-page and invalid-
+response failures. Chrome event listeners remain synchronously registered at
+service-worker module load; the transport does not keep the worker alive.
+
 ## Current Non-Changes
 
 - Do not remove diagnostics globally. The feature is still in early product

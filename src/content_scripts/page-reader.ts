@@ -236,14 +236,19 @@ export function handlePageReadingMessage(
   if (!isSupportedPageReadActivation(message.activation)) {
     return {
       type: "PAGE_READING_ERROR",
+      requestId: message.requestId,
       error: "page_reading_action_unsupported",
     };
   }
   try {
-    return extractCurrentPageReadingSurface(documentRef, url);
+    return {
+      ...extractCurrentPageReadingSurface(documentRef, url),
+      requestId: message.requestId,
+    };
   } catch (error) {
     return {
       type: "PAGE_READING_ERROR",
+      requestId: message.requestId,
       error: error instanceof Error ? error.message.slice(0, 200) : "page_reading_failed",
     };
   }

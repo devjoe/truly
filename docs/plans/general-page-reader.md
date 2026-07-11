@@ -289,14 +289,16 @@ generalized incrementally:
 
 1. User opens a normal web page.
 2. User clicks the Truly popup or side-panel action.
-3. Popup opens the side panel and sends a current-page reading request.
-4. Service worker injects or messages `page-reader.ts` into the active tab via
-   `activeTab`.
-5. Page reader extracts a `ReadingSurface`.
-6. Service worker stores the current page reading event in the same replayable
-   runtime state used by the side panel.
-7. Side panel renders the page-reading workspace.
-8. Existing model pipeline generates summary and reading brief.
+3. Popup queues a consume-once Reading Command Envelope containing request and
+   tab metadata, then opens the Side Panel in the same user-gesture chain.
+4. Side Panel cold-open consumes and removes the envelope, validates that the
+   tab still represents the same meaningful page, and starts the read.
+5. Service worker probes the page-reader content-script build, injecting
+   `page-reader.ts` through `activeTab` only when the reader is absent or stale.
+6. Page reader extracts a `ReadingSurface` and echoes the request identity.
+7. Side Panel ignores stale request identities and renders the page-reading
+   workspace. Extracted text and analysis output remain in memory only.
+8. Existing model pipeline generates summary and Reading Context.
 9. User may copy, download, search, or hand off manually.
 
 ## Current-Region Flow

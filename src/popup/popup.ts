@@ -16,6 +16,10 @@ import { loadReadinessSnapshot } from "../lib/readiness-storage";
 import type { GetSidePanelStateResultMsg } from "../lib/messages";
 import { debugLog } from "../lib/logger";
 import { isGeneralPageReadableUrl } from "../lib/page-readability";
+import {
+  createReadingCommandEnvelope,
+  createReadingRequestId,
+} from "../lib/reading-command-envelope";
 
 debugLog(`[Truly Popup] Loaded buildId=${__TRULY_BUILD_ID__}`);
 
@@ -318,14 +322,18 @@ async function init() {
     if (win.id != null) {
       const pageReadRequest = generalPageSupported && typeof activeTab.id === "number"
         ? browser.runtime.sendMessage({
-            type: "PAGE_READING_REQUEST",
-            tabId: activeTab.id,
-            inject: true,
-            activation: {
-              source: "popup",
-              targetKind: "page",
-              action: "read",
-            },
+            type: "QUEUE_PAGE_READING_COMMAND",
+            envelope: createReadingCommandEnvelope({
+              requestId: createReadingRequestId(),
+              tabId: activeTab.id,
+              url: activeUrl,
+              activation: {
+                source: "popup",
+                targetKind: "page",
+                action: "read",
+              },
+              createdAt: Date.now(),
+            }),
           }).catch(() => {})
         : null;
       if (pageSupport.supported && sidePanelOpen && sidePanelCanClose) {
