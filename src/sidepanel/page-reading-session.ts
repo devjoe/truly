@@ -121,6 +121,7 @@ export function clearSessionForMeaningfulNavigation(
 ): PageReadingSession {
   return {
     ...session,
+    requestId: undefined,
     url: input.url,
     title: input.title || session.title,
     surface: undefined,

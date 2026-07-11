@@ -90,6 +90,7 @@ describe("canonical page reading session", () => {
       updatedAt: 2_000,
     });
     expect(next.status).toBe("stale");
+    expect(next.requestId).toBeUndefined();
     expect(next.pageScope).toEqual({});
     expect(next.focusScope).toBeUndefined();
     expect(next.surface).toBeUndefined();

@@ -79,6 +79,12 @@ only browser lifecycle, shared timeouts, and aggregate reporting; migrate other
 flows to this shape when they need substantive changes rather than rewriting
 the whole audit at once.
 
+Meaningful Navigation uses the same scenario shape. Its timeline verifies that
+hash and tracking changes preserve the Page Reading Session, while a meaningful
+change invalidates the old request identity and scrubs the prior Reading Surface
+before a debounced auto-read begins. Assertions use canonical runtime state;
+quiet or intentionally absent success labels are not treated as failures.
+
 `npm run dev:check` now also verifies source freshness before comparing dist,
 reload-server, service-worker, and Facebook content-script build IDs. Use
 `npm run dev:check:source` when only the local source-to-dist freshness check is

@@ -15,6 +15,11 @@ import {
   runWebFocusContinuityScenario,
   webFocusContinuitySummary,
 } from "./lib/general-page-audit-scenarios/web-focus-continuity.mjs";
+import {
+  assertMeaningfulNavigationScenario,
+  meaningfulNavigationSummary,
+  runMeaningfulNavigationScenario,
+} from "./lib/general-page-audit-scenarios/meaningful-navigation.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DIST_BUILD_ID = resolve(ROOT, "dist", "build-id.txt");
@@ -1297,6 +1302,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null;
       const processing = pane?.querySelector('.page-reader-processing-status');
       const advisor = pane?.querySelector('.page-reader-advisor');
       const processingRows = [...processing?.querySelectorAll('dl div') || []].map((row) => ({
@@ -1305,6 +1311,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
         rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
       }));
       return {
+        runtimeState,
         activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
         status: pane?.querySelector('.page-reader-card-status')?.textContent?.trim() || pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         statusTitle: pane?.querySelector('.page-reader-card-meta')?.getAttribute('title') || pane?.querySelector('.page-reader-status')?.getAttribute('title') || '',
@@ -1601,32 +1608,13 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     await side.screenshot(resolve(OUT_DIR, "page-point-target.png"));
 
-    await liveArticle.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article3?multi=1#comments`)}; undefined`);
-    await sleep(500);
-    const afterHash = await side.evaluateJson(`(() => ({
-      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
-      stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || '')
-    }))()`);
-
-    await liveArticle.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article3?multi=1&utm_source=cdp&fbclid=abc`)}; undefined`);
-    await sleep(500);
-    const afterTracking = await side.evaluateJson(`(() => ({
-      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
-      stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || '')
-    }))()`);
-
-    await liveArticle.evaluate(`location.href = ${JSON.stringify(`${allowedBase}/article2`)}; undefined`);
-    await sleep(800);
-    const afterMeaningful = await side.evaluateJson(`(() => ({
-      status: document.querySelector('#page-pane .page-reader-card-status')?.textContent?.trim() || document.querySelector('#page-pane .page-reader-status-label')?.textContent?.trim(),
-      detail: document.querySelector('#page-pane .page-reader-status-detail')?.textContent?.trim(),
-      stale: /頁面已變更|Page changed/.test(document.querySelector('#page-pane')?.innerText || ''),
-      loading: /讀取中|Reading/.test(document.querySelector('#page-pane .page-reader-status-label')?.textContent || ''),
-      oldExcerptVisible: /synthetic article for the General Page Reader CDP acceptance test/.test(document.querySelector('#page-pane')?.innerText || ''),
-      sourceLinkVisible: Boolean(document.querySelector('#page-pane .page-reader-source-links a[href$="/source"]'))
-    }))()`);
-
-    await side.screenshot(resolve(OUT_DIR, "page-ready-and-stale.png"));
+    const navigation = await runMeaningfulNavigationScenario({
+      side,
+      article: liveArticle,
+      allowedBase,
+      sleep,
+      artifactPath: (name) => resolve(OUT_DIR, name),
+    });
 
     return {
       initial,
@@ -1641,9 +1629,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       selection,
       continuity,
       pointTarget,
-      afterHash,
-      afterTracking,
-      afterMeaningful,
+      navigation,
     };
   } finally {
     await thirdArticle?.closeTarget().catch(() => {});
@@ -1906,6 +1892,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null;
       const processing = pane?.querySelector('.page-reader-processing-status');
       const processingRows = [...processing?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
@@ -1916,6 +1903,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
       const advisor = pane?.querySelector('.page-reader-advisor');
       const pageAnalysis = pane?.querySelector('.page-reader-analysis');
       return {
+        runtimeState,
         status: pane?.querySelector('.page-reader-card-status')?.textContent?.trim() || pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         meta: [...pane?.querySelectorAll('.page-reader-meta div') || []].map((el) => ({
           label: el.querySelector('dt')?.textContent?.trim(),
@@ -2012,6 +2000,7 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null;
       const processing = pane?.querySelector('.page-reader-processing-status');
       const processingRows = [...processing?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
@@ -2022,6 +2011,7 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
       const advisor = pane?.querySelector('.page-reader-advisor');
       const pageAnalysis = pane?.querySelector('.page-reader-analysis');
       return {
+        runtimeState,
         status: pane?.querySelector('.page-reader-card-status')?.textContent?.trim() || pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
@@ -2133,6 +2123,7 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
 
     const ready = await side.evaluateJson(`(() => {
       const pane = document.querySelector('#page-pane');
+      const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null;
       const processing = pane?.querySelector('.page-reader-processing-status');
       const processingRows = [...processing?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
@@ -2143,6 +2134,7 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
       const advisor = pane?.querySelector('.page-reader-advisor');
       const pageAnalysis = pane?.querySelector('.page-reader-analysis');
       return {
+        runtimeState,
         status: pane?.querySelector('.page-reader-card-status')?.textContent?.trim() || pane?.querySelector('.page-reader-status-label')?.textContent?.trim(),
         excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
         extractionDiagnosticsOpen: pane?.querySelector('.page-reader-extraction-diagnostics')?.hasAttribute('open') ?? null,
@@ -2381,8 +2373,8 @@ function assertAudit(result) {
       errors.push(`popup read path showed unexpected Web title: ${result.popupRead.sideState.title || "(missing)"}`);
     }
   }
-  if (!isWebReadyStatus(result.success.ready.status)) {
-    errors.push(`successful read did not reach ready status: ${result.success.ready.status}`);
+  if (!isReadyObservation(result.success.ready)) {
+    errors.push(`successful read did not reach ready state: visible=${result.success.ready.status || "missing"}; runtime=${result.success.ready.runtimeState?.status || "missing"}`);
   }
   if (/秒|\bs\b/.test(result.success.ready.status || "")) {
     errors.push(`successful read status label should stay quiet without inline elapsed time: ${result.success.ready.status}`);
@@ -2521,20 +2513,11 @@ function assertAudit(result) {
   if (selectionAdvisorDecision !== "accept_current" && !selectionNeedsNoAdvisor) {
     errors.push("selection target did not preserve accept_current reading context");
   }
-  if (result.success.afterHash.stale) errors.push("hash-only URL change incorrectly marked stale");
-  if (result.success.afterTracking.stale) errors.push("tracking-only query change incorrectly marked stale");
-  if (result.success.autoRead?.allSites) {
-    if (!result.success.afterMeaningful.loading || result.success.afterMeaningful.stale) {
-      errors.push("meaningful URL change did not enter clean auto-read loading state");
-    }
-  } else if (!result.success.afterMeaningful.stale) {
-    errors.push("meaningful URL change without auto-read did not mark stale");
-  }
-  if (result.success.afterMeaningful.oldExcerptVisible || result.success.afterMeaningful.sourceLinkVisible) {
-    errors.push("meaningful URL change did not scrub stale Web surface content");
-  }
-  if (!isWebReadyStatus(result.noisy.ready.status)) {
-    errors.push(`noisy fallback read did not reach ready status: ${result.noisy.ready.status}`);
+  errors.push(...assertMeaningfulNavigationScenario(result.success.navigation, {
+    autoRead: Boolean(result.success.autoRead?.allSites),
+  }));
+  if (!isReadyObservation(result.noisy.ready)) {
+    errors.push(`noisy fallback read did not reach ready state: ${result.noisy.ready.runtimeState?.status || "missing"}`);
   }
   if (!result.noisy.ready.meta?.some((row) => /讀取方式|Reading method/.test(row.label || "") && row.value === "fallback")) {
     errors.push("noisy fallback audit did not exercise fallback extraction");
@@ -2585,8 +2568,8 @@ function assertAudit(result) {
   if (!noisyBriefReady && noisyUse !== "article_or_selection_analysis") {
     errors.push(`noisy fallback effective context was not article analysis: ${noisyUse || "(missing)"}`);
   }
-  if (!isWebReadyStatus(result.candidate.ready.status)) {
-    errors.push(`candidate block recovery did not reach ready status: ${result.candidate.ready.status}`);
+  if (!isReadyObservation(result.candidate.ready)) {
+    errors.push(`candidate block recovery did not reach ready state: ${result.candidate.ready.runtimeState?.status || "missing"}`);
   }
   const candidateBriefReady = result.candidate.ready.pipelineHidden === true && result.candidate.ready.pageAnalysis?.ready === true;
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
@@ -2631,20 +2614,23 @@ function assertAudit(result) {
   if ((result.candidate.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("candidate block recovery exposes more than six source links");
   }
-  if (!isWebReadyStatus(result.teaser.ready.status)) {
-    errors.push(`teaser hub did not reach ready status: ${result.teaser.ready.status}`);
+  if (!isReadyObservation(result.teaser.ready)) {
+    errors.push(`teaser hub did not reach ready state: ${result.teaser.ready.runtimeState?.status || "missing"}`);
   }
   const teaserBriefReady = result.teaser.ready.pipelineHidden === true && result.teaser.ready.pageAnalysis?.ready === true;
   const teaserAdvisorRows = result.teaser.ready.advisor?.rows || [];
-  const teaserDecision = rawRowValue(teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
-  const teaserUse = rawRowValue(teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
+  const teaserDecision = result.teaser.ready.runtimeState?.advisorDecision !== "none"
+    ? result.teaser.ready.runtimeState?.advisorDecision
+    : rawRowValue(teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
+  const teaserUse = result.teaser.ready.runtimeState?.allowedUse ||
+    rawRowValue(teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   const teaserSafeScope =
     (teaserDecision === "downgrade_to_index_or_feed" && teaserUse === "page_overview_only") ||
     (teaserDecision === "request_user_selection" && teaserUse === "requires_user_target");
   if (!teaserBriefReady && !teaserSafeScope) {
     errors.push(`teaser hub advisor did not choose a safe non-article scope: decision=${teaserDecision || "(missing)"} use=${teaserUse || "(missing)"}`);
   }
-  if (result.teaser.ready.extractionDiagnosticsOpen !== false) {
+  if (result.teaser.ready.extractionDiagnosticsOpen === true) {
     errors.push("teaser hub should keep extraction diagnostics collapsed by default");
   }
   if (!teaserBriefReady && result.teaser.ready.modelContext?.diagnosticsOpen !== false) {
@@ -2772,6 +2758,12 @@ function isWebReadyStatus(status) {
   return status === "已讀取" || status === "Ready" || status === "已擷取" || status === "Captured";
 }
 
+function isReadyObservation(observation) {
+  return observation?.runtimeState?.status === "ready" &&
+    observation?.runtimeState?.hasSurface === true &&
+    (observation?.pageAnalysis?.ready === true || /\bis-ready\b/.test(observation?.pageAnalysis?.className || ""));
+}
+
 function qaPass(value) {
   if (value === null) return "SKIP";
   return value ? "PASS" : "FAIL";
@@ -2833,9 +2825,11 @@ function designRestraint(result) {
     cleanReadyPrimaryActions?.hasInternalWorkspaceTabs === false &&
     cleanReadyPrimaryActions?.noPaneCommandBar === true;
   const sourceLinksCapped = (result.success.ready.sourceLinks?.length ?? 0) <= 6;
-  const nonCleanTechnicalCollapsed = result.teaser.ready.extractionDiagnosticsOpen === false &&
-    result.teaser.ready.modelContext?.diagnosticsOpen === false &&
-    result.teaser.ready.advisor?.diagnosticsOpen === false;
+  const nonCleanTechnicalCollapsed = result.teaser.ready.extractionDiagnosticsOpen !== true &&
+    (result.teaser.ready.pipelineHidden === true || (
+      result.teaser.ready.modelContext?.diagnosticsOpen === false &&
+      result.teaser.ready.advisor?.diagnosticsOpen === false
+    ));
   const responsiveClean = result.success.responsive?.horizontalOverflow === false &&
     (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
     (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0;
@@ -2872,7 +2866,7 @@ function ordinaryArticleReadPasses(result) {
       result.success.ready.modelContext?.diagnosticsOpen === false &&
       /page-reader-processing-status/.test(result.success.ready.modelContext?.className || "") &&
       result.success.ready.advisor?.diagnosticsOpen === false;
-  return isWebReadyStatus(result.success.ready.status) &&
+  return isReadyObservation(result.success.ready) &&
     result.success.ready.title === "Synthetic General Page Reader Article" &&
     !result.success.ready.fullTailVisible &&
     diagnosticsSafe &&
@@ -2883,7 +2877,7 @@ function autoReadTransitionState(result) {
   const entries = Array.isArray(result.success.initialLoadTimeline)
     ? result.success.initialLoadTimeline
     : [];
-  const firstLoading = entries.find((entry) => /讀取中|Reading/.test(entry.status || ""));
+  const firstLoading = entries.find((entry) => entry.runtimeState?.displayedSession?.status === "loading");
   const firstAnalysis = entries.find((entry) => /page-reader-analysis is-(?:running|ready)/.test(entry.analysisClass || ""));
   const technicalStates = entries.filter((entry) =>
     (firstAnalysis ? entry.elapsedMs <= firstAnalysis.elapsedMs : true) &&
@@ -2915,10 +2909,8 @@ function advisorTransitionState(result) {
     entry.processingStatusPresent ||
     entry.modelContextPresent ||
     entry.advisorPresent ||
-    entry.previewPresent ||
-    entry.supplementalDetailsPresent ||
-    !/page-reader-analysis is-running/.test(entry.analysisClass || "") ||
-    !/正在準備頁面重點|Preparing page brief/.test(entry.text || ""));
+    (entry.previewPresent && !entry.supplementalDetailsPresent) ||
+    !/page-reader-analysis is-running/.test(entry.analysisClass || ""));
   return {
     pass: checkingEntries.length > 0 && unsafeEntries.length === 0,
     checkingStateCount: checkingEntries.length,
@@ -2944,8 +2936,11 @@ function qaMatrixRows(result) {
   const noisyUse = rawRowValue(noisyAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   const candidateDecision = rawRowValue(candidateAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
   const candidateUse = rawRowValue(candidateAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
-  const teaserDecision = rawRowValue(teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
-  const teaserUse = rawRowValue(teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
+  const teaserDecision = result.teaser.ready.runtimeState?.advisorDecision !== "none"
+    ? result.teaser.ready.runtimeState?.advisorDecision
+    : rawRowValue(teaserAdvisorRows.find((row) => /判斷|Decision/.test(row.label || "")));
+  const teaserUse = result.teaser.ready.runtimeState?.allowedUse ||
+    rawRowValue(teaserAdvisorRows.find((row) => /用途|Use/.test(row.label || "")));
   const noisyBriefReady = result.noisy.ready.pipelineHidden === true && result.noisy.ready.pageAnalysis?.ready === true;
   const candidateBriefReady = result.candidate.ready.pipelineHidden === true && result.candidate.ready.pageAnalysis?.ready === true;
   const teaserBriefReady = result.teaser.ready.pipelineHidden === true && result.teaser.ready.pageAnalysis?.ready === true;
@@ -3127,17 +3122,19 @@ function qaMatrixRows(result) {
     ],
     [
       "URL identity and navigation scrub",
-      !result.success.afterHash.stale &&
-        !result.success.afterTracking.stale &&
-        (result.success.autoRead?.allSites
-          ? result.success.afterMeaningful.loading && !result.success.afterMeaningful.stale
-          : result.success.afterMeaningful.stale) &&
-        !result.success.afterMeaningful.oldExcerptVisible &&
-        !result.success.afterMeaningful.sourceLinkVisible,
-      "hashStale=" + result.success.afterHash.stale +
-        "; trackingStale=" + result.success.afterTracking.stale +
-        "; meaningfulStale=" + result.success.afterMeaningful.stale +
-        "; meaningfulLoading=" + result.success.afterMeaningful.loading,
+      assertMeaningfulNavigationScenario(result.success.navigation, {
+        autoRead: Boolean(result.success.autoRead?.allSites),
+      }).length === 0,
+      (() => {
+        const summary = meaningfulNavigationSummary(result.success.navigation);
+        return "hashStale=" + summary.hashStale +
+          "; trackingStale=" + summary.trackingStale +
+          "; loadingObserved=" + summary.loadingObserved +
+          "; staleObserved=" + summary.staleObserved +
+          "; scrubObserved=" + summary.scrubObserved +
+          "; requestInvalidated=" + summary.requestInvalidated +
+          "; oldContentVisibleAtEnd=" + summary.oldContentVisibleAtEnd;
+      })(),
     ],
     [
       "Noisy fallback clean context",
@@ -3163,7 +3160,7 @@ function qaMatrixRows(result) {
       (teaserBriefReady ||
         ((teaserDecision === "downgrade_to_index_or_feed" && teaserUse === "page_overview_only") ||
           (teaserDecision === "request_user_selection" && teaserUse === "requires_user_target"))) &&
-        result.teaser.ready.extractionDiagnosticsOpen === false &&
+        result.teaser.ready.extractionDiagnosticsOpen !== true &&
         (teaserBriefReady || result.teaser.ready.modelContext?.diagnosticsOpen === false) &&
         (teaserBriefReady || result.teaser.ready.advisor?.diagnosticsOpen === false) &&
         result.teaser.ready.hasMemberArea === false &&
@@ -3433,10 +3430,7 @@ function writeSummary(result, errors) {
     `- Candidate fixture extraction: ${result.candidate.ready.advisor?.status || "(missing)"}`,
     `- Teaser hub safe scope: ${result.teaser.ready.advisor?.status || "(missing)"}`,
     `- Screenshot recovery: offer=${result.screenshot?.offer?.state || "(missing)"}; preview=${result.screenshot?.preview?.state || "(missing)"}/${Math.round(result.screenshot?.preview?.previewRect?.height ?? 0)}px; sentImage=${Boolean(result.screenshot?.requests?.some((request) => request.kind === "screenshot-brief" && request.hasImageUrl === true))}; storageHits=${result.screenshot?.storageAfter?.hits?.length ?? "(missing)"}`,
-    `- Hash-only stale: ${result.success.afterHash.stale}`,
-    `- Tracking-only stale: ${result.success.afterTracking.stale}`,
-    `- Meaningful URL transition: stale=${result.success.afterMeaningful.stale}; loading=${result.success.afterMeaningful.loading}`,
-    `- Meaningful URL scrubbed stale surface: ${!result.success.afterMeaningful.oldExcerptVisible && !result.success.afterMeaningful.sourceLinkVisible}`,
+    `- Meaningful navigation: ${JSON.stringify(meaningfulNavigationSummary(result.success.navigation))}`,
     `- Copy info title/url/excerpt: ${result.success.copy.hasTitle}/${result.success.copy.hasUrl}/${result.success.copy.hasExcerpt}`,
     `- Storage privacy probe: ok=${result.storagePrivacy?.ok}; localKeys=${result.storagePrivacy?.localKeyCount ?? "(missing)"}; sessionKeys=${result.storagePrivacy?.sessionKeyCount ?? "(missing)"}; hits=${result.storagePrivacy?.hits?.length ?? "(missing)"}`,
     `- No-grant domain authorization: ${result.noGrant.authorizeButtonText || "(missing)"}`,

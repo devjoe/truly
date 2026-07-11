@@ -217,6 +217,21 @@ Projection tests cover the ordinary ready path, aggregation guidance,
 selection Focus, advisor checking, and empty/error states. This keeps state
 semantics and visible hierarchy reviewable without constructing Side Panel DOM.
 
+### Meaningful Navigation lifecycle checkpoint (2026-07-11)
+
+Meaningful Navigation now clears the prior read request identity together with
+the Reading Surface and both Analysis Scopes. This prevents a late response for
+the old page from becoming valid while the new page waits for debounced
+all-sites auto-read. A scenario-owned CDP timeline verifies hash/tracking
+stability, request invalidation, scrubbed loading or stale state, and removal of
+old excerpts and source links.
+
+The full background audit now reads readiness, advisor decisions, and analysis
+scope from canonical runtime state instead of requiring quiet pipeline labels
+to remain visible. Its 430px accessibility gate also verifies a 30px minimum
+hit area for the compact reread icon while keeping the icon itself visually
+small.
+
 ## Current Non-Changes
 
 - Do not remove diagnostics globally. The feature is still in early product
