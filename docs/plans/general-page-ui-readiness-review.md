@@ -141,6 +141,34 @@ locally as `truly-gpr-context-presentation-overview-ready-2026-07-11.png` and
 `truly-gpr-context-presentation-focus-2026-07-11.png`; neither artifact is
 committed. Runtime probes reported `document.hasFocus() === false`.
 
+### Web and Focus continuity checkpoint (2026-07-11)
+
+Web and Focus now keep independent, session-only analysis scopes. Switching
+between them no longer discards the other result, and a later asynchronous
+response is applied only to the scope that requested it. A same-page Web
+reread preserves Focus, while meaningful navigation still clears both scopes
+to prevent stale context from crossing page boundaries. Failed Focus updates
+leave the previous successful Focus result available and show the new error in
+that scope.
+
+The Focus action is named `Apply selected content` (`套用選取內容`) to describe
+the immediate effect without implying that the selection is stored. `Selected
+content overview` uses the same quiet caption hierarchy as `Items to verify`,
+so it introduces the generated summary without competing with the analysis
+content. Copy, Markdown download, retry, and audit state all resolve against
+the active scope.
+
+Regression coverage includes Web-to-Focus and Focus-to-Web restoration,
+scope-specific copy output, repeated Focus selection, same-page Web reread,
+failed Focus replacement, and concurrently resolving Web/Focus model calls.
+`make gpr-check` passed 19 files and 219 tests plus TypeScript checking. Private
+background-CDP evidence is under
+`tmp/focus-ia-cdp-2026-07-11T10-58-51-335Z`; it verified preserved Web and
+Focus summaries, aligned 11px/600 caption typography, the updated action copy,
+and `document.hasFocus() === false` throughout. The inspected development build
+was `1783767511170-810a603-dirty`. The private screenshots and audit JSON remain
+uncommitted.
+
 ## Current Non-Changes
 
 - Do not remove diagnostics globally. The feature is still in early product

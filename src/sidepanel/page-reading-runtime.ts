@@ -101,7 +101,21 @@ interface PageReadingSession {
   advisor?: PageReadingAdvisorSession;
   analysis?: PageReadingAnalysisSession;
   screenshot?: PageReadingScreenshotSession;
+  pageScope?: PageReadingScopeState;
+  focusScope?: FocusReadingScopeState;
 }
+
+interface PageReadingScopeState {
+  advisor?: PageReadingAdvisorSession;
+  analysis?: PageReadingAnalysisSession;
+  screenshot?: PageReadingScreenshotSession;
+}
+
+interface FocusReadingScopeState extends PageReadingScopeState {
+  target?: ReadingTarget;
+}
+
+type PageReadingScopeKind = "page" | "focus";
 
 /**
  * Session-only screenshot confirmation state. The data URL lives in memory
@@ -136,6 +150,58 @@ interface PageReadingAnalysisSession {
   error?: string;
   allowedUse?: GeneralPageEffectiveModelContextUse;
   updatedAt: number;
+}
+
+function pageScopeForSession(session: PageReadingSession): PageReadingScopeState {
+  return session.pageScope ?? {
+    advisor: session.target ? undefined : session.advisor,
+    analysis: session.target ? undefined : session.analysis,
+    screenshot: session.target ? undefined : session.screenshot,
+  };
+}
+
+function focusScopeForSession(session: PageReadingSession): FocusReadingScopeState | undefined {
+  if (session.focusScope) return session.focusScope;
+  return session.target
+    ? {
+        target: session.target,
+        advisor: session.advisor,
+        analysis: session.analysis,
+        screenshot: session.screenshot,
+      }
+    : undefined;
+}
+
+function scopeStateForSession(
+  session: PageReadingSession,
+  scope: PageReadingScopeKind,
+): PageReadingScopeState | FocusReadingScopeState {
+  return scope === "focus" ? focusScopeForSession(session) ?? {} : pageScopeForSession(session);
+}
+
+function materializeScopeSession(
+  session: PageReadingSession,
+  scope: PageReadingScopeKind,
+): PageReadingSession {
+  const state = scopeStateForSession(session, scope);
+  const target = scope === "focus" ? (state as FocusReadingScopeState).target : undefined;
+  return {
+    ...session,
+    target,
+    advisor: state.advisor,
+    analysis: state.analysis,
+    screenshot: state.screenshot,
+  };
+}
+
+function replaceScopeState(
+  session: PageReadingSession,
+  scope: PageReadingScopeKind,
+  state: PageReadingScopeState | FocusReadingScopeState,
+): PageReadingSession {
+  return scope === "focus"
+    ? { ...session, focusScope: state as FocusReadingScopeState }
+    : { ...session, pageScope: state };
 }
 
 interface BrowserTab {
@@ -601,8 +667,12 @@ function briefNoteMatchesPageContext(
     "dynamic-content-partial": /(?:動態|載入).*(?:不完整|尚未完成)|(?:dynamic|loading).*(?:partial|incomplete)/iu,
   };
   if (warnings.some((warning) => patterns[warning]?.test(note) === true)) return true;
-  return allowedUse === "page_overview_only" &&
-    /新聞(?:彙整|聚合)頁面|索引|列表|(?:各)?來源連結|news aggregation|index|feed|source links?/iu.test(note);
+  return allowedUse === "page_overview_only" && briefNoteIsAggregationGuidance(note);
+}
+
+function briefNoteIsAggregationGuidance(note: string | undefined): boolean {
+  return Boolean(note) &&
+    /新聞(?:彙整|聚合)頁面|索引|列表|(?:各)?來源連結|news aggregation|index|feed|source links?/iu.test(note ?? "");
 }
 
 function extractionWarningLabel(
@@ -683,6 +753,11 @@ function focusTargetPreview(text: string): string {
 function focusScopeHtml(
   target: ReadingTarget,
   canUpdate: boolean,
+  source: string,
+  advisory: string,
+  error: string,
+  analysisBlock: string,
+  toolButtons: string,
   tr: (key: string, params?: Record<string, string | number>) => string,
 ): string {
   const isSelection = target.kind === "selection";
@@ -697,10 +772,14 @@ function focusScopeHtml(
       <div class="page-reader-focus-header">
         <div>
           <h3 class="page-reader-focus-title">${escapeHtml(tr("sidepanel.page.advisor.title"))}</h3>
-          <div class="page-reader-focus-meta">${escapeHtml(tr("sidepanel.page.focus.scopeMeta", {
-            kind: kindLabel,
-            count: target.text.trim().length,
-          }))}</div>
+          <div class="page-reader-focus-meta">${escapeHtml(tr(
+            source ? "sidepanel.page.focus.scopeMetaWithSource" : "sidepanel.page.focus.scopeMeta",
+            {
+              kind: kindLabel,
+              count: target.text.trim().length,
+              source,
+            },
+          ))}</div>
         </div>
         <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUpdate ? "" : "disabled"}>${escapeHtml(tr("sidepanel.page.focus.update"))}</button>
       </div>
@@ -709,6 +788,10 @@ function focusScopeHtml(
         <summary>${escapeHtml(detailLabel)}</summary>
         <div class="page-reader-focus-fulltext">${escapeHtml(target.text)}</div>
       </details>
+      ${error ? `<p class="page-reader-focus-error" role="alert">${escapeHtml(error)}</p>` : ""}
+      ${advisory ? `<p class="page-reader-focus-advisory" role="note">${escapeHtml(advisory)}</p>` : ""}
+      ${analysisBlock ? `<div class="page-reader-focus-analysis">${analysisBlock}</div>` : ""}
+      ${toolButtons ? `<footer class="page-reader-focus-tools">${toolButtons}</footer>` : ""}
     </section>
   `;
 }
@@ -1082,11 +1165,12 @@ function analysisHtml(
   tr: (key: string, params?: Record<string, string | number>) => string,
   pageTitle?: string,
   omitBriefNote = false,
+  titleOverride?: string,
 ): string {
   if (!analysis || analysis.status === "idle") return "";
   const overview = analysis.allowedUse === "page_overview_only";
   const overviewClass = overview ? " is-overview" : "";
-  const title = tr(overview ? "sidepanel.page.analysis.overview" : "sidepanel.page.analysis.title");
+  const title = titleOverride || tr(overview ? "sidepanel.page.analysis.overview" : "sidepanel.page.analysis.title");
   const statusText = tr(`sidepanel.page.analysis.status.${analysis.status}`);
   if (analysis.status === "running") {
     return `
@@ -1427,6 +1511,8 @@ export function createSidepanelPageReadingRuntime({
       advisor: undefined,
       analysis: undefined,
       screenshot: undefined,
+      pageScope: {},
+      focusScope: undefined,
     });
     if (tabId === activeTabId || tabId === displayTabId) render();
   }
@@ -1434,7 +1520,7 @@ export function createSidepanelPageReadingRuntime({
   async function maybeAutoReadActivePage(token: number, expectedTabId: number, expectedUrl: string): Promise<void> {
     if (token !== autoReadToken) return;
     if (activeTabId !== expectedTabId || activeUrl !== expectedUrl || !shouldAutoReadActivePage(true)) return;
-    await requestReadCurrentPage("sidepanel");
+    await requestReadCurrentPage("sidepanel", { activateWorkspace: false });
   }
 
   function scheduleAutoReadActivePage(): void {
@@ -1563,6 +1649,9 @@ export function createSidepanelPageReadingRuntime({
       session.candidateBlocks = undefined;
       session.advisor = undefined;
       session.analysis = undefined;
+      session.screenshot = undefined;
+      session.pageScope = {};
+      session.focusScope = undefined;
       session.autoReadPending = undefined;
       session.updatedAt = now();
     }
@@ -1586,6 +1675,8 @@ export function createSidepanelPageReadingRuntime({
       advisor: undefined,
       analysis: undefined,
       screenshot: undefined,
+      pageScope: {},
+      focusScope: undefined,
       status: "stale",
       autoReadPending: undefined,
       updatedAt: now(),
@@ -1638,8 +1729,8 @@ export function createSidepanelPageReadingRuntime({
     const platform = platformForUrl(activeUrl);
     const session = currentSession();
     const activeWorkspace = pageWorkspace;
-    const viewSession: PageReadingSession | undefined = session?.surface && activeWorkspace === "page" && session.target
-      ? { ...session, target: undefined, advisor: undefined, analysis: undefined, screenshot: undefined }
+    const viewSession: PageReadingSession | undefined = session?.surface
+      ? materializeScopeSession(session, activeWorkspace)
       : session;
     const displayedTabId = session?.tabId ?? displayTabId;
     const displayedSessionIsActive = typeof displayedTabId === "number" && displayedTabId === activeTabId;
@@ -1729,13 +1820,24 @@ export function createSidepanelPageReadingRuntime({
           tr,
         )
       : "";
-    const screenshotBlock = session && displayedSessionIsActive ? screenshotHtml(session, tr) : "";
+    const screenshotBlock = viewSession && displayedSessionIsActive ? screenshotHtml(viewSession, tr) : "";
     const displayedAnalysis: PageReadingAnalysisSession | undefined = hidePendingAdvisorState
       ? { status: "running", updatedAt: viewSession?.advisor?.updatedAt ?? now() }
       : viewSession?.analysis;
     const contextPresentation = activeWorkspace === "page" && !hidePendingAdvisorState && viewSession?.surface
       ? pageContextPresentation(viewSession.surface, modelContext, viewSession.advisor, tr)
       : undefined;
+    const focusBriefNote = displayedAnalysis?.brief?.note;
+    const focusAggregationAdvisory = activeWorkspace === "focus" &&
+      briefNoteIsAggregationGuidance(focusBriefNote)
+      ? tr("sidepanel.page.focus.aggregationAdvisory")
+      : activeWorkspace === "focus" && briefNoteMatchesPageContext(
+        focusBriefNote,
+        viewSession?.surface?.extraction.warnings ?? [],
+        displayedAnalysis?.allowedUse,
+      )
+      ? tr("sidepanel.page.focus.navigationAdvisory")
+      : "";
     const omitBriefNote = Boolean(
       activeWorkspace === "page" &&
       contextPresentation &&
@@ -1745,12 +1847,18 @@ export function createSidepanelPageReadingRuntime({
         viewSession?.surface?.extraction.warnings ?? [],
         displayedAnalysis.allowedUse,
       ),
-    );
+    ) || Boolean(focusAggregationAdvisory);
+    const focusAnalysisTitle = activeWorkspace === "focus" && viewSession?.target
+      ? tr(viewSession.target.kind === "selection"
+        ? "sidepanel.page.focus.selectionOverview"
+        : "sidepanel.page.focus.regionOverview")
+      : undefined;
     const analysisBlock = analysisHtml(
       displayedAnalysis,
       tr,
       viewSession?.surface?.title || viewSession?.title,
       omitBriefNote,
+      focusAnalysisTitle,
     );
     const sourceLinksBlock = hidePendingAdvisorState
       ? ""
@@ -1765,15 +1873,20 @@ export function createSidepanelPageReadingRuntime({
       Boolean(session?.surface),
       Boolean(session?.surface && readSuccessFeedbackTabId === displayedTabId),
     );
-    const cardFooterActions = session?.surface
+    const cardToolButtons = session?.surface
+      ? `
+        <div class="page-reader-card-tools">
+          <button id="pageCopyMetadata" class="btn-investigation-secondary page-reader-card-action" type="button">${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</span></button>
+          <button id="pageDownloadMarkdown" class="btn-investigation-secondary page-reader-card-action" type="button">${DOWNLOAD_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</span></button>
+        </div>
+      `
+      : "";
+    const cardFooterActions = cardToolButtons
       ? `
         <footer class="page-reader-card-footer page-reader-external-tools">
           <div class="page-reader-external-tools-label">${escapeHtml(tr("sidepanel.dynamic.actions.title"))}</div>
           <div class="page-reader-external-tools-hint">${escapeHtml(tr("sidepanel.dynamic.actions.hint"))}</div>
-          <div class="page-reader-card-tools">
-            <button id="pageCopyMetadata" class="btn-investigation-secondary page-reader-card-action" type="button">${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</span></button>
-            <button id="pageDownloadMarkdown" class="btn-investigation-secondary page-reader-card-action" type="button">${DOWNLOAD_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(downloadState === "saved" ? tr("sidepanel.page.download.saved") : downloadState === "cancelled" ? tr("sidepanel.page.download.cancelled") : downloadState === "failed" ? tr("sidepanel.page.download.failed") : tr("sidepanel.page.download"))}</span></button>
-          </div>
+          ${cardToolButtons}
         </footer>
       `
       : "";
@@ -1805,15 +1918,24 @@ export function createSidepanelPageReadingRuntime({
     const focusWorkspaceBlock = activeWorkspace === "focus" &&
       typeof activeTabId === "number" &&
       (platform === "general" || platform === "facebook")
-      ? session?.target
-        ? focusScopeHtml(session.target, canUseLiveTarget, tr)
+      ? viewSession?.target
+        ? focusScopeHtml(
+            viewSession.target,
+            canUseLiveTarget,
+            source || (url ? hostnameForUrl(url) : ""),
+            focusAggregationAdvisory,
+            focusTargetError || "",
+            analysisBlock,
+            cardToolButtons,
+            tr,
+          )
         : `
-        <section class="page-reader-focus-panel" data-state="${focusTargetError ? "error" : session?.target ? "ready" : "empty"}">
+        <section class="page-reader-focus-panel" data-state="${focusTargetError ? "error" : viewSession?.target ? "ready" : "empty"}">
           <div>
             <h3 class="page-reader-focus-title">${escapeHtml(tr("sidepanel.page.focus.title"))}</h3>
-            <div class="page-reader-focus-detail">${escapeHtml(focusTargetError || (session?.target ? tr("sidepanel.page.focus.ready") : tr("sidepanel.page.focus.empty")))}</div>
+            <div class="page-reader-focus-detail">${escapeHtml(focusTargetError || (viewSession?.target ? tr("sidepanel.page.focus.ready") : tr("sidepanel.page.focus.empty")))}</div>
           </div>
-          <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(session?.target ? tr("sidepanel.page.focus.update") : tr("sidepanel.page.useSelection"))}</button>
+          <button id="pageReadSelection" class="btn-investigation-secondary" type="button" ${canUseLiveTarget ? "" : "disabled"}>${escapeHtml(viewSession?.target ? tr("sidepanel.page.focus.update") : tr("sidepanel.page.useSelection"))}</button>
         </section>
       `
       : "";
@@ -1843,7 +1965,7 @@ export function createSidepanelPageReadingRuntime({
       ${statusBlock}
       ${showErrorBlock ? `<section class="page-reader-error">${escapeHtml(errorText)}</section>` : ""}
       ${focusWorkspaceBlock}
-      ${session?.surface && (activeWorkspace === "page" || session.target || !displayedSessionIsActive) ? `
+      ${session?.surface && activeWorkspace === "page" ? `
         <article class="page-reader-card">
           <div class="page-reader-card-header">
             <div class="page-reader-title-block">
@@ -1873,8 +1995,9 @@ export function createSidepanelPageReadingRuntime({
     pagePaneEl.querySelector<HTMLButtonElement>("#pageCopyMetadata")?.addEventListener("click", async () => {
       const latest = currentSession();
       if (!latest) return;
+      const scoped = materializeScopeSession(latest, pageWorkspace);
       try {
-        await navigator.clipboard.writeText(buildCopyText(latest));
+        await navigator.clipboard.writeText(buildCopyText(scoped));
         copyState = "copied";
       } catch {
         copyState = "failed";
@@ -1884,10 +2007,11 @@ export function createSidepanelPageReadingRuntime({
     pagePaneEl.querySelector<HTMLButtonElement>("#pageDownloadMarkdown")?.addEventListener("click", async () => {
       const latest = currentSession();
       if (!latest) return;
+      const scoped = materializeScopeSession(latest, pageWorkspace);
       try {
         const outcome = await saveMarkdownTextFile(
-          buildCopyText(latest),
-          buildPageMarkdownFilename(latest),
+          buildCopyText(scoped),
+          buildPageMarkdownFilename(scoped),
           "text/markdown;charset=utf-8",
           { mode: getSettings().markdownDownloadMode },
         );
@@ -1900,7 +2024,13 @@ export function createSidepanelPageReadingRuntime({
     pagePaneEl.querySelector<HTMLButtonElement>("#pageAnalysisRetry")?.addEventListener("click", () => {
       const latest = currentSession();
       if (!latest) return;
-      runGeneralPageAnalysisIfEligible(latest.tabId, latest, true);
+      runGeneralPageAnalysisIfEligible(
+        latest.tabId,
+        materializeScopeSession(latest, pageWorkspace),
+        true,
+        "quick",
+        pageWorkspace,
+      );
     });
     for (const questionCopyBtn of pagePaneEl.querySelectorAll<HTMLButtonElement>(".page-analysis-question-copy")) {
       questionCopyBtn.addEventListener("click", (event) => {
@@ -2112,7 +2242,11 @@ export function createSidepanelPageReadingRuntime({
       nextStatus: screenshot?.status ?? "cleared",
       hasDataUrl: Boolean(screenshot?.dataUrl),
     });
-    sessions.set(tabId, { ...session, screenshot, updatedAt: session.updatedAt });
+    const pageScope = pageScopeForSession(session);
+    sessions.set(tabId, replaceScopeState(session, "page", {
+      ...pageScope,
+      screenshot,
+    }));
     if (tabId === activeTabId || tabId === displayTabId) render();
   }
 
@@ -2152,7 +2286,8 @@ export function createSidepanelPageReadingRuntime({
 
   async function sendConfirmedScreenshotAnalysis(tabId: number): Promise<void> {
     cancelPendingAutoRead();
-    const session = sessions.get(tabId);
+    const storedSession = sessions.get(tabId);
+    const session = storedSession ? materializeScopeSession(storedSession, "page") : undefined;
     const shot = session?.screenshot;
     const effective = session?.advisor?.effectiveModelContext;
     const providerRuntime = session?.advisor?.providerRuntime;
@@ -2177,7 +2312,7 @@ export function createSidepanelPageReadingRuntime({
     const key = `${generalPageAnalysisKey(effective, providerRuntime, mode)}|screenshot`;
     const dataUrl = shot.dataUrl;
     setScreenshot(tabId, { status: "sending", updatedAt: now() });
-    setAnalysis(tabId, { status: "running", key, mode, allowedUse: effective.allowedUse, updatedAt: now() });
+    setAnalysis(tabId, { status: "running", key, mode, allowedUse: effective.allowedUse, updatedAt: now() }, "page");
     try {
       const response = await runtime.sendMessage({
         type: "GENERAL_PAGE_ANALYSIS_REQUEST",
@@ -2190,37 +2325,49 @@ export function createSidepanelPageReadingRuntime({
         screenshotDataUrl: dataUrl,
       } satisfies TrulyMessage);
       const current = sessions.get(tabId);
-      if (!current || current.status === "stale" || current.analysis?.key !== key) return;
+      if (!current || current.status === "stale" || pageScopeForSession(current).analysis?.key !== key) return;
       if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_ANALYSIS_RESULT") {
         setScreenshot(tabId, { status: "error", error: tr("sidepanel.page.screenshot.error"), updatedAt: now() });
-        setAnalysisError(tabId, "general_page_brief_no_response", key, effective.allowedUse);
+        setAnalysisError(tabId, "general_page_brief_no_response", key, effective.allowedUse, "page");
         return;
       }
       const result = response as GeneralPageAnalysisResultMsg;
       if (!result.ok || !result.brief) {
         setScreenshot(tabId, { status: "error", error: result.error || tr("sidepanel.page.screenshot.error"), updatedAt: now() });
-        setAnalysisError(tabId, result.error || "general_page_brief_failed", key, effective.allowedUse);
+        setAnalysisError(tabId, result.error || "general_page_brief_failed", key, effective.allowedUse, "page");
         return;
       }
       setScreenshot(tabId, { status: "sent", updatedAt: now() });
-      setAnalysis(tabId, { status: "ready", key, mode, brief: result.brief, allowedUse: effective.allowedUse, updatedAt: now() });
+      setAnalysis(tabId, { status: "ready", key, mode, brief: result.brief, allowedUse: effective.allowedUse, updatedAt: now() }, "page");
     } catch (error) {
       setScreenshot(tabId, { status: "error", error: errorMessage(error), updatedAt: now() });
-      setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse);
+      setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse, "page");
     }
   }
 
-  function setAdvisor(tabId: number, advisor: PageReadingAdvisorSession): void {
+  function setAdvisor(
+    tabId: number,
+    advisor: PageReadingAdvisorSession,
+    scope: PageReadingScopeKind = "page",
+  ): void {
     const session = sessions.get(tabId);
     if (!session || session.status === "stale") return;
-    const nextSession: PageReadingSession = {
-      ...session,
+    const currentScope = scopeStateForSession(session, scope);
+    const nextSession = replaceScopeState(session, scope, {
+      ...currentScope,
       advisor,
-      analysis: advisor.effectiveModelContext ? session.analysis : undefined,
-      updatedAt: session.updatedAt,
-    };
+      analysis: advisor.effectiveModelContext ? currentScope.analysis : undefined,
+    });
     sessions.set(tabId, nextSession);
-    if (advisor.effectiveModelContext) runGeneralPageAnalysisIfEligible(tabId, nextSession, false);
+    if (advisor.effectiveModelContext) {
+      runGeneralPageAnalysisIfEligible(
+        tabId,
+        materializeScopeSession(nextSession, scope),
+        false,
+        "quick",
+        scope,
+      );
+    }
     if (tabId === activeTabId || tabId === displayTabId) render();
   }
 
@@ -2229,6 +2376,7 @@ export function createSidepanelPageReadingRuntime({
     session: PageReadingSession,
     force: boolean,
     mode: GeneralPageAnalysisMode = "quick",
+    scope: PageReadingScopeKind = session.target ? "focus" : "page",
   ): void {
     const effective = session.advisor?.effectiveModelContext;
     const providerRuntime = session.advisor?.providerRuntime;
@@ -2249,7 +2397,9 @@ export function createSidepanelPageReadingRuntime({
       return;
     }
     const key = generalPageAnalysisKey(effective, providerRuntime, mode);
-    if (!force && session.analysis?.key === key && (session.analysis.status === "running" || session.analysis.status === "ready")) {
+    const currentScope = scopeStateForSession(session, scope);
+    if (!force && currentScope.analysis?.key === key &&
+      (currentScope.analysis.status === "running" || currentScope.analysis.status === "ready")) {
       return;
     }
     setAnalysis(tabId, {
@@ -2258,7 +2408,7 @@ export function createSidepanelPageReadingRuntime({
       mode,
       allowedUse: effective.allowedUse,
       updatedAt: now(),
-    });
+    }, scope);
     void Promise.resolve(runtime.sendMessage({
       type: "GENERAL_PAGE_ANALYSIS_REQUEST",
       tabId,
@@ -2269,16 +2419,16 @@ export function createSidepanelPageReadingRuntime({
       outputLang: getLang(),
     } satisfies TrulyMessage)).then((response) => {
       const current = sessions.get(tabId);
-      if (!current || current.status === "stale" || current.analysis?.key !== key) return;
+      if (!current || current.status === "stale" || scopeStateForSession(current, scope).analysis?.key !== key) return;
       if (!current.surface || !isMeaningfullySamePage(current.identity, current.surface.url)) return;
       if (tabId === activeTabId && activeUrl && !isMeaningfullySamePage(current.identity, activeUrl)) return;
       if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_ANALYSIS_RESULT") {
-        setAnalysisError(tabId, "general_page_brief_no_response", key, effective.allowedUse);
+        setAnalysisError(tabId, "general_page_brief_no_response", key, effective.allowedUse, scope);
         return;
       }
       const result = response as GeneralPageAnalysisResultMsg;
       if (!result.ok || !result.brief) {
-        setAnalysisError(tabId, result.error || "general_page_brief_failed", key, effective.allowedUse);
+        setAnalysisError(tabId, result.error || "general_page_brief_failed", key, effective.allowedUse, scope);
         return;
       }
       setAnalysis(tabId, {
@@ -2288,20 +2438,24 @@ export function createSidepanelPageReadingRuntime({
         brief: result.brief,
         allowedUse: effective.allowedUse,
         updatedAt: now(),
-      });
+      }, scope);
     }).catch((error) => {
-      setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse);
+      setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse, scope);
     });
   }
 
-  function setAnalysis(tabId: number, analysis: PageReadingAnalysisSession): void {
+  function setAnalysis(
+    tabId: number,
+    analysis: PageReadingAnalysisSession,
+    scope: PageReadingScopeKind = "page",
+  ): void {
     const session = sessions.get(tabId);
     if (!session || session.status === "stale") return;
-    sessions.set(tabId, {
-      ...session,
+    const currentScope = scopeStateForSession(session, scope);
+    sessions.set(tabId, replaceScopeState(session, scope, {
+      ...currentScope,
       analysis,
-      updatedAt: session.updatedAt,
-    });
+    }));
     if (tabId === activeTabId) render();
   }
 
@@ -2310,6 +2464,7 @@ export function createSidepanelPageReadingRuntime({
     error: string,
     key?: string,
     allowedUse?: GeneralPageEffectiveModelContextUse,
+    scope: PageReadingScopeKind = "page",
   ): void {
     setAnalysis(tabId, {
       status: "error",
@@ -2317,7 +2472,7 @@ export function createSidepanelPageReadingRuntime({
       error,
       allowedUse,
       updatedAt: now(),
-    });
+    }, scope);
   }
 
   function generalPageAnalysisKey(
@@ -2366,6 +2521,7 @@ export function createSidepanelPageReadingRuntime({
     } = {},
   ): void {
     const target = options.target;
+    const scope: PageReadingScopeKind = target ? "focus" : "page";
     const context = target
       ? buildGeneralPageModelContext(surface, {
           target,
@@ -2390,7 +2546,7 @@ export function createSidepanelPageReadingRuntime({
         effectiveModelContext,
         providerRuntime,
         updatedAt: now(),
-      });
+      }, scope);
       return;
     }
 
@@ -2399,7 +2555,7 @@ export function createSidepanelPageReadingRuntime({
       request,
       providerRuntime,
       updatedAt: now(),
-    });
+    }, scope);
 
     void Promise.resolve(runtime.sendMessage({
       type: "GENERAL_PAGE_PARSER_ADVISOR_REQUEST",
@@ -2412,7 +2568,7 @@ export function createSidepanelPageReadingRuntime({
       if (
         !current?.surface ||
         !isMeaningfullySamePage(pageUrlIdentity(current.surface.url, current.surface.canonicalUrl), surface.url) ||
-        (target && current.target?.id !== target.id)
+        (target && focusScopeForSession(current)?.target?.id !== target.id)
       )
         return;
       if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_PARSER_ADVISOR_RESULT") {
@@ -2423,7 +2579,7 @@ export function createSidepanelPageReadingRuntime({
           effectiveModelContext,
           error: "parser_advisor_no_response",
           updatedAt: now(),
-        });
+        }, scope);
         return;
       }
       const result = response as GeneralPageParserAdvisorResultMsg;
@@ -2435,7 +2591,7 @@ export function createSidepanelPageReadingRuntime({
           effectiveModelContext,
           error: result.error || "parser_advisor_failed",
           updatedAt: now(),
-        });
+        }, scope);
         return;
       }
       setAdvisor(tabId, {
@@ -2445,7 +2601,7 @@ export function createSidepanelPageReadingRuntime({
         providerRuntime: result.providerRuntime ?? providerRuntime,
         effectiveModelContext: await buildEffectiveContextForAdvice(tabId, surface, context, request, result.advice),
         updatedAt: now(),
-      });
+      }, scope);
     }).catch((error) => {
       setAdvisor(tabId, {
         status: "error",
@@ -2454,7 +2610,7 @@ export function createSidepanelPageReadingRuntime({
         effectiveModelContext,
         error: errorMessage(error),
         updatedAt: now(),
-      });
+      }, scope);
     });
   }
 
@@ -2526,15 +2682,7 @@ export function createSidepanelPageReadingRuntime({
         return;
       }
       focusTargetErrors.delete(tabId);
-      if (session?.surface) {
-        setAdvisor(tabId, {
-          status: "checking",
-          providerRuntime: resolveAdvisorProviderRuntime(getSettings(), getTierAEndpoint(), getTierAModel()),
-          updatedAt: now(),
-        });
-      } else {
-        render();
-      }
+      render();
       const response = await runtime.sendMessage({
         type: "READING_TARGET_REQUEST",
         tabId,
@@ -2578,11 +2726,7 @@ export function createSidepanelPageReadingRuntime({
         });
         return;
       }
-      setAdvisor(tabId, {
-        status: "checking",
-        providerRuntime: resolveAdvisorProviderRuntime(getSettings(), getTierAEndpoint(), getTierAModel()),
-        updatedAt: now(),
-      });
+      render();
       const response = await runtime.sendMessage({
         type: "READING_TARGET_REQUEST",
         tabId,
@@ -2640,7 +2784,10 @@ export function createSidepanelPageReadingRuntime({
     });
   }
 
-  async function requestReadCurrentPage(source: PageActivationSource = "sidepanel"): Promise<void> {
+  async function requestReadCurrentPage(
+    source: PageActivationSource = "sidepanel",
+    options: { activateWorkspace?: boolean } = {},
+  ): Promise<void> {
     clearAutoReadTimer();
     autoReadToken += 1;
     try {
@@ -2677,6 +2824,10 @@ export function createSidepanelPageReadingRuntime({
       activeUrl = tabUrl;
       activeTitle = tab.title ?? "";
       const previousSession = sessions.get(tab.id);
+      const preserveFocusScope = previousSession &&
+        isMeaningfullySamePage(previousSession.identity, activeUrl)
+        ? focusScopeForSession(previousSession)
+        : undefined;
       if (previousSession?.surface && previousSession.status === "ready") {
         pendingRereadFeedback.add(tab.id);
       } else {
@@ -2694,11 +2845,13 @@ export function createSidepanelPageReadingRuntime({
         advisor: undefined,
         analysis: undefined,
         screenshot: undefined,
+        pageScope: {},
+        focusScope: preserveFocusScope,
         startedAt,
         updatedAt: startedAt,
         activationSource: source,
       });
-      activateTab("page");
+      if (options.activateWorkspace !== false) activateTab("page");
       render();
       const response = await runtime.sendMessage({
         type: "PAGE_READING_REQUEST",
@@ -2736,6 +2889,7 @@ export function createSidepanelPageReadingRuntime({
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
     const existing = sessions.get(tabId);
+    const preservePendingFocus = pageWorkspace === "focus" && existing?.status === "loading";
     const shouldShowRereadSuccess = pendingRereadFeedback.delete(tabId);
     const duplicateReadySurface = existing?.status === "ready" &&
       existing.surface?.id === message.surface.id &&
@@ -2754,16 +2908,24 @@ export function createSidepanelPageReadingRuntime({
       ? Math.max(0, completedAt - existing.startedAt)
       : undefined;
     const nextIdentity = pageUrlIdentity(message.surface.url, message.surface.canonicalUrl);
-    const preserveScreenshot = existing?.screenshot &&
+    const existingPageScope = existing ? pageScopeForSession(existing) : {};
+    const preserveScreenshot = existing && existingPageScope.screenshot &&
       existing.status !== "stale" &&
       isMeaningfullySamePage(existing.identity, message.surface.url)
-      ? existing.screenshot
+      ? existingPageScope.screenshot
       : undefined;
     const preserveRecoveryState = Boolean(preserveScreenshot);
+    const preserveFocusScope = existing &&
+      existing.status !== "stale" &&
+      isMeaningfullySamePage(existing.identity, message.surface.url)
+      ? focusScopeForSession(existing)
+      : undefined;
     const revealIncoming = shouldRevealIncomingPageRead(tabId);
     copyState = "idle";
     downloadState = "idle";
-    if (revealIncoming || tabId === activeTabId || tabId === displayTabId) pageWorkspace = "page";
+    if (!preservePendingFocus && (revealIncoming || tabId === activeTabId || tabId === displayTabId)) {
+      pageWorkspace = "page";
+    }
     sessions.set(tabId, {
       tabId,
       url: message.surface.url,
@@ -2772,15 +2934,23 @@ export function createSidepanelPageReadingRuntime({
       surface: message.surface,
       target: undefined,
       candidateBlocks: message.candidateBlocks ?? [],
-      advisor: preserveRecoveryState ? existing?.advisor : undefined,
+      advisor: undefined,
       status: "ready",
       updatedAt: completedAt,
       startedAt: existing?.startedAt ?? (typeof elapsedMs === "number" ? completedAt - elapsedMs : undefined),
       completedAt,
       elapsedMs,
       activationSource: existing?.activationSource ?? "toolbar",
-      analysis: preserveRecoveryState ? existing?.analysis : undefined,
-      screenshot: preserveScreenshot,
+      analysis: undefined,
+      screenshot: undefined,
+      pageScope: preserveRecoveryState
+        ? {
+            advisor: existingPageScope.advisor,
+            analysis: existingPageScope.analysis,
+            screenshot: preserveScreenshot,
+          }
+        : {},
+      focusScope: preserveFocusScope,
     });
     if (revealIncoming) {
       displayTabId = tabId;
@@ -2841,11 +3011,15 @@ export function createSidepanelPageReadingRuntime({
     sessions.set(tabId, {
       ...nextSession,
       surface: selectionSurface,
-      target: message.target,
+      target: undefined,
       status: "ready",
       updatedAt: now(),
       analysis: undefined,
       screenshot: undefined,
+      pageScope: pageScopeForSession(nextSession),
+      focusScope: {
+        target: message.target,
+      },
     });
     copyState = "idle";
     downloadState = "idle";
@@ -2871,18 +3045,6 @@ export function createSidepanelPageReadingRuntime({
       if (tabId === activeTabId || tabId === displayTabId) render();
       return;
     }
-    sessions.set(tabId, {
-      ...existing,
-      advisor: {
-        status: "error",
-        error: friendlyTargetError(message.error),
-        providerRuntime: resolveAdvisorProviderRuntime(getSettings(), getTierAEndpoint(), getTierAModel()),
-        updatedAt: now(),
-      },
-      analysis: undefined,
-      screenshot: undefined,
-      updatedAt: now(),
-    });
     if (shouldRevealIncomingPageRead(tabId)) {
       displayTabId = tabId;
     }
@@ -2921,6 +3083,8 @@ export function createSidepanelPageReadingRuntime({
       advisor: undefined,
       analysis: undefined,
       screenshot: undefined,
+      pageScope: existing ? pageScopeForSession(existing) : {},
+      focusScope: existing ? focusScopeForSession(existing) : undefined,
       status: "error",
       error: friendlyPageReadingError(message.error),
       updatedAt: completedAt,
@@ -2974,21 +3138,26 @@ export function createSidepanelPageReadingRuntime({
     requestPointTarget,
     auditState: () => {
       const session = currentSession();
+      const scopedSession = session ? materializeScopeSession(session, pageWorkspace) : undefined;
+      const pageScope = session ? pageScopeForSession(session) : undefined;
+      const focusScope = session ? focusScopeForSession(session) : undefined;
       return {
         activeTabId,
         displayTabId,
-        displayedSession: session
+        displayedSession: scopedSession
           ? {
-              status: session.status,
-              hasSurface: Boolean(session.surface),
-              screenshotStatus: session.screenshot?.status,
-              screenshotHasDataUrl: Boolean(session.screenshot?.dataUrl),
-              advisorStatus: session.advisor?.status,
-              advisorDecision: session.advisor?.advice?.decision ?? "none",
-              analysisStatus: session.analysis?.status,
-              autoReadPending: session.autoReadPending,
-              targetKind: session.surface ? modelContextForSession({ ...session, surface: session.surface }).targetKind : undefined,
-              allowedUse: session.advisor?.effectiveModelContext?.allowedUse,
+              status: scopedSession.status,
+              hasSurface: Boolean(scopedSession.surface),
+              screenshotStatus: scopedSession.screenshot?.status,
+              screenshotHasDataUrl: Boolean(scopedSession.screenshot?.dataUrl),
+              advisorStatus: scopedSession.advisor?.status,
+              advisorDecision: scopedSession.advisor?.advice?.decision ?? "none",
+              analysisStatus: scopedSession.analysis?.status,
+              autoReadPending: scopedSession.autoReadPending,
+              targetKind: scopedSession.surface ? modelContextForSession({ ...scopedSession, surface: scopedSession.surface }).targetKind : undefined,
+              allowedUse: scopedSession.advisor?.effectiveModelContext?.allowedUse,
+              pageAnalysisStatus: pageScope?.analysis?.status,
+              focusAnalysisStatus: focusScope?.analysis?.status,
             }
           : undefined,
       };

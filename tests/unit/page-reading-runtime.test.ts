@@ -129,6 +129,43 @@ describe("sidepanel page reading runtime", () => {
     }
   });
 
+  it("does not pull the user back to Web when a pending page read finishes in Focus", async () => {
+    const pagePaneEl = setupDom();
+    let resolveRead: ((message: TrulyMessage) => void) | undefined;
+    const readPromise = new Promise<TrulyMessage>((resolve) => {
+      resolveRead = resolve;
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage: vi.fn(() => readPromise) },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+    });
+
+    const pendingRead = runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    runtime.setWorkspace("focus");
+    expect(pagePaneEl.querySelector(".page-reader-focus-panel")).not.toBeNull();
+
+    resolveRead?.({
+      type: "PAGE_READING_RESULT",
+      tabId: 42,
+      surface: surface(),
+    } satisfies TrulyMessage);
+    await pendingRead;
+
+    expect(pagePaneEl.querySelector(".page-reader-focus-panel")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-card")).toBeNull();
+  });
+
   it("keeps Focus available on Facebook and analyzes only an explicit selection", async () => {
     const pagePaneEl = setupDom();
     const selectedText = [
@@ -1252,7 +1289,11 @@ describe("sidepanel page reading runtime", () => {
         }
         throw new Error(`unexpected message ${(message as { type: string }).type}`);
       });
-      const runtime = createSidepanelPageReadingRuntime({
+      let runtime: ReturnType<typeof createSidepanelPageReadingRuntime>;
+      const activateTab = vi.fn((tab: TabId) => {
+        runtime?.setWorkspace(tab === "focus" ? "focus" : "page");
+      });
+      runtime = createSidepanelPageReadingRuntime({
         pagePaneEl,
         runtime: { sendMessage },
         tabs: {
@@ -1262,7 +1303,7 @@ describe("sidepanel page reading runtime", () => {
             title: "Runtime Fixture",
           }]),
         },
-        activateTab: vi.fn(),
+        activateTab,
         getLang: () => "zh-TW",
         now: () => 1_000,
         hasAllSitesPermission: vi.fn(async () => true),
@@ -1277,6 +1318,8 @@ describe("sidepanel page reading runtime", () => {
       expect(sendMessage).not.toHaveBeenCalled();
       expect(pagePaneEl.querySelector(".page-reader-card-loading-status")?.textContent).toBe("讀取中");
       expect(pagePaneEl.textContent).not.toContain("尚未讀取此頁");
+      runtime.setWorkspace("focus");
+      expect(pagePaneEl.querySelector(".page-reader-focus-panel")).not.toBeNull();
 
       vi.advanceTimersByTime(1_000);
       await flushMicrotasks();
@@ -1293,7 +1336,8 @@ describe("sidepanel page reading runtime", () => {
           action: "read",
         }),
       }));
-      expect(pagePaneEl.textContent).toContain("Runtime fixture excerpt.");
+      expect(pagePaneEl.querySelector(".page-reader-focus-panel")).not.toBeNull();
+      expect(pagePaneEl.querySelector(".page-reader-card")).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -2173,6 +2217,297 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-focus-meta")?.textContent).toContain("選取文字");
     expect(pagePaneEl.textContent).toContain(selectedText);
     expect(pagePaneEl.querySelector(".page-reader-context-details")).toBeNull();
+  });
+
+  it("keeps Focus target-centric and routes aggregation guidance into the scope", async () => {
+    const pagePaneEl = setupDom();
+    const copiedTexts: string[] = [];
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: vi.fn(async (text: string) => {
+          copiedTexts.push(text);
+        }),
+      },
+    });
+    const selectedText = [
+      "This selected news-aggregation passage is intentionally long enough for focused analysis.",
+      "It represents one disaster-news headline and teaser chosen by the reader.",
+    ].join(" ");
+    const aggregationNote = "此為新聞聚合頁面，建議點擊各來源連結以獲取完整災情報導。";
+    const navigationNote = "頁面含大量導航雜訊，建議直接點擊新聞標題獲取詳情。";
+    let pageReadCount = 0;
+    let selectionRequestCount = 0;
+    let selectionAnalysisCount = 0;
+    const baseSurface = surface({
+      sourceName: "Google 新聞",
+      mainText: `${surface().mainText} Additional aggregation navigation and linked headline text.`,
+      extraction: {
+        method: "semantic-html",
+        status: "partial",
+        warnings: ["large-navigation-noise"],
+      },
+    });
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        pageReadCount += 1;
+        return {
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: pageReadCount === 1
+            ? baseSurface
+            : {
+                ...baseSurface,
+                mainText: `${baseSurface.mainText} Refreshed same-page content.`,
+                excerpt: "Refreshed same-page excerpt.",
+              },
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "READING_TARGET_REQUEST") {
+        selectionRequestCount += 1;
+        if (selectionRequestCount === 3) {
+          return {
+            type: "READING_TARGET_ERROR",
+            tabId: 42,
+            error: "no_meaningful_selection",
+          } satisfies TrulyMessage;
+        }
+        return {
+          type: "READING_TARGET_RESULT",
+          tabId: 42,
+          target: {
+            id: `target:selection:aggregation:${selectionRequestCount}`,
+            surfaceId: baseSurface.id,
+            kind: "selection",
+            text: selectedText,
+            surroundingText: "Synthetic aggregation context around the selected headline.",
+            extraction: {
+              method: "selection",
+              status: "complete",
+              warnings: [],
+            },
+          },
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        const selectionNote = message.context.targetKind === "selection"
+          ? ++selectionAnalysisCount === 1 ? aggregationNote : navigationNote
+          : undefined;
+        return {
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: 42,
+          ok: true,
+          brief: {
+            schemaVersion: 1,
+            summary: message.context.targetKind === "selection"
+              ? "Selected disaster-news context summary."
+              : "Whole-page fixture summary.",
+            note: selectionNote,
+            model: "brief-model",
+            outputLang: "zh-TW",
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    runtime.setWorkspace("page");
+    expect(pagePaneEl.textContent).toContain("Whole-page fixture summary.");
+    expect(runtime.auditState().displayedSession?.pageAnalysisStatus).toBe("ready");
+    runtime.setWorkspace("focus");
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(pagePaneEl.querySelectorAll(".page-reader-focus-panel")).toHaveLength(1);
+    expect(pagePaneEl.querySelector(".page-reader-card")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-focus-analysis .page-reader-analysis")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-analysis-header h3")?.textContent).toBe("選取內容總覽");
+    expect(pagePaneEl.querySelector(".page-reader-focus-meta")?.textContent).toContain("選取文字");
+    expect(pagePaneEl.querySelector(".page-reader-focus-meta")?.textContent).toContain("Google 新聞");
+    expect(pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.textContent).toBe("套用選取內容");
+    expect(pagePaneEl.textContent).not.toContain("上次讀取");
+    expect(pagePaneEl.textContent).not.toContain("外部工具整合");
+    expect(pagePaneEl.querySelector(".page-reader-focus-tools #pageCopyMetadata")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-focus-tools #pageDownloadMarkdown")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-focus-advisory")?.textContent)
+      .toBe("選取內容來自新聞聚合頁；完整報導請回到原頁開啟新聞標題。");
+    expect(pagePaneEl.querySelector(".page-reader-analysis-note")).toBeNull();
+    expect(pagePaneEl.textContent?.match(/新聞聚合頁/g)).toHaveLength(1);
+    expect(pagePaneEl.textContent).not.toContain(aggregationNote);
+    expect(runtime.auditState().displayedSession?.pageAnalysisStatus).toBe("ready");
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageCopyMetadata")?.click();
+    await flushMicrotasks();
+    expect(copiedTexts.at(-1)).toContain("Selected disaster-news context summary.");
+    expect(copiedTexts.at(-1)).not.toContain("Whole-page fixture summary.");
+
+    runtime.setWorkspace("page");
+    expect(runtime.auditState().displayedSession?.pageAnalysisStatus).toBe("ready");
+    expect(pagePaneEl.textContent).toContain("Whole-page fixture summary.");
+    expect(pagePaneEl.textContent).not.toContain("Selected disaster-news context summary.");
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageCopyMetadata")?.click();
+    await flushMicrotasks();
+    expect(copiedTexts.at(-1)).toContain("Whole-page fixture summary.");
+    expect(copiedTexts.at(-1)).not.toContain("Selected disaster-news context summary.");
+    runtime.setWorkspace("focus");
+    expect(pagePaneEl.textContent).toContain("Selected disaster-news context summary.");
+
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(pagePaneEl.querySelector(".page-reader-focus-advisory")?.textContent)
+      .toBe("選取內容來自導覽較多的頁面；完整內容請回到原頁開啟標題。");
+    expect(pagePaneEl.querySelector(".page-reader-analysis-note")).toBeNull();
+    expect(pagePaneEl.textContent).not.toContain(navigationNote);
+
+    runtime.setWorkspace("page");
+    expect(pagePaneEl.textContent).toContain("Whole-page fixture summary.");
+    runtime.setWorkspace("focus");
+    expect(pagePaneEl.textContent).toContain("Selected disaster-news context summary.");
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    runtime.setWorkspace("page");
+    expect(pagePaneEl.textContent).toContain("Whole-page fixture summary.");
+    runtime.setWorkspace("focus");
+    expect(pagePaneEl.textContent).toContain("Selected disaster-news context summary.");
+
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(pagePaneEl.textContent).toContain("請先在目前網頁選取一段較完整的文字，再套用選取內容");
+    expect(pagePaneEl.textContent).toContain("Selected disaster-news context summary.");
+    runtime.setWorkspace("page");
+    expect(pagePaneEl.textContent).toContain("Whole-page fixture summary.");
+  });
+
+  it("routes concurrent Web and Focus analysis responses back to their originating scopes", async () => {
+    const pagePaneEl = setupDom();
+    const selectedText = [
+      "This selected passage is long enough to start a concurrent Focus analysis request.",
+      "Its result must remain independent from the whole-page analysis response.",
+    ].join(" ");
+    let resolvePageAnalysis: ((message: TrulyMessage) => void) | undefined;
+    let resolveFocusAnalysis: ((message: TrulyMessage) => void) | undefined;
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return {
+          type: "PAGE_READING_RESULT",
+          tabId: 42,
+          surface: surface(),
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "READING_TARGET_REQUEST") {
+        return {
+          type: "READING_TARGET_RESULT",
+          tabId: 42,
+          target: {
+            id: "target:selection:concurrent",
+            surfaceId: surface().id,
+            kind: "selection",
+            text: selectedText,
+            surroundingText: "Synthetic concurrent analysis context.",
+            extraction: {
+              method: "selection",
+              status: "complete",
+              warnings: [],
+            },
+          },
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        return await new Promise<TrulyMessage>((resolve) => {
+          if (message.context.targetKind === "selection") resolveFocusAnalysis = resolve;
+          else resolvePageAnalysis = resolve;
+        });
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    expect(resolvePageAnalysis).toBeTypeOf("function");
+    runtime.setWorkspace("focus");
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageReadSelection")?.click();
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(resolveFocusAnalysis).toBeTypeOf("function");
+
+    resolveFocusAnalysis?.({
+      type: "GENERAL_PAGE_ANALYSIS_RESULT",
+      tabId: 42,
+      ok: true,
+      brief: {
+        schemaVersion: 1,
+        summary: "Concurrent Focus summary.",
+        model: "brief-model",
+        outputLang: "zh-TW",
+      },
+    } satisfies TrulyMessage);
+    await flushMicrotasks();
+    resolvePageAnalysis?.({
+      type: "GENERAL_PAGE_ANALYSIS_RESULT",
+      tabId: 42,
+      ok: true,
+      brief: {
+        schemaVersion: 1,
+        summary: "Concurrent Web summary.",
+        model: "brief-model",
+        outputLang: "zh-TW",
+      },
+    } satisfies TrulyMessage);
+    await flushMicrotasks();
+
+    runtime.setWorkspace("page");
+    expect(runtime.auditState().displayedSession?.pageAnalysisStatus).toBe("ready");
+    expect(pagePaneEl.textContent).toContain("Concurrent Web summary.");
+    runtime.setWorkspace("focus");
+    expect(pagePaneEl.textContent).toContain("Concurrent Focus summary.");
   });
 
   it("fails closed with toolbar guidance for current-region hotkey without a live read session", async () => {

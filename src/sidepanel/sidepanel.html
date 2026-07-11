@@ -207,6 +207,8 @@
       display: grid;
       align-items: initial;
       justify-content: initial;
+      gap: 10px;
+      padding: 11px 12px;
     }
     .page-reader-focus-header {
       display: flex;
@@ -253,6 +255,41 @@
       font-size: var(--truly-type-body);
       line-height: 1.5;
       white-space: pre-wrap;
+    }
+    .page-reader-focus-advisory {
+      margin: 0;
+      color: var(--truly-sidepanel-muted-text);
+      font-size: var(--truly-type-caption);
+      line-height: 1.45;
+    }
+    .page-reader-focus-error {
+      margin: 0;
+      color: var(--truly-status-error);
+      font-size: var(--truly-type-caption);
+      line-height: 1.45;
+    }
+    .page-reader-focus-analysis {
+      padding-top: 1px;
+      border-top: 1px solid var(--truly-sidepanel-soft-border);
+    }
+    .page-reader-focus-analysis .page-reader-analysis {
+      margin-top: 10px;
+      padding-right: 0;
+      padding-left: 0;
+    }
+    .page-reader-focus-analysis .page-reader-analysis h3,
+    .page-reader-focus-analysis .page-reader-analysis.is-overview h3 {
+      color: var(--truly-sidepanel-muted-text);
+      font-size: var(--truly-type-caption);
+      font-weight: 600;
+      line-height: 1.35;
+    }
+    .page-reader-focus-tools {
+      padding-top: 9px;
+      border-top: 1px solid var(--truly-sidepanel-soft-border);
+    }
+    .page-reader-focus-tools .page-reader-card-tools {
+      margin-top: 0;
     }
     .page-reader-title-block h2 {
       font-size: var(--truly-type-title);
@@ -577,7 +614,7 @@
       justify-content: center;
       width: 14px;
       height: 14px;
-      margin-left: auto;
+      margin-left: 6px;
       color: var(--truly-sidepanel-muted-text);
       flex: 0 0 auto;
     }

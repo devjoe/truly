@@ -34,6 +34,12 @@ const PHASE_TIMEOUT_MS = {
   storagePrivacy: 20_000,
 };
 const CDP_COMMAND_TIMEOUT_MS = 15_000;
+const WEB_SURFACE_READY_EXPRESSION = `(() => {
+  const state = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession;
+  return Boolean(document.querySelector('#page-pane .page-reader-card')) &&
+    state?.status === 'ready' &&
+    state?.hasSurface === true;
+})()`;
 const auditPhaseLog = [];
 
 function usage() {
@@ -1179,7 +1185,7 @@ async function auditPopupReadClick(extensionId, allowedBase) {
         await capturePopupReadTimeoutState(popup, side, article, before, initialSide, "replay");
         throw error;
       });
-    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane .page-reader-status-label')?.textContent || ''))()`, 8000, "popup-triggered Web ready status")
+    await waitFor(side, WEB_SURFACE_READY_EXPRESSION, 8000, "popup-triggered Web ready status")
       .catch(async (error) => {
         await capturePopupReadTimeoutState(popup, side, article, before, initialSide, "ready");
         throw error;
@@ -1310,7 +1316,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     autoRead.observed = false;
     autoRead.error = "";
     if (autoRead.allSites) {
-      await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web auto-read ready state")
+      await waitFor(side, WEB_SURFACE_READY_EXPRESSION, 8000, "Web auto-read ready state")
         .then(() => {
           autoRead.observed = true;
         })
@@ -1323,7 +1329,12 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     if (!autoRead.observed) {
       await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
     }
-    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web ready state").catch(async (error) => {
+    await waitFor(side, `(() => {
+      const activeState = globalThis.__trulyPageReadingRuntime?.auditState?.();
+      return Boolean(document.querySelector('#page-pane .page-reader-card')) &&
+        activeState?.displayedSession?.status === 'ready' &&
+        activeState?.displayedSession?.hasSurface === true;
+    })()`, 8000, "Web ready state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, article, initial).catch((captureError) => ({
         initial,
         captureError: captureError.message,
@@ -1588,8 +1599,32 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       await side.screenshot(resolve(OUT_DIR, "page-web-history-hidden-timeout.png")).catch(() => {});
       throw error;
     });
+    await waitFor(side, `(() => document.querySelector('.tab[data-tab="focus"]')?.getAttribute('aria-disabled') !== 'true')()`, 4000, "Web Focus tab available");
     await side.evaluate(`document.querySelector('.tab[data-tab="focus"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => document.querySelector('#pageReadSelection')?.disabled === false)()`, 4000, "Web focus selection action enabled on current page");
+    const focusActivationState = await side.evaluateJson(`(() => {
+      return {
+        activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim() || null,
+        selectionButton: Boolean(document.querySelector('#pageReadSelection')),
+        paneText: document.querySelector('#page-pane')?.innerText || '',
+        runtime: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
+      };
+    })()`);
+    writeFileSync(resolve(OUT_DIR, "page-focus-activation.json"), JSON.stringify(focusActivationState, null, 2));
+    await waitFor(side, `(() => document.querySelector('#pageReadSelection')?.disabled === false)()`, 4000, "Web focus selection action enabled on current page").catch(async (error) => {
+      const timeoutState = await side.evaluateJson(`(() => ({
+        activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim() || null,
+        focusAvailability: document.querySelector('.tab[data-tab="focus"]')?.getAttribute('aria-disabled'),
+        selectionButton: (() => {
+          const button = document.querySelector('#pageReadSelection');
+          return button ? { text: button.textContent?.trim(), disabled: button.disabled } : null;
+        })(),
+        paneText: document.querySelector('#page-pane')?.innerText || '',
+        activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
+      }))()`);
+      writeFileSync(resolve(OUT_DIR, "page-focus-ready-timeout.json"), JSON.stringify(timeoutState, null, 2));
+      await side.screenshot(resolve(OUT_DIR, "page-focus-ready-timeout.png")).catch(() => {});
+      throw error;
+    });
     const historyDisplay = await side.evaluateJson(`(() => {
       const base = globalThis.__trulyHistoryDisplayAudit || {};
       return {
@@ -1655,7 +1690,13 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       const model = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-model-context');
       const advisor = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-advisor');
       return {
-        excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
+        excerpt: pane?.querySelector('.page-reader-focus-preview')?.textContent?.trim(),
+        focusPanelCount: pane?.querySelectorAll('.page-reader-focus-panel').length || 0,
+        hasPageCard: Boolean(pane?.querySelector('.page-reader-card')),
+        analysisTitle: pane?.querySelector('.page-reader-focus-analysis .page-reader-analysis-header h3')?.textContent?.trim(),
+        hasLastRead: /上次讀取|Last read/.test(pane?.innerText || ''),
+        hasExternalToolsLabel: /外部工具整合|External Tool Integration/.test(pane?.innerText || ''),
+        focusToolCount: pane?.querySelectorAll('.page-reader-focus-tools .page-reader-card-action').length || 0,
         modelRows: [...model?.querySelectorAll('dl div') || []].map((row) => ({
           label: row.querySelector('dt')?.textContent?.trim(),
           value: row.querySelector('dd')?.textContent?.trim(),
@@ -1691,17 +1732,11 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
     await side.evaluate(`chrome.storage.session.set({ pendingCurrentRegionRead: { tabId: ${JSON.stringify(pointerTab.activeTabId)}, ts: Date.now() } })`);
     await waitFor(side, `(() => {
-      const model = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-model-context');
-      const advisor = document.querySelector('#page-pane .page-reader-processing-status') || document.querySelector('#page-pane .page-reader-advisor');
-      const advisorStatus = advisor?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim() || '';
-      const rows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
-        label: row.querySelector('dt')?.textContent?.trim(),
-        value: row.querySelector('dd')?.textContent?.trim(),
-            rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
-      }));
-      return rows.some((row) => /targetKind|目標|Target/.test(row.label || '') && (row.rawValue || row.value) === 'current-region') &&
-        Boolean(advisor) &&
-        !/整理中|Organizing|檢查中|Checking/.test(advisorStatus);
+      const state = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession;
+      return state?.targetKind === 'current-region' &&
+        state?.advisorStatus !== 'checking' &&
+        state?.analysisStatus !== 'running' &&
+        Boolean(document.querySelector('#page-pane .page-reader-focus-panel'));
     })()`, 16000, "Web current-region target").catch(async (error) => {
       await side.screenshot(resolve(OUT_DIR, "page-point-target-timeout.png")).catch(() => {});
       throw error;
@@ -1710,16 +1745,20 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       const pane = document.querySelector('#page-pane');
       const model = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-model-context');
       const advisor = pane?.querySelector('.page-reader-processing-status') || pane?.querySelector('.page-reader-advisor');
+      const activeState = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null;
       const modelRows = [...model?.querySelectorAll('dl div') || []].map((row) => ({
         label: row.querySelector('dt')?.textContent?.trim(),
         value: row.querySelector('dd')?.textContent?.trim(),
             rawValue: row.querySelector('dd')?.getAttribute('data-raw-value') || row.querySelector('dd')?.textContent?.trim()
       }));
       return {
-        targetKind: modelRows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.rawValue,
+        targetKind: activeState?.targetKind || modelRows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.rawValue,
         targetKindLabel: modelRows.find((row) => /targetKind|目標|Target/.test(row.label || ''))?.value,
-        advisorStatus: advisor?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim(),
-        excerpt: pane?.querySelector('.page-reader-excerpt')?.textContent?.trim(),
+        advisorStatus: activeState?.advisorStatus || advisor?.querySelector('.page-reader-processing-status-header span, .page-reader-advisor-header span')?.textContent?.trim(),
+        advisorDecision: activeState?.advisorDecision || null,
+        excerpt: pane?.querySelector('.page-reader-focus-preview')?.textContent?.trim(),
+        focusPanelCount: pane?.querySelectorAll('.page-reader-focus-panel').length || 0,
+        hasPageCard: Boolean(pane?.querySelector('.page-reader-card')),
       };
     })()`);
     await side.screenshot(resolve(OUT_DIR, "page-point-target.png"));
@@ -1999,7 +2038,7 @@ async function auditNoisyFallbackRead(extensionId, allowedBase) {
     await sleep(800);
     await installAdvisorTransitionTimeline(side);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "Web noisy fallback ready state").catch(async (error) => {
+    await waitFor(side, WEB_SURFACE_READY_EXPRESSION, 8000, "Web noisy fallback ready state").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, noisy, null).catch((captureError) => ({
         captureError: captureError.message,
       }));
@@ -2116,7 +2155,7 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
   try {
     await sleep(800);
     await side.evaluate(`document.querySelector('#pageReadCurrent')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
-    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "candidate block page ready");
+    await waitFor(side, WEB_SURFACE_READY_EXPRESSION, 8000, "candidate block page ready");
     await waitFor(side, `(() => {
       const analysis = document.querySelector('#page-pane .page-reader-analysis:not(.is-running)');
       if (analysis) return true;
@@ -2227,7 +2266,7 @@ async function auditTeaserHubOverview(extensionId, allowedBase) {
       if (!button || button.disabled) return false;
       return button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
     })()`);
-    await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-card-status')) || /已讀取|Ready/.test(document.querySelector('#page-pane')?.innerText || ''))()`, 8000, "teaser hub page ready").catch(async (error) => {
+    await waitFor(side, WEB_SURFACE_READY_EXPRESSION, 8000, "teaser hub page ready").catch(async (error) => {
       const timeoutState = await capturePageReadTimeoutState(side, teaser, null).catch((captureError) => ({
         captureError: captureError.message,
       }));
@@ -2609,7 +2648,16 @@ function assertAudit(result) {
     errors.push("Web hidden-history Focus view should expose selection-only controls");
   }
   if (!result.success.selection?.selectedText || !result.success.selection.excerpt?.includes(result.success.selection.selectedText.slice(0, 60))) {
-    errors.push("selection target text was not rendered as the Web preview");
+    errors.push("selection target text was not rendered as the Focus preview");
+  }
+  if (
+    result.success.selection?.focusPanelCount !== 1 ||
+    result.success.selection?.hasPageCard !== false ||
+    result.success.selection?.hasLastRead !== false ||
+    result.success.selection?.hasExternalToolsLabel !== false ||
+    result.success.selection?.focusToolCount !== 2
+  ) {
+    errors.push("Focus target did not preserve the single-card target-centric information architecture");
   }
   if (result.success.selection?.beforeAction?.selectionDisabled !== false) {
     errors.push(`selection target button was not available before explicit action: ${result.success.selection?.beforeAction?.selectionDisabled}`);
@@ -2626,7 +2674,9 @@ function assertAudit(result) {
   const selectionAdvisorDecision = activeSelectionAdvisorDecision && activeSelectionAdvisorDecision !== "none"
     ? activeSelectionAdvisorDecision
     : result.success.selection?.advisorRows?.find((row) => /判斷|Decision/.test(row.label || ""))?.rawValue;
-  if (selectionAdvisorDecision !== "accept_current") {
+  const selectionNeedsNoAdvisor = result.success.selection?.activeState?.displayedSession?.advisorStatus === "not_needed" &&
+    result.success.selection?.activeState?.displayedSession?.allowedUse === "article_or_selection_analysis";
+  if (selectionAdvisorDecision !== "accept_current" && !selectionNeedsNoAdvisor) {
     errors.push("selection target did not preserve accept_current reading context");
   }
   if (result.success.afterHash.stale) errors.push("hash-only URL change incorrectly marked stale");
@@ -3213,14 +3263,24 @@ function qaMatrixRows(result) {
       Boolean(result.success.selection?.selectedText) &&
         result.success.selection?.beforeAction?.selectionDisabled === false &&
         result.success.selection?.beforeAction?.targetKind === "page" &&
-        result.success.selection?.modelRows?.some((row) => /目標|Target/.test(row.label || "") && rawRowValue(row) === "selection") &&
-        result.success.selection?.advisorRows?.some((row) => /判斷|Decision/.test(row.label || "") && rawRowValue(row) === "accept_current"),
+        result.success.selection?.activeState?.displayedSession?.targetKind === "selection" &&
+        (
+          result.success.selection?.activeState?.displayedSession?.advisorDecision === "accept_current" ||
+          (
+            result.success.selection?.activeState?.displayedSession?.advisorStatus === "not_needed" &&
+            result.success.selection?.activeState?.displayedSession?.allowedUse === "article_or_selection_analysis"
+          )
+        ) &&
+        result.success.selection?.focusPanelCount === 1 &&
+        result.success.selection?.hasPageCard === false,
       "before=" + (result.success.selection?.beforeAction?.targetKind || "missing") +
         "; after=selection; selectedChars=" + (result.success.selection?.selectedText?.length ?? 0),
     ],
     [
       "Current-region shortcut",
-      result.success.pointTarget?.targetKind === "current-region",
+      result.success.pointTarget?.targetKind === "current-region" &&
+        result.success.pointTarget?.focusPanelCount === 1 &&
+        result.success.pointTarget?.hasPageCard === false,
       "target=" + (result.success.pointTarget?.targetKind || "missing") + "; advisor=" + (result.success.pointTarget?.advisorStatus || "missing"),
     ],
     [
