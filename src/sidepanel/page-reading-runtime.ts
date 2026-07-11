@@ -55,7 +55,6 @@ import { isSupportedScreenshotDataUrl } from "../lib/screenshot-data-url";
 import {
   isMeaningfullySamePage,
   pageUrlIdentity,
-  type PageUrlIdentity,
 } from "../lib/page-url-identity";
 import {
   classifyPageReadability,
@@ -77,138 +76,35 @@ import {
   PENDING_PAGE_READING_COMMAND_KEY,
   parseReadingCommandEnvelope,
 } from "../lib/reading-command-envelope";
+import {
+  applyReadingTargetToSession,
+  beginPageReadingSession,
+  clearSessionForMeaningfulNavigation,
+  completePageReadingSession,
+  failPageReadingSession,
+  focusScopeForSession,
+  materializeScopeSession,
+  pageScopeForSession,
+  replaceScopeState,
+  scopeStateForSession,
+  type MaterializedPageReadingSession,
+  type PageActivationSource,
+  type PageReadingAdvisorSession,
+  type PageReadingAdvisorStatus,
+  type PageReadingAnalysisSession,
+  type PageReadingAnalysisStatus,
+  type PageReadingScopeKind,
+  type PageReadingScopeState,
+  type PageReadingScreenshotSession,
+  type PageReadingSession,
+  type PageSessionStatus,
+} from "./page-reading-session";
 
 type PagePlatform = PageReadabilityPlatform;
-type PageSessionStatus = "idle" | "loading" | "ready" | "error" | "stale";
-type PageActivationSource = "toolbar" | "popup" | "sidepanel" | "hotkey";
 export type PageWorkspace = "page" | "focus";
 const LOADING_ELAPSED_VISIBLE_THRESHOLD_MS = 2_000;
 const AUTO_READ_DEBOUNCE_MS = 700;
 const READ_SUCCESS_FEEDBACK_MS = 1_800;
-
-interface PageReadingSession {
-  requestId?: string;
-  tabId: number;
-  url: string;
-  identity: PageUrlIdentity;
-  title?: string;
-  surface?: ReadingSurface;
-  target?: ReadingTarget;
-  candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
-  status: PageSessionStatus;
-  error?: string;
-  updatedAt: number;
-  startedAt?: number;
-  completedAt?: number;
-  elapsedMs?: number;
-  activationSource: PageActivationSource;
-  /** True while an all-sites auto-read is waiting for the DOM-settle debounce. */
-  autoReadPending?: boolean;
-  advisor?: PageReadingAdvisorSession;
-  analysis?: PageReadingAnalysisSession;
-  screenshot?: PageReadingScreenshotSession;
-  pageScope?: PageReadingScopeState;
-  focusScope?: FocusReadingScopeState;
-}
-
-interface PageReadingScopeState {
-  advisor?: PageReadingAdvisorSession;
-  analysis?: PageReadingAnalysisSession;
-  screenshot?: PageReadingScreenshotSession;
-}
-
-interface FocusReadingScopeState extends PageReadingScopeState {
-  target?: ReadingTarget;
-}
-
-type PageReadingScopeKind = "page" | "focus";
-
-/**
- * Session-only screenshot confirmation state. The data URL lives in memory
- * for the confirmation preview only; it is never persisted, logged, or kept
- * after the analysis request is sent or cancelled.
- */
-interface PageReadingScreenshotSession {
-  status: "offer" | "preview" | "sending" | "sent" | "error";
-  dataUrl?: string;
-  error?: string;
-  updatedAt: number;
-}
-
-type PageReadingAdvisorStatus = "not_needed" | "checking" | "ready" | "error";
-type PageReadingAnalysisStatus = "idle" | "running" | "ready" | "error";
-
-interface PageReadingAdvisorSession {
-  status: PageReadingAdvisorStatus;
-  request?: GeneralPageParserAdvisorRequest;
-  advice?: GeneralPageParserAdvisorAdvice;
-  effectiveModelContext?: GeneralPageEffectiveModelContext;
-  providerRuntime?: GeneralPageParserAdvisorProviderRuntime;
-  error?: string;
-  updatedAt: number;
-}
-
-interface PageReadingAnalysisSession {
-  status: PageReadingAnalysisStatus;
-  key?: string;
-  mode?: GeneralPageAnalysisMode;
-  brief?: GeneralPageBrief;
-  error?: string;
-  allowedUse?: GeneralPageEffectiveModelContextUse;
-  updatedAt: number;
-}
-
-function pageScopeForSession(session: PageReadingSession): PageReadingScopeState {
-  return session.pageScope ?? {
-    advisor: session.target ? undefined : session.advisor,
-    analysis: session.target ? undefined : session.analysis,
-    screenshot: session.target ? undefined : session.screenshot,
-  };
-}
-
-function focusScopeForSession(session: PageReadingSession): FocusReadingScopeState | undefined {
-  if (session.focusScope) return session.focusScope;
-  return session.target
-    ? {
-        target: session.target,
-        advisor: session.advisor,
-        analysis: session.analysis,
-        screenshot: session.screenshot,
-      }
-    : undefined;
-}
-
-function scopeStateForSession(
-  session: PageReadingSession,
-  scope: PageReadingScopeKind,
-): PageReadingScopeState | FocusReadingScopeState {
-  return scope === "focus" ? focusScopeForSession(session) ?? {} : pageScopeForSession(session);
-}
-
-function materializeScopeSession(
-  session: PageReadingSession,
-  scope: PageReadingScopeKind,
-): PageReadingSession {
-  const state = scopeStateForSession(session, scope);
-  const target = scope === "focus" ? (state as FocusReadingScopeState).target : undefined;
-  return {
-    ...session,
-    target,
-    advisor: state.advisor,
-    analysis: state.analysis,
-    screenshot: state.screenshot,
-  };
-}
-
-function replaceScopeState(
-  session: PageReadingSession,
-  scope: PageReadingScopeKind,
-  state: PageReadingScopeState | FocusReadingScopeState,
-): PageReadingSession {
-  return scope === "focus"
-    ? { ...session, focusScope: state as FocusReadingScopeState }
-    : { ...session, pageScope: state };
-}
 
 interface BrowserTab {
   id?: number;
@@ -472,7 +368,7 @@ function decodeJsonStringFragment(value: string): string {
   }
 }
 
-function buildCopyText(session: PageReadingSession): string {
+function buildCopyText(session: MaterializedPageReadingSession): string {
   const surface = session.surface;
   const lines = [
     `Title: ${surface?.title || session.title || "(untitled)"}`,
@@ -525,7 +421,7 @@ function generalPageBriefCopyLines(
   return lines;
 }
 
-function modelContextForSession(session: PageReadingSession & { surface: ReadingSurface }): GeneralPageModelContext {
+function modelContextForSession(session: MaterializedPageReadingSession & { surface: ReadingSurface }): GeneralPageModelContext {
   if (session.target) {
     return buildGeneralPageModelContext(session.surface, {
       target: session.target,
@@ -1506,7 +1402,6 @@ export function createSidepanelPageReadingRuntime({
       identity: pageUrlIdentity(url),
       title: activeTitle || existing?.title,
       surface: undefined,
-      target: undefined,
       candidateBlocks: undefined,
       status: "loading",
       error: undefined,
@@ -1516,9 +1411,6 @@ export function createSidepanelPageReadingRuntime({
       elapsedMs: undefined,
       activationSource: "sidepanel",
       autoReadPending: true,
-      advisor: undefined,
-      analysis: undefined,
-      screenshot: undefined,
       pageScope: {},
       focusScope: undefined,
     });
@@ -1649,19 +1541,11 @@ export function createSidepanelPageReadingRuntime({
     const session = typeof nextTabId === "number" ? sessions.get(nextTabId) : undefined;
     if (session && activeUrl && !isMeaningfullySamePage(session.identity, activeUrl)) {
       if (typeof nextTabId === "number") focusTargetErrors.delete(nextTabId);
-      session.status = "stale";
-      session.url = activeUrl;
-      session.title = activeTitle || session.title;
-      session.surface = undefined;
-      session.target = undefined;
-      session.candidateBlocks = undefined;
-      session.advisor = undefined;
-      session.analysis = undefined;
-      session.screenshot = undefined;
-      session.pageScope = {};
-      session.focusScope = undefined;
-      session.autoReadPending = undefined;
-      session.updatedAt = now();
+      sessions.set(session.tabId, clearSessionForMeaningfulNavigation(session, {
+        url: activeUrl,
+        title: activeTitle,
+        updatedAt: now(),
+      }));
     }
     render();
     scheduleAutoReadActivePage();
@@ -1673,22 +1557,11 @@ export function createSidepanelPageReadingRuntime({
     const nextUrl = tab.url;
     if (!session || !nextUrl || isMeaningfullySamePage(session.identity, nextUrl)) return;
     focusTargetErrors.delete(tabId);
-    sessions.set(tabId, {
-      ...session,
+    sessions.set(tabId, clearSessionForMeaningfulNavigation(session, {
       url: nextUrl,
       title: tab.title || session.title,
-      surface: undefined,
-      target: undefined,
-      candidateBlocks: undefined,
-      advisor: undefined,
-      analysis: undefined,
-      screenshot: undefined,
-      pageScope: {},
-      focusScope: undefined,
-      status: "stale",
-      autoReadPending: undefined,
       updatedAt: now(),
-    });
+    }));
     if (tabId === displayTabId) render();
   }
 
@@ -1737,9 +1610,7 @@ export function createSidepanelPageReadingRuntime({
     const platform = platformForUrl(activeUrl);
     const session = currentSession();
     const activeWorkspace = pageWorkspace;
-    const viewSession: PageReadingSession | undefined = session?.surface
-      ? materializeScopeSession(session, activeWorkspace)
-      : session;
+    const viewSession = session ? materializeScopeSession(session, activeWorkspace) : undefined;
     const displayedTabId = session?.tabId ?? displayTabId;
     const displayedSessionIsActive = typeof displayedTabId === "number" && displayedTabId === activeTabId;
     const canRead = platform === "general" && typeof activeTabId === "number";
@@ -2183,7 +2054,7 @@ export function createSidepanelPageReadingRuntime({
     return tr("sidepanel.page.target.error.failed");
   }
 
-  function screenshotHtml(session: PageReadingSession, translate: typeof tr): string {
+  function screenshotHtml(session: MaterializedPageReadingSession, translate: typeof tr): string {
     const offerAllowed = canOfferGeneralPageScreenshot({
       visionSupported: getVisionSupported(),
       decision: session.advisor?.advice?.decision,
@@ -2381,7 +2252,7 @@ export function createSidepanelPageReadingRuntime({
 
   function runGeneralPageAnalysisIfEligible(
     tabId: number,
-    session: PageReadingSession,
+    session: MaterializedPageReadingSession,
     force: boolean,
     mode: GeneralPageAnalysisMode = "quick",
     scope: PageReadingScopeKind = session.target ? "focus" : "page",
@@ -2674,18 +2545,11 @@ export function createSidepanelPageReadingRuntime({
         return;
       }
       if (session?.surface && !isMeaningfullySamePage(session.identity, tab?.url ?? session.url)) {
-        sessions.set(tabId, {
-          ...session,
-          surface: undefined,
-          target: undefined,
-          candidateBlocks: undefined,
-          advisor: undefined,
-          analysis: undefined,
-          screenshot: undefined,
-          status: "stale",
+        sessions.set(tabId, clearSessionForMeaningfulNavigation(session, {
           url: tab?.url ?? session.url,
+          title: tab?.title,
           updatedAt: now(),
-        });
+        }));
         render();
         return;
       }
@@ -2837,6 +2701,7 @@ export function createSidepanelPageReadingRuntime({
           url: "",
           identity: pageUrlIdentity(""),
           title: activeTitle,
+          pageScope: {},
           status: "error",
           error: tr("sidepanel.page.error.needsToolbarActivation"),
           updatedAt: now(),
@@ -2869,23 +2734,17 @@ export function createSidepanelPageReadingRuntime({
       clearReadSuccessFeedback(tab.id);
       const startedAt = now();
       requestId ??= createReadingRequestId();
-      sessions.set(tab.id, {
+      sessions.set(tab.id, beginPageReadingSession({
+        previous: previousSession,
         requestId,
         tabId: tab.id,
         url: activeUrl,
         identity: pageUrlIdentity(activeUrl),
         title: activeTitle,
-        status: "loading",
-        target: undefined,
-        advisor: undefined,
-        analysis: undefined,
-        screenshot: undefined,
-        pageScope: {},
-        focusScope: preserveFocusScope,
         startedAt,
-        updatedAt: startedAt,
         activationSource: source,
-      });
+        preserveFocus: Boolean(preserveFocusScope),
+      }));
       if (options.activateWorkspace !== false) activateTab("page");
       render();
       const response = await runtime.sendMessage({
@@ -2945,52 +2804,23 @@ export function createSidepanelPageReadingRuntime({
       : typeof existing?.startedAt === "number"
       ? Math.max(0, completedAt - existing.startedAt)
       : undefined;
-    const nextIdentity = pageUrlIdentity(message.surface.url, message.surface.canonicalUrl);
-    const existingPageScope = existing ? pageScopeForSession(existing) : {};
-    const preserveScreenshot = existing && existingPageScope.screenshot &&
-      existing.status !== "stale" &&
-      isMeaningfullySamePage(existing.identity, message.surface.url)
-      ? existingPageScope.screenshot
-      : undefined;
-    const preserveRecoveryState = Boolean(preserveScreenshot);
-    const preserveFocusScope = existing &&
-      existing.status !== "stale" &&
-      isMeaningfullySamePage(existing.identity, message.surface.url)
-      ? focusScopeForSession(existing)
-      : undefined;
+    const completion = completePageReadingSession({
+      existing,
+      tabId,
+      requestId: message.requestId,
+      surface: message.surface,
+      candidateBlocks: message.candidateBlocks,
+      completedAt,
+      elapsedMs,
+    });
+    const preserveRecoveryState = completion.preservedRecovery;
     const revealIncoming = shouldRevealIncomingPageRead(tabId);
     copyState = "idle";
     downloadState = "idle";
     if (!preservePendingFocus && (revealIncoming || tabId === activeTabId || tabId === displayTabId)) {
       pageWorkspace = "page";
     }
-    sessions.set(tabId, {
-      requestId: message.requestId ?? existing?.requestId,
-      tabId,
-      url: message.surface.url,
-      identity: nextIdentity,
-      title: message.surface.title,
-      surface: message.surface,
-      target: undefined,
-      candidateBlocks: message.candidateBlocks ?? [],
-      advisor: undefined,
-      status: "ready",
-      updatedAt: completedAt,
-      startedAt: existing?.startedAt ?? (typeof elapsedMs === "number" ? completedAt - elapsedMs : undefined),
-      completedAt,
-      elapsedMs,
-      activationSource: existing?.activationSource ?? "toolbar",
-      analysis: undefined,
-      screenshot: undefined,
-      pageScope: preserveRecoveryState
-        ? {
-            advisor: existingPageScope.advisor,
-            analysis: existingPageScope.analysis,
-            screenshot: preserveScreenshot,
-          }
-        : {},
-      focusScope: preserveFocusScope,
-    });
+    sessions.set(tabId, completion.session);
     if (revealIncoming) {
       displayTabId = tabId;
     }
@@ -3042,24 +2872,18 @@ export function createSidepanelPageReadingRuntime({
       identity: pageUrlIdentity(activeUrl),
       title: activeTitle,
       surface: selectionSurface,
+      pageScope: {},
       status: "ready",
       updatedAt: now(),
       completedAt: now(),
       activationSource: "sidepanel",
     };
-    sessions.set(tabId, {
-      ...nextSession,
+    sessions.set(tabId, applyReadingTargetToSession({
+      session: nextSession,
       surface: selectionSurface,
-      target: undefined,
-      status: "ready",
+      target: message.target,
       updatedAt: now(),
-      analysis: undefined,
-      screenshot: undefined,
-      pageScope: pageScopeForSession(nextSession),
-      focusScope: {
-        target: message.target,
-      },
-    });
+    }));
     copyState = "idle";
     downloadState = "idle";
     focusTargetErrors.delete(tabId);
@@ -3112,28 +2936,17 @@ export function createSidepanelPageReadingRuntime({
       if (tabId === activeTabId || tabId === displayTabId) render();
       return;
     }
-    sessions.set(tabId, {
-      requestId: message.requestId ?? existing?.requestId,
+    sessions.set(tabId, failPageReadingSession({
+      existing,
+      requestId: message.requestId,
       tabId,
       url: sessionUrl,
-      identity: existing?.identity || pageUrlIdentity(sessionUrl),
-      title: existing?.title || activeTitle,
-      surface: existing?.surface,
-      target: undefined,
-      candidateBlocks: existing?.candidateBlocks,
-      advisor: undefined,
-      analysis: undefined,
-      screenshot: undefined,
-      pageScope: existing ? pageScopeForSession(existing) : {},
-      focusScope: existing ? focusScopeForSession(existing) : undefined,
-      status: "error",
+      identity: pageUrlIdentity(sessionUrl),
+      title: activeTitle,
       error: friendlyPageReadingError(message.error),
-      updatedAt: completedAt,
-      startedAt: existing?.startedAt ?? (typeof elapsedMs === "number" ? completedAt - elapsedMs : undefined),
       completedAt,
       elapsedMs,
-      activationSource: existing?.activationSource || "toolbar",
-    });
+    }));
     if (tabId === activeTabId || tabId === displayTabId) render();
   }
 

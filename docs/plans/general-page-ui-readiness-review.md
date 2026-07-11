@@ -191,6 +191,19 @@ injects only when absent or stale, and normalizes restricted-page and invalid-
 response failures. Chrome event listeners remain synchronously registered at
 service-worker module load; the transport does not keep the worker alive.
 
+### Canonical Analysis Scope checkpoint (2026-07-11)
+
+`src/sidepanel/page-reading-session.ts` is now the single owner of Page Reading
+Session state and its Web/Focus Analysis Scopes. The canonical session no longer
+contains legacy `target`, `advisor`, `analysis`, or `screenshot` fields beside
+`pageScope` and `focusScope`; a flat view exists only when the active scope is
+materialized for presentation.
+
+Pure transitions cover scope replacement, same-page reread preservation,
+meaningful-navigation clearing, page completion, Reading Target application,
+and read failure. The Side Panel runtime orchestrates browser effects but no
+longer reconstructs those invariants in each asynchronous response path.
+
 ## Current Non-Changes
 
 - Do not remove diagnostics globally. The feature is still in early product
