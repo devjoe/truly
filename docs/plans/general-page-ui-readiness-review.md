@@ -204,6 +204,19 @@ meaningful-navigation clearing, page completion, Reading Target application,
 and read failure. The Side Panel runtime orchestrates browser effects but no
 longer reconstructs those invariants in each asynchronous response path.
 
+### Reading Presentation Projection checkpoint (2026-07-11)
+
+`src/sidepanel/page-reading-presentation.ts` now owns the user-facing
+information-architecture policy for Web and Focus. Its pure projection maps a
+canonical session view to surface and Focus states, quiet-ready visibility,
+Page Context guidance, Focus advisories, overview labels, technical-detail
+visibility, and duplicate-note suppression. The DOM runtime remains an adapter
+that renders this projection and wires browser effects.
+
+Projection tests cover the ordinary ready path, aggregation guidance,
+selection Focus, advisor checking, and empty/error states. This keeps state
+semantics and visible hierarchy reviewable without constructing Side Panel DOM.
+
 ## Current Non-Changes
 
 - Do not remove diagnostics globally. The feature is still in early product

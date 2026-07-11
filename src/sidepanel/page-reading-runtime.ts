@@ -99,9 +99,14 @@ import {
   type PageReadingSession,
   type PageSessionStatus,
 } from "./page-reading-session";
+import {
+  projectPageReadingPresentation,
+  type PageContextPresentation,
+  type ReadingWorkspace,
+} from "./page-reading-presentation";
 
 type PagePlatform = PageReadabilityPlatform;
-export type PageWorkspace = "page" | "focus";
+export type PageWorkspace = ReadingWorkspace;
 const LOADING_ELAPSED_VISIBLE_THRESHOLD_MS = 2_000;
 const AUTO_READ_DEBOUNCE_MS = 700;
 const READ_SUCCESS_FEEDBACK_MS = 1_800;
@@ -475,109 +480,6 @@ function pagePreviewHtml(excerpt: string, tr: (key: string, params?: Record<stri
   `;
 }
 
-type PageContextPresentationTone = "info" | "caution" | "action-required";
-
-interface PageContextPresentation {
-  tone: PageContextPresentationTone;
-  summary: string;
-  status?: string;
-}
-
-function pageContextPresentation(
-  surface: ReadingSurface,
-  context: GeneralPageModelContext | undefined,
-  advisor: PageReadingAdvisorSession | undefined,
-  tr: (key: string, params?: Record<string, string | number>) => string,
-): PageContextPresentation | undefined {
-  const warnings = surface.extraction.warnings;
-  const effective = advisor?.effectiveModelContext;
-  const allowedUse = effective?.allowedUse;
-
-  if (effective?.source === "candidate-block" && allowedUse === "article_or_selection_analysis")
-    return undefined;
-
-  if (warnings.includes("login-or-paywall-like"))
-    return {
-      tone: "action-required",
-      status: tr("sidepanel.page.context.status.blocked"),
-      summary: tr("sidepanel.page.context.advisory.paywall"),
-    };
-
-  if (allowedUse === "blocked") {
-    return {
-      tone: "action-required",
-      status: tr("sidepanel.page.context.status.blocked"),
-      summary: tr("sidepanel.page.advisor.detail.needsTarget"),
-    };
-  }
-
-  if (allowedUse === "requires_user_target") {
-    return {
-      tone: "action-required",
-      status: tr("sidepanel.page.context.status.needsTarget"),
-      summary: tr("sidepanel.page.context.summary.requiresTarget"),
-    };
-  }
-
-  if (allowedUse === "page_overview_only") {
-    return {
-      tone: "info",
-      summary: tr(warnings.includes("large-navigation-noise")
-        ? "sidepanel.page.context.summary.overviewNavigation"
-        : "sidepanel.page.context.summary.overview"),
-    };
-  }
-
-  if (context?.modelReadiness === "blocked") {
-    const summary = warnings.includes("very-short-content")
-      ? tr("sidepanel.page.context.summary.short")
-      : warnings.includes("no-main-content")
-      ? tr("sidepanel.page.context.summary.noMain")
-      : tr("sidepanel.page.advisor.detail.needsTarget");
-    return {
-      tone: "action-required",
-      status: tr("sidepanel.page.context.status.blocked"),
-      summary,
-    };
-  }
-
-  if (warnings.includes("dynamic-content-partial"))
-    return { tone: "caution", summary: tr("sidepanel.page.context.advisory.dynamic") };
-  if (warnings.includes("large-navigation-noise"))
-    return { tone: "caution", summary: tr("sidepanel.page.context.advisory.navigation") };
-  if (warnings.includes("no-main-content"))
-    return { tone: "caution", summary: tr("sidepanel.page.context.summary.noMain") };
-  if (warnings.includes("very-short-content"))
-    return { tone: "caution", summary: tr("sidepanel.page.context.summary.short") };
-  if (surface.extraction.status === "partial" || context?.modelReadiness === "caution")
-    return { tone: "caution", summary: tr("sidepanel.page.context.summary.partial") };
-  if (advisor?.status === "error")
-    return { tone: "caution", summary: tr("sidepanel.page.advisor.detail.error") };
-  return undefined;
-}
-
-function briefNoteMatchesPageContext(
-  note: string | undefined,
-  warnings: ReadingExtractionWarning[],
-  allowedUse: GeneralPageEffectiveModelContextUse | undefined,
-): boolean {
-  if (!note) return false;
-  const patterns: Partial<Record<ReadingExtractionWarning, RegExp>> = {
-    "large-navigation-noise": /(?:導覽|導航).*(?:雜訊|噪音)|(?:navigation).*(?:noise)|(?:點擊|click).*(?:標題|headline).*(?:完整|full)/iu,
-    "no-main-content": /(?:正文|主內容|main[ -]?content).*(?:找不到|未找到|missing|not found)/iu,
-    "very-short-content": /(?:文字|內容).*(?:較少|過短)|(?:text|content).*(?:short|limited)/iu,
-    "login-or-paywall-like": /登入|付費牆|login|paywall/iu,
-    "dynamic-content-partial": /(?:動態|載入).*(?:不完整|尚未完成)|(?:dynamic|loading).*(?:partial|incomplete)/iu,
-  };
-  if (warnings.some((warning) => patterns[warning]?.test(note) === true)) return true;
-  return allowedUse === "page_overview_only" && briefNoteIsAggregationGuidance(note);
-}
-
-function briefNoteIsAggregationGuidance(note: string | undefined): boolean {
-  return Boolean(note) &&
-    /新聞(?:彙整|聚合)頁面|索引|列表|(?:各)?來源連結|news aggregation|index|feed|source links?/iu.test(note ?? "");
-}
-
 function extractionWarningLabel(
   warning: ReadingExtractionWarning,
   tr: (key: string, params?: Record<string, string | number>) => string,
@@ -810,49 +712,6 @@ function pageTechnicalDiagnosticRows(
     [tr("sidepanel.page.advisor.mode"), modelMode],
   );
   return rows;
-}
-
-function shouldHideReadyPipelineState(
-  context: GeneralPageModelContext | undefined,
-  advisor: PageReadingAdvisorSession | undefined,
-  analysis: PageReadingAnalysisSession | undefined,
-): boolean {
-  // "running" counts as clean-ready too: while the quick brief is being
-  // generated for an otherwise clean page, the pane keeps the final compact
-  // layout (title + loading line) instead of flashing pipeline diagnostics
-  // for a few seconds and then collapsing them when the brief arrives.
-  // Errors flip status to "error", which brings the diagnostics back.
-  if (!context || !advisor || (analysis?.status !== "ready" && analysis?.status !== "running")) return false;
-  if (context.modelReadiness !== "ready" || context.targetKind !== "page") return false;
-  const effective = advisor.effectiveModelContext;
-  const cleanScope = advisor.status === "not_needed" ||
-    (advisor.status === "ready" &&
-      advisor.advice?.decision === "accept_current" &&
-      effective?.allowedUse === "article_or_selection_analysis");
-  return cleanScope;
-}
-
-function shouldHidePendingPageAdvisorState(
-  context: GeneralPageModelContext | undefined,
-  advisor: PageReadingAdvisorSession | undefined,
-): boolean {
-  // Scope classification is an internal transition, not a user decision.
-  // Keep whole-page reads on the same neutral loading surface used by brief
-  // generation until the advisor produces a durable result. Final caution,
-  // blocked, and recovery states remain visible after checking completes.
-  return context?.targetKind === "page" && advisor?.status === "checking";
-}
-
-function shouldHideCleanTechnicalDetails(
-  surface: ReadingSurface | undefined,
-  context: GeneralPageModelContext | undefined,
-  advisor: PageReadingAdvisorSession | undefined,
-  analysis: PageReadingAnalysisSession | undefined,
-): boolean {
-  if (!surface || !shouldHideReadyPipelineState(context, advisor, analysis)) return false;
-  return surface.extraction.method === "semantic-html" &&
-    surface.extraction.status === "complete" &&
-    surface.extraction.warnings.length === 0;
 }
 
 function modelContextStatusText(
@@ -1670,11 +1529,18 @@ export function createSidepanelPageReadingRuntime({
     const excerpt = viewSession?.surface
       ? visibleExcerpt(viewSession.surface, modelContext, viewSession.advisor?.effectiveModelContext)
       : "";
-    const hidePendingAdvisorState = shouldHidePendingPageAdvisorState(modelContext, viewSession?.advisor);
-    const hideReadyPipelineState = hidePendingAdvisorState ||
-      shouldHideReadyPipelineState(modelContext, viewSession?.advisor, viewSession?.analysis);
-    const hideTechnicalDetails = hidePendingAdvisorState ||
-      shouldHideCleanTechnicalDetails(viewSession?.surface, modelContext, viewSession?.advisor, viewSession?.analysis);
+    const presentation = projectPageReadingPresentation({
+      workspace: activeWorkspace,
+      status: session?.status,
+      surface: viewSession?.surface,
+      context: modelContext,
+      advisor: viewSession?.advisor,
+      analysis: viewSession?.analysis,
+      target: viewSession?.target,
+      hasFocusError: typeof displayedTabId === "number" && focusTargetErrors.has(displayedTabId),
+      tr,
+    });
+    const { hidePendingAdvisorState, hideReadyPipelineState, hideTechnicalDetails } = presentation;
     const hasReadySurface = Boolean(session?.surface && session.status === "ready");
     const updatedAt = session ? formatUpdatedAt(session.updatedAt, lang) : "";
     const statusTitle = pageStatusTitle(session, updatedAt);
@@ -1703,34 +1569,17 @@ export function createSidepanelPageReadingRuntime({
     const displayedAnalysis: PageReadingAnalysisSession | undefined = hidePendingAdvisorState
       ? { status: "running", updatedAt: viewSession?.advisor?.updatedAt ?? now() }
       : viewSession?.analysis;
-    const contextPresentation = activeWorkspace === "page" && !hidePendingAdvisorState && viewSession?.surface
-      ? pageContextPresentation(viewSession.surface, modelContext, viewSession.advisor, tr)
-      : undefined;
-    const focusBriefNote = displayedAnalysis?.brief?.note;
-    const focusAggregationAdvisory = activeWorkspace === "focus" &&
-      briefNoteIsAggregationGuidance(focusBriefNote)
+    const contextPresentation = presentation.pageContext;
+    const focusAggregationAdvisory = presentation.focusAdvisory === "aggregation"
       ? tr("sidepanel.page.focus.aggregationAdvisory")
-      : activeWorkspace === "focus" && briefNoteMatchesPageContext(
-        focusBriefNote,
-        viewSession?.surface?.extraction.warnings ?? [],
-        displayedAnalysis?.allowedUse,
-      )
+      : presentation.focusAdvisory === "navigation"
       ? tr("sidepanel.page.focus.navigationAdvisory")
       : "";
-    const omitBriefNote = Boolean(
-      activeWorkspace === "page" &&
-      contextPresentation &&
-      displayedAnalysis?.brief?.note &&
-      briefNoteMatchesPageContext(
-        displayedAnalysis.brief.note,
-        viewSession?.surface?.extraction.warnings ?? [],
-        displayedAnalysis.allowedUse,
-      ),
-    ) || Boolean(focusAggregationAdvisory);
-    const focusAnalysisTitle = activeWorkspace === "focus" && viewSession?.target
-      ? tr(viewSession.target.kind === "selection"
-        ? "sidepanel.page.focus.selectionOverview"
-        : "sidepanel.page.focus.regionOverview")
+    const omitBriefNote = presentation.omitBriefNote;
+    const focusAnalysisTitle = presentation.focusOverview === "selection"
+      ? tr("sidepanel.page.focus.selectionOverview")
+      : presentation.focusOverview === "region"
+      ? tr("sidepanel.page.focus.regionOverview")
       : undefined;
     const analysisBlock = analysisHtml(
       displayedAnalysis,
@@ -1775,7 +1624,7 @@ export function createSidepanelPageReadingRuntime({
       false,
       tr,
     );
-    const emptyBodyBlock = !session?.surface && !showErrorBlock && session?.status !== "loading" && platform === "general"
+    const emptyBodyBlock = presentation.surfaceState === "empty" && !showErrorBlock && platform === "general"
       ? emptyBody(
           platform,
           canRead,
@@ -1785,7 +1634,7 @@ export function createSidepanelPageReadingRuntime({
           activePageNeedsDomainGrant(),
         )
       : "";
-    const loadingBodyBlock = !session?.surface && session?.status === "loading" &&
+    const loadingBodyBlock = presentation.surfaceState === "loading" &&
       platform === "general" && activeWorkspace === "page"
       ? loadingBody(
           title,
@@ -1809,7 +1658,7 @@ export function createSidepanelPageReadingRuntime({
             tr,
           )
         : `
-        <section class="page-reader-focus-panel" data-state="${focusTargetError ? "error" : viewSession?.target ? "ready" : "empty"}">
+        <section class="page-reader-focus-panel" data-state="${presentation.focusState}">
           <div>
             <h3 class="page-reader-focus-title">${escapeHtml(tr("sidepanel.page.focus.title"))}</h3>
             <div class="page-reader-focus-detail">${escapeHtml(focusTargetError || (viewSession?.target ? tr("sidepanel.page.focus.ready") : tr("sidepanel.page.focus.empty")))}</div>
