@@ -964,6 +964,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("閱讀脈絡");
     expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
     expect(pagePaneEl.textContent).toContain("Runtime claim");
+    expect(pagePaneEl.querySelector(".page-reader-analysis")?.getAttribute("data-analysis-mode")).toBe("quick");
     // Quick briefs use one quiet footer for both model transparency and the
     // preview disclaimer instead of competing left/right notes.
     expect(pagePaneEl.textContent).toContain("brief-model 協助整理");

@@ -932,11 +932,12 @@ function analysisHtml(
   if (!analysis || analysis.status === "idle") return "";
   const overview = analysis.allowedUse === "page_overview_only";
   const overviewClass = overview ? " is-overview" : "";
+  const modeAttribute = analysis.mode ? ` data-analysis-mode="${escapeHtml(analysis.mode)}"` : "";
   const title = titleOverride || tr(overview ? "sidepanel.page.analysis.overview" : "sidepanel.page.analysis.title");
   const statusText = tr(`sidepanel.page.analysis.status.${analysis.status}`);
   if (analysis.status === "running") {
     return `
-      <section class="page-reader-analysis is-running${overviewClass}" role="status" aria-live="polite" aria-busy="true">
+      <section class="page-reader-analysis is-running${overviewClass}"${modeAttribute} role="status" aria-live="polite" aria-busy="true">
         <div class="page-reader-analysis-header">
           <h3>${escapeHtml(title)}</h3>
           <div class="reading-brief-loading page-reader-analysis-loading">${escapeHtml(tr("sidepanel.page.analysis.running"))}</div>
@@ -956,7 +957,7 @@ function analysisHtml(
     ? briefHtml(analysis.brief, analysis.allowedUse, tr, pageTitle, omitBriefNote)
     : "";
   return `
-    <section class="page-reader-analysis is-${escapeHtml(analysis.status)}${overviewClass}">
+    <section class="page-reader-analysis is-${escapeHtml(analysis.status)}${overviewClass}"${modeAttribute}>
       <div class="page-reader-analysis-header">
         <h3>${escapeHtml(title)}</h3>
         ${visibleStatus}

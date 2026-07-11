@@ -1672,6 +1672,7 @@ async function observePageBrief(side, readyScreenshotName) {
     rawExcerptContextualized: false,
     contextDetailsOpen: null,
     readyHeaderVisible: false,
+    analysisMode: null,
   };
   try {
     await waitFor(side, `(() => {
@@ -1693,6 +1694,7 @@ async function observePageBrief(side, readyScreenshotName) {
     const analysisHeader = analysis?.querySelector('.page-reader-analysis-header');
     return {
       className: analysis?.className || '',
+      analysisMode: analysis?.getAttribute('data-analysis-mode') || null,
       header: analysis?.querySelector('h3')?.textContent?.trim(),
       status: analysis?.querySelector('.page-reader-analysis-header span')?.textContent?.trim(),
       text: analysis?.innerText?.trim() || '',
@@ -1725,6 +1727,7 @@ async function observePageBrief(side, readyScreenshotName) {
   observation.rawExcerptContextualized = Boolean(state?.rawExcerptContextualized);
   observation.contextDetailsOpen = state?.contextDetailsOpen ?? null;
   observation.readyHeaderVisible = Boolean(state?.readyHeaderVisible);
+  observation.analysisMode = state?.analysisMode ?? null;
   observation.primaryActions = state?.primaryActions || null;
   await side.screenshot(resolve(OUT_DIR, readyScreenshotName)).catch(() => {});
   observation.screenshot = relative(ROOT, resolve(OUT_DIR, readyScreenshotName));
@@ -3043,8 +3046,8 @@ function qaMatrixRows(result) {
     ],
     [
       "Page brief quick mode",
-      /快速重點|quick brief/.test(result.success.pageBrief?.text || ""),
-      "quickNote=" + /快速重點|quick brief/.test(result.success.pageBrief?.text || ""),
+      result.success.pageBrief?.analysisMode === "quick",
+      "analysisMode=" + (result.success.pageBrief?.analysisMode || "missing"),
     ],
     [
       "Responsive Web layout",
@@ -3415,7 +3418,7 @@ function writeSummary(result, errors) {
     `- Page status: ${result.success.ready.processingStatus?.status || result.success.ready.modelContext?.status || "(missing)"}`,
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
     `- Page brief model context status: ${result.success.pageBrief?.modelContextStatus || (result.success.pageBrief?.pipelineHidden ? "hidden" : "(missing)")}`,
-    `- Page brief quick mode: ${/快速重點|quick brief/.test(result.success.pageBrief?.text || "")}`,
+    `- Page brief quick mode: ${result.success.pageBrief?.analysisMode === "quick"} (mode=${result.success.pageBrief?.analysisMode || "missing"})`,
     `- Responsive Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
     `- Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; cleanBriefDebugHidden=${restraint.cleanBriefDebugHidden}; pageStatusConsolidated=${restraint.readyPageStatusConsolidated}; readyBriefStatusQuiet=${restraint.readyBriefStatusQuiet}; singleItemBriefSectionsCompact=${restraint.singleItemBriefSectionsCompact}; cleanReadyRawExcerptContextualized=${restraint.cleanReadyRawExcerptContextualized}; cleanReadyBriefHeaderAligned=${restraint.cleanReadyBriefHeaderAligned}; secondaryActionsInFooter=${restraint.secondaryActionsInFooter}; sourceContextAndToolsSeparated=${restraint.sourceContextAndToolsSeparated}; sharedReadingSkeleton=${restraint.sharedReadingSkeleton}; pageContextExpandedHealthy=${restraint.pageContextExpandedHealthy}; primaryActionsScopedToCard=${restraint.primaryActionsScopedToCard}; sourceLinksCapped=${restraint.sourceLinksCapped}; nonCleanTechnicalCollapsed=${restraint.nonCleanTechnicalCollapsed}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
     `- Page context expanded: present=${result.success.pageContext?.present}; open=${result.success.pageContext?.open}; preview=${result.success.pageContext?.hasPreview}; links=${result.success.pageContext?.sourceLinkCount ?? "(missing)"}; technicalCollapsed=${result.success.pageContext?.technicalDetailsCollapsed}`,
