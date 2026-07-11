@@ -9,6 +9,7 @@ import {
   isFacebookPageTarget,
   reloadStaleExtensionWithFacebookRecovery,
 } from "./lib/general-page-audit-runtime-reload.mjs";
+import { connectCdp as connectCdpClient } from "./lib/cdp-client.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DIST_BUILD_ID = resolve(ROOT, "dist", "build-id.txt");
@@ -88,90 +89,10 @@ async function fetchJson(url, options = {}, timeoutMs = 2500) {
 }
 
 function connectCdp(webSocketDebuggerUrl) {
-  if (typeof WebSocket !== "function") {
-    throw new Error("global WebSocket is unavailable in this Node runtime");
-  }
-
-  const ws = new WebSocket(webSocketDebuggerUrl);
-  let nextId = 1;
-  const pending = new Map();
-  const opened = new Promise((resolveOpen, rejectOpen) => {
-    ws.addEventListener("open", () => resolveOpen());
-    ws.addEventListener("error", () => rejectOpen(new Error("CDP websocket connection failed")), { once: true });
+  return connectCdpClient(webSocketDebuggerUrl, {
+    commandTimeoutMs: CDP_COMMAND_TIMEOUT_MS,
+    screenshotBeyondViewport: true,
   });
-
-  ws.addEventListener("message", (event) => {
-    const message = JSON.parse(event.data);
-    if (!message.id || !pending.has(message.id)) return;
-    const { resolve, reject, timer } = pending.get(message.id);
-    pending.delete(message.id);
-    clearTimeout(timer);
-    if (message.error) reject(new Error(message.error.message ?? JSON.stringify(message.error)));
-    else resolve(message.result);
-  });
-
-  async function send(method, params = {}, timeoutMs = CDP_COMMAND_TIMEOUT_MS) {
-    await opened;
-    const id = nextId++;
-    const response = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`CDP command timed out: ${method} after ${timeoutMs}ms`));
-      }, timeoutMs);
-      pending.set(id, { resolve, reject, timer });
-    });
-    ws.send(JSON.stringify({ id, method, params }));
-    return response;
-  }
-
-  return {
-    send,
-    async evaluate(expression, timeout = 10_000) {
-      const result = await send("Runtime.evaluate", {
-        expression,
-        awaitPromise: true,
-        returnByValue: true,
-        timeout,
-      }, Math.max(timeout + 1000, 3000));
-      if (result.exceptionDetails) {
-        throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || "Runtime.evaluate failed");
-      }
-      return result.result?.value ?? null;
-    },
-    async evaluateJson(expression) {
-      const raw = await this.evaluate(`(async () => JSON.stringify(await (${expression})))()`);
-      return raw ? JSON.parse(raw) : null;
-    },
-    async screenshot(path) {
-      await send("Page.enable").catch(() => {});
-      const result = await send("Page.captureScreenshot", {
-        format: "png",
-        fromSurface: true,
-        captureBeyondViewport: true,
-      });
-      writeFileSync(path, Buffer.from(result.data, "base64"));
-    },
-    async setViewport(width, height) {
-      await send("Emulation.setDeviceMetricsOverride", {
-        width,
-        height,
-        deviceScaleFactor: 1,
-        mobile: false,
-      });
-    },
-    async clearViewport() {
-      await send("Emulation.clearDeviceMetricsOverride").catch(() => {});
-    },
-    async reload() {
-      await send("Page.reload", { ignoreCache: true });
-    },
-    async closeTarget() {
-      await send("Page.close").catch(() => {});
-    },
-    close() {
-      ws.close();
-    },
-  };
 }
 
 function sleep(ms) {

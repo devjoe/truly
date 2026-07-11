@@ -61,6 +61,11 @@ uses the existing Chrome remote debugger, reloads a stale Truly runtime when
 needed, and exercises synthetic local pages with deterministic model responses.
 It does not call `bringToFront` or intentionally focus Chrome.
 
+GPR, Facebook, and dev-check scripts share the timeout-safe transport in
+`scripts/lib/cdp-client.mjs`. Target selection and permission to focus a page
+remain caller-owned policies; ordinary evaluate, screenshot, and viewport
+operations never activate a Chrome window.
+
 The gate checks the 430px layout, accessible controls, the Focus single-card
 information architecture, Web/Focus analysis preservation, distinct scope
 results, Focus caption typography, and localized action copy. Screenshots,

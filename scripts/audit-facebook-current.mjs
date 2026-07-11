@@ -4,6 +4,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { connectCdp } from "./lib/cdp-client.mjs";
+
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DIST_BUILD_ID = resolve(ROOT, "dist", "build-id.txt");
 const CDP_PORT = Number(process.env.CDP_PORT || 9222);
@@ -118,113 +120,6 @@ async function fetchJson(url, timeoutMs = 2500) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-function connectCdp(webSocketDebuggerUrl) {
-  if (typeof WebSocket !== "function") {
-    throw new Error("global WebSocket is unavailable in this Node runtime");
-  }
-
-  const ws = new WebSocket(webSocketDebuggerUrl);
-  let nextId = 1;
-  const pending = new Map();
-  const opened = new Promise((resolveOpen, rejectOpen) => {
-    ws.addEventListener("open", () => resolveOpen());
-    ws.addEventListener("error", () => rejectOpen(new Error("CDP websocket connection failed")), { once: true });
-  });
-
-  ws.addEventListener("message", (event) => {
-    const message = JSON.parse(event.data);
-    if (!message.id || !pending.has(message.id)) return;
-    const { resolve, reject } = pending.get(message.id);
-    pending.delete(message.id);
-    if (message.error) reject(new Error(message.error.message ?? JSON.stringify(message.error)));
-    else resolve(message.result);
-  });
-
-  async function send(method, params = {}) {
-    await opened;
-    const id = nextId++;
-    const response = new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        pending.delete(id);
-        reject(new Error(`${method} timed out`));
-      }, 10_000);
-      pending.set(id, {
-        resolve: (value) => {
-          clearTimeout(timer);
-          resolve(value);
-        },
-        reject: (error) => {
-          clearTimeout(timer);
-          reject(error);
-        },
-      });
-    });
-    ws.send(JSON.stringify({ id, method, params }));
-    return response;
-  }
-
-  return {
-    send,
-    async evaluate(expression) {
-      const result = await send("Runtime.evaluate", {
-        expression,
-        awaitPromise: true,
-        returnByValue: true,
-        timeout: 10_000,
-      });
-      if (result.exceptionDetails) {
-        throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || "Runtime.evaluate failed");
-      }
-      return result.result?.value ?? null;
-    },
-    async evaluateJson(expression) {
-      const raw = await this.evaluate(`JSON.stringify((${expression}))`);
-      return raw ? JSON.parse(raw) : null;
-    },
-    async clickAt(x, y) {
-      await send("Input.dispatchMouseEvent", {
-        type: "mouseMoved",
-        x,
-        y,
-        button: "none",
-      });
-      await send("Input.dispatchMouseEvent", {
-        type: "mousePressed",
-        x,
-        y,
-        button: "left",
-        clickCount: 1,
-      });
-      await send("Input.dispatchMouseEvent", {
-        type: "mouseReleased",
-        x,
-        y,
-        button: "left",
-        clickCount: 1,
-      });
-    },
-    async reload() {
-      await send("Page.enable").catch(() => {});
-      await send("Page.reload", { ignoreCache: true });
-    },
-    async bringToFront() {
-      await send("Page.bringToFront");
-    },
-    async screenshot(path) {
-      await send("Page.enable").catch(() => {});
-      const result = await send("Page.captureScreenshot", {
-        format: "png",
-        fromSurface: true,
-        captureBeyondViewport: false,
-      });
-      writeFileSync(path, Buffer.from(result.data, "base64"));
-    },
-    close() {
-      ws.close();
-    },
-  };
 }
 
 function isFacebookTarget(target) {

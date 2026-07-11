@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { inspectBuildFreshness } from "./lib/dev-build-freshness.mjs";
+import { connectCdp } from "./lib/cdp-client.mjs";
 
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DIST_BUILD_ID = resolve(ROOT, "dist", "build-id.txt");
@@ -103,60 +104,6 @@ function checkReloadPortOwner() {
   const owned = commands.some(({ command }) => command.includes("scripts/dev-reload-server.mjs"));
   const detail = commands.map(({ pid, command }) => `${pid}: ${command}`).join(" | ");
   record("reload port owner", owned, detail);
-}
-
-function assertWebSocketAvailable() {
-  if (typeof WebSocket !== "function") {
-    throw new Error("global WebSocket is unavailable in this Node runtime");
-  }
-}
-
-function connectCdp(webSocketDebuggerUrl) {
-  assertWebSocketAvailable();
-  const ws = new WebSocket(webSocketDebuggerUrl);
-  let nextId = 1;
-  const pending = new Map();
-
-  const opened = new Promise((resolveOpen, rejectOpen) => {
-    ws.addEventListener("open", () => resolveOpen());
-    ws.addEventListener("error", () => rejectOpen(new Error("CDP websocket connection failed")), { once: true });
-  });
-
-  ws.addEventListener("message", (event) => {
-    const message = JSON.parse(event.data);
-    if (!message.id || !pending.has(message.id)) return;
-    const { resolve, reject } = pending.get(message.id);
-    pending.delete(message.id);
-    if (message.error) reject(new Error(message.error.message ?? JSON.stringify(message.error)));
-    else resolve(message.result);
-  });
-
-  async function send(method, params = {}) {
-    await opened;
-    const id = nextId++;
-    const response = new Promise((resolve, reject) => {
-      pending.set(id, { resolve, reject });
-    });
-    ws.send(JSON.stringify({ id, method, params }));
-    return response;
-  }
-
-  return {
-    async evaluate(expression) {
-      const result = await send("Runtime.evaluate", {
-        expression,
-        awaitPromise: true,
-        returnByValue: true,
-      });
-      if (result.exceptionDetails) {
-        throw new Error(result.exceptionDetails.text ?? "Runtime.evaluate failed");
-      }
-      return result.result?.value ?? null;
-    },
-    close() {
-      ws.close();
-    },
-  };
 }
 
 async function readCdpTargets() {
