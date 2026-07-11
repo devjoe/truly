@@ -10,6 +10,11 @@ This document is the current public-safe readiness index for the General Page Re
 - Page/Web reads are user-triggered through toolbar popup activation, or automatic while the Side Panel is open after optional all-sites access is enabled from Settings.
 - Whole-page, selected-text, and current-region reading paths share the same Page/Web session model and remain session-only.
 - Page/Web model integration uses a single Tier B `GeneralPageBrief` request over the effective reading context, not the raw full DOM or hidden private artifacts.
+- The Reading Analysis Coordinator is the single Module Interface for ordinary
+  quick analysis and confirmed screenshot full analysis. It owns eligibility,
+  scoped request keys, provider commands, stale-result acceptance, and uniform
+  ready/error settlement; the DOM runtime only applies the resulting scope and
+  screenshot states.
 - Screenshot-assisted recovery is user-confirmed only, vision-gated, session-only, and never stored in `chrome.storage` or logs.
 - Multi-tab Page/Web sessions remain isolated internally, but the primary UI no
   longer shows a Web history strip or a direct `切到此分頁` activation control.

@@ -55,3 +55,10 @@ A consume-once, session-only instruction that identifies the tab, requested
 reading action, request identity, and creation time without storing page text or
 analysis output.
 _Avoid_: Reading result cache, event queue
+
+**Reading Analysis Coordinator**:
+The Side Panel Module that plans model analysis for an Analysis Scope, including
+eligibility, request identity, provider command, stale-result acceptance, and
+success or error settlement. Ordinary text analysis and confirmed screenshot
+analysis use the same Interface.
+_Avoid_: Model helper, request wrapper

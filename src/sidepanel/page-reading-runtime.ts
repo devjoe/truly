@@ -23,7 +23,6 @@ import {
 } from "../lib/general-page-parser-advisor";
 import {
   canOfferGeneralPageScreenshot,
-  generalPageBriefEligibility,
   type GeneralPageAnalysisMode,
   type GeneralPageAnalysisEligibilityReason,
   type GeneralPageBrief,
@@ -32,7 +31,6 @@ import type { Lang, UserSettings } from "../lib/types";
 import { DEFAULT_SETTINGS } from "../lib/types";
 import type {
   GeneralPageCandidateBlockTextResultMsg,
-  GeneralPageAnalysisResultMsg,
   GeneralPageParserAdvisorProviderRuntime,
   GeneralPageParserAdvisorResultMsg,
   PageReadingErrorMsg,
@@ -104,6 +102,11 @@ import {
   type PageContextPresentation,
   type ReadingWorkspace,
 } from "./page-reading-presentation";
+import {
+  pageReadingAnalysisRunIsCurrent,
+  planPageReadingAnalysis,
+  settlePageReadingAnalysis,
+} from "./page-reading-analysis-coordinator";
 
 type PagePlatform = PageReadabilityPlatform;
 export type PageWorkspace = ReadingWorkspace;
@@ -2018,61 +2021,61 @@ export function createSidepanelPageReadingRuntime({
     const storedSession = sessions.get(tabId);
     const session = storedSession ? materializeScopeSession(storedSession, "page") : undefined;
     const shot = session?.screenshot;
-    const effective = session?.advisor?.effectiveModelContext;
-    const providerRuntime = session?.advisor?.providerRuntime;
     if (!session?.surface || session.status === "stale") return;
-    if (!shot?.dataUrl || !isSupportedScreenshotDataUrl(shot.dataUrl) || !effective || !providerRuntime) return;
-    if (!providerRuntime.canUseModel || !providerRuntime.endpoint || !providerRuntime.model) return;
+    if (!shot?.dataUrl || !isSupportedScreenshotDataUrl(shot.dataUrl)) return;
 
-    const analysisContext = analysisContextForEffectiveSession(session, session.surface, effective);
-    const eligibility = generalPageBriefEligibility({
-      sessionReady: session.status === "ready",
-      surfaceCurrent: tabId !== activeTabId || !activeUrl || isMeaningfullySamePage(session.identity, activeUrl),
-      context: analysisContext,
-      allowedUse: effective.allowedUse,
-      provider: providerRuntime.effectiveProvider,
-      screenshotConfirmed: true,
+    const plan = planPageReadingAnalysis({
+      tabId,
+      session,
+      scope: "page",
+      mode: "full",
+      force: true,
+      activeTabId,
+      activeUrl,
+      outputLang: getLang(),
+      now: now(),
+      screenshotDataUrl: shot.dataUrl,
     });
-    if (!eligibility.ok) {
-      setScreenshot(tabId, { status: "error", error: analysisEligibilityMessage(eligibility.reason ?? "provider_not_ready"), updatedAt: now() });
+    if (plan.kind === "skip") {
+      setScreenshot(tabId, {
+        status: "error",
+        error: analysisEligibilityMessage(plan.eligibilityReason),
+        updatedAt: now(),
+      });
       return;
     }
-    const mode: GeneralPageAnalysisMode = "full";
-    const key = `${generalPageAnalysisKey(effective, providerRuntime, mode)}|screenshot`;
-    const dataUrl = shot.dataUrl;
+
+    const { run } = plan;
     setScreenshot(tabId, { status: "sending", updatedAt: now() });
-    setAnalysis(tabId, { status: "running", key, mode, allowedUse: effective.allowedUse, updatedAt: now() }, "page");
+    setAnalysis(tabId, run.running, "page");
     try {
-      const response = await runtime.sendMessage({
-        type: "GENERAL_PAGE_ANALYSIS_REQUEST",
-        tabId,
-        context: analysisContext,
-        allowedUse: effective.allowedUse,
-        mode,
-        providerRuntime,
-        outputLang: getLang(),
-        screenshotDataUrl: dataUrl,
-      } satisfies TrulyMessage);
+      const response = await runtime.sendMessage(run.message satisfies TrulyMessage);
       const current = sessions.get(tabId);
-      if (!current || current.status === "stale" || pageScopeForSession(current).analysis?.key !== key) return;
-      if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_ANALYSIS_RESULT") {
-        setScreenshot(tabId, { status: "error", error: tr("sidepanel.page.screenshot.error"), updatedAt: now() });
-        setAnalysisError(tabId, "general_page_brief_no_response", key, effective.allowedUse, "page");
-        return;
+      if (!pageReadingAnalysisRunIsCurrent({ run, session: current, tabId, activeTabId, activeUrl })) return;
+      const settlement = settlePageReadingAnalysis({ run, response, now: now() });
+      if (settlement.kind === "ready") {
+        setScreenshot(tabId, { status: "sent", updatedAt: now() });
+      } else {
+        setScreenshot(tabId, {
+          status: "error",
+          error: settlement.analysis.error || tr("sidepanel.page.screenshot.error"),
+          updatedAt: now(),
+        });
       }
-      const result = response as GeneralPageAnalysisResultMsg;
-      if (!result.ok || !result.brief) {
-        setScreenshot(tabId, { status: "error", error: result.error || tr("sidepanel.page.screenshot.error"), updatedAt: now() });
-        setAnalysisError(tabId, result.error || "general_page_brief_failed", key, effective.allowedUse, "page");
-        return;
-      }
-      setScreenshot(tabId, { status: "sent", updatedAt: now() });
-      setAnalysis(tabId, { status: "ready", key, mode, brief: result.brief, allowedUse: effective.allowedUse, updatedAt: now() }, "page");
+      setAnalysis(tabId, settlement.analysis, "page");
     } catch (error) {
-      setScreenshot(tabId, { status: "error", error: errorMessage(error), updatedAt: now() });
-      setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse, "page");
+      const current = sessions.get(tabId);
+      if (!pageReadingAnalysisRunIsCurrent({ run, session: current, tabId, activeTabId, activeUrl })) return;
+      const settlement = settlePageReadingAnalysis({ run, error, now: now() });
+      setScreenshot(tabId, {
+        status: "error",
+        error: settlement.analysis.error || tr("sidepanel.page.screenshot.error"),
+        updatedAt: now(),
+      });
+      setAnalysis(tabId, settlement.analysis, "page");
     }
   }
+
 
   function setAdvisor(
     tabId: number,
@@ -2107,71 +2110,39 @@ export function createSidepanelPageReadingRuntime({
     mode: GeneralPageAnalysisMode = "quick",
     scope: PageReadingScopeKind = session.target ? "focus" : "page",
   ): void {
-    const effective = session.advisor?.effectiveModelContext;
-    const providerRuntime = session.advisor?.providerRuntime;
-    if (!effective || !providerRuntime) return;
-    const surface = session.surface;
-    if (!surface) return;
-    const analysisContext = analysisContextForEffectiveSession(session, surface, effective);
-    const surfaceCurrent = tabId !== activeTabId || !activeUrl || isMeaningfullySamePage(session.identity, activeUrl);
-    const eligibility = generalPageBriefEligibility({
-      sessionReady: session.status === "ready",
-      surfaceCurrent,
-      context: analysisContext,
-      allowedUse: effective.allowedUse,
-      provider: providerRuntime.effectiveProvider,
-    });
-    if (!eligibility.ok || !providerRuntime.canUseModel || !providerRuntime.endpoint || !providerRuntime.model) {
-      if (force) setAnalysisError(tabId, analysisEligibilityMessage(eligibility.reason ?? "provider_not_ready"));
-      return;
-    }
-    const key = generalPageAnalysisKey(effective, providerRuntime, mode);
-    const currentScope = scopeStateForSession(session, scope);
-    if (!force && currentScope.analysis?.key === key &&
-      (currentScope.analysis.status === "running" || currentScope.analysis.status === "ready")) {
-      return;
-    }
-    setAnalysis(tabId, {
-      status: "running",
-      key,
-      mode,
-      allowedUse: effective.allowedUse,
-      updatedAt: now(),
-    }, scope);
-    void Promise.resolve(runtime.sendMessage({
-      type: "GENERAL_PAGE_ANALYSIS_REQUEST",
+    const plan = planPageReadingAnalysis({
       tabId,
-      context: analysisContext,
-      allowedUse: effective.allowedUse,
+      session,
+      scope,
       mode,
-      providerRuntime,
+      force,
+      activeTabId,
+      activeUrl,
       outputLang: getLang(),
-    } satisfies TrulyMessage)).then((response) => {
+      now: now(),
+    });
+    if (plan.kind === "skip") {
+      if (plan.reportError) {
+        setAnalysisError(tabId, analysisEligibilityMessage(plan.eligibilityReason), undefined, undefined, scope);
+      }
+      return;
+    }
+
+    const { run } = plan;
+    setAnalysis(tabId, run.running, scope);
+    void Promise.resolve(runtime.sendMessage(run.message satisfies TrulyMessage)).then((response) => {
       const current = sessions.get(tabId);
-      if (!current || current.status === "stale" || scopeStateForSession(current, scope).analysis?.key !== key) return;
-      if (!current.surface || !isMeaningfullySamePage(current.identity, current.surface.url)) return;
-      if (tabId === activeTabId && activeUrl && !isMeaningfullySamePage(current.identity, activeUrl)) return;
-      if (!response || typeof response !== "object" || (response as { type?: unknown }).type !== "GENERAL_PAGE_ANALYSIS_RESULT") {
-        setAnalysisError(tabId, "general_page_brief_no_response", key, effective.allowedUse, scope);
-        return;
-      }
-      const result = response as GeneralPageAnalysisResultMsg;
-      if (!result.ok || !result.brief) {
-        setAnalysisError(tabId, result.error || "general_page_brief_failed", key, effective.allowedUse, scope);
-        return;
-      }
-      setAnalysis(tabId, {
-        status: "ready",
-        key,
-        mode,
-        brief: result.brief,
-        allowedUse: effective.allowedUse,
-        updatedAt: now(),
-      }, scope);
+      if (!pageReadingAnalysisRunIsCurrent({ run, session: current, tabId, activeTabId, activeUrl })) return;
+      const settlement = settlePageReadingAnalysis({ run, response, now: now() });
+      setAnalysis(tabId, settlement.analysis, scope);
     }).catch((error) => {
-      setAnalysisError(tabId, errorMessage(error), key, effective.allowedUse, scope);
+      const current = sessions.get(tabId);
+      if (!pageReadingAnalysisRunIsCurrent({ run, session: current, tabId, activeTabId, activeUrl })) return;
+      const settlement = settlePageReadingAnalysis({ run, error, now: now() });
+      setAnalysis(tabId, settlement.analysis, scope);
     });
   }
+
 
   function setAnalysis(
     tabId: number,
@@ -2202,39 +2173,6 @@ export function createSidepanelPageReadingRuntime({
       allowedUse,
       updatedAt: now(),
     }, scope);
-  }
-
-  function generalPageAnalysisKey(
-    effective: GeneralPageEffectiveModelContext,
-    providerRuntime: GeneralPageParserAdvisorProviderRuntime,
-    mode: GeneralPageAnalysisMode,
-  ): string {
-    return [
-      mode,
-      effective.allowedUse,
-      effective.source,
-      effective.mainText.length,
-      effective.mainText.slice(0, 160),
-      providerRuntime.effectiveProvider,
-      providerRuntime.model,
-    ].join("|");
-  }
-
-  function analysisContextForEffectiveSession(
-    session: PageReadingSession,
-    surface: ReadingSurface,
-    effective: GeneralPageEffectiveModelContext,
-  ): GeneralPageModelContext {
-    const base = modelContextForSession({ ...session, surface });
-    return {
-      ...base,
-      title: effective.title ?? base.title,
-      url: effective.url || base.url,
-      mainText: effective.mainText,
-      modelEligible: effective.modelEligible,
-      modelReadiness: effective.modelReadiness,
-      ineligibilityReason: effective.modelEligible ? undefined : base.ineligibilityReason,
-    };
   }
 
   function analysisEligibilityMessage(reason: GeneralPageAnalysisEligibilityReason): string {
