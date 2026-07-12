@@ -93,6 +93,7 @@ describe("sidepanel page reading runtime", () => {
         activateTab: vi.fn(),
         getLang: () => "zh-TW",
         now: () => nowMs,
+        hasHostPermission: vi.fn(async () => true),
       });
 
       const pendingRead = runtime.requestReadCurrentPage("sidepanel");
@@ -104,6 +105,8 @@ describe("sidepanel page reading runtime", () => {
       expect(loadingCard?.querySelector(".page-reader-title-block h2")?.textContent).toBe("Runtime Fixture");
       expect(loadingCard?.querySelector(".page-reader-card-meta")?.textContent).toContain("example.test");
       expect(loadingCard?.querySelector(".page-reader-card-loading-status")?.textContent).toBe("讀取中");
+      expect(loadingCard?.querySelector("#pageReadCurrent")).toBeNull();
+      expect(loadingCard?.textContent).not.toContain("讀取此頁");
       expect(loadingCard?.querySelector(".page-reader-loading-context")?.getAttribute("aria-disabled")).toBe("true");
       expect(loadingCard?.querySelector(".page-reader-loading-analysis h3")?.textContent).toBe("閱讀脈絡");
       expect(loadingCard?.querySelector(".page-reader-analysis-loading")?.textContent).toBe("整理中…");
@@ -706,49 +709,332 @@ describe("sidepanel page reading runtime", () => {
     expect(title).not.toContain("讀取耗時 0 秒");
   });
 
-  it("briefly replaces the reread action with neutral success feedback", async () => {
-    vi.useFakeTimers();
-    try {
-      const pagePaneEl = setupDom();
-      const runtime = createSidepanelPageReadingRuntime({
-        pagePaneEl,
-        runtime: {
-          sendMessage: vi.fn(async () => ({
-            type: "PAGE_READING_RESULT",
+  it("keeps reread busy through extraction and Reading Context analysis", async () => {
+    const pagePaneEl = setupDom();
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    let pageReadCount = 0;
+    let analysisCount = 0;
+    let resolveReread: ((message: TrulyMessage) => void) | undefined;
+    let resolveRereadAnalysis: ((message: TrulyMessage) => void) | undefined;
+    const rereadResponse = new Promise<TrulyMessage>((resolve) => {
+      resolveReread = resolve;
+    });
+    const rereadAnalysisResponse = new Promise<TrulyMessage>((resolve) => {
+      resolveRereadAnalysis = resolve;
+    });
+    const sendMessage = vi.fn((message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        pageReadCount += 1;
+        if (pageReadCount > 1) return rereadResponse;
+        return Promise.resolve({
+          type: "PAGE_READING_RESULT",
+          requestId: message.requestId,
+          tabId: 42,
+          surface: surface(),
+          elapsedMs: 200,
+        } satisfies TrulyMessage);
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        analysisCount += 1;
+        if (analysisCount > 1) return rereadAnalysisResponse;
+        return Promise.resolve({
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: 42,
+          ok: true,
+          brief: { schemaVersion: 1, summary: "Initial reading context.", model: "brief-model" },
+        } satisfies TrulyMessage);
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{
+          id: 42,
+          url: "https://example.test/article",
+          title: "Runtime Fixture",
+        }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("重新讀取此頁");
+
+    const pendingReread = runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    expect(pagePaneEl.querySelector(".page-reader-card.is-loading-target")).toBeNull();
+    expect(pagePaneEl.textContent).toContain("Initial reading context.");
+    expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("正在更新此頁");
+    expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-busy")).toBe("true");
+    expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-disabled")).toBe("true");
+    readCurrentButton(pagePaneEl)?.focus();
+    expect(pagePaneEl.ownerDocument.activeElement?.id).toBe("pageReadCurrent");
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageCopyMetadata")?.click();
+    await flushMicrotasks();
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining("Initial reading context."));
+
+    resolveReread?.({
+      type: "PAGE_READING_RESULT",
+      tabId: 42,
+      surface: surface(),
+      elapsedMs: 200,
+    } satisfies TrulyMessage);
+    await pendingReread;
+    await flushMicrotasks();
+    expect(pagePaneEl.querySelector(".page-reader-analysis.is-running")).toBeNull();
+    expect(pagePaneEl.textContent).toContain("Initial reading context.");
+    expect(pagePaneEl.textContent).not.toContain("Updated reading context.");
+    expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("正在更新此頁");
+    expect(readCurrentButton(pagePaneEl)?.classList.contains("is-reread-busy")).toBe(true);
+    expect(readCurrentButton(pagePaneEl)?.classList.contains("is-read-success")).toBe(false);
+    expect(pagePaneEl.ownerDocument.activeElement?.id).toBe("pageReadCurrent");
+
+    resolveRereadAnalysis?.({
+      type: "GENERAL_PAGE_ANALYSIS_RESULT",
+      tabId: 42,
+      ok: true,
+      brief: { schemaVersion: 1, summary: "Updated reading context.", model: "brief-model" },
+    } satisfies TrulyMessage);
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("重新讀取此頁");
+    expect(readCurrentButton(pagePaneEl)?.hasAttribute("aria-busy")).toBe(false);
+    expect(readCurrentButton(pagePaneEl)?.hasAttribute("aria-disabled")).toBe(false);
+    expect(pagePaneEl.textContent).toContain("Updated reading context.");
+  });
+
+  it("keeps the last successful result when reread extraction fails", async () => {
+    const pagePaneEl = setupDom();
+    let pageReadCount = 0;
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        pageReadCount += 1;
+        if (pageReadCount > 1) {
+          return {
+            type: "PAGE_READING_ERROR",
+            requestId: message.requestId,
             tabId: 42,
-            surface: surface(),
-            elapsedMs: 200,
-          } satisfies TrulyMessage)),
-        },
-        tabs: {
-          query: vi.fn(async () => [{
-            id: 42,
-            url: "https://example.test/article",
-            title: "Runtime Fixture",
-          }]),
-        },
-        activateTab: vi.fn(),
-        getLang: () => "zh-TW",
-        now: () => 1_000,
-        hasHostPermission: vi.fn(async () => true),
-      });
+            error: "synthetic_reread_failure",
+          } satisfies TrulyMessage;
+        }
+        return {
+          type: "PAGE_READING_RESULT",
+          requestId: message.requestId,
+          tabId: 42,
+          surface: surface(),
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        return {
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: 42,
+          ok: true,
+          brief: { schemaVersion: 1, summary: "Last successful context.", model: "brief-model" },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: { query: vi.fn(async () => [{ id: 42, url: "https://example.test/article", title: "Runtime Fixture" }]) },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
+    });
 
-      await runtime.requestReadCurrentPage("sidepanel");
-      await flushMicrotasks();
-      expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("重新讀取此頁");
-      expect(readCurrentButton(pagePaneEl)?.parentElement?.classList.contains("page-reader-card-meta")).toBe(true);
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    expect(pagePaneEl.textContent).toContain("Last successful context.");
 
-      await runtime.requestReadCurrentPage("sidepanel");
-      await flushMicrotasks();
-      expect(readCurrentButton(pagePaneEl)?.classList.contains("is-read-success")).toBe(true);
-      expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("讀取完成");
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
 
-      await vi.advanceTimersByTimeAsync(1_800);
-      expect(readCurrentButton(pagePaneEl)?.classList.contains("is-read-success")).toBe(false);
-      expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("重新讀取此頁");
-    } finally {
-      vi.useRealTimers();
-    }
+    expect(pagePaneEl.textContent).toContain("Last successful context.");
+    expect(pagePaneEl.textContent).toContain("更新失敗，仍顯示上次結果。");
+    expect(pagePaneEl.textContent).not.toContain("synthetic_reread_failure");
+    expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("重新讀取此頁");
+  });
+
+  it("keeps the last successful result when reread analysis fails", async () => {
+    const pagePaneEl = setupDom();
+    let pageReadCount = 0;
+    let analysisCount = 0;
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        pageReadCount += 1;
+        return {
+          type: "PAGE_READING_RESULT",
+          requestId: message.requestId,
+          tabId: 42,
+          surface: surface(pageReadCount > 1 ? { title: "Uncommitted replacement" } : {}),
+        } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        analysisCount += 1;
+        return analysisCount > 1
+          ? {
+              type: "GENERAL_PAGE_ANALYSIS_RESULT",
+              tabId: 42,
+              ok: false,
+              error: "general_page_brief_timeout",
+            } satisfies TrulyMessage
+          : {
+              type: "GENERAL_PAGE_ANALYSIS_RESULT",
+              tabId: 42,
+              ok: true,
+              brief: { schemaVersion: 1, summary: "Stable previous context.", model: "brief-model" },
+            } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: { query: vi.fn(async () => [{ id: 42, url: "https://example.test/article", title: "Runtime Fixture" }]) },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    expect(pagePaneEl.textContent).toContain("Stable previous context.");
+    expect(pagePaneEl.textContent).not.toContain("Uncommitted replacement");
+    expect(pagePaneEl.textContent).toContain("更新失敗，仍顯示上次結果。");
+    expect(pagePaneEl.querySelector("#pageAnalysisRetry")).toBeNull();
+  });
+
+  it("publishes the refreshed surface when analysis is intentionally skipped", async () => {
+    const pagePaneEl = setupDom();
+    let pageReadCount = 0;
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type !== "PAGE_READING_REQUEST") throw new Error(`unexpected message ${(message as { type: string }).type}`);
+      pageReadCount += 1;
+      return {
+        type: "PAGE_READING_RESULT",
+        requestId: message.requestId,
+        tabId: 42,
+        surface: surface({
+          title: pageReadCount > 1 ? "Updated without model analysis" : "Initial without model analysis",
+        }),
+      } satisfies TrulyMessage;
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: { query: vi.fn(async () => [{ id: 42, url: "https://example.test/article", title: "Runtime Fixture" }]) },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    expect(pagePaneEl.textContent).toContain("Initial without model analysis");
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+
+    expect(pagePaneEl.textContent).toContain("Updated without model analysis");
+    expect(pagePaneEl.textContent).not.toContain("Initial without model analysis");
+    expect(readCurrentButton(pagePaneEl)?.hasAttribute("aria-busy")).toBe(false);
+  });
+
+  it("rejects a late reread result after meaningful navigation", async () => {
+    const pagePaneEl = setupDom();
+    let onUpdated: ((tabId: number, changeInfo: { url?: string; status?: string }, tab: { id: number; url: string; title: string }) => void) | undefined;
+    let pageReadCount = 0;
+    let resolveReread: ((message: TrulyMessage) => void) | undefined;
+    let rereadRequestId = "";
+    const pendingResponse = new Promise<TrulyMessage>((resolve) => {
+      resolveReread = resolve;
+    });
+    const sendMessage = vi.fn((message: TrulyMessage) => {
+      if (message.type !== "PAGE_READING_REQUEST") throw new Error(`unexpected message ${(message as { type: string }).type}`);
+      pageReadCount += 1;
+      if (pageReadCount > 1) {
+        rereadRequestId = message.requestId;
+        return pendingResponse;
+      }
+      return Promise.resolve({
+        type: "PAGE_READING_RESULT",
+        requestId: message.requestId,
+        tabId: 42,
+        surface: surface(),
+      } satisfies TrulyMessage);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{ id: 42, url: "https://example.test/article", title: "Runtime Fixture" }]),
+        onUpdated: { addListener(listener) { onUpdated = listener; } },
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    await runtime.requestReadCurrentPage("sidepanel");
+    const reread = runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    onUpdated?.(42, { url: "https://example.test/new-article" }, {
+      id: 42,
+      url: "https://example.test/new-article",
+      title: "New Article",
+    });
+    resolveReread?.({
+      type: "PAGE_READING_RESULT",
+      requestId: rereadRequestId,
+      tabId: 42,
+      surface: surface({ title: "Late stale replacement" }),
+    } satisfies TrulyMessage);
+    await reread;
+    await flushMicrotasks();
+
+    expect(runtime.auditState().displayedSession?.status).toBe("stale");
+    expect(pagePaneEl.textContent).not.toContain("Late stale replacement");
+    expect(pagePaneEl.textContent).not.toContain("Runtime fixture excerpt.");
   });
 
   it("keeps saved page sessions internal without rendering a Web history switcher", async () => {
@@ -946,6 +1232,7 @@ describe("sidepanel page reading runtime", () => {
         tierBModel: "brief-model",
       }),
       now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
     });
 
     await runtime.requestReadCurrentPage("sidepanel");
@@ -1047,6 +1334,7 @@ describe("sidepanel page reading runtime", () => {
         tierBModel: "brief-model",
       }),
       now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
     });
 
     await runtime.requestReadCurrentPage("sidepanel");
@@ -1058,6 +1346,8 @@ describe("sidepanel page reading runtime", () => {
     expect(loadingHeader?.textContent).toContain("閱讀脈絡");
     expect(loadingHeader?.querySelector(".page-reader-analysis-loading")?.textContent).toBe("整理中…");
     expect(pagePaneEl.querySelector(".page-reader-analysis.is-running")?.children).toHaveLength(1);
+    expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("正在整理此頁");
+    expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-disabled")).toBe("true");
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis-header")).toBeNull();
     // While a clean page's brief is running, the pane already uses the final
     // The extracted preview is available only inside the collapsed page-context

@@ -85,6 +85,20 @@ change invalidates the old request identity and scrubs the prior Reading Surface
 before a debounced auto-read begins. Assertions use canonical runtime state;
 quiet or intentionally absent success labels are not treated as failures.
 
+Page rereads are transactional. While a fresh extraction and analysis are in
+flight, the Side Panel keeps the previous completed result visible, marks the
+reload control busy, and suppresses duplicate read actions. A successful
+request replaces the previous result only after the new analysis settles; a
+failed request restores the previous result and exposes a compact failure
+message. Unit coverage must also reject stale completion messages whose request
+identity no longer matches the active session.
+
+Feed, Web, and Focus external-tool actions share one compact button treatment
+and short action labels. Their status footer stays out of layout until an action
+produces feedback, so an empty live region cannot create mode-specific card
+padding. Keep this behavior covered by DOM-level unit tests when changing the
+shared action renderer or its localized labels.
+
 `npm run dev:check` now also verifies source freshness before comparing dist,
 reload-server, service-worker, and Facebook content-script build IDs. Use
 `npm run dev:check:source` when only the local source-to-dist freshness check is

@@ -103,6 +103,7 @@
       line-height: 1.1;
       text-decoration: none;
     }
+    .sidepanel-utility-link svg,
     .sidepanel-utility-btn svg {
       width: 14px;
       height: 14px;
@@ -461,18 +462,6 @@
       gap: 2px 6px;
       margin-top: 7px;
     }
-    /* Card actions keep the Feed external-tools button look (bordered
-       icon+label secondary buttons) so Web and Feed actions match. */
-    .page-reader-card-action {
-      gap: 5px;
-      min-height: var(--truly-control-height);
-      padding: 3px 9px;
-    }
-    .page-reader-card-action svg {
-      width: 13px;
-      height: 13px;
-      flex: 0 0 auto;
-    }
     .page-reader-target-action {
       display: inline-flex;
       align-items: center;
@@ -501,7 +490,8 @@
       border-color: color-mix(in srgb, var(--truly-sidepanel-accent) 58%, var(--truly-sidepanel-border));
       background: color-mix(in srgb, var(--truly-sidepanel-accent) 15%, var(--truly-sidepanel-surface));
     }
-    .page-reader-target-action:disabled {
+    .page-reader-target-action:disabled,
+    .page-reader-target-action[aria-disabled="true"] {
       cursor: not-allowed;
       opacity: 0.5;
     }
@@ -536,10 +526,6 @@
     @media (max-width: 520px) {
       .page-reader-card-header {
         gap: 6px;
-      }
-      .page-reader-card-action {
-        padding: 2px 5px;
-        border-radius: 4px;
       }
     }
     .page-reader-url {
@@ -576,17 +562,34 @@
       width: 30px;
       min-width: 30px;
       min-height: 30px;
-      margin: -4px 0 -4px -2px;
+      margin: -4px 0 -4px auto;
     }
     .page-reader-card-meta .page-reader-target-action.is-icon-only svg {
       width: 13px;
       height: 13px;
     }
-    .page-reader-target-action.is-read-success,
-    .page-reader-target-action.is-read-success:hover:not(:disabled) {
-      border-color: transparent;
-      background: transparent;
+    .page-reader-target-action.is-reread-busy[aria-disabled="true"] {
+      cursor: progress;
+      opacity: 1;
       color: var(--truly-sidepanel-muted-text);
+    }
+    .page-reader-target-action.is-reread-busy svg {
+      animation: truly-page-reread-spin 800ms linear infinite;
+    }
+    @keyframes truly-page-reread-spin {
+      to { transform: rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .page-reader-target-action.is-reread-busy svg {
+        animation: none;
+        opacity: 0.72;
+      }
+    }
+    .page-reader-refresh-error {
+      margin-top: 4px;
+      color: var(--truly-status-error);
+      font-size: var(--truly-type-caption);
+      line-height: 1.35;
     }
     .page-reader-excerpt {
       color: var(--truly-sidepanel-text);
@@ -1613,6 +1616,23 @@
       background: #f5f6f7;
       border-color: #bec3c9;
     }
+    /* External-tool actions share one compact icon+label component across
+       Feed, Web, and Focus. The explanatory copy above carries the detail. */
+    .investigation-action-row .btn-investigation-secondary,
+    .page-reader-card-action {
+      min-height: 30px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: var(--truly-type-caption);
+      gap: 5px;
+    }
+    .investigation-action-row .btn-investigation-icon,
+    .investigation-action-row .btn-investigation-icon-svg,
+    .page-reader-card-action svg {
+      width: 13px;
+      height: 13px;
+      flex: 0 0 auto;
+    }
     .btn-investigation-secondary-warning {
       border-color: var(--truly-sidepanel-soft-border);
       background: var(--truly-sidepanel-subtle-surface);
@@ -1648,6 +1668,9 @@
       justify-content: space-between;
       gap: 12px;
       min-height: 16px;
+    }
+    .investigation-action-footer[hidden] {
+      display: none;
     }
     .investigation-action-footer .investigation-action-status {
       flex: 1 1 auto;
@@ -2356,7 +2379,14 @@
   <div id="page-pane" class="feed-container page-container" role="tabpanel" data-tab="page" aria-label="Web 閱讀" data-i18n-aria-label="sidepanel.page.contentAria" hidden>
   </div>
   <div class="sidepanel-utility-bar" aria-label="側欄輔助工具" data-i18n-aria-label="sidepanel.utilityAria">
-    <a class="sidepanel-utility-link" href="https://trulyreader.org/feedback/" target="_blank" rel="noopener noreferrer" aria-label="提供 Truly 使用回饋" data-i18n="sidepanel.dynamic.actions.feedback" data-i18n-aria-label="sidepanel.dynamic.actions.feedbackAria">提供回饋</a>
+    <a class="sidepanel-utility-link" href="https://trulyreader.org/feedback/" target="_blank" rel="noopener noreferrer" aria-label="提供 Truly 使用回饋" data-i18n-aria-label="sidepanel.dynamic.actions.feedbackAria">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4Z"></path>
+        <path d="M8 9h8"></path>
+        <path d="M8 13h5"></path>
+      </svg>
+      <span data-i18n="sidepanel.dynamic.actions.feedback">提供回饋</span>
+    </a>
     <button id="openOptionsPage" class="sidepanel-utility-btn" type="button" title="開啟設定" aria-label="開啟 Truly 設定" data-i18n-title="sidepanel.openSettingsTitle" data-i18n-aria-label="sidepanel.openSettingsAria">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
         <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path>

@@ -112,7 +112,6 @@ type PagePlatform = PageReadabilityPlatform;
 export type PageWorkspace = ReadingWorkspace;
 const LOADING_ELAPSED_VISIBLE_THRESHOLD_MS = 2_000;
 const AUTO_READ_DEBOUNCE_MS = 700;
-const READ_SUCCESS_FEEDBACK_MS = 1_800;
 
 interface BrowserTab {
   id?: number;
@@ -166,6 +165,11 @@ interface ActiveExtensionPageMarker {
   url?: string;
   ts: number;
   buildId?: string;
+}
+
+interface PageRereadTransaction {
+  requestId: string;
+  previousSession: PageReadingSession;
 }
 
 export interface SidepanelPageReadingRuntime {
@@ -1093,10 +1097,9 @@ export function createSidepanelPageReadingRuntime({
   let loadingTicker: ReturnType<typeof setInterval> | undefined;
   let autoReadTimer: ReturnType<typeof setTimeout> | undefined;
   let autoReadToken = 0;
-  const pendingRereadFeedback = new Set<number>();
+  const rereadTransactions = new Map<number, PageRereadTransaction>();
+  const rereadFailures = new Set<number>();
   const consumedReadingCommandIds = new Set<string>();
-  let readSuccessFeedbackTabId: number | undefined;
-  let readSuccessFeedbackTimer: ReturnType<typeof setTimeout> | undefined;
   let activeExtensionPageMarker: ActiveExtensionPageMarker | undefined;
   let hostPermissionState: {
     url: string;
@@ -1110,6 +1113,11 @@ export function createSidepanelPageReadingRuntime({
   function currentSession(): PageReadingSession | undefined {
     const tabId = typeof displayTabId === "number" ? displayTabId : activeTabId;
     return typeof tabId === "number" ? sessions.get(tabId) : undefined;
+  }
+
+  function visibleSession(session: PageReadingSession | undefined): PageReadingSession | undefined {
+    if (!session) return undefined;
+    return rereadTransactions.get(session.tabId)?.previousSession ?? session;
   }
 
   function setWorkspace(workspace: PageWorkspace): void {
@@ -1147,7 +1155,12 @@ export function createSidepanelPageReadingRuntime({
     return permissionStatus === "missing" || permissionStatus === "failed";
   }
 
-  function pageReadActionHtml(canRead: boolean, hasSurface: boolean, showReadSuccess: boolean): string {
+  function pageReadActionHtml(
+    canRead: boolean,
+    hasSurface: boolean,
+    readBusy: boolean,
+    busyTitle = tr("sidepanel.page.readCurrentUpdating"),
+  ): string {
     if (!canRead || pageWorkspace !== "page") return "";
     const permissionStatus = activePagePermissionStatus();
     const needsDomainGrant = permissionStatus === "missing" || permissionStatus === "failed";
@@ -1177,8 +1190,8 @@ export function createSidepanelPageReadingRuntime({
         </button>
       `;
     }
-    const title = showReadSuccess
-      ? tr("sidepanel.page.readCurrentSuccess")
+    const title = readBusy
+      ? busyTitle
       : hasSurface
         ? tr("sidepanel.page.readCurrentReloadTitle")
         : tr("sidepanel.page.readCurrentTitle");
@@ -1186,36 +1199,32 @@ export function createSidepanelPageReadingRuntime({
     return `
       <button
         id="pageReadCurrent"
-        class="page-reader-target-action${hasSurface ? " is-icon-only" : " is-read"}${showReadSuccess ? " is-read-success" : ""}"
+        class="page-reader-target-action${hasSurface ? " is-icon-only" : " is-read"}${readBusy ? " is-reread-busy" : ""}"
         type="button"
         title="${escapeHtml(title)}"
         aria-label="${escapeHtml(title)}"
-        aria-live="polite"
+        ${readBusy ? `aria-busy="true" aria-disabled="true"` : ""}
       >
-        ${showReadSuccess
-          ? `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="m5 12.5 4.25 4.25L19 7"></path></svg>`
-          : `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg>`}
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"></path><path d="M21 4v6h-6"></path></svg>
         <span>${escapeHtml(label)}</span>
       </button>
     `;
   }
 
-  function clearReadSuccessFeedback(tabId?: number): void {
-    if (typeof tabId === "number" && readSuccessFeedbackTabId !== tabId) return;
-    if (readSuccessFeedbackTimer) clearTimeout(readSuccessFeedbackTimer);
-    readSuccessFeedbackTimer = undefined;
-    readSuccessFeedbackTabId = undefined;
+  function clearRereadTransaction(tabId: number, requestId?: string): boolean {
+    const transaction = rereadTransactions.get(tabId);
+    if (!transaction || (requestId && transaction.requestId !== requestId)) return false;
+    rereadTransactions.delete(tabId);
+    return true;
   }
 
-  function showReadSuccessFeedback(tabId: number): void {
-    clearReadSuccessFeedback();
-    readSuccessFeedbackTabId = tabId;
-    readSuccessFeedbackTimer = setTimeout(() => {
-      readSuccessFeedbackTimer = undefined;
-      if (readSuccessFeedbackTabId !== tabId) return;
-      readSuccessFeedbackTabId = undefined;
-      if (tabId === activeTabId || tabId === displayTabId) render();
-    }, READ_SUCCESS_FEEDBACK_MS);
+  function restoreRereadAfterFailure(tabId: number, requestId: string | undefined): boolean {
+    const transaction = rereadTransactions.get(tabId);
+    if (!transaction || (requestId && transaction.requestId !== requestId)) return false;
+    sessions.set(tabId, transaction.previousSession);
+    rereadTransactions.delete(tabId);
+    rereadFailures.add(tabId);
+    return true;
   }
 
   async function requestActiveDomainAuthorization(): Promise<void> {
@@ -1404,6 +1413,8 @@ export function createSidepanelPageReadingRuntime({
     const session = typeof nextTabId === "number" ? sessions.get(nextTabId) : undefined;
     if (session && activeUrl && !isMeaningfullySamePage(session.identity, activeUrl)) {
       if (typeof nextTabId === "number") focusTargetErrors.delete(nextTabId);
+      rereadTransactions.delete(session.tabId);
+      rereadFailures.delete(session.tabId);
       sessions.set(session.tabId, clearSessionForMeaningfulNavigation(session, {
         url: activeUrl,
         title: activeTitle,
@@ -1420,6 +1431,8 @@ export function createSidepanelPageReadingRuntime({
     const nextUrl = tab.url;
     if (!session || !nextUrl || isMeaningfullySamePage(session.identity, nextUrl)) return;
     focusTargetErrors.delete(tabId);
+    rereadTransactions.delete(tabId);
+    rereadFailures.delete(tabId);
     sessions.set(tabId, clearSessionForMeaningfulNavigation(session, {
       url: nextUrl,
       title: tab.title || session.title,
@@ -1469,9 +1482,13 @@ export function createSidepanelPageReadingRuntime({
   }
 
   function render(): void {
+    const focusedControlId = pagePaneEl.contains(document.activeElement)
+      ? (document.activeElement as HTMLElement | null)?.id || ""
+      : "";
     const lang = getLang();
     const platform = platformForUrl(activeUrl);
-    const session = currentSession();
+    const workingSession = currentSession();
+    const session = visibleSession(workingSession);
     const activeWorkspace = pageWorkspace;
     const viewSession = session ? materializeScopeSession(session, activeWorkspace) : undefined;
     const displayedTabId = session?.tabId ?? displayTabId;
@@ -1600,10 +1617,21 @@ export function createSidepanelPageReadingRuntime({
     const modelPipeline = screenshotBlock;
     const previewBlock = pagePreviewHtml(excerpt, tr);
     const pageContextPreviewBlock = hidePendingAdvisorState ? "" : previewBlock;
+    const rereadBusy = typeof displayedTabId === "number" && rereadTransactions.has(displayedTabId);
+    const rereadFailed = typeof displayedTabId === "number" && rereadFailures.has(displayedTabId);
+    const workingPageScope = workingSession ? pageScopeForSession(workingSession) : undefined;
+    const initialPipelineBusy = !rereadBusy && Boolean(
+      workingSession?.surface &&
+      (workingPageScope?.advisor?.status === "checking" || workingPageScope?.analysis?.status === "running"),
+    );
+    const readBusy = rereadBusy || initialPipelineBusy;
     const pageReadAction = pageReadActionHtml(
       canRead && displayedSessionIsActive,
-      Boolean(session?.surface),
-      Boolean(session?.surface && readSuccessFeedbackTabId === displayedTabId),
+      Boolean(session?.surface) || rereadBusy,
+      readBusy,
+      initialPipelineBusy
+        ? tr("sidepanel.page.readCurrentProcessing")
+        : tr("sidepanel.page.readCurrentUpdating"),
     );
     const cardToolButtons = session?.surface
       ? `
@@ -1644,6 +1672,7 @@ export function createSidepanelPageReadingRuntime({
           title,
           source || (url ? hostnameForUrl(url) : ""),
           statusLabel,
+          rereadBusy ? pageReadAction : "",
         )
       : "";
     const focusTargetError = typeof displayedTabId === "number" ? focusTargetErrors.get(displayedTabId) : undefined;
@@ -1678,6 +1707,7 @@ export function createSidepanelPageReadingRuntime({
           ${updatedAt ? `<span>${escapeHtml(tr("sidepanel.page.status.lastRead", { updatedAt }))}</span>` : ""}
           ${pageReadAction}
         </div>
+        ${rereadFailed ? `<p class="page-reader-refresh-error" role="status">${escapeHtml(tr("sidepanel.page.readCurrentFailed"))}</p>` : ""}
       `
       : "";
     const hasQuietEmptyBody = Boolean(emptyBodyBlock) && (!session || session.status === "idle");
@@ -1719,13 +1749,14 @@ export function createSidepanelPageReadingRuntime({
       void requestSelectionTarget("sidepanel");
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageReadCurrent")?.addEventListener("click", () => {
+      if (readBusy) return;
       void requestReadCurrentPage("sidepanel");
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageAuthorizeDomain")?.addEventListener("click", () => {
       void requestActiveDomainAuthorization();
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageCopyMetadata")?.addEventListener("click", async () => {
-      const latest = currentSession();
+      const latest = visibleSession(currentSession());
       if (!latest) return;
       const scoped = materializeScopeSession(latest, pageWorkspace);
       try {
@@ -1737,7 +1768,7 @@ export function createSidepanelPageReadingRuntime({
       render();
     });
     pagePaneEl.querySelector<HTMLButtonElement>("#pageDownloadMarkdown")?.addEventListener("click", async () => {
-      const latest = currentSession();
+      const latest = visibleSession(currentSession());
       if (!latest) return;
       const scoped = materializeScopeSession(latest, pageWorkspace);
       try {
@@ -1782,6 +1813,12 @@ export function createSidepanelPageReadingRuntime({
       if (typeof displayedTabId !== "number" || displayedTabId !== activeTabId) return;
       setScreenshot(displayedTabId, undefined);
     });
+    if (focusedControlId) {
+      const replacement = document.getElementById(focusedControlId);
+      if (replacement instanceof HTMLElement && pagePaneEl.contains(replacement)) {
+        replacement.focus({ preventScroll: true });
+      }
+    }
     if (availabilityFallback) activateTab(availabilityFallback);
   }
 
@@ -1842,7 +1879,7 @@ export function createSidepanelPageReadingRuntime({
     `;
   }
 
-  function loadingBody(targetTitle: string, targetMeta: string, loadingLabel: string): string {
+  function loadingBody(targetTitle: string, targetMeta: string, loadingLabel: string, actionHtml = ""): string {
     return `
       <article class="page-reader-card is-loading-target" aria-busy="true">
         <div class="page-reader-card-header">
@@ -1851,6 +1888,7 @@ export function createSidepanelPageReadingRuntime({
             <div class="page-reader-card-meta">
               ${targetMeta ? `<span>${escapeHtml(targetMeta)}</span>` : ""}
               <span class="page-reader-card-loading-status" role="status" aria-live="polite">${escapeHtml(loadingLabel)}</span>
+              ${actionHtml}
             </div>
           </div>
         </div>
@@ -2122,8 +2160,14 @@ export function createSidepanelPageReadingRuntime({
       now: now(),
     });
     if (plan.kind === "skip") {
+      if (scope === "page" && !plan.reportError) {
+        clearRereadTransaction(tabId, session.requestId);
+        rereadFailures.delete(tabId);
+      }
       if (plan.reportError) {
         setAnalysisError(tabId, analysisEligibilityMessage(plan.eligibilityReason), undefined, undefined, scope);
+      } else if (tabId === activeTabId || tabId === displayTabId) {
+        render();
       }
       return;
     }
@@ -2151,11 +2195,23 @@ export function createSidepanelPageReadingRuntime({
   ): void {
     const session = sessions.get(tabId);
     if (!session || session.status === "stale") return;
+    if (
+      scope === "page" &&
+      analysis.status === "error" &&
+      restoreRereadAfterFailure(tabId, session.requestId)
+    ) {
+      if (tabId === activeTabId || tabId === displayTabId) render();
+      return;
+    }
     const currentScope = scopeStateForSession(session, scope);
     sessions.set(tabId, replaceScopeState(session, scope, {
       ...currentScope,
       analysis,
     }));
+    if (scope === "page" && (analysis.status === "ready" || analysis.status === "error")) {
+      clearRereadTransaction(tabId, session.requestId);
+      if (analysis.status === "ready") rereadFailures.delete(tabId);
+    }
     if (tabId === activeTabId) render();
   }
 
@@ -2514,14 +2570,14 @@ export function createSidepanelPageReadingRuntime({
         isMeaningfullySamePage(previousSession.identity, activeUrl)
         ? focusScopeForSession(previousSession)
         : undefined;
-      if (previousSession?.surface && previousSession.status === "ready") {
-        pendingRereadFeedback.add(tab.id);
-      } else {
-        pendingRereadFeedback.delete(tab.id);
-      }
-      clearReadSuccessFeedback(tab.id);
       const startedAt = now();
       requestId ??= createReadingRequestId();
+      if (previousSession?.surface && previousSession.status === "ready") {
+        rereadTransactions.set(tab.id, { requestId, previousSession });
+      } else {
+        rereadTransactions.delete(tab.id);
+      }
+      rereadFailures.delete(tab.id);
       sessions.set(tab.id, beginPageReadingSession({
         previous: previousSession,
         requestId,
@@ -2573,9 +2629,8 @@ export function createSidepanelPageReadingRuntime({
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
     const existing = sessions.get(tabId);
-    if (message.requestId && existing?.requestId && message.requestId !== existing.requestId) return;
+    if (message.requestId && message.requestId !== existing?.requestId) return;
     const preservePendingFocus = pageWorkspace === "focus" && existing?.status === "loading";
-    const shouldShowRereadSuccess = pendingRereadFeedback.delete(tabId);
     const duplicateReadySurface = existing?.status === "ready" &&
       existing.surface?.id === message.surface.id &&
       isMeaningfullySamePage(existing.identity, message.surface.url) &&
@@ -2612,13 +2667,13 @@ export function createSidepanelPageReadingRuntime({
     if (revealIncoming) {
       displayTabId = tabId;
     }
-    if (shouldShowRereadSuccess) showReadSuccessFeedback(tabId);
     if (!preserveRecoveryState) {
       startParserAdvisor(tabId, message.surface, {
         candidateBlocks: message.candidateBlocks ?? [],
       });
-    } else if (tabId === activeTabId || displayTabId === tabId) {
-      render();
+    } else {
+      clearRereadTransaction(tabId, completion.session.requestId);
+      if (tabId === activeTabId || displayTabId === tabId) render();
     }
   }
 
@@ -2708,10 +2763,13 @@ export function createSidepanelPageReadingRuntime({
   function handlePageReadingError(message: PageReadingErrorMsg): void {
     const tabId = typeof message.tabId === "number" ? message.tabId : activeTabId;
     if (typeof tabId !== "number") return;
-    pendingRereadFeedback.delete(tabId);
-    clearReadSuccessFeedback(tabId);
     const existing = sessions.get(tabId);
-    if (message.requestId && existing?.requestId && message.requestId !== existing.requestId) return;
+    if (message.requestId && message.requestId !== existing?.requestId) return;
+    if (restoreRereadAfterFailure(tabId, message.requestId)) {
+      if (tabId === activeTabId || tabId === displayTabId) render();
+      return;
+    }
+    clearRereadTransaction(tabId, message.requestId);
     const completedAt = now();
     const elapsedMs = typeof message.elapsedMs === "number" && Number.isFinite(message.elapsedMs)
       ? Math.max(0, message.elapsedMs)
@@ -2760,6 +2818,8 @@ export function createSidepanelPageReadingRuntime({
     tabs.onRemoved?.addListener((tabId) => {
       const wasDisplayed = tabId === displayTabId;
       focusTargetErrors.delete(tabId);
+      rereadTransactions.delete(tabId);
+      rereadFailures.delete(tabId);
       sessions.delete(tabId);
       if (tabId === displayTabId) {
         displayTabId = typeof activeTabId === "number" && sessions.has(activeTabId)

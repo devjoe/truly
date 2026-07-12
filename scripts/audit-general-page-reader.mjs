@@ -1223,6 +1223,10 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           pageContextPresent: Boolean(pane?.querySelector(".page-reader-context-details")),
           pageContextOpen: pane?.querySelector(".page-reader-context-details")?.hasAttribute("open") ?? null,
           analysisClass: pane?.querySelector(".page-reader-analysis")?.className || "",
+          readActionPresent: Boolean(pane?.querySelector("#pageReadCurrent")),
+          readActionClass: pane?.querySelector("#pageReadCurrent")?.className || "",
+          readActionText: norm(pane?.querySelector("#pageReadCurrent")?.textContent),
+          readActionAriaDisabled: pane?.querySelector("#pageReadCurrent")?.getAttribute("aria-disabled") || "",
           supplementalDetailsOpen: pane?.querySelector(".page-reader-supplemental-details")?.hasAttribute("open") ?? null,
           runtimeState,
         };
@@ -2878,6 +2882,8 @@ function autoReadTransitionState(result) {
     ? result.success.initialLoadTimeline
     : [];
   const firstLoading = entries.find((entry) => entry.runtimeState?.displayedSession?.status === "loading");
+  const loadingEntries = entries.filter((entry) => entry.runtimeState?.displayedSession?.status === "loading");
+  const initialReadActionEntries = loadingEntries.filter((entry) => entry.readActionPresent === true);
   const firstAnalysis = entries.find((entry) => /page-reader-analysis is-(?:running|ready)/.test(entry.analysisClass || ""));
   const technicalStates = entries.filter((entry) =>
     (firstAnalysis ? entry.elapsedMs <= firstAnalysis.elapsedMs : true) &&
@@ -2892,9 +2898,30 @@ function autoReadTransitionState(result) {
     ));
   const firstLoadingMs = typeof firstLoading?.elapsedMs === "number" ? firstLoading.elapsedMs : undefined;
   return {
-    pass: typeof firstLoadingMs === "number" && firstLoadingMs <= 100 && technicalStates.length === 0,
+    pass: typeof firstLoadingMs === "number" && firstLoadingMs <= 100 &&
+      technicalStates.length === 0 && initialReadActionEntries.length === 0,
     firstLoadingMs,
     technicalStateCount: technicalStates.length,
+    initialReadActionCount: initialReadActionEntries.length,
+  };
+}
+
+function initialAnalysisActionState(result) {
+  const entries = Array.isArray(result.success.initialLoadTimeline)
+    ? result.success.initialLoadTimeline
+    : [];
+  const runningEntries = entries.filter((entry) =>
+    entry.runtimeState?.displayedSession?.status === "ready" &&
+    entry.runtimeState?.displayedSession?.analysisStatus === "running");
+  const unsafeEntries = runningEntries.filter((entry) =>
+    entry.readActionPresent !== true ||
+    !/\bis-reread-busy\b/.test(entry.readActionClass || "") ||
+    entry.readActionAriaDisabled !== "true" ||
+    !/正在整理此頁|Organizing this page/.test(entry.readActionText || ""));
+  return {
+    pass: runningEntries.length > 0 && unsafeEntries.length === 0,
+    runningStateCount: runningEntries.length,
+    unsafeStateCount: unsafeEntries.length,
   };
 }
 
@@ -3021,7 +3048,14 @@ function qaMatrixRows(result) {
       "Auto-read transitional UI",
       result.success.autoRead?.allSites ? autoReadTransitionState(result).pass : true,
       "firstLoadingMs=" + (autoReadTransitionState(result).firstLoadingMs ?? "missing") +
-        "; technicalStates=" + autoReadTransitionState(result).technicalStateCount,
+        "; technicalStates=" + autoReadTransitionState(result).technicalStateCount +
+        "; initialReadActions=" + autoReadTransitionState(result).initialReadActionCount,
+    ],
+    [
+      "Initial analysis action lock",
+      initialAnalysisActionState(result).pass,
+      "runningStates=" + initialAnalysisActionState(result).runningStateCount +
+        "; unsafeStates=" + initialAnalysisActionState(result).unsafeStateCount,
     ],
     [
       "Advisor transitional UI",
