@@ -26,7 +26,7 @@ const URL_RE = /https?:\/\/\S+/gi;
 const DOMAIN_OR_PATH_RE = /(?:^|\s|\b)(?:[a-z0-9-]+\.)+(?:com|org|net|edu|gov|io|ai|co|app|dev|tw|cn|jp|uk)(?:[/:?#][^\s]*)?/i;
 const COMMAND_OR_MARKDOWN_RE = /\[[^\]]+\]\([^\)]+\)|(?:^|\s)(?:curl|wget|npm|pnpm|brew|git)\s|(?:google.{0,80}(?:search|搜尋)|(?:search|搜尋).{0,80}google|bing|duckduckgo|搜尋引擎)/i;
 const VAGUE_ONLY_RE = /^(?:這篇文章|此內容|它|上述說法|this article|this content|it|the above claim)[？?。.\s]*$/i;
-const COMPOUND_CLAIM_RE = /(?:，|,|；|;)\s*(?:且|並|並且|以及|and\b)/i;
+const COMPOUND_CLAIM_RE = /(?:且|並且|以及)|(?:，|,|；|;)\s*(?:並|and\b)/i;
 
 function cleanInvestigationText(value: string | undefined, limit: number): string {
   return cleanSearchContextText(value ?? "", limit)

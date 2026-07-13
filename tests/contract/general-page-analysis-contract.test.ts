@@ -204,6 +204,8 @@ describe("General Page analysis contract", () => {
     expect(englishPrompt).toContain("ordinary purchase decision");
     expect(englishPrompt).toContain("single success or failure");
     expect(englishPrompt).toContain("index, feed, or mixed list");
+    expect(englishPrompt).toContain("Claims MUST be empty for ordinary engagement");
+    expect(englishPrompt).toContain("purchase decision, consumer rights");
     expect(englishPrompt).toContain("same assertion as claim.c");
     expect(englishPrompt).toContain("claims MUST contain no more than 1 item");
     expect(englishPrompt).toContain("understand|context|counter|image");
@@ -226,6 +228,8 @@ describe("General Page analysis contract", () => {
     expect(zhPrompt).toContain("一般購買決策本身不等於");
     expect(zhPrompt).toContain("單一使用者操作工具成功或失敗");
     expect(zhPrompt).toContain("索引、feed 或互不相關");
+    expect(zhPrompt).toContain("claims 必須回空陣列");
+    expect(zhPrompt).toContain("影響購買決策");
     expect(zhPrompt).toContain("claims.c 的同一個主張");
     expect(zhPrompt).toContain("claims 絕對不得超過 1 項");
     expect(zhPrompt).toContain("不得使用 verify/source 類型");

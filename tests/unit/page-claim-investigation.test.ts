@@ -46,6 +46,7 @@ describe("page claim investigation contract", () => {
     expect(usableClaimQuestion("gstudent.com.tw courses 001-social 課程 0713 漲價 折扣")).toBeUndefined();
     expect(usableClaimQuestion("產品是否通過檢驗？又是否為市場第一？")).toBeUndefined();
     expect(usableClaimQuestion("USPS 是否收到 900 萬件假郵資包裹，且涉案者是否購買 12 間房？")).toBeUndefined();
+    expect(usableClaimQuestion("課程是否提供30小時內容且折扣碼可折350元？")).toBeUndefined();
     expect(deterministicClaimQuestion({
       c: "某機構公布 232 項產品名單",
       why: "影響消費者判斷",
