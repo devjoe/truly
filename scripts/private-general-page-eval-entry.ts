@@ -14,6 +14,10 @@ import {
 } from "../src/lib/tier-b-client";
 import type { ReadingSurface } from "../src/lib/reading-surface-types";
 import {
+  buildPageClaimInvestigationTask,
+  usableClaimQuestion,
+} from "../src/sidepanel/page-claim-investigation";
+import {
   assertPrivateEvalPaths,
   outputLanguageForPrivateEval,
   parsePrivateEvalJsonl,
@@ -122,7 +126,30 @@ async function evaluateRow(row: InputRow) {
     const raw = String(payload?.choices?.[0]?.message?.content ?? "").trim();
     const parsed = parseGeneralPageBriefContent(raw, model, outputLang);
     if (!parsed.ok || !parsed.value) return { schemaVersion: 1, sampleId: row.sampleId, surface: row.surface, sourceSha256: row.sourceSha256, ok: false, latencyMs: Date.now() - started, error: "format_error", raw };
-    return { schemaVersion: 1, sampleId: row.sampleId, surface: row.surface, sourceSha256: row.sourceSha256, ok: true, latencyMs: Date.now() - started, brief: applyGeneralPageBriefPostGuards(parsed.value, "page_full_text"), raw };
+    const brief = applyGeneralPageBriefPostGuards(parsed.value, "page_full_text");
+    const claim = brief.claims?.[0];
+    const modelQuestion = claim ? usableClaimQuestion(claim.q) : undefined;
+    const task = claim ? buildPageClaimInvestigationTask({
+      analysisKey: row.sampleId,
+      scope: "page",
+      claimIndex: 0,
+      claim,
+    }) : undefined;
+    return {
+      schemaVersion: 1,
+      sampleId: row.sampleId,
+      surface: row.surface,
+      sourceSha256: row.sourceSha256,
+      ok: true,
+      latencyMs: Date.now() - started,
+      brief,
+      investigation: {
+        eligible: Boolean(task),
+        questionSource: task ? (modelQuestion ? "model" : "deterministic_fallback") : "none",
+        question: task?.question,
+      },
+      raw,
+    };
   } catch (error) {
     const reason = error instanceof DOMException && error.name === "AbortError" ? "timeout" : "network_error";
     return { schemaVersion: 1, sampleId: row.sampleId, surface: row.surface, sourceSha256: row.sourceSha256, ok: false, latencyMs: Date.now() - started, error: reason };
