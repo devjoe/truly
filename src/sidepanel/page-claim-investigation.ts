@@ -30,8 +30,9 @@ const DOMAIN_OR_PATH_RE = /(?:^|\s|\b)(?:[a-z0-9-]+\.)+(?:com|org|net|edu|gov|io
 const COMMAND_OR_MARKDOWN_RE = /\[[^\]]+\]\([^\)]+\)|(?:^|\s)(?:curl|wget|npm|pnpm|brew|git)\s|(?:google.{0,80}(?:search|搜尋)|(?:search|搜尋).{0,80}google|bing|duckduckgo|搜尋引擎)/i;
 const VAGUE_ONLY_RE = /^(?:這篇文章|此內容|它|上述說法|this article|this content|it|the above claim)[？?。.\s]*$/i;
 const VAGUE_ATOMIC_PART_RE = /^(?:這段內容|此內容|上述內容|這件事|它|this content|the content|it)$/i;
-const COMPOUND_CLAIM_RE = /(?:且|並|以及|同時|；|;)|(?:，|,)\s*(?:並|且|也|另|同時)|\b(?:and|while)\s+(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)?(?:is|are|was|were|has|have|had|did|does|will|can|must)\b/iu;
+const COMPOUND_CLAIM_RE = /(?:且|並|以及|同時|；|;)|(?:，|,)\s*(?:並|且|也|另|同時)|(?:，|,)\s*[^，,。.!?]{0,28}(?:因此|隨後|未來|已|將|會|成立|出版|推動|聚焦|買(?:了|下)|購買|禁止|擴大|創下)|\b(?:and|while|as)\s+(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)?(?:is|are|was|were|has|have|had|did|does|will|can|must|take|takes|took)\b/iu;
 const SECOND_PROPOSITION_RE = /(?:，|,)\s*(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)(?:said|says|reported|announced|is|are|was|were|has|have|had|did|does|will|can)\b/iu;
+const ATTRIBUTION_RELATION_RE = /(?:數據顯示|表示|指出|指稱|宣稱|估計|聲稱|報導|according to|said|reported|estimated|alleged|claimed)/iu;
 
 type LegalStatus = "arrest" | "charge" | "bail" | "conviction" | "sentence" | "investigation";
 
@@ -94,6 +95,19 @@ function orderedAtomicSpan(claimText: string, atom: GeneralPageAtomicProposition
   return claimText.slice(subjectStart, objectStart + atom.o.length).trim();
 }
 
+function leadingAttribution(
+  claimText: string,
+  atom: GeneralPageAtomicProposition,
+): { relation: string; entity?: string } | undefined {
+  const subjectStart = claimText.indexOf(atom.s);
+  if (subjectStart <= 0) return undefined;
+  const prefix = claimText.slice(0, subjectStart).replace(/[，,:：\s]+$/u, "").trim();
+  const match = prefix.match(ATTRIBUTION_RELATION_RE);
+  if (!match?.[0]) return undefined;
+  const entity = prefix.replace(match[0], " ").replace(/[，,:：\s]+/gu, " ").trim();
+  return { relation: match[0], ...(normalizedMatchText(entity).length >= 2 ? { entity } : {}) };
+}
+
 function usableAtomicProposition(
   claim: GeneralPageBriefClaim,
 ): GeneralPageAtomicProposition | undefined {
@@ -125,6 +139,9 @@ export function usableClaimQuestion(
     if (!containsAtomicPart(question, atom.s) ||
       !containsAtomicPart(question, atom.p) ||
       !containsAtomicPart(question, atom.o)) return undefined;
+    const attribution = leadingAttribution(claimText ?? "", atom);
+    if (attribution && (!containsAtomicPart(question, attribution.relation) ||
+      (attribution.entity && !containsAtomicPart(question, attribution.entity)))) return undefined;
     const claimStatuses = legalStatuses(`${atom.p} ${claimText ?? ""}`);
     const questionStatuses = legalStatuses(question);
     if (claimStatuses.size > 0 && !containsAtomicPart(question, atom.p)) return undefined;
@@ -137,6 +154,7 @@ export function deterministicClaimQuestion(claim: GeneralPageBriefClaim): string
   if (hasInvestigationArtifact(claim.c) || hasInvestigationArtifact(claim.need)) return undefined;
   const atom = usableAtomicProposition(claim);
   if (!atom) return undefined;
+  if (leadingAttribution(claim.c, atom)) return undefined;
   const proposition = cleanInvestigationText(orderedAtomicSpan(claim.c, atom) ?? "", 160);
   if (!proposition || proposition.length < 6) return undefined;
   if (/\p{Script=Han}/u.test(proposition)) {

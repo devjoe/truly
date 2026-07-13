@@ -215,6 +215,8 @@ describe("General Page analysis contract", () => {
     expect(englishPrompt).toContain("exactly one atomic assertion");
     expect(englishPrompt).toContain("atom.s, atom.p, and atom.o");
     expect(englishPrompt).toContain("three short, non-overlapping substrings verbatim");
+    expect(englishPrompt).toContain("at most 6 English words");
+    expect(englishPrompt).toContain("select only one and rewrite claim.c");
     expect(englishPrompt).toContain("Keep attribution and modality exact");
     expect(englishPrompt).toContain("complete sentence with terminal punctuation");
     expect(englishPrompt).toContain("broad marketing problem statements");
@@ -240,6 +242,8 @@ describe("General Page analysis contract", () => {
     expect(zhPrompt).toContain("每個 claim 只能有一個原子主張");
     expect(zhPrompt).toContain("atom.s、atom.p、atom.o");
     expect(zhPrompt).toContain("三段簡短、不重疊文字");
+    expect(zhPrompt).toContain("最多 12 個中文字");
+    expect(zhPrompt).toContain("只選一個並把 claims.c 改寫成該單一完整陳述");
     expect(zhPrompt).toContain("來源歸因與語氣必須保持原意");
     expect(zhPrompt).toContain("有句末標點的完整句");
     expect(zhPrompt).toContain("廣泛行銷問題陳述");

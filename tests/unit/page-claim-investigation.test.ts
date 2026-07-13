@@ -140,6 +140,27 @@ describe("page claim investigation contract", () => {
     )).toBeUndefined();
   });
 
+  it("preserves an outer attribution instead of silently checking the inner assertion", () => {
+    const attributedClaim = {
+      c: "烏克蘭政府估計，俄羅斯飛彈有九成裝著日本製零件。",
+      why: "涉及武器供應鏈與出口管制。",
+      need: "烏克蘭政府原始估計。",
+      atom: { s: "俄羅斯飛彈", p: "有九成裝著", o: "日本製零件" },
+    };
+
+    expect(usableClaimQuestion(
+      "烏克蘭政府是否估計俄羅斯飛彈有九成裝著日本製零件？",
+      attributedClaim.atom,
+      attributedClaim.c,
+    )).toBeDefined();
+    expect(usableClaimQuestion(
+      "俄羅斯飛彈是否有九成裝著日本製零件？",
+      attributedClaim.atom,
+      attributedClaim.c,
+    )).toBeUndefined();
+    expect(deterministicClaimQuestion(attributedClaim)).toBeUndefined();
+  });
+
   it("keeps charge, bail, conviction, and sentencing stages distinct", () => {
     const chargedClaim = {
       c: "Joseph Horner 被控二級謀殺罪。",
@@ -190,6 +211,18 @@ describe("page claim investigation contract", () => {
       scope: "focus",
       claimIndex: 0,
       claim: { c: "短", why: "不明", need: "來源" },
+    })).toBeUndefined();
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: "USPS 收到 900 萬件假郵資包裹，涉案者因此買了 12 間房。",
+        why: "涉及郵政詐欺規模。",
+        need: "法院文件。",
+        q: "USPS 是否收到 900 萬件假郵資包裹？",
+        atom: { s: "USPS", p: "收到", o: "900 萬件假郵資包裹" },
+      },
     })).toBeUndefined();
     expect(buildPageClaimInvestigationTask({
       analysisKey: "analysis:key",
