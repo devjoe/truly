@@ -586,8 +586,8 @@ investigation history.
 
 ### Phase 3.5b: Raw Grounding Corpus
 
-Status: private evaluation control plane created; clean-source collection and
-human labeling remain in progress.
+Status: completed for candidate v1. The private corpus, blind development
+labels, frozen candidate, and one-time holdout evaluation are complete.
 
 - `devjoe/truly-private-evals` is a private control-plane repository for corpus
   schemas, rubrics, opaque manifests, deterministic splits, tooling, and
@@ -604,9 +604,28 @@ human labeling remain in progress.
 - Private model runs require explicit endpoint/model/data confirmation. Only
   reviewed anonymous aggregate results may return to this public repository.
 
+Candidate v1 used 36 eligible original Facebook samples and 30 original news
+samples; the fixed v1 evaluation set used 30 per surface. Development review
+cleared the predeclared preview thresholds, so commit `7de9c5b` and prompt
+SHA-256 `ae31fe692cc243ee5a9450a70148d0812d0bd7651e819b8f621feabb65c92ef0`
+were frozen before the holdout was unsealed. The 20 holdout sources were labeled
+without candidate output, then evaluated exactly once with `qwen3.6-35b`.
+
+The holdout showed 100% run success, 86.7% blind-gold claim precision, 100%
+recall, 71.4% abstention accuracy, and 100% manually reviewed grounding
+precision. It did **not** clear the investigation-action gates: the automated
+unsafe-action rate was 28.6% against a maximum 25%; manual atomic-claim rate was
+46.7% against 80%; aligned atomic-query rate was 66.7% against 75%; and useful
+eligible-action rate was 28.6% against 50%. Most failures combined multiple
+supported propositions rather than inventing unsupported content. Candidate v1
+therefore remains evidence for the compact reading contract, but is not cleared
+as the source of a release investigation action. It was not retuned after the
+holdout result.
+
 ### Phase 4: Session-only Claim Investigation
 
-- Status: implemented behind the compact standard brief contract.
+- Status: implementation and fail-closed contract completed on the feature
+  branch, but candidate v1 did not clear the private holdout gate for release.
 - A grounded `claims.q` is preferred; a bounded natural-question fallback from
   `claim.c + claim.need` is used only when the model question is missing or
   locally rejected. URLs, domains, search-engine instructions, vague references,
@@ -622,6 +641,8 @@ human labeling remain in progress.
 
 ### Phase 5: Runtime and UX Gate
 
+- Status: implementation verification completed; product-quality holdout gate
+  failed for candidate v1, so the investigation action remains unreleased.
 - Focused unit coverage validates query sanitization, deterministic fallback,
   fail-closed eligibility, Page/Focus state isolation, and the two-step UI.
 - The CDP UI audit validates that preparing a task opens no browser target and

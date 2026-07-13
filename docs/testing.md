@@ -70,6 +70,12 @@ data categories. It prints aggregate status only. Original text and per-sample
 model output must remain in the private control plane (or under this repo's
 gitignored `tmp/` for local-only debugging).
 
+Candidate v1's one-time 20-sample holdout passed grounding but failed the
+predeclared atomic-claim, aligned-query, useful-action, and automated
+unsafe-action gates. See the Phase 3.5b section of
+`docs/plans/general-page-reader.md`. Do not use that holdout to tune the next
+candidate; reserve a new final evaluation slice.
+
 ## General Page Reader UI Gate
 
 After changing the Web or Focus information architecture, build the development
