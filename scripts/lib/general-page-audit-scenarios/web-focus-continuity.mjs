@@ -132,9 +132,12 @@ export async function runWebFocusContinuityScenario({
       activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
     };
   })()`);
-  await side.screenshot(artifactPath(WEB_FOCUS_CONTINUITY_ARTIFACTS.selection));
-
   await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-focus-analysis .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 20_000, "Focus analysis before Web switch");
+  Object.assign(selection, await side.evaluateJson(`(() => ({
+    focusToolCount: document.querySelectorAll('#page-pane .page-reader-focus-tools .page-reader-card-action').length || 0,
+    activeState: globalThis.__trulyPageReadingRuntime?.auditState?.() || null,
+  }))()`));
+  await side.screenshot(artifactPath(WEB_FOCUS_CONTINUITY_ARTIFACTS.selection));
   const focusBeforeWeb = await side.evaluateJson(`(() => {
     const pane = document.querySelector('#page-pane');
     const heading = pane?.querySelector('.page-reader-focus-analysis .page-reader-analysis-header h3');

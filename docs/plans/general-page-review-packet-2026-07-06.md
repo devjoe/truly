@@ -19,7 +19,7 @@ In scope:
 - Popup and Side Panel Page/Web read flow.
 - Side Panel auto-read only while the panel is open and all-sites access is
   granted.
-- Automatic General Page quick brief when the page is eligible and Tier B model
+- Automatic compact General Page brief when the page is eligible and Tier B model
   settings are available.
 - Selection and current-region target seams for future paragraph summary and
   check workflows.
@@ -48,7 +48,7 @@ contracts instead of bypassing privacy and audit gates.
 | Service worker | Mediates extension messages, content-script reads, permission boundaries, and model calls. | Privileged model runtime must use trusted stored settings, not content-script supplied endpoints. |
 | Content scripts | Extract live page surfaces and target snapshots. | Page extraction should not mutate live pages or leak private data into storage. |
 | Reading contracts | `ReadingSurface`, `ReadingTarget`, and General Page context types. | Page, selection, current-region, and screenshot recovery should converge through the same model-context boundary. |
-| Tier B model client | Builds compact or full JSON-only prompts and parses bounded output. | Automatic Page/Web analysis should use quick mode; screenshot-confirmed recovery may use full mode. |
+| Tier B model client | Builds the single compact standard JSON-only prompt and parses bounded output. | Page, Focus, and screenshot-confirmed recovery must share one output contract and normalization boundary. |
 | Audit tooling | Uses synthetic local pages and live CDP to verify behavior. | Artifacts stay under `tmp/` and remain private. |
 
 ## Main Flows
@@ -70,25 +70,20 @@ contracts instead of bypassing privacy and audit gates.
 3. Navigating to a new readable HTTP/HTTPS page triggers automatic Page/Web
    extraction for the current tab.
 4. If the page is eligible and Tier B settings are available, Page/Web requests
-   a quick brief automatically.
+   one compact standard reading brief automatically.
 5. Blocked pages and pages requiring an explicit user target remain fail-closed.
 
 This boundary is intentional: all-sites access does not mean background crawling;
 it means Truly may read the currently viewed page while the user is actively
 using the Side Panel.
 
-### Quick Brief Versus Full Brief
+### Compact Standard Reading Contract
 
-Automatic Page/Web analysis uses quick mode:
-
-- lower output token cap;
-- one-sentence summary target;
-- at most two background items;
-- at most one claim and one follow-up question;
-- UI copy says the model produced a quick brief.
-
-Full mode is reserved for explicit recovery flows such as user-confirmed
-screenshot-assisted analysis.
+Every Page, Focus, and user-confirmed screenshot-assisted analysis uses the
+same compact contract: a one-sentence summary, at most two background items,
+at most one checkable claim, at most one follow-up question, and an optional
+short note. Screenshot recovery adds visual evidence to the input; it does not
+select a different analysis depth or output schema.
 
 ### Targeted Reading
 
@@ -125,8 +120,8 @@ Expected evidence:
 - `check:public` passes typecheck, contract tests, unit tests, build, parser
   spikes, public-boundary checks, model-integration audit, and release bundle
   audit.
-- `audit:general-page-reader` passes synthetic Page/Web flows, quick brief
-  detection, hidden Web history checks, target flows, no-grant guidance, and
+- `audit:general-page-reader` passes synthetic Page/Web flows, compact standard
+  brief detection, hidden Web history checks, target flows, no-grant guidance, and
   storage privacy scanning.
 - `audit:facebook-current:zh` passes against the currently opened Chinese
   Facebook flow before release review.
@@ -145,9 +140,9 @@ safe to copy into public review material.
 | Chinese live-DOM news validation | Private Google News publisher-URL reviews under `/private/tmp/truly-google-news-100` | 100/100 `good` after fixture-driven fixes, plus a fresh 50/50 `good` validation set. |
 | English live-DOM validation | Private balanced review under `/private/tmp/truly-english-validation-v1` | Primary readable pages: 78/78 extracted, 70 `good`, 7 `partial`, 1 expected blocked/empty; edge pages mostly partial/blocked/error as expected. |
 | CDP review harness | `tests/unit/cdp-page-source.test.mjs` | Stuck CDP target now becomes a recorded timeout and closes the target instead of leaving review output missing. |
-| Page/Web CDP product audit | `TRULY_EXTENSION_ID=<id> TRULY_AUDIT_AUTO_RELOAD=1 rtk npm run audit:general-page-reader` | Passed on 2026-07-07 with popup read included. A later post-build rerun used `TRULY_AUDIT_SKIP_POPUP_READ=1` because Chrome reported an inactive native window for `chrome.action.openPopup`; the non-popup Page/Web flows still passed. The combined evidence covers popup read, Side Panel auto-read, quick brief dispatch, tab-state isolation without a visible Web history strip, selection/current-region targets, unsupported-page guidance, screenshot recovery, storage privacy, and responsive UI checks. |
+| Page/Web CDP product audit | `TRULY_EXTENSION_ID=<id> TRULY_AUDIT_AUTO_RELOAD=1 rtk npm run audit:general-page-reader` | Passed on 2026-07-07 with popup read included. A later post-build rerun used `TRULY_AUDIT_SKIP_POPUP_READ=1` because Chrome reported an inactive native window for `chrome.action.openPopup`; the non-popup Page/Web flows still passed. The combined evidence covers popup read, Side Panel auto-read, compact standard brief dispatch, tab-state isolation without a visible Web history strip, selection/current-region targets, unsupported-page guidance, screenshot recovery, storage privacy, and responsive UI checks. |
 | Facebook live smoke | `TRULY_EXTENSION_ID=<id> rtk npm run audit:facebook-current:zh` | Passed on 2026-07-07 against a logged-in Chinese Facebook home feed. Verified clean service-worker/content-script build `1783366275821-4bb7a2a`, `zh-Hant` locale, heads-up rendering, post tagging, valid boundaries, selector health, heads-up expand/collapse, and deep-read Side Panel handoff from the `深入閱讀` action button. |
-| Runtime auto-read and model dispatch | `tests/unit/page-reading-runtime.test.ts` | all-sites auto-read is gated on Side Panel use, auto quick brief uses Tier B settings, and weak/target-required pages fail closed. |
+| Runtime auto-read and model dispatch | `tests/unit/page-reading-runtime.test.ts` | all-sites auto-read is gated on Side Panel use, the compact standard brief uses Tier B settings, and weak/target-required pages fail closed. |
 | Screenshot recovery | `tests/unit/page-reading-runtime.test.ts`, `tests/unit/screenshot-data-url.test.ts`, `tests/unit/snapshot-redaction.test.ts` | Vision recovery is user-confirmed, data URL format-checked, session-only, and snapshot-redacted. |
 
 Facebook live audit is intentionally separate from Page/Web synthetic audit. It
@@ -197,7 +192,7 @@ not a parser regression.
 
 - Real-site parser quality still needs human judgment beyond synthetic audit
   pages.
-- Quick brief reduces output length but does not eliminate model latency; slow
+- The compact standard brief reduces output length but does not eliminate model latency; slow
   providers can still take noticeable time.
 - Current-region targeting is a v1 seam; it is intentionally conservative and
   should not be judged as the final paragraph UX.

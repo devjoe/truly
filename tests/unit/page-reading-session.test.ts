@@ -24,6 +24,7 @@ function session(): PageReadingSession {
     activationSource: "sidepanel",
     pageScope: {
       analysis: { status: "ready", updatedAt: 900, brief: { schemaVersion: 1, summary: "Web" } },
+      investigation: { analysisKey: "page-key", claimIndex: 0, expanded: true },
     },
     focusScope: {
       target: {
@@ -34,6 +35,7 @@ function session(): PageReadingSession {
         extraction: { method: "selection", status: "complete", warnings: [] },
       },
       analysis: { status: "ready", updatedAt: 950, brief: { schemaVersion: 1, summary: "Focus" } },
+      investigation: { analysisKey: "focus-key", claimIndex: 0, expanded: false },
     },
   };
 }
@@ -45,6 +47,8 @@ describe("canonical page reading session", () => {
     expect(materializeScopeSession(canonical, "page").target).toBeUndefined();
     expect(materializeScopeSession(canonical, "focus").analysis?.brief?.summary).toBe("Focus");
     expect(materializeScopeSession(canonical, "focus").target?.kind).toBe("selection");
+    expect(materializeScopeSession(canonical, "page").investigation?.analysisKey).toBe("page-key");
+    expect(materializeScopeSession(canonical, "focus").investigation?.analysisKey).toBe("focus-key");
     expect(canonical).not.toHaveProperty("analysis");
     expect(canonical).not.toHaveProperty("target");
   });

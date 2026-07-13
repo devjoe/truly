@@ -14,7 +14,6 @@ import { applyGeneralPageBriefOutputReview } from "./model-output-review";
 
 export interface GeneralPageBrief {
   schemaVersion: 1;
-  mode?: GeneralPageAnalysisMode;
   summary: string;
   bg?: ReadingBriefBackground[];
   claims?: ReadingBriefClaim[];
@@ -25,8 +24,6 @@ export interface GeneralPageBrief {
   elapsedMs?: number;
   outputReview?: ModelOutputReview;
 }
-
-export type GeneralPageAnalysisMode = "quick" | "full";
 
 export type GeneralPageAnalysisEligibilityReason =
   | "session_not_ready"
@@ -92,25 +89,23 @@ export function normalizeGeneralPageBrief(
   raw: unknown,
   model: string,
   outputLang?: Lang,
-  mode: GeneralPageAnalysisMode = "full",
 ): GeneralPageBrief | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
   if (record.schemaVersion !== 1) return null;
-  const summary = boundedString(record.summary, mode === "quick" ? 360 : 900);
+  const summary = boundedSummary(record.summary, outputLang);
   if (!summary) return null;
 
   const brief: GeneralPageBrief = {
     schemaVersion: 1,
-    mode,
     summary,
     model,
     outputLang,
   };
   const bg = normalizeArray(record.bg, 2, normalizeBackground);
-  const claims = normalizeArray(record.claims, mode === "quick" ? 1 : 3, normalizeClaim);
-  const qs = normalizeArray(record.qs, mode === "quick" ? 1 : 3, normalizeQuestion);
-  const note = boundedString(record.note, mode === "quick" ? 200 : 500);
+  const claims = normalizeArray(record.claims, 1, normalizeClaim);
+  const qs = normalizeArray(record.qs, 1, normalizeQuestion);
+  const note = boundedString(record.note, 200);
   if (bg.length > 0) brief.bg = bg;
   if (claims.length > 0) brief.claims = claims;
   if (qs.length > 0) brief.qs = qs;
@@ -122,14 +117,13 @@ export function parseGeneralPageBriefContent(
   content: string,
   model: string,
   outputLang?: Lang,
-  mode: GeneralPageAnalysisMode = "full",
 ): ParsedGeneralPageBriefContent {
   const trimmed = content.trim();
   if (!trimmed) return { ok: false, value: null, error: "empty_content" };
   const jsonText = extractJsonPayload(trimmed);
   if (!jsonText) return { ok: false, value: null, error: "json_not_found" };
   try {
-    const value = normalizeGeneralPageBrief(JSON.parse(jsonText), model, outputLang, mode);
+    const value = normalizeGeneralPageBrief(JSON.parse(jsonText), model, outputLang);
     const reviewed = value && outputLang === "zh-TW"
       ? applyGeneralPageBriefOutputReview(value)
       : value;
@@ -213,12 +207,11 @@ function normalizeQuestion(value: unknown): ReadingBriefQuestion | null {
   const q = boundedString(record?.q, 140);
   const kind = boundedString(record?.kind, 30);
   if (!q) return null;
+  if (kind === "verify" || kind === "source") return null;
   const normalizedKind = kind === "understand" ||
     kind === "context" ||
     kind === "counter" ||
-    kind === "verify" ||
-    kind === "image" ||
-    kind === "source"
+    kind === "image"
     ? kind
     : "understand";
   return { q, kind: normalizedKind };
@@ -251,6 +244,14 @@ function boundedString(value: unknown, maxLength: number): string | undefined {
   const clean = value.trim().replace(/\s+/g, " ");
   if (!clean) return undefined;
   return clean.length > maxLength ? clean.slice(0, maxLength).trim() : clean;
+}
+
+function boundedSummary(value: unknown, outputLang: Lang | undefined): string | undefined {
+  const clean = boundedString(value, 900);
+  if (!clean) return undefined;
+  if (outputLang === "zh-TW") return Array.from(clean).slice(0, 80).join("").trim();
+  if (outputLang === "en") return clean.split(/\s+/).slice(0, 32).join(" ").trim();
+  return clean.slice(0, 360).trim();
 }
 
 function extractJsonPayload(value: string): string | undefined {

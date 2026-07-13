@@ -11,7 +11,8 @@ This document is the current public-safe readiness index for the General Page Re
 - Whole-page, selected-text, and current-region reading paths share the same Page/Web session model and remain session-only.
 - Page/Web model integration uses a single Tier B `GeneralPageBrief` request over the effective reading context, not the raw full DOM or hidden private artifacts.
 - The Reading Analysis Coordinator is the single Module Interface for ordinary
-  quick analysis and confirmed screenshot full analysis. It owns eligibility,
+  analysis and confirmed screenshot-assisted analysis. Both use the same compact
+  standard contract. It owns eligibility,
   scoped request keys, provider commands, stale-result acceptance, and uniform
   ready/error settlement; the DOM runtime only applies the resulting scope and
   screenshot states.
@@ -24,7 +25,7 @@ This document is the current public-safe readiness index for the General Page Re
 
 - Public fixtures stay synthetic and anonymous.
 - Real-web observation and 200-target live-DOM product-quality reviews stay under `tmp/` or private repos.
-- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, page brief generation, quick-brief mode, 430px Page/Web responsive overflow, Page/Web design restraint, Page/Web interaction accessibility, hidden Web history, selection, current-region, URL stale handling, noisy fallback, candidate recovery, teaser-hub overview downgrade, no-grant guidance, and storage privacy scanning.
+- `audit:general-page-reader` is the runtime acceptance harness for popup activation, ordinary reads, the compact standard page-brief contract, 430px Page/Web responsive overflow, Page/Web design restraint, Page/Web interaction accessibility, hidden Web history, selection, current-region, URL stale handling, noisy fallback, candidate recovery, teaser-hub overview downgrade, no-grant guidance, and storage privacy scanning.
 - `general-page-ui-readiness-review.md` records the current Page/Web component decisions: keep ready pages quiet, expand diagnostics only for caution/recovery, preserve the compact Feed-aligned side-panel style, and avoid decorative reader-mode UI.
 - Long-running `audit:general-page-reader` phases are bounded by phase-level timeouts and write `audit-progress.json` plus `audit-phase-log.json`, so a CDP/browser hang fails with a diagnosable artifact instead of blocking reviewer validation indefinitely. Individual CDP commands also have client-side timeouts so an unresponsive `Runtime.evaluate` cannot bypass the phase's inner diagnostic screenshots and JSON state capture.
 - `check:merge-readiness` verifies that the feature branch is clean, synced with

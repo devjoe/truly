@@ -1179,6 +1179,16 @@ describe("sidepanel page reading runtime", () => {
 
   it("auto-generates a session-only General Page brief when Tier B is available", async () => {
     const pagePaneEl = setupDom();
+    const copiedTexts: string[] = [];
+    Object.defineProperty(globalThis.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText: vi.fn(async (text: string) => { copiedTexts.push(text); }) },
+    });
+    const savedMarkdown: string[] = [];
+    const saveMarkdownFile = vi.fn(async (text: string) => {
+      savedMarkdown.push(text);
+      return "fallback-download" as const;
+    });
     const sendMessage = vi.fn(async (message: TrulyMessage) => {
       if (message.type === "PAGE_READING_REQUEST") {
         return {
@@ -1189,7 +1199,6 @@ describe("sidepanel page reading runtime", () => {
       }
       if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
         expect(message.allowedUse).toBe("article_or_selection_analysis");
-        expect(message.mode).toBe("quick");
         expect(message.context.targetKind).toBe("page");
         expect(message.context.mainText).toContain("Runtime fixture text long enough");
         return {
@@ -1198,11 +1207,10 @@ describe("sidepanel page reading runtime", () => {
           ok: true,
           brief: {
             schemaVersion: 1,
-            mode: "quick",
             summary: "Synthetic model summary for the current page.",
             bg: [{ t: "Context", why: "The page is a synthetic runtime article." }],
-            claims: [{ c: "Runtime claim", why: "It is central to the sample.", need: "Check the source." }],
-            qs: [{ q: "What source supports the runtime claim?", kind: "source" }],
+            claims: [{ c: "Runtime claim", why: "It is central to the sample.", need: "Check the source.", q: "What primary source supports the runtime claim?" }],
+            qs: [{ q: "What background helps explain the runtime claim?", kind: "context" }],
             note: "Synthetic content-specific caveat.",
             model: "brief-model",
             outputLang: "zh-TW",
@@ -1233,6 +1241,7 @@ describe("sidepanel page reading runtime", () => {
       }),
       now: () => 1_000,
       hasHostPermission: vi.fn(async () => true),
+      saveMarkdownFile,
     });
 
     await runtime.requestReadCurrentPage("sidepanel");
@@ -1241,7 +1250,6 @@ describe("sidepanel page reading runtime", () => {
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: "GENERAL_PAGE_ANALYSIS_REQUEST",
       tabId: 42,
-      mode: "quick",
       providerRuntime: expect.objectContaining({
         canUseModel: true,
         effectiveProvider: "openai-compatible",
@@ -1251,8 +1259,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("閱讀脈絡");
     expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
     expect(pagePaneEl.textContent).toContain("Runtime claim");
-    expect(pagePaneEl.querySelector(".page-reader-analysis")?.getAttribute("data-analysis-mode")).toBe("quick");
-    // Quick briefs use one quiet footer for both model transparency and the
+    // Standard briefs use one quiet footer for both model transparency and the
     // preview disclaimer instead of competing left/right notes.
     expect(pagePaneEl.textContent).toContain("brief-model 協助整理");
     expect(pagePaneEl.textContent).not.toContain("Analyzed by brief-model");
@@ -1272,8 +1279,25 @@ describe("sidepanel page reading runtime", () => {
     const askLink = pagePaneEl.querySelector<HTMLAnchorElement>(".page-reader-analysis-questions .reading-brief-google-link");
     expect(askLink?.href).toContain("google.com/search");
     expect(pagePaneEl.querySelector(".page-reader-analysis-header span")).toBeNull();
-    expect(pagePaneEl.querySelectorAll(".page-reader-analysis-section.is-single")).toHaveLength(3);
-    expect(pagePaneEl.querySelector(".page-reader-analysis-section ul")).toBeNull();
+    expect(pagePaneEl.querySelectorAll(".page-reader-analysis-section.is-single")).toHaveLength(2);
+    const startCheck = pagePaneEl.querySelector<HTMLButtonElement>(".page-claim-start");
+    expect(startCheck?.textContent).toBe("開始查核");
+    expect(pagePaneEl.querySelector(".page-claim-investigation")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-claim-action")).toBeNull();
+    startCheck?.click();
+    expect(pagePaneEl.querySelector(".page-claim-investigation")?.textContent).toContain("What primary source supports the runtime claim");
+    const evidenceLink = pagePaneEl.querySelector<HTMLAnchorElement>(".page-claim-investigation-actions a");
+    expect(evidenceLink?.textContent).toBe("搜尋證據");
+    expect(evidenceLink?.href).toContain("google.com/search");
+    expect(evidenceLink?.href).not.toContain("udm=50");
+    expect(pagePaneEl.querySelectorAll(".page-claim-investigation-actions a")).toHaveLength(3);
+    pagePaneEl.querySelector<HTMLButtonElement>(".page-claim-copy-question")?.click();
+    await flushMicrotasks();
+    expect(copiedTexts.at(-1)).toBe("What primary source supports the runtime claim");
+    const questionList = pagePaneEl.querySelector(".page-reader-analysis-questions .reading-brief-question-list");
+    expect(questionList?.tagName).toBe("UL");
+    expect(questionList?.querySelectorAll(":scope > .reading-brief-question-row")).toHaveLength(1);
+    expect(questionList?.querySelector(":scope > .reading-brief-question-row")?.tagName).toBe("LI");
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-excerpt")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-context-details .page-reader-excerpt")).not.toBeNull();
     expect(pagePaneEl.querySelector<HTMLDetailsElement>(".page-reader-context-details")?.open).toBe(false);
@@ -1281,9 +1305,30 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-card-header #pageCopyMetadata")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-context-details .page-reader-source-links")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-analysis-header h3")?.textContent).toBe("閱讀脈絡");
-    expect(pagePaneEl.querySelector(".page-reader-external-tools-label")?.textContent).toBe("外部工具整合");
+    const externalTools = pagePaneEl.querySelector(".page-reader-external-tools");
+    expect(externalTools?.querySelector(".page-reader-external-tools-label")?.textContent).toBe("外部工具整合");
+    expect(externalTools?.querySelector(".page-reader-external-tools-hint")?.textContent)
+      .toBe("複製或下載 Markdown，接到 AI 工具、OpenClaw 或筆記。");
     expect(pagePaneEl.querySelector(".page-reader-card-tools #pageCopyMetadata")).not.toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card-tools #pageDownloadMarkdown")).not.toBeNull();
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageCopyMetadata")?.click();
+    await flushMicrotasks();
+    expect(copiedTexts.at(-1)).toContain("閱讀脈絡\nSynthetic model summary for the current page.");
+    expect(copiedTexts.at(-1)).toContain("待確認事項");
+    expect(copiedTexts.at(-1)).not.toContain("Runtime fixture excerpt.");
+    expect(copiedTexts.at(-1)).not.toContain("Extraction:");
+    pagePaneEl.querySelector<HTMLButtonElement>("#pageDownloadMarkdown")?.click();
+    await flushMicrotasks();
+    expect(savedMarkdown.at(-1)).toContain("# Runtime Fixture");
+    expect(savedMarkdown.at(-1)).toContain("## 頁面文字");
+    expect(savedMarkdown.at(-1)).toContain("Runtime fixture excerpt.");
+    expect(savedMarkdown.at(-1)).toContain("## 來源連結");
+    expect(saveMarkdownFile).toHaveBeenCalledWith(
+      expect.stringContaining("Synthetic model summary for the current page."),
+      expect.stringMatching(/^truly-page-.*\.md$/),
+      "text/markdown;charset=utf-8",
+      expect.objectContaining({ mode: DEFAULT_SETTINGS.markdownDownloadMode }),
+    );
     expect(pagePaneEl.textContent).not.toContain("技術細節");
     expect(pagePaneEl.querySelector(".page-reader-status")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-command-bar")).toBeNull();
@@ -1348,6 +1393,8 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-reader-analysis.is-running")?.children).toHaveLength(1);
     expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-label")).toBe("正在整理此頁");
     expect(readCurrentButton(pagePaneEl)?.getAttribute("aria-disabled")).toBe("true");
+    expect(pagePaneEl.querySelector(".page-reader-external-tools")).toBeNull();
+    expect(pagePaneEl.querySelector("#pageCopyMetadata, #pageDownloadMarkdown")).toBeNull();
     expect(pagePaneEl.querySelector(".page-reader-card > .page-reader-analysis-header")).toBeNull();
     // While a clean page's brief is running, the pane already uses the final
     // The extracted preview is available only inside the collapsed page-context
@@ -1480,6 +1527,8 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.textContent).toContain("頁面重點暫時無法產生。");
     expect(pagePaneEl.textContent).not.toContain("general_page_brief_format_error");
     expect(pagePaneEl.querySelector("#pageAnalysisRetry")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-reader-external-tools")).toBeNull();
+    expect(pagePaneEl.querySelector("#pageCopyMetadata, #pageDownloadMarkdown")).toBeNull();
   });
 
   it("does not auto-read a general page when all-sites access is unavailable", async () => {
@@ -1788,7 +1837,6 @@ describe("sidepanel page reading runtime", () => {
         }
         if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
           expect(message.allowedUse).toBe("article_or_selection_analysis");
-          expect(message.mode).toBe("quick");
           expect(message.context.targetKind).toBe("page");
           return {
             type: "GENERAL_PAGE_ANALYSIS_RESULT",
@@ -1796,11 +1844,10 @@ describe("sidepanel page reading runtime", () => {
             ok: true,
             brief: {
               schemaVersion: 1,
-              mode: "quick",
               summary: "Auto-read model summary.",
               bg: [{ t: "Auto context", why: "The side panel was open with all-sites access." }],
-              claims: [{ c: "Auto-read claim", why: "It verifies automatic model dispatch.", need: "Compare with the page." }],
-              qs: [{ q: "What changed after auto-read?", kind: "source" }],
+              claims: [{ c: "Auto-read claim", why: "It verifies automatic model dispatch.", need: "Compare with the page.", q: "What primary evidence supports the auto-read claim?" }],
+              qs: [{ q: "What background explains the auto-read result?", kind: "context" }],
               model: "brief-model",
               outputLang: "zh-TW",
               elapsedMs: 900,
@@ -2156,7 +2203,6 @@ describe("sidepanel page reading runtime", () => {
           model: "advisor-model",
         });
         expect(message.allowedUse).toBe("page_overview_only");
-        expect(message.mode).toBe("quick");
         return {
           type: "GENERAL_PAGE_ANALYSIS_RESULT",
           tabId: 42,
@@ -2169,7 +2215,7 @@ describe("sidepanel page reading runtime", () => {
               why: "Overview mode should not render claims.",
               need: "No claim needed.",
             }],
-            qs: [{ q: "Which linked card should the reader inspect?", kind: "source" }],
+            qs: [{ q: "Which linked card should the reader understand next?", kind: "understand" }],
             note: "此為新聞彙整頁面，建議點擊各來源連結以獲取詳細報導。",
             model: "advisor-model",
             outputLang: "zh-TW",
@@ -3140,7 +3186,7 @@ describe("sidepanel page reading runtime", () => {
 
     expect(sentAnalysis).toHaveLength(1);
     const request = sentAnalysis[0] as Extract<TrulyMessage, { type: "GENERAL_PAGE_ANALYSIS_REQUEST" }>;
-    expect(request.mode).toBe("full");
+    expect("mode" in request).toBe(false);
     expect(request.screenshotDataUrl).toContain("data:image/jpeg;base64");
     expect(pagePaneEl.textContent).toContain("Screenshot-grounded synthetic summary.");
   });

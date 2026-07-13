@@ -189,7 +189,7 @@ facts intact:
   single domain from the side panel for persistent read access to that site
   only. If the user explicitly enables General Page all-sites access in
   Settings, the side panel can read the current page on ordinary HTTP/HTTPS
-  sites while the Side Panel is open; suitable pages may send quick-brief
+  sites while the Side Panel is open; suitable pages may send compact-reading
   context to the configured model endpoint, but this does not enable background
   crawling or persistent full-page history.
 - Page/Web screenshot-assisted recovery can process a visible-tab screenshot

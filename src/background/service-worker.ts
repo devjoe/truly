@@ -384,7 +384,6 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           apiKey: await tierBApiKeyForProvider(trustedRuntime.effectiveProvider),
           context: message.context,
           allowedUse: message.allowedUse,
-          mode: message.mode ?? "full",
           outputLang: message.outputLang,
           screenshotDataUrl,
         });

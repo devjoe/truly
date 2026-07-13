@@ -37,7 +37,7 @@ describe("General Page analysis contract", () => {
       summary: "A neutral synthetic summary.",
       bg: [{ t: "Topic", why: "It frames the page.", q: "What is the topic?" }],
       claims: [{ c: "Synthetic claim", why: "It is checkable.", need: "Source", q: "Synthetic claim source?" }],
-      qs: [{ q: "What should be checked next?", kind: "verify" }],
+      qs: [{ q: "What background would help the reader?", kind: "context" }],
       note: "Use source links.",
     }, "mock-model", "en");
 
@@ -48,12 +48,12 @@ describe("General Page analysis contract", () => {
       outputLang: "en",
       bg: [{ t: "Topic", why: "It frames the page.", q: "What is the topic?" }],
       claims: [{ c: "Synthetic claim", why: "It is checkable.", need: "Source", q: "Synthetic claim source?" }],
-      qs: [{ q: "What should be checked next?", kind: "verify" }],
+      qs: [{ q: "What background would help the reader?", kind: "context" }],
       note: "Use source links.",
     });
   });
 
-  it("bounds quick page briefs for automatic side-panel display", () => {
+  it("bounds the compact standard brief for every General Page analysis", () => {
     const brief = normalizeGeneralPageBrief({
       schemaVersion: 1,
       summary: "A ".repeat(400),
@@ -63,25 +63,49 @@ describe("General Page analysis contract", () => {
         { t: "Topic 3", why: "Should be dropped." },
       ],
       claims: [
-        { c: "Claim 1", why: "Important.", need: "Evidence." },
-        { c: "Claim 2", why: "Should be dropped.", need: "Evidence." },
+        { c: "Claim 1", why: "Important.", need: "Evidence.", q: "What primary evidence supports Claim 1?" },
+        { c: "Claim 2", why: "Should be dropped.", need: "Evidence.", q: "What primary evidence supports Claim 2?" },
       ],
       qs: [
-        { q: "What should be checked?", kind: "verify" },
-        { q: "What should be dropped?", kind: "source" },
+        { q: "What background would help?", kind: "context" },
+        { q: "What alternative perspective matters?", kind: "counter" },
       ],
       note: "N".repeat(300),
-    }, "mock-model", "en", "quick");
+    }, "mock-model", "en");
 
     expect(brief).toMatchObject({
-      mode: "quick",
       model: "mock-model",
     });
-    expect(brief?.summary.length).toBeLessThanOrEqual(360);
+    expect(brief?.summary.split(/\s+/)).toHaveLength(32);
     expect(brief?.bg).toHaveLength(2);
     expect(brief?.claims).toHaveLength(1);
     expect(brief?.qs).toHaveLength(1);
     expect(brief?.note?.length).toBeLessThanOrEqual(200);
+  });
+
+  it("enforces the zh-TW 80-character summary boundary", () => {
+    const brief = normalizeGeneralPageBrief({
+      schemaVersion: 1,
+      summary: "字".repeat(120),
+    }, "mock-model", "zh-TW");
+
+    expect(Array.from(brief?.summary ?? "")).toHaveLength(80);
+  });
+
+  it("tolerates a missing claim query but drops verify/source follow-up questions", () => {
+    const brief = normalizeGeneralPageBrief({
+      schemaVersion: 1,
+      summary: "A compact result.",
+      claims: [{ c: "A supported claim", why: "It matters.", need: "Primary evidence" }],
+      qs: [
+        { q: "Is the same claim true?", kind: "verify" },
+        { q: "Where is the source?", kind: "source" },
+        { q: "What background matters?", kind: "context" },
+      ],
+    }, "mock-model", "en");
+
+    expect(brief?.claims).toEqual([{ c: "A supported claim", why: "It matters.", need: "Primary evidence" }]);
+    expect(brief?.qs).toEqual([{ q: "What background matters?", kind: "context" }]);
   });
 
   it("rejects wrong schema versions and prose-wrapped JSON", () => {
@@ -167,29 +191,50 @@ describe("General Page analysis contract", () => {
       model: "vision-model",
       context,
       allowedUse: "article_or_selection_analysis",
-    });
-    expect(typeof withoutShot.messages[1]?.content).toBe("string");
-    expect(withoutShot.max_tokens).toBe(1400);
-
-    const quick = buildTierBGeneralPageBriefChatBody({
-      endpoint: "http://127.0.0.1:4999/v1/chat/completions",
-      model: "quick-model",
-      context,
-      allowedUse: "article_or_selection_analysis",
-      mode: "quick",
       outputLang: "en",
     });
-    expect(quick.max_tokens).toBe(520);
-    expect(String(quick.messages[0]?.content)).toContain("Quick mode");
+    expect(typeof withoutShot.messages[1]?.content).toBe("string");
+    expect(withoutShot.max_tokens).toBe(720);
+    const englishPrompt = String(withoutShot.messages[0]?.content);
+    expect(englishPrompt).toContain("search-ready verification question");
+    expect(englishPrompt).toContain("could materially change the reader's judgment");
+    expect(englishPrompt).toContain("not a keyword list, domain, or path");
+    expect(englishPrompt).toContain("exactly one atomic assertion");
+    expect(englishPrompt).toContain("whether text or images appear AI-generated");
+    expect(englishPrompt).toContain("claims MUST contain no more than 1 item");
+    expect(englishPrompt).toContain("understand|context|counter|image");
+    expect(englishPrompt).not.toContain("Quick mode");
+    expect(englishPrompt).not.toContain("Full mode");
+
+    const zhStandard = buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://127.0.0.1:4999/v1/chat/completions",
+      model: "standard-model",
+      context,
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "zh-TW",
+    });
+    const zhPrompt = String(zhStandard.messages[0]?.content);
+    expect(zhPrompt).toContain("可直接搜尋的核心查核問題");
+    expect(zhPrompt).toContain("可能實質改變讀者");
+    expect(zhPrompt).toContain("不得只是關鍵字、網域或路徑");
+    expect(zhPrompt).toContain("只能處理一個原子主張");
+    expect(zhPrompt).toContain("內容是否像 AI 生成");
+    expect(zhPrompt).toContain("claims 絕對不得超過 1 項");
+    expect(zhPrompt).toContain("不得使用 verify/source 類型");
+    expect(zhPrompt).not.toContain("快速模式");
+    expect(zhPrompt).not.toContain("完整模式");
 
     const withShot = buildTierBGeneralPageBriefChatBody({
       endpoint: "http://127.0.0.1:4999/v1/chat/completions",
       model: "vision-model",
       context,
       allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
       screenshotDataUrl: "data:image/jpeg;base64,c3ludGhldGljLXNjcmVlbnNob3Q=",
     });
     const content = withShot.messages[1]?.content;
+    expect(withShot.max_tokens).toBe(720);
+    expect(withShot.messages[0]?.content).toBe(withoutShot.messages[0]?.content);
     expect(Array.isArray(content)).toBe(true);
     if (Array.isArray(content)) {
       expect(content[0]).toMatchObject({ type: "text" });

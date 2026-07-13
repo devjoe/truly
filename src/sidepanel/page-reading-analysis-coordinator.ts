@@ -5,7 +5,6 @@ import {
 import {
   generalPageBriefEligibility,
   type GeneralPageAnalysisEligibilityReason,
-  type GeneralPageAnalysisMode,
 } from "../lib/general-page-analysis";
 import type {
   GeneralPageEffectiveModelContext,
@@ -37,7 +36,6 @@ export interface PageReadingAnalysisRun {
   key: string;
   scope: PageReadingScopeKind;
   allowedUse: GeneralPageEffectiveModelContextUse;
-  mode: GeneralPageAnalysisMode;
   running: PageReadingAnalysisSession;
   message: GeneralPageAnalysisRequestMsg;
 }
@@ -77,11 +75,9 @@ function analysisContext(
 function analysisKey(
   effective: GeneralPageEffectiveModelContext,
   providerRuntime: GeneralPageParserAdvisorProviderRuntime,
-  mode: GeneralPageAnalysisMode,
   screenshotConfirmed: boolean,
 ): string {
   const parts = [
-    mode,
     effective.allowedUse,
     effective.source,
     effective.mainText.length,
@@ -97,7 +93,6 @@ export function planPageReadingAnalysis(input: {
   tabId: number;
   session: MaterializedPageReadingSession;
   scope: PageReadingScopeKind;
-  mode: GeneralPageAnalysisMode;
   force: boolean;
   activeTabId?: number | null;
   activeUrl?: string;
@@ -139,7 +134,7 @@ export function planPageReadingAnalysis(input: {
     return { kind: "skip", reason: "provider_not_configured", eligibilityReason: "provider_not_ready", reportError: input.force };
   }
 
-  const key = analysisKey(effective, providerRuntime, input.mode, screenshotConfirmed);
+  const key = analysisKey(effective, providerRuntime, screenshotConfirmed);
   const currentAnalysis = scopeStateForSession(input.session, input.scope).analysis;
   if (!input.force && currentAnalysis?.key === key &&
     (currentAnalysis.status === "running" || currentAnalysis.status === "ready")) {
@@ -148,7 +143,6 @@ export function planPageReadingAnalysis(input: {
   const running: PageReadingAnalysisSession = {
     status: "running",
     key,
-    mode: input.mode,
     allowedUse: effective.allowedUse,
     updatedAt: input.now,
   };
@@ -158,14 +152,12 @@ export function planPageReadingAnalysis(input: {
       key,
       scope: input.scope,
       allowedUse: effective.allowedUse,
-      mode: input.mode,
       running,
       message: {
         type: "GENERAL_PAGE_ANALYSIS_REQUEST",
         tabId: input.tabId,
         context,
         allowedUse: effective.allowedUse,
-        mode: input.mode,
         providerRuntime,
         outputLang: input.outputLang,
         ...(input.screenshotDataUrl ? { screenshotDataUrl: input.screenshotDataUrl } : {}),
@@ -198,7 +190,6 @@ export function settlePageReadingAnalysis(input: {
 }): PageReadingAnalysisSettlement {
   const base = {
     key: input.run.key,
-    mode: input.run.mode,
     allowedUse: input.run.allowedUse,
     updatedAt: input.now,
   };

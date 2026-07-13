@@ -56,12 +56,11 @@ function session(): MaterializedPageReadingSession {
   };
 }
 
-function quickRun() {
+function standardRun() {
   const plan = planPageReadingAnalysis({
     tabId: 42,
     session: session(),
     scope: "page",
-    mode: "quick",
     force: false,
     activeTabId: 42,
     activeUrl: surface.url,
@@ -73,17 +72,18 @@ function quickRun() {
 }
 
 describe("Page Reading Analysis Coordinator", () => {
-  it("plans one keyed quick request and running state", () => {
-    const run = quickRun();
-    expect(run.key).toContain("quick|article_or_selection_analysis|current");
-    expect(run.running).toMatchObject({ status: "running", key: run.key, mode: "quick" });
+  it("plans one keyed standard request and running state", () => {
+    const run = standardRun();
+    expect(run.key).toContain("article_or_selection_analysis|current");
+    expect(run.running).toMatchObject({ status: "running", key: run.key });
     expect(run.message).toMatchObject({
       type: "GENERAL_PAGE_ANALYSIS_REQUEST",
       tabId: 42,
       allowedUse: "article_or_selection_analysis",
-      mode: "quick",
       outputLang: "zh-TW",
     });
+    expect("mode" in run.message).toBe(false);
+    expect("mode" in run.running).toBe(false);
     expect(run.message.context.mainText).toBe(surface.mainText);
   });
 
@@ -92,7 +92,6 @@ describe("Page Reading Analysis Coordinator", () => {
       tabId: 42,
       session: session(),
       scope: "page",
-      mode: "full",
       force: true,
       activeTabId: 42,
       activeUrl: surface.url,
@@ -111,7 +110,6 @@ describe("Page Reading Analysis Coordinator", () => {
       tabId: 42,
       session: session(),
       scope: "page",
-      mode: "quick",
       force: true,
       activeTabId: 42,
       activeUrl: "https://example.test/other",
@@ -125,7 +123,7 @@ describe("Page Reading Analysis Coordinator", () => {
       reportError: true,
     });
 
-    const previous = quickRun();
+    const previous = standardRun();
     const duplicateSession = session();
     duplicateSession.pageScope = { analysis: previous.running };
     duplicateSession.analysis = previous.running;
@@ -133,7 +131,6 @@ describe("Page Reading Analysis Coordinator", () => {
       tabId: 42,
       session: duplicateSession,
       scope: "page",
-      mode: "quick",
       force: false,
       activeTabId: 42,
       activeUrl: surface.url,
@@ -144,7 +141,7 @@ describe("Page Reading Analysis Coordinator", () => {
   });
 
   it("rejects late results after navigation or a newer scoped run", () => {
-    const run = quickRun();
+    const run = standardRun();
     const current = session();
     current.pageScope = { analysis: run.running };
     expect(pageReadingAnalysisRunIsCurrent({
@@ -165,7 +162,7 @@ describe("Page Reading Analysis Coordinator", () => {
   });
 
   it("settles success, remote failure, missing response, and thrown errors uniformly", () => {
-    const run = quickRun();
+    const run = standardRun();
     const brief = { schemaVersion: 1 as const, summary: "Ready", model: "fixture-model" };
     expect(settlePageReadingAnalysis({
       run,

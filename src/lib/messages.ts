@@ -34,7 +34,7 @@ import type { ReadingSurface } from "./reading-surface-types";
 import type { ReadingTarget, ReadingTargetErrorReason } from "./reading-target-types";
 import type { ReadingActivation } from "./reading-action-types";
 import type { ReadingCommandEnvelope } from "./reading-command-envelope";
-import type { GeneralPageAnalysisMode, GeneralPageBrief } from "./general-page-analysis";
+import type { GeneralPageBrief } from "./general-page-analysis";
 import type { GeneralPageModelContext } from "./general-page-model-context";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./readiness";
 import type {
@@ -212,7 +212,6 @@ export interface GeneralPageAnalysisRequestMsg {
   tabId: number;
   context: GeneralPageModelContext;
   allowedUse: GeneralPageEffectiveModelContextUse;
-  mode?: GeneralPageAnalysisMode;
   providerRuntime: GeneralPageParserAdvisorProviderRuntime;
   outputLang?: Lang;
   /** Session-only, user-confirmed screenshot. Never persisted or logged. */

@@ -14,7 +14,6 @@ import type { GeneralPageModelContext } from "./general-page-model-context";
 import {
   applyGeneralPageBriefPostGuards,
   parseGeneralPageBriefContent,
-  type GeneralPageAnalysisMode,
   type GeneralPageBrief,
 } from "./general-page-analysis";
 import { buildGeneralPageModelUserPrompt } from "./general-page-model-context";
@@ -194,43 +193,45 @@ export function readingBriefSystemPrompt(outputLang?: Lang): string {
 export function generalPageBriefSystemPrompt(
   outputLang: Lang | undefined,
   allowedUse: GeneralPageEffectiveModelContextUse,
-  mode: GeneralPageAnalysisMode = "full",
 ): string {
   const lang = tierBOutputLang(outputLang);
   const overview = allowedUse === "page_overview_only";
-  const quick = mode === "quick";
   if (lang === "en") {
     return [
       "You are Truly's General Page reading assistant. You receive extracted web-page context and must return JSON only.",
-      quick
-        ? "Schema: {\"schemaVersion\":1,\"summary\":\"1 neutral sentence <=32 English words\",\"bg\":[{\"t\":\"point <=8 words\",\"why\":\"why it matters <=18 words\"}],\"claims\":[{\"c\":\"one checkable claim <=24 words\",\"why\":\"why it matters <=18 words\",\"need\":\"evidence needed <=16 words\"}],\"qs\":[{\"q\":\"one follow-up question <=28 words\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"optional note <=24 words\"}"
-        : "Schema: {\"schemaVersion\":1,\"summary\":\"2-4 neutral sentences\",\"bg\":[{\"t\":\"background topic\",\"why\":\"why it matters\",\"q\":\"optional question\"}],\"claims\":[{\"c\":\"checkable claim\",\"why\":\"why it matters\",\"need\":\"evidence needed\",\"q\":\"optional question\"}],\"qs\":[{\"q\":\"follow-up question\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"optional short note\"}",
+      "Schema: {\"schemaVersion\":1,\"summary\":\"1 neutral sentence <=32 English words\",\"bg\":[{\"t\":\"point <=8 words\",\"why\":\"why it matters <=18 words\"}],\"claims\":[{\"c\":\"one checkable claim <=24 words\",\"why\":\"why it matters <=18 words\",\"need\":\"evidence needed <=16 words\",\"q\":\"search-ready verification question <=28 words\"}],\"qs\":[{\"q\":\"one follow-up question <=28 words\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"optional note <=24 words\"}",
       `Write every natural-language field in English. ${TEMPORAL_CONTEXT_GUIDANCE_EN}.`,
       "Use only the supplied page context. Do not invent sources, dates, authors, facts, motives, or URLs.",
       "When targetKind is selection, summarize and analyze only the selected text; surrounding text is context only.",
       overview
         ? "This is page overview only. Describe what kind of page it is, what linked topics or sections appear, and what the reader may inspect next. Return claims as an empty array or omit it. Do not produce article-grade claims."
         : "For article or selection analysis, return a neutral summary, useful background, checkable claims only when the supplied text supports them, and follow-up questions.",
-      quick
-        ? "Quick mode: keep output compact for automatic UI display. bg has at most 2 items; claims and qs have at most 1 item each. Prefer omitting claims/qs unless they are clearly useful."
-        : "Full mode: keep the output useful but still concise.",
+      "Use claims only for concrete statements that require external evidence and could materially change the reader's judgment about safety, money, rights, public-interest events, or another consequential decision. Do not force a claim for personal experience or opinion, harmless humor, ordinary activity, low-stakes metadata, or routine course/product promotion unless it makes a consequential medical, safety, financial, legal, or public-interest assertion.",
+      "Do not emit claims about subjective product/course effectiveness, routine schedules, media appearances, writing style, whether text or images appear AI-generated, or prior analysis labels. Treat those as non-claim metadata unless the page presents a concrete, measurable, consequential assertion.",
+      "Distinguish between 'the page says X' and 'X is true'. Do not turn advice, preference, satire, or speculation into a factual claim. If the supplied context does not support one materially useful claim, return claims as an empty array or omit it.",
+      "Each claim and claim.q must cover exactly one atomic assertion. Never combine separate facts or ask multiple verification questions in one item. claim.q must be one natural, self-contained verification question using only people, organizations, events, products, numbers, or dates explicitly present in the page context. It must be a question, not a keyword list, domain, or path.",
+      "A claim.q must not use vague references such as this article, this content, it, or the statement above. It must not contain URLs, domains, Markdown, search-engine names, or operational commands. Omit the claim if a reliable q cannot be produced.",
+      "Use qs only for understanding, background, counter-perspectives, or image interpretation. Do not use verify/source kinds. A qs item must not repeat a claim or ask whether the same claim is true or sourced.",
+      "Keep the output compact: bg has at most 2 items. claims MUST contain no more than 1 item, and qs MUST contain no more than 1 item. If several candidates exist, keep only the single most consequential one. Prefer omitting claims or qs unless clearly useful.",
       "Do not use markdown. Do not output extra fields.",
     ].join("\n");
   }
   return [
     "你是 Truly 的一般網頁閱讀助理。你會收到抽取後的網頁脈絡，只能回傳 JSON。",
-    quick
-      ? "Schema: {\"schemaVersion\":1,\"summary\":\"1 句中立摘要，80 字以內\",\"bg\":[{\"t\":\"重點，12 字以內\",\"why\":\"為何重要，40 字以內\"}],\"claims\":[{\"c\":\"一個可查核主張，50 字以內\",\"why\":\"為何重要，40 字以內\",\"need\":\"需要的證據，30 字以內\"}],\"qs\":[{\"q\":\"一個延伸問題，50 字以內\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"可選短提醒，40 字以內\"}"
-      : "Schema: {\"schemaVersion\":1,\"summary\":\"2-4 句中立摘要\",\"bg\":[{\"t\":\"背景主題\",\"why\":\"為何重要\",\"q\":\"可選問題\"}],\"claims\":[{\"c\":\"可查核主張\",\"why\":\"為何重要\",\"need\":\"需要的證據\",\"q\":\"可選問題\"}],\"qs\":[{\"q\":\"延伸問題\",\"kind\":\"understand|context|counter|verify|image|source\"}],\"note\":\"可選短提醒\"}",
+    "Schema: {\"schemaVersion\":1,\"summary\":\"1 句中立摘要，80 字以內\",\"bg\":[{\"t\":\"重點，12 字以內\",\"why\":\"為何重要，40 字以內\"}],\"claims\":[{\"c\":\"一個可查核主張，50 字以內\",\"why\":\"為何重要，40 字以內\",\"need\":\"需要的證據，30 字以內\",\"q\":\"可直接搜尋的核心查核問題，50 字以內\"}],\"qs\":[{\"q\":\"一個延伸問題，50 字以內\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"可選短提醒，40 字以內\"}",
     `所有自然語言欄位使用台灣慣用繁體中文。${TEMPORAL_CONTEXT_GUIDANCE}。${ZHTW_OUTPUT_GUIDANCE}。`,
     "只能使用提供的頁面脈絡。不要發明來源、日期、作者、事實、動機或網址。",
     "targetKind 是 selection 時，只摘要與分析選取文字；surrounding text 只能當脈絡，不可當成摘要主體。",
     overview
       ? "這只允許頁面總覽。請描述這是什麼類型的頁面、它連到哪些主題或區塊、讀者下一步可檢視什麼。claims 必須回空陣列或省略，不得產生文章級查核主張。"
       : "文章或選取文字分析可回傳中立摘要、有用背景、僅限文本支持的可查核主張，以及延伸問題。",
-    quick
-      ? "快速模式：輸出要適合自動顯示。bg 最多 2 項；claims 與 qs 最多各 1 項。除非明顯有幫助，否則省略 claims/qs。"
-      : "完整模式：保持有用但仍需精簡。",
+    "claims 只放需要外部證據驗證，且查證結果可能實質改變讀者對安全、金錢、權利、公共事件或其他重要決策判斷的具體陳述。個人經驗或意見、無害玩笑、日常活動、低風險附帶資訊、一般課程或產品宣傳細節，不要為了填欄位而產生 claim；除非其中包含具後果的醫療、安全、財務、法律或公共利益主張。",
+    "不要為主觀的產品或課程成效、例行日期、上節目紀錄、文字風格、內容是否像 AI 生成、或先前分析標籤產生 claim。除非頁面提出可量測且具後果的具體陳述，這些都視為非 claim 的附帶資訊。",
+    "要區分「頁面聲稱 X」與「X 為真」。不要把建議、偏好、諷刺或推測改寫成事實主張。若頁面脈絡沒有一項實質有用的可查核主張，claims 回空陣列或省略。",
+    "每個 claim 與 claims.q 都只能處理一個原子主張，不得合併數個不同事實，也不得在同一項詢問多個查核問題。claims.q 必須是一個自然、完整、可獨立理解的查核問句，並只使用頁面脈絡中明確出現的人物、機構、事件、產品、數字或日期。它必須是問句，不得只是關鍵字、網域或路徑。",
+    "claims.q 不得使用「這篇文章」「此內容」「它」「上述說法」等代稱，不得包含 URL、網域、Markdown、搜尋引擎名稱或操作指令。若無法產生可靠的 q，省略該 claim。",
+    "qs 只放理解、背景、反方觀點或影像理解問題，不得使用 verify/source 類型，不得重述 claims，也不得詢問相同主張的來源或真假。",
+    "保持精簡：bg 最多 2 項；claims 絕對不得超過 1 項，qs 絕對不得超過 1 項。若有多個候選，只保留對讀者判斷最重要的一項。除非明顯有幫助，否則省略 claim 或 qs。",
     "不要 markdown，不要輸出其他欄位。",
   ].join("\n");
 }
@@ -383,7 +384,6 @@ export interface TierBGeneralPageBriefRequest {
   apiKey?: string;
   context: GeneralPageModelContext;
   allowedUse: GeneralPageEffectiveModelContextUse;
-  mode?: GeneralPageAnalysisMode;
   timeoutMs?: number;
   outputLang?: Lang;
   /** User-confirmed visible-tab screenshot as a data URL (vision providers only). */
@@ -691,7 +691,6 @@ export function buildGeneralPageBriefPrompt(
 
 export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefRequest): TierBChatBody {
   const userText = buildGeneralPageBriefPrompt(req.context, req.outputLang);
-  const mode = req.mode ?? "full";
   const userContent: string | ChatContent[] = req.screenshotDataUrl
     ? [
         { type: "text", text: userText },
@@ -701,11 +700,11 @@ export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefReq
   const body: TierBChatBody = {
     model: req.model,
     messages: [
-      { role: "system", content: generalPageBriefSystemPrompt(req.outputLang, req.allowedUse, mode) },
+      { role: "system", content: generalPageBriefSystemPrompt(req.outputLang, req.allowedUse) },
       { role: "user", content: userContent },
     ],
     temperature: 0,
-    max_tokens: mode === "quick" ? 520 : 1400,
+    max_tokens: 720,
     response_format: { type: "json_object" },
     truncate_prompt_tokens: TIER_B_CONTEXT_LIMIT_TOKENS,
     chat_template_kwargs: { enable_thinking: false },
@@ -860,7 +859,7 @@ export async function callTierBGeneralPageBrief(
     }
     const data = await resp.json();
     const raw = String(data?.choices?.[0]?.message?.content || "").trim();
-    const parsed = parseGeneralPageBriefContent(raw, req.model, req.outputLang, req.mode ?? "full");
+    const parsed = parseGeneralPageBriefContent(raw, req.model, req.outputLang);
     if (!parsed.ok || !parsed.value) {
       console.warn(`[Truly General Page Brief] ${parsed.error}:`, raw.slice(0, 240));
       return { ok: false, brief: null, raw: raw.slice(0, 1200), error: "general_page_brief_format_error" };

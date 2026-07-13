@@ -125,7 +125,7 @@ permissions only after the user explicitly enables General Page all-sites access
 from Settings. That opt-in lets the Page/Web tab read the current page directly
 while the Side Panel is open; it does not enable background crawling, automatic
 screenshot capture, or persistent article storage. Suitable pages may send
-quick-brief context to the configured model endpoint.
+compact-reading context to the configured model endpoint.
 
 Optional endpoint host permissions may also be requested for user-configured
 model endpoints.
@@ -447,7 +447,11 @@ artifacts. It should cover:
 - successful Page/Web read on a synthetic local page;
 - hash-only and tracking-query URL changes do not mark stale;
 - meaningful URL changes do mark stale;
-- copy metadata includes title, URL, and excerpt but not full body text;
+- clipboard copy includes a compact, human-readable result without raw parser
+  diagnostics, source lists, or page excerpts;
+- Markdown download includes the complete reading package: metadata, reading
+  result, bounded page excerpt, and de-duplicated source links, but not the full
+  page body;
 - Side Panel retry without page access shows toolbar activation guidance.
 
 ## Implementation Slices
@@ -541,6 +545,90 @@ artifacts. It should cover:
   clicks.
 - Prototype hotkey and click-hold triggers.
 - Compare side-panel-only, in-page-anchor-only, and hybrid result surfaces.
+
+### Phase 3.5: Private Paired Prompt Audit
+
+Status: completed with a fixed 60-sample private corpus and manual review.
+
+The audit compared the pre-contract baseline with the compact standard contract
+using 30 Facebook-derived samples and 30 news-page samples. The Facebook set
+contained 2 live-DOM extracts, 4 SSR-cache originals, and 24 de-duplicated
+runtime summaries from earlier real-browser audits. The news set contained 30
+real preview extracts. The mixed Facebook provenance makes this an abstention
+and query-contract audit, not a definitive raw-post grounding benchmark.
+
+On the final fixed-corpus comparison:
+
+| Aggregate check | Baseline | Compact standard candidate |
+|---|---:|---:|
+| Output within 2 background / 1 claim / 1 question limits | 100% | 100% |
+| Samples with no claim or a populated `q` for every emitted claim | 5% | 100% |
+| Disallowed verify/source follow-up kind | 25% | 0% |
+| Claim/question duplication detected | 0% | 0% |
+| Facebook samples that emitted a claim | 90% | 66.7% |
+
+The final candidate still produced one prompt-level query containing the name
+of a search product (1/60). The session-only investigation guard rejects that
+query and its deterministic fallback, so it cannot become an external action.
+Manual review also found that runtime-summary inputs can contain earlier AI
+assessment metadata; the prompt now explicitly excludes writing-style,
+AI-generation, routine schedule, media-appearance, subjective product/course
+effectiveness, and other low-consequence metadata from claims. Some residual
+false positives remain in those contaminated summaries, so automated lexical
+"grounding" was not used as a release gate. A future raw-post corpus should
+measure claim precision separately from this contract audit.
+
+Keep raw page/post content, model input, model output, URLs, and human review
+notes under gitignored `tmp/`. Commit only anonymized aggregate findings and
+public-safe synthetic regression fixtures. This phase evaluates prompt quality;
+it does not ship claim links, external search actions, verdicts, or durable
+investigation history.
+
+### Phase 3.5b: Raw Grounding Corpus
+
+Status: private evaluation control plane created; clean-source collection and
+human labeling remain in progress.
+
+- `devjoe/truly-private-evals` is a private control-plane repository for corpus
+  schemas, rubrics, opaque manifests, deterministic splits, tooling, and
+  aggregate reports. Truly does not depend on it at runtime.
+- Complete source text, URLs, screenshots, HTML, per-sample annotations, and
+  model runs remain outside Git under that checkout's gitignored
+  `private-data/`. Private GitHub visibility is not authorization to commit raw
+  browsing content.
+- The v1 target is 30 original Facebook samples and 30 original news samples.
+  `runtime_summary` is forbidden; eligible samples must pass authorization,
+  provenance, contamination, content-hash, and duplicate checks.
+- The fixed split is 20 Facebook + 20 news for development and 10 + 10 for a
+  holdout that is evaluated only after prompt and guard contracts are frozen.
+- Private model runs require explicit endpoint/model/data confirmation. Only
+  reviewed anonymous aggregate results may return to this public repository.
+
+### Phase 4: Session-only Claim Investigation
+
+- Status: implemented behind the compact standard brief contract.
+- A grounded `claims.q` is preferred; a bounded natural-question fallback from
+  `claim.c + claim.need` is used only when the model question is missing or
+  locally rejected. URLs, domains, search-engine instructions, vague references,
+  and likely compound claims fail closed instead of bypassing the guard.
+- The first `開始查核` action only prepares a bounded, session-only task in the
+  current Page or Focus scope. It does not open a tab, send another model
+  request, persist history, or assign a verdict.
+- Evidence search, Gemini, copy, and original-source actions require a second
+  explicit user action. Page navigation, reread, a new analysis key, and a new
+  Focus target clear stale task state.
+- Overview-only output remains ineligible because its deterministic guard
+  removes claims.
+
+### Phase 5: Runtime and UX Gate
+
+- Focused unit coverage validates query sanitization, deterministic fallback,
+  fail-closed eligibility, Page/Focus state isolation, and the two-step UI.
+- The CDP UI audit validates that preparing a task opens no browser target and
+  captures the expanded card at 430px alongside Page, Focus, screenshot
+  recovery, loading, and ready states.
+- Real-content paired audit artifacts remain private under `tmp/`; only
+  anonymized aggregate findings may be copied into tracked documentation.
 
 ## Verification Gates
 

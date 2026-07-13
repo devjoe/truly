@@ -1,4 +1,4 @@
-import type { GeneralPageAnalysisMode, GeneralPageBrief } from "../lib/general-page-analysis";
+import type { GeneralPageBrief } from "../lib/general-page-analysis";
 import type { GeneralPageEffectiveModelContextUse, GeneralPageParserAdvisorAdvice, GeneralPageParserAdvisorCandidateBlock, GeneralPageParserAdvisorRequest } from "../lib/general-page-parser-advisor";
 import type { GeneralPageParserAdvisorProviderRuntime } from "../lib/messages";
 import { isMeaningfullySamePage, pageUrlIdentity, type PageUrlIdentity } from "../lib/page-url-identity";
@@ -31,17 +31,23 @@ export interface PageReadingAdvisorSession {
 export interface PageReadingAnalysisSession {
   status: PageReadingAnalysisStatus;
   key?: string;
-  mode?: GeneralPageAnalysisMode;
   brief?: GeneralPageBrief;
   error?: string;
   allowedUse?: GeneralPageEffectiveModelContextUse;
   updatedAt: number;
 }
 
+export interface PageClaimInvestigationSession {
+  analysisKey: string;
+  claimIndex: number;
+  expanded: boolean;
+}
+
 export interface PageReadingScopeState {
   advisor?: PageReadingAdvisorSession;
   analysis?: PageReadingAnalysisSession;
   screenshot?: PageReadingScreenshotSession;
+  investigation?: PageClaimInvestigationSession;
 }
 
 export interface FocusReadingScopeState extends PageReadingScopeState {
@@ -73,6 +79,7 @@ export interface MaterializedPageReadingSession extends PageReadingSession {
   advisor?: PageReadingAdvisorSession;
   analysis?: PageReadingAnalysisSession;
   screenshot?: PageReadingScreenshotSession;
+  investigation?: PageClaimInvestigationSession;
 }
 
 export function pageScopeForSession(session: PageReadingSession): PageReadingScopeState {
@@ -102,6 +109,7 @@ export function materializeScopeSession(
     advisor: state.advisor,
     analysis: state.analysis,
     screenshot: state.screenshot,
+    investigation: state.investigation,
   };
 }
 

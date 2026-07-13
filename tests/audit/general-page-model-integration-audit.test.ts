@@ -17,7 +17,7 @@ afterEach(async () => {
 });
 
 describe("General Page model integration audit", () => {
-  it("sends quick page briefs as effective text context without raw DOM or screenshots", async () => {
+  it("sends standard page briefs as effective text context without raw DOM or screenshots", async () => {
     const effectivePageText = "Effective synthetic article text that should be sent to the model as the readable page context.";
     const forbiddenRawDom = "<html><body><script>DO_NOT_SEND_RAW_DOM</script><article>Hidden raw document</article></body></html>";
     const forbiddenJsonLd = "{\"@context\":\"https://schema.org\",\"@type\":\"NewsArticle\",\"headline\":\"DO_NOT_SEND_JSON_LD\"}";
@@ -25,10 +25,10 @@ describe("General Page model integration audit", () => {
     const captured: CapturedRequest[] = [];
     const endpoint = await startMockEndpoint(captured, {
       schemaVersion: 1,
-      summary: "Quick synthetic page summary.",
+      summary: "Compact synthetic page summary.",
       bg: [{ t: "Context", why: "The effective page text was supplied." }],
-      claims: [{ c: "Quick claim", why: "It appears in the effective text.", need: "Check source." }],
-      qs: [{ q: "What source supports the article?", kind: "source" }],
+      claims: [{ c: "Compact claim", why: "It appears in the effective text.", need: "Primary evidence.", q: "What primary evidence supports the compact claim?" }],
+      qs: [{ q: "What background helps explain the article?", kind: "context" }],
     });
 
     const result = await callTierBGeneralPageBrief({
@@ -42,7 +42,6 @@ describe("General Page model integration audit", () => {
       }),
       allowedUse: "article_or_selection_analysis",
       outputLang: "en",
-      mode: "quick",
       timeoutMs: 5_000,
     });
 
@@ -50,7 +49,7 @@ describe("General Page model integration audit", () => {
     expect(captured).toHaveLength(1);
     const rawBody = JSON.stringify(captured[0].body);
     const userContent = messageContent(captured[0].body, "user");
-    expect(captured[0].body.max_tokens).toBe(520);
+    expect(captured[0].body.max_tokens).toBe(720);
     expect(userContent).toContain(effectivePageText);
     expect(userContent).toContain("Effective source");
     expect(userContent).toContain("Effective image alt text");
@@ -69,7 +68,7 @@ describe("General Page model integration audit", () => {
       summary: "Selection-only synthetic summary.",
       bg: [{ t: "Scope", why: "Only the selected paragraph was supplied." }],
       claims: [{ c: "Selected claim", why: "It appears in the selected text.", need: "Check source." }],
-      qs: [{ q: "What source supports the selected claim?", kind: "source" }],
+      qs: [{ q: "What background helps explain the selected claim?", kind: "context" }],
     });
 
     const result = await callTierBGeneralPageBrief({

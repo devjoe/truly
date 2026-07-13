@@ -23,7 +23,6 @@ import {
 } from "../lib/general-page-parser-advisor";
 import {
   canOfferGeneralPageScreenshot,
-  type GeneralPageAnalysisMode,
   type GeneralPageAnalysisEligibilityReason,
   type GeneralPageBrief,
 } from "../lib/general-page-analysis";
@@ -66,7 +65,19 @@ import {
   requestGeneralPageHostPermission,
 } from "../lib/general-page-host-permission";
 import { copyReadingBriefQuestion, safeFilenamePart, saveMarkdownTextFile } from "./browser-actions";
-import { googleSearchUrl, readingBriefQuestionDisplay } from "./reading-brief-text";
+import { readingBriefQuestionDisplay } from "./reading-brief-text";
+import { createReadingBriefQuestionList } from "./reading-brief-renderer";
+import {
+  buildPageClaimInvestigationTask,
+  geminiEvidenceSearchUrl,
+  standardEvidenceSearchUrl,
+  type PageClaimInvestigationTask,
+} from "./page-claim-investigation";
+import {
+  formatCompactPageReadingExport,
+  formatFullPageReadingMarkdown,
+  type PageReadingExportPacket,
+} from "./page-reading-export";
 import { modelDisplayIdentity } from "../lib/model-display";
 import type { TabId } from "./tabs";
 import {
@@ -91,6 +102,7 @@ import {
   type PageReadingAdvisorStatus,
   type PageReadingAnalysisSession,
   type PageReadingAnalysisStatus,
+  type PageClaimInvestigationSession,
   type PageReadingScopeKind,
   type PageReadingScopeState,
   type PageReadingScreenshotSession,
@@ -218,6 +230,8 @@ export interface CreateSidepanelPageReadingRuntimeOptions {
   hasHostPermission?(url: string): Promise<boolean>;
   /** Requests persistent read access to the active page origin. */
   requestHostPermission?(url: string): Promise<boolean>;
+  /** Test seam for the Markdown download projection. */
+  saveMarkdownFile?: typeof saveMarkdownTextFile;
 }
 
 function escapeHtml(input: string): string {
@@ -380,26 +394,29 @@ function decodeJsonStringFragment(value: string): string {
   }
 }
 
-function buildCopyText(session: MaterializedPageReadingSession): string {
+function buildExportPacket(
+  session: MaterializedPageReadingSession,
+  lang: Lang,
+  caution?: string,
+): PageReadingExportPacket | undefined {
   const surface = session.surface;
-  const lines = [
-    `Title: ${surface?.title || session.title || "(untitled)"}`,
-    `URL: ${surface?.canonicalUrl || surface?.url || session.url}`,
-  ];
-  if (surface?.sourceName) lines.push(`Source: ${surface.sourceName}`);
-  if (surface?.authorName) lines.push(`Author: ${surface.authorName}`);
-  if (surface?.publishedAt) lines.push(`Published: ${surface.publishedAt}`);
-  if (surface?.extraction) {
-    lines.push(`Extraction: ${surface.extraction.method} / ${surface.extraction.status}`);
-    if (surface.extraction.warnings.length > 0)
-      lines.push(`Warnings: ${surface.extraction.warnings.join(", ")}`);
-  }
+  const brief = session.analysis?.status === "ready" ? session.analysis.brief : undefined;
+  if (!surface || !brief) return undefined;
   const modelContext = surface ? modelContextForSession({ ...session, surface }) : undefined;
   const excerpt = surface ? visibleExcerpt(surface, modelContext, session.advisor?.effectiveModelContext) : "";
-  if (excerpt) lines.push("", "Excerpt:", excerpt);
-  const brief = session.analysis?.status === "ready" ? session.analysis.brief : undefined;
-  if (brief) lines.push(...generalPageBriefCopyLines(brief, session.analysis?.allowedUse));
-  return lines.join("\n");
+  return {
+    lang,
+    title: surface.title || session.title || t("sidepanel.page.untitled", lang),
+    url: surface.canonicalUrl || surface.url || session.url,
+    sourceName: surface.sourceName,
+    authorName: surface.authorName,
+    publishedAt: surface.publishedAt,
+    caution,
+    excerpt,
+    links: modelContext?.links,
+    brief,
+    allowedUse: session.analysis?.allowedUse,
+  };
 }
 
 function buildPageMarkdownFilename(session: PageReadingSession): string {
@@ -409,28 +426,9 @@ function buildPageMarkdownFilename(session: PageReadingSession): string {
   return `truly-page-${date}-${domain}-${title}.md`;
 }
 
-function generalPageBriefCopyLines(
-  brief: GeneralPageBrief,
-  allowedUse: GeneralPageEffectiveModelContextUse | undefined,
-): string[] {
-  const lines = ["", "Page brief:", brief.summary];
-  if (allowedUse === "page_overview_only") lines.push("Scope: page overview");
-  if (brief.bg?.length) {
-    lines.push("", "Page context:");
-    for (const item of brief.bg) lines.push(`- ${item.t}: ${item.why}${item.q ? ` (${item.q})` : ""}`);
-  }
-  if (brief.claims?.length) {
-    lines.push("", "Claims to inspect:");
-    for (const claim of brief.claims) lines.push(`- ${claim.c}: ${claim.why} Need: ${claim.need}`);
-  }
-  if (brief.qs?.length) {
-    lines.push("", "Questions:");
-    for (const question of brief.qs) lines.push(`- [${question.kind}] ${question.q}`);
-  }
-  if (brief.note) lines.push("", `Note: ${brief.note}`);
-  lines.push("", `Analyzed by: ${brief.model}${brief.elapsedMs ? ` (${Math.round(brief.elapsedMs / 100) / 10}s)` : ""}`);
-  lines.push("AI preview: Please rely on the original text and your own judgement.");
-  return lines;
+function hasMeaningfulExportPayload(session: MaterializedPageReadingSession | undefined): boolean {
+  const analysis = session?.analysis;
+  return analysis?.status === "ready" && Boolean(analysis.brief?.summary.trim());
 }
 
 function modelContextForSession(session: MaterializedPageReadingSession & { surface: ReadingSurface }): GeneralPageModelContext {
@@ -932,19 +930,22 @@ const INFO_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 function analysisHtml(
   analysis: PageReadingAnalysisSession | undefined,
   tr: (key: string, params?: Record<string, string | number>) => string,
+  lang: Lang,
   pageTitle?: string,
   omitBriefNote = false,
   titleOverride?: string,
+  investigation?: PageClaimInvestigationSession,
+  scope: PageReadingScopeKind = "page",
+  source?: { title?: string; sourceName?: string; publishedAt?: string; url?: string },
 ): string {
   if (!analysis || analysis.status === "idle") return "";
   const overview = analysis.allowedUse === "page_overview_only";
   const overviewClass = overview ? " is-overview" : "";
-  const modeAttribute = analysis.mode ? ` data-analysis-mode="${escapeHtml(analysis.mode)}"` : "";
   const title = titleOverride || tr(overview ? "sidepanel.page.analysis.overview" : "sidepanel.page.analysis.title");
   const statusText = tr(`sidepanel.page.analysis.status.${analysis.status}`);
   if (analysis.status === "running") {
     return `
-      <section class="page-reader-analysis is-running${overviewClass}"${modeAttribute} role="status" aria-live="polite" aria-busy="true">
+      <section class="page-reader-analysis is-running${overviewClass}" role="status" aria-live="polite" aria-busy="true">
         <div class="page-reader-analysis-header">
           <h3>${escapeHtml(title)}</h3>
           <div class="reading-brief-loading page-reader-analysis-loading">${escapeHtml(tr("sidepanel.page.analysis.running"))}</div>
@@ -961,10 +962,15 @@ function analysisHtml(
       <button id="pageAnalysisRetry" class="btn-investigation-secondary page-reader-analysis-retry" type="button">${escapeHtml(tr("sidepanel.page.analysis.retry"))}</button>
     `
     : analysis.brief
-    ? briefHtml(analysis.brief, analysis.allowedUse, tr, pageTitle, omitBriefNote)
+    ? briefHtml(analysis.brief, analysis.allowedUse, tr, lang, pageTitle, omitBriefNote, {
+        analysisKey: analysis.key ?? "",
+        scope,
+        investigation,
+        source,
+      })
     : "";
   return `
-    <section class="page-reader-analysis is-${escapeHtml(analysis.status)}${overviewClass}"${modeAttribute}>
+    <section class="page-reader-analysis is-${escapeHtml(analysis.status)}${overviewClass}">
       <div class="page-reader-analysis-header">
         <h3>${escapeHtml(title)}</h3>
         ${visibleStatus}
@@ -978,8 +984,15 @@ function briefHtml(
   brief: GeneralPageBrief,
   allowedUse: GeneralPageEffectiveModelContextUse | undefined,
   tr: (key: string, params?: Record<string, string | number>) => string,
+  lang: Lang,
   pageTitle?: string,
   omitNote = false,
+  investigationContext?: {
+    analysisKey: string;
+    scope: PageReadingScopeKind;
+    investigation?: PageClaimInvestigationSession;
+    source?: { title?: string; sourceName?: string; publishedAt?: string; url?: string };
+  },
 ): string {
   const modelLabel = modelDisplayIdentity(brief.model).label || brief.model;
   const attributionTitle = brief.elapsedMs
@@ -998,8 +1011,8 @@ function briefHtml(
   return `
     <p class="page-reader-analysis-summary">${escapeHtml(brief.summary)}</p>
     ${briefSectionHtml("", brief.bg?.map((item) => `${item.t}: ${item.why}${item.q ? ` ${item.q}` : ""}`) ?? [])}
-    ${overview ? "" : briefSectionHtml(tr("sidepanel.dynamic.readingBrief.verify"), brief.claims?.map((claim) => tr("sidepanel.dynamic.readingBrief.needEvidence", { claim: claim.c, need: claim.need })) ?? [])}
-    ${briefQuestionsHtml(brief.qs ?? [], pageTitle, tr)}
+    ${overview ? "" : briefClaimsHtml(brief.claims ?? [], investigationContext, tr)}
+    ${briefQuestionsHtml(brief.qs ?? [], pageTitle, tr, lang)}
     <div class="page-reader-analysis-closing">
       ${noteHtml}
       <p class="page-reader-analysis-footer reading-brief-model-note" role="note" title="${escapeHtml(attributionTitle)}" aria-label="${escapeHtml(attributionTitle)}">${escapeHtml(attribution)}</p>
@@ -1007,39 +1020,80 @@ function briefHtml(
   `;
 }
 
+function briefClaimsHtml(
+  claims: NonNullable<GeneralPageBrief["claims"]>,
+  context: Parameters<typeof briefHtml>[6],
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  if (!claims?.length) return "";
+  const rows = claims.map((claim, claimIndex) => {
+    const task = context && buildPageClaimInvestigationTask({
+      analysisKey: context.analysisKey,
+      scope: context.scope,
+      claimIndex,
+      claim,
+      source: context.source,
+    });
+    const expanded = Boolean(task && context?.investigation?.expanded &&
+      context.investigation.analysisKey === context.analysisKey &&
+      context.investigation.claimIndex === claimIndex);
+    return `
+      <li class="page-claim-row">
+        <div class="page-claim-copy">${escapeHtml(tr("sidepanel.dynamic.readingBrief.needEvidence", { claim: claim.c, need: claim.need }))}</div>
+        ${task ? `<button class="page-claim-start" type="button" data-claim-index="${claimIndex}" aria-expanded="${expanded}">${escapeHtml(expanded ? tr("sidepanel.page.investigation.hide") : tr("sidepanel.page.investigation.start"))}</button>` : ""}
+        ${expanded && task ? claimInvestigationHtml(task, tr) : ""}
+      </li>`;
+  }).join("");
+  return `
+    <div class="page-reader-analysis-section page-claim-section">
+      <h4>${escapeHtml(tr("sidepanel.dynamic.readingBrief.verify"))}</h4>
+      <ul>${rows}</ul>
+    </div>`;
+}
+
+function claimInvestigationHtml(
+  task: PageClaimInvestigationTask,
+  tr: (key: string, params?: Record<string, string | number>) => string,
+): string {
+  const sourceAction = task.sourceUrl
+    ? `<a class="page-claim-action" href="${escapeHtml(task.sourceUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(tr("sidepanel.page.investigation.source"))}</a>`
+    : "";
+  return `
+    <section class="page-claim-investigation" data-task-id="${escapeHtml(task.id)}">
+      <div class="page-claim-investigation-label">${escapeHtml(tr("sidepanel.page.investigation.prepared"))}</div>
+      <p class="page-claim-investigation-question">${escapeHtml(task.question)}</p>
+      <p class="page-claim-investigation-need">${escapeHtml(tr("sidepanel.page.investigation.need", { need: task.evidenceNeed }))}</p>
+      <div class="page-claim-investigation-actions">
+        <a class="page-claim-action" href="${escapeHtml(standardEvidenceSearchUrl(task.searchQuery))}" target="_blank" rel="noopener noreferrer">${escapeHtml(tr("sidepanel.page.investigation.search"))}</a>
+        <a class="page-claim-action" href="${escapeHtml(geminiEvidenceSearchUrl(task.searchQuery))}" target="_blank" rel="noopener noreferrer">${escapeHtml(tr("sidepanel.dynamic.readingBrief.askGemini"))}</a>
+        <button class="page-claim-action page-claim-copy-question" type="button" data-question="${escapeHtml(task.question)}">${escapeHtml(tr("sidepanel.page.investigation.copy"))}</button>
+        ${sourceAction}
+      </div>
+    </section>`;
+}
+
 /**
- * Questions render as Feed-style rows with per-question copy and
- * "Ask Gemini" actions, reusing the Feed reading-brief classes so both
- * panes stay visually aligned. Rows use divs (not ul) so the audit's
- * design-restraint list-section counting keeps treating single-item
- * sections as compact.
+ * Feed, Web, and Focus share the same semantic question-list builder. Page
+ * Reading binds its copy handlers after the generated markup enters the pane.
  */
 function briefQuestionsHtml(
   questions: Array<{ q: string }>,
   pageTitle: string | undefined,
   tr: (key: string, params?: Record<string, string | number>) => string,
+  lang: Lang,
 ): string {
   if (questions.length === 0) return "";
-  const rows = questions.map((question) => {
+  return createReadingBriefQuestionList({
+    label: tr("sidepanel.page.analysis.questions"),
+    items: questions.map((question) => {
     const display = readingBriefQuestionDisplay(question.q);
     const query = [display, pageTitle?.trim()].filter(Boolean).join(" ").slice(0, 200);
-    return `
-      <div class="reading-brief-question-row">
-        <span class="reading-brief-question-text">${escapeHtml(display)}</span>
-        <span class="reading-brief-question-actions">
-          <button type="button" class="reading-brief-copy-btn page-analysis-question-copy" data-question="${escapeHtml(display)}" title="${escapeHtml(tr("sidepanel.dynamic.readingBrief.copyQuestion"))}" aria-label="${escapeHtml(tr("sidepanel.dynamic.readingBrief.copyQuestionAria", { question: display }))}">${COPY_ICON_SVG}</button>
-          <a class="reading-brief-google-link" href="${escapeHtml(googleSearchUrl(query))}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(tr("sidepanel.dynamic.readingBrief.askGeminiTitle"))}" aria-label="${escapeHtml(tr("sidepanel.dynamic.readingBrief.askGeminiAria", { query }))}">${escapeHtml(tr("sidepanel.dynamic.readingBrief.askGemini"))}</a>
-        </span>
-      </div>
-    `;
-  }).join("");
-  const singleClass = questions.length === 1 ? " is-single" : "";
-  return `
-    <div class="page-reader-analysis-section page-reader-analysis-questions${singleClass}">
-      <h4>${escapeHtml(tr("sidepanel.page.analysis.questions"))}</h4>
-      ${rows}
-    </div>
-  `;
+      return { displayQuestion: display, searchQuery: query };
+    }),
+    lang,
+    blockClassName: "page-reader-analysis-section page-reader-analysis-questions",
+    copyButtonClassName: "page-analysis-question-copy",
+  }).outerHTML;
 }
 
 function briefSectionHtml(title: string, items: string[]): string {
@@ -1083,6 +1137,7 @@ export function createSidepanelPageReadingRuntime({
   hasAllSitesPermission = hasGeneralPageAllSitesPermission,
   hasHostPermission = hasGeneralPageHostPermission,
   requestHostPermission = requestGeneralPageHostPermission,
+  saveMarkdownFile = saveMarkdownTextFile,
 }: CreateSidepanelPageReadingRuntimeOptions): SidepanelPageReadingRuntime {
   const sessions = new Map<number, PageReadingSession>();
   const focusTargetErrors = new Map<number, string>();
@@ -1605,9 +1660,18 @@ export function createSidepanelPageReadingRuntime({
     const analysisBlock = analysisHtml(
       displayedAnalysis,
       tr,
+      lang,
       viewSession?.surface?.title || viewSession?.title,
       omitBriefNote,
       focusAnalysisTitle,
+      viewSession?.investigation,
+      activeWorkspace,
+      {
+        title: viewSession?.surface?.title || viewSession?.title,
+        sourceName: viewSession?.surface?.sourceName,
+        publishedAt: viewSession?.surface?.publishedAt,
+        url: viewSession?.surface?.canonicalUrl || viewSession?.surface?.url,
+      },
     );
     const sourceLinksBlock = hidePendingAdvisorState
       ? ""
@@ -1633,7 +1697,7 @@ export function createSidepanelPageReadingRuntime({
         ? tr("sidepanel.page.readCurrentProcessing")
         : tr("sidepanel.page.readCurrentUpdating"),
     );
-    const cardToolButtons = session?.surface
+    const cardToolButtons = hasMeaningfulExportPayload(viewSession)
       ? `
         <div class="page-reader-card-tools">
           <button id="pageCopyMetadata" class="btn-investigation-secondary page-reader-card-action" type="button">${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(copyState === "copied" ? tr("sidepanel.page.copy.copied") : tr("sidepanel.page.copy"))}</span></button>
@@ -1759,8 +1823,10 @@ export function createSidepanelPageReadingRuntime({
       const latest = visibleSession(currentSession());
       if (!latest) return;
       const scoped = materializeScopeSession(latest, pageWorkspace);
+      const packet = buildExportPacket(scoped, getLang(), contextPresentation?.summary);
+      if (!packet) return;
       try {
-        await navigator.clipboard.writeText(buildCopyText(scoped));
+        await navigator.clipboard.writeText(formatCompactPageReadingExport(packet));
         copyState = "copied";
       } catch {
         copyState = "failed";
@@ -1771,9 +1837,11 @@ export function createSidepanelPageReadingRuntime({
       const latest = visibleSession(currentSession());
       if (!latest) return;
       const scoped = materializeScopeSession(latest, pageWorkspace);
+      const packet = buildExportPacket(scoped, getLang(), contextPresentation?.summary);
+      if (!packet) return;
       try {
-        const outcome = await saveMarkdownTextFile(
-          buildCopyText(scoped),
+        const outcome = await saveMarkdownFile(
+          formatFullPageReadingMarkdown(packet),
           buildPageMarkdownFilename(scoped),
           "text/markdown;charset=utf-8",
           { mode: getSettings().markdownDownloadMode },
@@ -1791,7 +1859,6 @@ export function createSidepanelPageReadingRuntime({
         latest.tabId,
         materializeScopeSession(latest, pageWorkspace),
         true,
-        "quick",
         pageWorkspace,
       );
     });
@@ -1799,6 +1866,34 @@ export function createSidepanelPageReadingRuntime({
       questionCopyBtn.addEventListener("click", (event) => {
         event.stopPropagation();
         copyReadingBriefQuestion(questionCopyBtn, questionCopyBtn.dataset.question || "", getLang());
+      });
+    }
+    for (const startButton of pagePaneEl.querySelectorAll<HTMLButtonElement>(".page-claim-start")) {
+      startButton.addEventListener("click", () => {
+        const latest = currentSession();
+        const claimIndex = Number(startButton.dataset.claimIndex);
+        const scoped = latest ? scopeStateForSession(latest, pageWorkspace) : undefined;
+        const analysisKey = scoped?.analysis?.key;
+        if (!latest || !analysisKey || !Number.isInteger(claimIndex)) return;
+        const current = scoped.investigation;
+        const expanded = !(current?.expanded && current.analysisKey === analysisKey && current.claimIndex === claimIndex);
+        sessions.set(latest.tabId, replaceScopeState(latest, pageWorkspace, {
+          ...scoped,
+          investigation: { analysisKey, claimIndex, expanded },
+        }));
+        render();
+      });
+    }
+    for (const copyButton of pagePaneEl.querySelectorAll<HTMLButtonElement>(".page-claim-copy-question")) {
+      copyButton.addEventListener("click", async () => {
+        const question = copyButton.dataset.question || "";
+        if (!question) return;
+        try {
+          await navigator.clipboard.writeText(question);
+          copyButton.textContent = tr("sidepanel.page.investigation.copied");
+        } catch {
+          copyButton.textContent = tr("sidepanel.page.copy.failed");
+        }
       });
     }
     pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCapture")?.addEventListener("click", () => {
@@ -2066,7 +2161,6 @@ export function createSidepanelPageReadingRuntime({
       tabId,
       session,
       scope: "page",
-      mode: "full",
       force: true,
       activeTabId,
       activeUrl,
@@ -2134,7 +2228,6 @@ export function createSidepanelPageReadingRuntime({
         tabId,
         materializeScopeSession(nextSession, scope),
         false,
-        "quick",
         scope,
       );
     }
@@ -2145,14 +2238,12 @@ export function createSidepanelPageReadingRuntime({
     tabId: number,
     session: MaterializedPageReadingSession,
     force: boolean,
-    mode: GeneralPageAnalysisMode = "quick",
     scope: PageReadingScopeKind = session.target ? "focus" : "page",
   ): void {
     const plan = planPageReadingAnalysis({
       tabId,
       session,
       scope,
-      mode,
       force,
       activeTabId,
       activeUrl,
@@ -2207,6 +2298,9 @@ export function createSidepanelPageReadingRuntime({
     sessions.set(tabId, replaceScopeState(session, scope, {
       ...currentScope,
       analysis,
+      investigation: currentScope.investigation?.analysisKey === analysis.key
+        ? currentScope.investigation
+        : undefined,
     }));
     if (scope === "page" && (analysis.status === "ready" || analysis.status === "error")) {
       clearRereadTransaction(tabId, session.requestId);
