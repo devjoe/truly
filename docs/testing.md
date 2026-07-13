@@ -45,6 +45,31 @@ checkpoint, push, merge, or release, still run:
 make verify
 ```
 
+### Private grounding evaluation runner
+
+The public repository owns the runtime-equivalent context builder, prompt,
+normalization, and post-guard runner, but never owns the real corpus. A private
+control plane may invoke it with absolute paths outside this checkout:
+
+```bash
+npm run eval:gpr:private -- \
+  --input /absolute/private/input.jsonl \
+  --output /absolute/private/results.jsonl \
+  --meta-output /absolute/private/run-manifest.json \
+  --endpoint https://approved-model-endpoint.example/v1 \
+  --model approved-model \
+  --split dev \
+  --run-id gpr-dev-example \
+  --sample-count 40 \
+  --data-categories facebook-original,news-original \
+  --confirm-private-data-send
+```
+
+The runner fails closed unless the caller declares the exact record count and
+data categories. It prints aggregate status only. Original text and per-sample
+model output must remain in the private control plane (or under this repo's
+gitignored `tmp/` for local-only debugging).
+
 ## General Page Reader UI Gate
 
 After changing the Web or Focus information architecture, build the development
