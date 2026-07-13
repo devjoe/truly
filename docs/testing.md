@@ -59,14 +59,18 @@ npm run eval:gpr:private -- \
   --endpoint https://approved-model-endpoint.example/v1 \
   --model approved-model \
   --split dev \
+  --dataset-version gpr-grounding-v1 \
   --run-id gpr-dev-example \
   --sample-count 40 \
   --data-categories facebook-original,news-original \
   --confirm-private-data-send
 ```
 
-The runner fails closed unless the caller declares the exact record count and
-data categories. It prints aggregate status only. Original text and per-sample
+The runner fails closed unless the caller declares the dataset version, exact
+record count, and data categories. Its private run manifest records both the
+dataset version and each present language variant's system-prompt hash, so a
+mixed-language dev batch is not confused with a single-language holdout. It
+prints aggregate status only. Original text and per-sample
 model output must remain in the private control plane (or under this repo's
 gitignored `tmp/` for local-only debugging).
 
@@ -75,6 +79,11 @@ predeclared atomic-claim, aligned-query, useful-action, and automated
 unsafe-action gates. See the Phase 3.5b section of
 `docs/plans/general-page-reader.md`. Do not use that holdout to tune the next
 candidate; reserve a new final evaluation slice.
+
+Candidate v2's fresh 30-sample holdout also remained fully grounded, and the
+blind-gold unsafe-action rate fell to 7.1%. It still failed the frozen release
+gates: claim precision was 88.2% against 90%, and manual useful/aligned eligible
+action rates were 50%/70% against 90%/95%. Do not tune v2 or reuse its holdout.
 
 ## General Page Reader UI Gate
 

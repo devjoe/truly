@@ -622,10 +622,27 @@ therefore remains evidence for the compact reading contract, but is not cleared
 as the source of a release investigation action. It was not retuned after the
 holdout result.
 
+Candidate v2 added structured atomic propositions, compound-claim and
+attribution guards, and a separate 30-sample holdout (15 Facebook + 15 news)
+collected after the v2 work began. Commit `e9a81b3` was frozen before candidate
+output was generated; all holdout labels were completed without that output,
+and the holdout was evaluated exactly once with `qwen3.6-35b`.
+
+The v2 holdout achieved 100% run success, 88.2% blind-gold claim precision,
+93.8% recall, 85.7% abstention accuracy, 7.1% blind-gold unsafe-action rate,
+and 100% manually reviewed grounding precision. It still failed the frozen
+action boundary: only 50% of exposed actions were both consequential and
+aligned, versus the 90% threshold, and 70% preserved an aligned eligible-action
+question, versus 95%. Low-consequence opinions and generic controversy still
+entered claims; one fallback dropped an expert-analysis attribution; two
+compound claims reached action eligibility. Candidate v2 is frozen as failed
+evidence and was not tuned after the holdout.
+
 ### Phase 4: Session-only Claim Investigation
 
 - Status: implementation and fail-closed contract completed on the feature
-  branch, but candidate v1 did not clear the private holdout gate for release.
+  branch, but candidates v1 and v2 did not clear their private holdout gates for
+  release.
 - A grounded `claims.q` is preferred; a bounded natural-question fallback from
   `claim.c + claim.need` is used only when the model question is missing or
   locally rejected. URLs, domains, search-engine instructions, vague references,
@@ -641,8 +658,9 @@ holdout result.
 
 ### Phase 5: Runtime and UX Gate
 
-- Status: implementation verification completed; product-quality holdout gate
-  failed for candidate v1, so the investigation action remains unreleased.
+- Status: implementation verification completed; product-quality holdout gates
+  failed for candidates v1 and v2, so the investigation action remains
+  unreleased.
 - Focused unit coverage validates query sanitization, deterministic fallback,
   fail-closed eligibility, Page/Focus state isolation, and the two-step UI.
 - The CDP UI audit validates that preparing a task opens no browser target and

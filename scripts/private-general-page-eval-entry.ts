@@ -51,11 +51,13 @@ const endpoint = required("--endpoint");
 const model = required("--model");
 const split = required("--split");
 const runId = required("--run-id");
+const datasetVersion = required("--dataset-version");
 const declaredCategories = required("--data-categories");
 const expectedCount = Number(required("--sample-count"));
 const concurrency = Math.max(1, Math.min(8, Number(option("--concurrency", "2")) || 2));
 const timeoutMs = Math.max(1000, Math.min(120000, Number(option("--timeout-ms", "45000")) || 45000));
 if (!['dev', 'holdout'].includes(split)) throw new Error("--split must be dev or holdout");
+if (!/^gpr-grounding-v[1-9]\d*$/.test(datasetVersion)) throw new Error("--dataset-version must be gpr-grounding-vN");
 if (!/^https?:\/\//.test(endpoint)) throw new Error("--endpoint must be HTTP(S)");
 
 const paths = assertPrivateEvalPaths(inputPath, outputPath, metaOutputPath, process.cwd());
@@ -91,7 +93,14 @@ function promptVariantSha(row: InputRow): string {
   return crypto.createHash("sha256").update(JSON.stringify(system)).digest("hex");
 }
 
-const promptVariants = [...new Set(rows.map(promptVariantSha))].sort();
+const promptVariantSha256ByLanguage = Object.fromEntries(
+  [...new Set(rows.map((row) => outputLanguageForPrivateEval(row.language)))].sort().map((language) => {
+    const row = rows.find((candidate) => outputLanguageForPrivateEval(candidate.language) === language);
+    if (!row) throw new Error(`Missing prompt row for ${language}`);
+    return [language, promptVariantSha(row)];
+  }),
+);
+const promptVariants = Object.values(promptVariantSha256ByLanguage).sort();
 const promptSha256 = crypto.createHash("sha256").update(promptVariants.join("\0")).digest("hex");
 const startedAt = new Date().toISOString();
 const results = new Array(rows.length);
@@ -174,10 +183,11 @@ const trulyCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8
 const manifest = {
   schemaVersion: 1,
   runId,
-  datasetVersion: "gpr-grounding-v1",
+  datasetVersion,
   split,
   trulyCommit,
   promptSha256,
+  promptVariantSha256ByLanguage,
   model: { provider: "openai-compatible", name: model, temperature: 0, maxTokens: 720 },
   guardVersion: trulyCommit,
   startedAt,
