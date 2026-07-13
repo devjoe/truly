@@ -128,7 +128,7 @@ async function evaluateRow(row: InputRow) {
     if (!parsed.ok || !parsed.value) return { schemaVersion: 1, sampleId: row.sampleId, surface: row.surface, sourceSha256: row.sourceSha256, ok: false, latencyMs: Date.now() - started, error: "format_error", raw };
     const brief = applyGeneralPageBriefPostGuards(parsed.value, "page_full_text");
     const claim = brief.claims?.[0];
-    const modelQuestion = claim ? usableClaimQuestion(claim.q) : undefined;
+    const modelQuestion = claim ? usableClaimQuestion(claim.q, claim.atom, claim.c) : undefined;
     const task = claim ? buildPageClaimInvestigationTask({
       analysisKey: row.sampleId,
       scope: "page",

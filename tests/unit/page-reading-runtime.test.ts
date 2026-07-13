@@ -1209,7 +1209,13 @@ describe("sidepanel page reading runtime", () => {
             schemaVersion: 1,
             summary: "Synthetic model summary for the current page.",
             bg: [{ t: "Context", why: "The page is a synthetic runtime article." }],
-            claims: [{ c: "Runtime claim", why: "It is central to the sample.", need: "Check the source.", q: "What primary source supports the runtime claim?" }],
+            claims: [{
+              c: "Runtime fixture reports one synthetic claim",
+              why: "It is central to the sample.",
+              need: "Check the source.",
+              q: "Does Runtime fixture report one synthetic claim?",
+              atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
+            }],
             qs: [{ q: "What background helps explain the runtime claim?", kind: "context" }],
             note: "Synthetic content-specific caveat.",
             model: "brief-model",
@@ -1258,7 +1264,7 @@ describe("sidepanel page reading runtime", () => {
     }));
     expect(pagePaneEl.textContent).toContain("閱讀脈絡");
     expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
-    expect(pagePaneEl.textContent).toContain("Runtime claim");
+    expect(pagePaneEl.textContent).toContain("Runtime fixture reports one synthetic claim");
     // Standard briefs use one quiet footer for both model transparency and the
     // preview disclaimer instead of competing left/right notes.
     expect(pagePaneEl.textContent).toContain("brief-model 協助整理");
@@ -1285,7 +1291,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-claim-investigation")).toBeNull();
     expect(pagePaneEl.querySelector(".page-claim-action")).toBeNull();
     startCheck?.click();
-    expect(pagePaneEl.querySelector(".page-claim-investigation")?.textContent).toContain("What primary source supports the runtime claim");
+    expect(pagePaneEl.querySelector(".page-claim-investigation")?.textContent).toContain("Does Runtime fixture report one synthetic claim");
     const evidenceLink = pagePaneEl.querySelector<HTMLAnchorElement>(".page-claim-investigation-actions a");
     expect(evidenceLink?.textContent).toBe("搜尋證據");
     expect(evidenceLink?.href).toContain("google.com/search");
@@ -1293,7 +1299,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelectorAll(".page-claim-investigation-actions a")).toHaveLength(3);
     pagePaneEl.querySelector<HTMLButtonElement>(".page-claim-copy-question")?.click();
     await flushMicrotasks();
-    expect(copiedTexts.at(-1)).toBe("What primary source supports the runtime claim");
+    expect(copiedTexts.at(-1)).toBe("Does Runtime fixture report one synthetic claim");
     const questionList = pagePaneEl.querySelector(".page-reader-analysis-questions .reading-brief-question-list");
     expect(questionList?.tagName).toBe("UL");
     expect(questionList?.querySelectorAll(":scope > .reading-brief-question-row")).toHaveLength(1);

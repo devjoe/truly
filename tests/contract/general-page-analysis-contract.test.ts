@@ -36,7 +36,13 @@ describe("General Page analysis contract", () => {
       schemaVersion: 1,
       summary: "A neutral synthetic summary.",
       bg: [{ t: "Topic", why: "It frames the page.", q: "What is the topic?" }],
-      claims: [{ c: "Synthetic claim", why: "It is checkable.", need: "Source", q: "Synthetic claim source?" }],
+      claims: [{
+        c: "Synthetic Agency published one claim",
+        why: "It is checkable.",
+        need: "Source",
+        q: "Did Synthetic Agency publish one claim?",
+        atom: { s: "Synthetic Agency", p: "published", o: "one claim" },
+      }],
       qs: [{ q: "What background would help the reader?", kind: "context" }],
       note: "Use source links.",
     }, "mock-model", "en");
@@ -47,7 +53,13 @@ describe("General Page analysis contract", () => {
       model: "mock-model",
       outputLang: "en",
       bg: [{ t: "Topic", why: "It frames the page.", q: "What is the topic?" }],
-      claims: [{ c: "Synthetic claim", why: "It is checkable.", need: "Source", q: "Synthetic claim source?" }],
+      claims: [{
+        c: "Synthetic Agency published one claim",
+        why: "It is checkable.",
+        need: "Source",
+        q: "Did Synthetic Agency publish one claim?",
+        atom: { s: "Synthetic Agency", p: "published", o: "one claim" },
+      }],
       qs: [{ q: "What background would help the reader?", kind: "context" }],
       note: "Use source links.",
     });
@@ -200,6 +212,8 @@ describe("General Page analysis contract", () => {
     expect(englishPrompt).toContain("could materially change the reader's judgment");
     expect(englishPrompt).toContain("not a keyword list, domain, or path");
     expect(englishPrompt).toContain("exactly one atomic assertion");
+    expect(englishPrompt).toContain("atom.s, atom.p, and atom.o");
+    expect(englishPrompt).toContain("arrested, charged, denied bail, convicted, and sentenced");
     expect(englishPrompt).toContain("whether text or images appear AI-generated");
     expect(englishPrompt).toContain("ordinary purchase decision");
     expect(englishPrompt).toContain("single success or failure");
@@ -224,6 +238,8 @@ describe("General Page analysis contract", () => {
     expect(zhPrompt).toContain("可能實質改變讀者");
     expect(zhPrompt).toContain("不得只是關鍵字、網域或路徑");
     expect(zhPrompt).toContain("只能處理一個原子主張");
+    expect(zhPrompt).toContain("atom.s、atom.p、atom.o");
+    expect(zhPrompt).toContain("被捕、被控、不得交保、被判有罪與被判刑");
     expect(zhPrompt).toContain("內容是否像 AI 生成");
     expect(zhPrompt).toContain("一般購買決策本身不等於");
     expect(zhPrompt).toContain("單一使用者操作工具成功或失敗");

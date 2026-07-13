@@ -16,13 +16,29 @@ export interface GeneralPageBrief {
   schemaVersion: 1;
   summary: string;
   bg?: ReadingBriefBackground[];
-  claims?: ReadingBriefClaim[];
+  claims?: GeneralPageBriefClaim[];
   qs?: ReadingBriefQuestion[];
   note?: string;
   model: string;
   outputLang?: Lang;
   elapsedMs?: number;
   outputReview?: ModelOutputReview;
+}
+
+/** Machine-checkable decomposition used only by General Page investigation.
+ *  These fields are not rendered. Missing or malformed atoms keep the reading
+ *  brief usable but make the downstream investigation action fail closed. */
+export interface GeneralPageAtomicProposition {
+  /** Concrete subject copied from claim.c. */
+  s: string;
+  /** Single factual relation copied from claim.c. */
+  p: string;
+  /** Concrete object, outcome, number, or status copied from claim.c. */
+  o: string;
+}
+
+export interface GeneralPageBriefClaim extends ReadingBriefClaim {
+  atom?: GeneralPageAtomicProposition;
 }
 
 export type GeneralPageAnalysisEligibilityReason =
@@ -192,14 +208,30 @@ function normalizeBackground(value: unknown): ReadingBriefBackground | null {
   return q ? { t, why, q } : { t, why };
 }
 
-function normalizeClaim(value: unknown): ReadingBriefClaim | null {
+function normalizeClaim(value: unknown): GeneralPageBriefClaim | null {
   const record = asRecord(value);
   const c = boundedString(record?.c, 120);
   const why = boundedString(record?.why, 120);
   const need = boundedString(record?.need, 90);
   if (!c || !why || !need) return null;
   const q = boundedString(record?.q, 120);
-  return q ? { c, why, need, q } : { c, why, need };
+  const atom = normalizeAtomicProposition(record?.atom);
+  return {
+    c,
+    why,
+    need,
+    ...(q ? { q } : {}),
+    ...(atom ? { atom } : {}),
+  };
+}
+
+function normalizeAtomicProposition(value: unknown): GeneralPageAtomicProposition | null {
+  const record = asRecord(value);
+  const s = boundedString(record?.s, 80);
+  const p = boundedString(record?.p, 60);
+  const o = boundedString(record?.o, 120);
+  if (!s || !p || !o) return null;
+  return { s, p, o };
 }
 
 function normalizeQuestion(value: unknown): ReadingBriefQuestion | null {

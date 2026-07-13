@@ -18,7 +18,8 @@ describe("page claim investigation contract", () => {
         c: "Example Agency reported 232 affected products on July 8.",
         why: "The number affects public risk assessment.",
         need: "The agency announcement and product list.",
-        q: "Which 232 products did Example Agency report on July 8?",
+        q: "Did Example Agency report 232 affected products on July 8?",
+        atom: { s: "Example Agency", p: "reported", o: "232 affected products" },
       },
       source: {
         title: "Synthetic public notice",
@@ -29,9 +30,9 @@ describe("page claim investigation contract", () => {
     });
 
     expect(task).toMatchObject({
-      version: 1,
+      version: 2,
       scope: "page",
-      question: "Which 232 products did Example Agency report on July 8",
+      question: "Did Example Agency report 232 affected products on July 8",
       sourceUrl: "https://example.test/report",
     });
     expect(task?.searchQuery).toContain("Synthetic public notice");
@@ -51,6 +52,7 @@ describe("page claim investigation contract", () => {
       c: "某機構公布 232 項產品名單",
       why: "影響消費者判斷",
       need: "官方公告與完整名單",
+      atom: { s: "某機構", p: "公布", o: "232 項產品名單" },
     })).toBe("「某機構公布 232 項產品名單」是否有官方公告與完整名單支持？");
     expect(deterministicClaimQuestion({
       c: "Google搜尋結果會優先顯示偏好來源",
@@ -66,6 +68,78 @@ describe("page claim investigation contract", () => {
       c: "產品通過檢驗，且是市場第一",
       why: "影響購買決策",
       need: "第三方報告",
+      atom: { s: "產品", p: "通過", o: "檢驗" },
+    })).toBeUndefined();
+  });
+
+  it("requires a parser-retained atomic proposition before preparing an action", () => {
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: "Example Agency reported 232 affected products.",
+        why: "The result affects public safety.",
+        need: "The agency announcement.",
+        q: "Did Example Agency report 232 affected products?",
+      },
+    })).toBeUndefined();
+
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: "Example Agency reported 232 affected products.",
+        why: "The result affects public safety.",
+        need: "The agency announcement.",
+        q: "Did Example Agency report 232 affected products?",
+        atom: { s: "Example Agency", p: "published", o: "232 affected products" },
+      },
+    })).toBeUndefined();
+  });
+
+  it("keeps charge, bail, conviction, and sentencing stages distinct", () => {
+    const chargedClaim = {
+      c: "Joseph Horner 被控二級謀殺罪",
+      why: "涉及刑事司法程序",
+      need: "檢方起訴文件",
+      atom: { s: "Joseph Horner", p: "被控", o: "二級謀殺罪" },
+    };
+
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        ...chargedClaim,
+        q: "Joseph Horner 是否被控二級謀殺罪？",
+      },
+    })).toBeDefined();
+
+    const recovered = buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        ...chargedClaim,
+        q: "紐約州法院是否裁定 Joseph Horner 二級謀殺罪成立？",
+      },
+    });
+    expect(recovered?.question).toContain("Joseph Horner 被控二級謀殺罪");
+    expect(recovered?.question).not.toContain("法院");
+
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: "Joseph Horner 被控二級謀殺罪，法院裁定不得交保",
+        why: "涉及刑事司法程序",
+        need: "起訴與保釋文件",
+        q: "Joseph Horner 是否被控二級謀殺罪且不得交保？",
+        atom: { s: "Joseph Horner", p: "被控", o: "二級謀殺罪" },
+      },
     })).toBeUndefined();
   });
 
@@ -85,6 +159,7 @@ describe("page claim investigation contract", () => {
         why: "影響健康安全",
         need: "產品檢驗報告",
         q: "產品是否適合孩童使用？",
+        atom: { s: "產品", p: "宣稱適合", o: "孩童" },
       },
     })).toBeUndefined();
     expect(buildPageClaimInvestigationTask({
@@ -96,6 +171,7 @@ describe("page claim investigation contract", () => {
         why: "影響購買決策",
         need: "gstudent.com.tw/courses/001-social 的價格紀錄",
         q: "gstudent.com.tw courses 001-social 課程折扣",
+        atom: { s: "課程頁面", p: "宣稱", o: "限時折扣" },
       },
     })).toBeUndefined();
   });

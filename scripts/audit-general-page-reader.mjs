@@ -373,8 +373,20 @@ async function startMockOpenAiEndpoint() {
           ? [{ t: "Visual context", why: "The confirmed screenshot was included." }]
           : [{ t: "Synthetic scope", why: "This deterministic response verifies the UI state." }],
         claims: hasImageUrl
-          ? [{ c: "The page needs visual grounding.", why: "The text extraction was too sparse.", need: "Use the confirmed screenshot.", q: "What evidence in the confirmed screenshot supports the visible card?" }]
-          : [{ c: "The analyzed content is synthetic.", why: "The UI check must not depend on live page content.", need: "Confirm the expected scope.", q: "What evidence confirms the scope of the synthetic analyzed content?" }],
+          ? [{
+              c: "The page needs visual grounding.",
+              why: "The text extraction was too sparse.",
+              need: "Use the confirmed screenshot.",
+              q: "Does the page need visual grounding?",
+              atom: { s: "The page", p: "needs", o: "visual grounding" },
+            }]
+          : [{
+              c: "The analyzed content is synthetic.",
+              why: "The UI check must not depend on live page content.",
+              need: "Confirm the expected scope.",
+              q: "Is the analyzed content synthetic?",
+              atom: { s: "The analyzed content", p: "is", o: "synthetic" },
+            }],
         qs: [{ q: hasImageUrl ? "What does the visible card show?" : "Which analysis scope is active?", kind: "understand" }],
       });
     }

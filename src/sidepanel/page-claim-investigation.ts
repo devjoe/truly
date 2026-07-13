@@ -1,4 +1,7 @@
-import type { ReadingBriefClaim } from "../lib/types";
+import type {
+  GeneralPageAtomicProposition,
+  GeneralPageBriefClaim,
+} from "../lib/general-page-analysis";
 import { cleanSearchContextText } from "./format";
 
 export interface PageClaimInvestigationSource {
@@ -9,7 +12,7 @@ export interface PageClaimInvestigationSource {
 }
 
 export interface PageClaimInvestigationTask {
-  version: 1;
+  version: 2;
   id: string;
   analysisKey: string;
   scope: "page" | "focus";
@@ -26,7 +29,19 @@ const URL_RE = /https?:\/\/\S+/gi;
 const DOMAIN_OR_PATH_RE = /(?:^|\s|\b)(?:[a-z0-9-]+\.)+(?:com|org|net|edu|gov|io|ai|co|app|dev|tw|cn|jp|uk)(?:[/:?#][^\s]*)?/i;
 const COMMAND_OR_MARKDOWN_RE = /\[[^\]]+\]\([^\)]+\)|(?:^|\s)(?:curl|wget|npm|pnpm|brew|git)\s|(?:google.{0,80}(?:search|搜尋)|(?:search|搜尋).{0,80}google|bing|duckduckgo|搜尋引擎)/i;
 const VAGUE_ONLY_RE = /^(?:這篇文章|此內容|它|上述說法|this article|this content|it|the above claim)[？?。.\s]*$/i;
-const COMPOUND_CLAIM_RE = /(?:且|並且|以及)|(?:，|,|；|;)\s*(?:並|and\b)/i;
+const COMPOUND_CLAIM_RE = /(?:且|並且|以及|同時|；|;)|(?:，|,)\s*(?:並|且|也|另|同時)|\b(?:and|while)\s+(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)?(?:is|are|was|were|has|have|had|did|does|will|can|must)\b/iu;
+const SECOND_PROPOSITION_RE = /(?:，|,)\s*(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)(?:said|says|reported|announced|is|are|was|were|has|have|had|did|does|will|can)\b/iu;
+
+type LegalStatus = "arrest" | "charge" | "bail" | "conviction" | "sentence" | "investigation";
+
+const LEGAL_STATUS_PATTERNS: Array<[LegalStatus, RegExp]> = [
+  ["arrest", /(?:被捕|逮捕|拘捕|遭捕|arrest(?:ed)?)/iu],
+  ["charge", /(?:被控|遭控|起訴|控告|charged|indicted|accused\s+of)/iu],
+  ["bail", /(?:不得交保|拒絕保釋|羈押|denied\s+bail|without\s+bail|remand(?:ed)?)/iu],
+  ["conviction", /(?:判決?有罪|定罪|罪名成立|convict(?:ed|ion)?|found\s+guilty|guilty\s+verdict)/iu],
+  ["sentence", /(?:判刑|刑期|量刑|sentenc(?:ed|ing)?)/iu],
+  ["investigation", /(?:偵辦|偵查|調查中|investigat(?:e|ed|ion|ing))/iu],
+];
 
 function cleanInvestigationText(value: string | undefined, limit: number): string {
   return cleanSearchContextText(value ?? "", limit)
@@ -40,21 +55,73 @@ function hasInvestigationArtifact(value: string | undefined): boolean {
   return /https?:\/\/\S+/i.test(text) || DOMAIN_OR_PATH_RE.test(text) || COMMAND_OR_MARKDOWN_RE.test(text);
 }
 
-export function usableClaimQuestion(value: string | undefined): string | undefined {
+function normalizedMatchText(value: string): string {
+  return value.normalize("NFKC").toLocaleLowerCase("en").replace(/[\p{P}\p{S}\s]+/gu, "");
+}
+
+function containsAtomicPart(text: string, part: string): boolean {
+  const normalizedPart = normalizedMatchText(part);
+  return normalizedPart.length >= 2 && normalizedMatchText(text).includes(normalizedPart);
+}
+
+function legalStatuses(text: string): Set<LegalStatus> {
+  const statuses = new Set<LegalStatus>();
+  for (const [status, pattern] of LEGAL_STATUS_PATTERNS) {
+    if (pattern.test(text)) statuses.add(status);
+  }
+  if (/(?:法院|法官).{0,24}(?:裁定|判決).{0,24}(?:有罪|罪名)|(?:court|judge).{0,32}(?:ruled|found|held).{0,20}(?:guilty|convict)/iu.test(text)) {
+    statuses.add("conviction");
+  }
+  return statuses;
+}
+
+function hasOneProposition(value: string): boolean {
+  return !COMPOUND_CLAIM_RE.test(value) && !SECOND_PROPOSITION_RE.test(value);
+}
+
+function usableAtomicProposition(
+  claim: GeneralPageBriefClaim,
+): GeneralPageAtomicProposition | undefined {
+  const atom = claim.atom;
+  if (!atom) return undefined;
+  if ([atom.s, atom.p, atom.o].some((part) => hasInvestigationArtifact(part))) return undefined;
+  if (!containsAtomicPart(claim.c, atom.s) || !containsAtomicPart(claim.c, atom.p) || !containsAtomicPart(claim.c, atom.o)) {
+    return undefined;
+  }
+  if (!hasOneProposition(claim.c)) return undefined;
+  const statuses = legalStatuses(`${atom.p} ${claim.c}`);
+  if (statuses.size > 1) return undefined;
+  return atom;
+}
+
+export function usableClaimQuestion(
+  value: string | undefined,
+  atom?: GeneralPageAtomicProposition,
+  claimText?: string,
+): string | undefined {
   if (hasInvestigationArtifact(value)) return undefined;
   if (((value ?? "").match(/[？?]/g) ?? []).length > 1) return undefined;
-  if (COMPOUND_CLAIM_RE.test(value ?? "")) return undefined;
+  if (!hasOneProposition(value ?? "")) return undefined;
   const question = cleanInvestigationText(value, 180);
   if (!question || question.length < 6 || VAGUE_ONLY_RE.test(question)) return undefined;
   if (/^(?:這篇文章|此內容|它|上述說法)(?:是否|有沒有|真假|來源)/.test(question)) return undefined;
+  if (atom) {
+    if (!containsAtomicPart(question, atom.s) || !containsAtomicPart(question, atom.o)) return undefined;
+    const claimStatuses = legalStatuses(`${atom.p} ${claimText ?? ""}`);
+    const questionStatuses = legalStatuses(question);
+    if (claimStatuses.size > 0 && !containsAtomicPart(question, atom.p)) return undefined;
+    if ([...questionStatuses].some((status) => !claimStatuses.has(status))) return undefined;
+  }
   return question;
 }
 
-export function deterministicClaimQuestion(claim: ReadingBriefClaim): string | undefined {
+export function deterministicClaimQuestion(claim: GeneralPageBriefClaim): string | undefined {
   if (hasInvestigationArtifact(claim.c) || hasInvestigationArtifact(claim.need)) return undefined;
+  const atom = usableAtomicProposition(claim);
+  if (!atom) return undefined;
   const statement = cleanInvestigationText(claim.c, 120);
   const need = cleanInvestigationText(claim.need, 80);
-  if (!statement || statement.length < 6 || COMPOUND_CLAIM_RE.test(statement)) return undefined;
+  if (!statement || statement.length < 6 || !hasOneProposition(statement)) return undefined;
   if (/\p{Script=Han}/u.test(statement)) {
     return `「${statement}」是否有${need || "外部證據"}支持？`.slice(0, 180);
   }
@@ -78,14 +145,15 @@ export function buildPageClaimInvestigationTask(input: {
   analysisKey: string;
   scope: "page" | "focus";
   claimIndex: number;
-  claim: ReadingBriefClaim;
+  claim: GeneralPageBriefClaim;
   source?: PageClaimInvestigationSource;
 }): PageClaimInvestigationTask | undefined {
   const claim = cleanInvestigationText(input.claim.c, 160);
   const why = cleanInvestigationText(input.claim.why, 120);
   const evidenceNeed = cleanInvestigationText(input.claim.need, 100);
-  if (COMPOUND_CLAIM_RE.test(claim)) return undefined;
-  const question = usableClaimQuestion(input.claim.q) ?? deterministicClaimQuestion(input.claim);
+  const atom = usableAtomicProposition(input.claim);
+  if (!atom) return undefined;
+  const question = usableClaimQuestion(input.claim.q, atom, claim) ?? deterministicClaimQuestion(input.claim);
   if (!input.analysisKey || !claim || !evidenceNeed || !question) return undefined;
   const context = [
     question,
@@ -95,7 +163,7 @@ export function buildPageClaimInvestigationTask(input: {
   ].filter(Boolean);
   const searchQuery = [...new Set(context)].join(" ").slice(0, 360);
   return {
-    version: 1,
+    version: 2,
     id: `${input.scope}:${input.analysisKey}:${input.claimIndex}`,
     analysisKey: input.analysisKey,
     scope: input.scope,
