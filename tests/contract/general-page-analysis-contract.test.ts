@@ -214,6 +214,10 @@ describe("General Page analysis contract", () => {
     expect(englishPrompt).toContain("keyword lists");
     expect(englishPrompt).toContain("exactly one atomic assertion");
     expect(englishPrompt).toContain("atom.s, atom.p, and atom.o");
+    expect(englishPrompt).toContain("three short, non-overlapping substrings verbatim");
+    expect(englishPrompt).toContain("Keep attribution and modality exact");
+    expect(englishPrompt).toContain("complete sentence with terminal punctuation");
+    expect(englishPrompt).toContain("broad marketing problem statements");
     expect(englishPrompt).toContain("arrested, charged, denied bail, convicted, and sentenced");
     expect(englishPrompt).toContain("routine product features");
     expect(englishPrompt).toContain("indexes, feeds, or mixed headlines");
@@ -235,6 +239,10 @@ describe("General Page analysis contract", () => {
     expect(zhPrompt).toContain("可能實質改變健康、安全、金錢、權利、法律或公共事件判斷");
     expect(zhPrompt).toContain("每個 claim 只能有一個原子主張");
     expect(zhPrompt).toContain("atom.s、atom.p、atom.o");
+    expect(zhPrompt).toContain("三段簡短、不重疊文字");
+    expect(zhPrompt).toContain("來源歸因與語氣必須保持原意");
+    expect(zhPrompt).toContain("有句末標點的完整句");
+    expect(zhPrompt).toContain("廣泛行銷問題陳述");
     expect(zhPrompt).toContain("被捕、被控、不得交保、被判有罪與被判刑");
     expect(zhPrompt).toContain("一般折扣／折扣碼／課程數量");
     expect(zhPrompt).toContain("索引、feed 或混合標題");

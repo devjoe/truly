@@ -210,11 +210,14 @@ function normalizeBackground(value: unknown): ReadingBriefBackground | null {
 
 function normalizeClaim(value: unknown): GeneralPageBriefClaim | null {
   const record = asRecord(value);
-  const c = boundedString(record?.c, 120);
+  // English's 28-word prompt budget can legitimately exceed 120 characters.
+  // Keep semantic fields intact within the UI/task budget instead of silently
+  // slicing them mid-word and invalidating an otherwise coherent atom.
+  const c = boundedString(record?.c, 180);
   const why = boundedString(record?.why, 120);
   const need = boundedString(record?.need, 90);
   if (!c || !why || !need) return null;
-  const q = boundedString(record?.q, 120);
+  const q = boundedString(record?.q, 180);
   const atom = normalizeAtomicProposition(record?.atom);
   return {
     c,
@@ -228,8 +231,8 @@ function normalizeClaim(value: unknown): GeneralPageBriefClaim | null {
 function normalizeAtomicProposition(value: unknown): GeneralPageAtomicProposition | null {
   const record = asRecord(value);
   const s = boundedString(record?.s, 80);
-  const p = boundedString(record?.p, 60);
-  const o = boundedString(record?.o, 120);
+  const p = boundedString(record?.p, 100);
+  const o = boundedString(record?.o, 160);
   if (!s || !p || !o) return null;
   return { s, p, o };
 }

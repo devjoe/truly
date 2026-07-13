@@ -18,7 +18,7 @@ describe("page claim investigation contract", () => {
         c: "Example Agency reported 232 affected products on July 8.",
         why: "The number affects public risk assessment.",
         need: "The agency announcement and product list.",
-        q: "Did Example Agency report 232 affected products on July 8?",
+        q: "Is it true that Example Agency reported 232 affected products on July 8?",
         atom: { s: "Example Agency", p: "reported", o: "232 affected products" },
       },
       source: {
@@ -32,7 +32,7 @@ describe("page claim investigation contract", () => {
     expect(task).toMatchObject({
       version: 2,
       scope: "page",
-      question: "Did Example Agency report 232 affected products on July 8",
+      question: "Is it true that Example Agency reported 232 affected products on July 8",
       sourceUrl: "https://example.test/report",
     });
     expect(task?.searchQuery).toContain("Synthetic public notice");
@@ -48,12 +48,13 @@ describe("page claim investigation contract", () => {
     expect(usableClaimQuestion("產品是否通過檢驗？又是否為市場第一？")).toBeUndefined();
     expect(usableClaimQuestion("USPS 是否收到 900 萬件假郵資包裹，且涉案者是否購買 12 間房？")).toBeUndefined();
     expect(usableClaimQuestion("課程是否提供30小時內容且折扣碼可折350元？")).toBeUndefined();
+    expect(usableClaimQuestion("某機構公布 232 項產品名單")).toBeUndefined();
     expect(deterministicClaimQuestion({
-      c: "某機構公布 232 項產品名單",
+      c: "某機構公布 232 項產品名單。",
       why: "影響消費者判斷",
       need: "官方公告與完整名單",
       atom: { s: "某機構", p: "公布", o: "232 項產品名單" },
-    })).toBe("「某機構公布 232 項產品名單」是否有官方公告與完整名單支持？");
+    })).toBe("「某機構公布 232 項產品名單」是否有外部證據支持？");
     expect(deterministicClaimQuestion({
       c: "Google搜尋結果會優先顯示偏好來源",
       why: "影響資訊來源選擇",
@@ -65,7 +66,7 @@ describe("page claim investigation contract", () => {
       need: "官方功能說明",
     })).toBeUndefined();
     expect(deterministicClaimQuestion({
-      c: "產品通過檢驗，且是市場第一",
+      c: "產品通過檢驗，且是市場第一。",
       why: "影響購買決策",
       need: "第三方報告",
       atom: { s: "產品", p: "通過", o: "檢驗" },
@@ -99,9 +100,49 @@ describe("page claim investigation contract", () => {
     })).toBeUndefined();
   });
 
+  it("rejects an incomplete claim sentence even when its atom is internally consistent", () => {
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: "The court upheld bans on athletes in female",
+        why: "The ruling affects rights.",
+        need: "The complete ruling.",
+        q: "Did the court uphold bans on athletes in female?",
+        atom: { s: "court", p: "upheld", o: "bans on athletes in female" },
+      },
+    })).toBeUndefined();
+  });
+
+  it("rejects vague atom parts and overlong deterministic questions", () => {
+    expect(deterministicClaimQuestion({
+      c: "AI 不知道這段內容。",
+      why: "產品宣稱 AI 有限制。",
+      need: "技術文件",
+      atom: { s: "AI", p: "不知道", o: "這段內容" },
+    })).toBeUndefined();
+
+    const longObject = `a ${"very ".repeat(35)}long outcome`.trim();
+    expect(deterministicClaimQuestion({
+      c: `Example Agency reported ${longObject}.`,
+      why: "The outcome affects safety.",
+      need: "Official evidence.",
+      atom: { s: "Example Agency", p: "reported", o: longObject },
+    })).toBeUndefined();
+  });
+
+  it("rejects a model query that omits the atomic relation", () => {
+    expect(usableClaimQuestion(
+      "Acme Model 9 passed the safety audit?",
+      { s: "Acme Model 9", p: "did not pass", o: "the safety audit" },
+      "Acme Model 9 did not pass the safety audit.",
+    )).toBeUndefined();
+  });
+
   it("keeps charge, bail, conviction, and sentencing stages distinct", () => {
     const chargedClaim = {
-      c: "Joseph Horner 被控二級謀殺罪",
+      c: "Joseph Horner 被控二級謀殺罪。",
       why: "涉及刑事司法程序",
       need: "檢方起訴文件",
       atom: { s: "Joseph Horner", p: "被控", o: "二級謀殺罪" },
@@ -134,7 +175,7 @@ describe("page claim investigation contract", () => {
       scope: "page",
       claimIndex: 0,
       claim: {
-        c: "Joseph Horner 被控二級謀殺罪，法院裁定不得交保",
+        c: "Joseph Horner 被控二級謀殺罪，法院裁定不得交保。",
         why: "涉及刑事司法程序",
         need: "起訴與保釋文件",
         q: "Joseph Horner 是否被控二級謀殺罪且不得交保？",
