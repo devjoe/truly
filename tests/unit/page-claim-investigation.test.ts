@@ -45,6 +45,7 @@ describe("page claim investigation contract", () => {
     expect(usableClaimQuestion("請用 Google 搜尋 https://example.test")).toBeUndefined();
     expect(usableClaimQuestion("gstudent.com.tw courses 001-social 課程 0713 漲價 折扣")).toBeUndefined();
     expect(usableClaimQuestion("產品是否通過檢驗？又是否為市場第一？")).toBeUndefined();
+    expect(usableClaimQuestion("USPS 是否收到 900 萬件假郵資包裹，且涉案者是否購買 12 間房？")).toBeUndefined();
     expect(deterministicClaimQuestion({
       c: "某機構公布 232 項產品名單",
       why: "影響消費者判斷",
@@ -73,6 +74,17 @@ describe("page claim investigation contract", () => {
       scope: "focus",
       claimIndex: 0,
       claim: { c: "短", why: "不明", need: "來源" },
+    })).toBeUndefined();
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: "產品宣稱適合孩童，且通過 831 項檢驗",
+        why: "影響健康安全",
+        need: "產品檢驗報告",
+        q: "產品是否適合孩童使用？",
+      },
     })).toBeUndefined();
     expect(buildPageClaimInvestigationTask({
       analysisKey: "analysis:key",

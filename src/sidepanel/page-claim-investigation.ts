@@ -43,6 +43,7 @@ function hasInvestigationArtifact(value: string | undefined): boolean {
 export function usableClaimQuestion(value: string | undefined): string | undefined {
   if (hasInvestigationArtifact(value)) return undefined;
   if (((value ?? "").match(/[？?]/g) ?? []).length > 1) return undefined;
+  if (COMPOUND_CLAIM_RE.test(value ?? "")) return undefined;
   const question = cleanInvestigationText(value, 180);
   if (!question || question.length < 6 || VAGUE_ONLY_RE.test(question)) return undefined;
   if (/^(?:這篇文章|此內容|它|上述說法)(?:是否|有沒有|真假|來源)/.test(question)) return undefined;
@@ -83,6 +84,7 @@ export function buildPageClaimInvestigationTask(input: {
   const claim = cleanInvestigationText(input.claim.c, 160);
   const why = cleanInvestigationText(input.claim.why, 120);
   const evidenceNeed = cleanInvestigationText(input.claim.need, 100);
+  if (COMPOUND_CLAIM_RE.test(claim)) return undefined;
   const question = usableClaimQuestion(input.claim.q) ?? deterministicClaimQuestion(input.claim);
   if (!input.analysisKey || !claim || !evidenceNeed || !question) return undefined;
   const context = [

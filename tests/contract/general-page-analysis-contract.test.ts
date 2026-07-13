@@ -201,6 +201,10 @@ describe("General Page analysis contract", () => {
     expect(englishPrompt).toContain("not a keyword list, domain, or path");
     expect(englishPrompt).toContain("exactly one atomic assertion");
     expect(englishPrompt).toContain("whether text or images appear AI-generated");
+    expect(englishPrompt).toContain("ordinary purchase decision");
+    expect(englishPrompt).toContain("single success or failure");
+    expect(englishPrompt).toContain("index, feed, or mixed list");
+    expect(englishPrompt).toContain("same assertion as claim.c");
     expect(englishPrompt).toContain("claims MUST contain no more than 1 item");
     expect(englishPrompt).toContain("understand|context|counter|image");
     expect(englishPrompt).not.toContain("Quick mode");
@@ -219,6 +223,10 @@ describe("General Page analysis contract", () => {
     expect(zhPrompt).toContain("不得只是關鍵字、網域或路徑");
     expect(zhPrompt).toContain("只能處理一個原子主張");
     expect(zhPrompt).toContain("內容是否像 AI 生成");
+    expect(zhPrompt).toContain("一般購買決策本身不等於");
+    expect(zhPrompt).toContain("單一使用者操作工具成功或失敗");
+    expect(zhPrompt).toContain("索引、feed 或互不相關");
+    expect(zhPrompt).toContain("claims.c 的同一個主張");
     expect(zhPrompt).toContain("claims 絕對不得超過 1 項");
     expect(zhPrompt).toContain("不得使用 verify/source 類型");
     expect(zhPrompt).not.toContain("快速模式");
