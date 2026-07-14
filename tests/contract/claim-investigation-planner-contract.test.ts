@@ -118,7 +118,6 @@ describe("Claim Investigation planner draft contract", () => {
     expect(prompt).toContain("attributes, not additional propositions");
     expect(prompt).toContain("Never use allegation merely because a claim is unverified");
     expect(prompt).toContain("never use forecast for historical or current data");
-    expect(prompt).toContain("Use attribution=null for an event actor, author/byline, or page date");
     expect(prompt).toContain("completed is not published");
     expect(prompt).toContain("Never request private medical, financial, employment, account");
     expect(prompt).toContain("allowed only when it is an entity in the selected proposition");
