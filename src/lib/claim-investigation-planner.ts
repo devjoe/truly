@@ -140,7 +140,7 @@ export const INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA = {
                     relation: { type: "string", minLength: 1, maxLength: 80 },
                     modality: {
                       enum: ["statement", "report", "estimate", "allegation", "forecast", "analysis"],
-                      description: "statement=the actor directly said or announced it; report=a document or publisher reported a past/current fact; estimate=an explicitly approximate quantity; allegation=an explicit accusation or disputed charge; forecast=a future prediction only; analysis=an interpretation. Do not use allegation merely because a claim is unverified or forecast for current/historical data.",
+                      description: "statement=the actor directly said, announced, or advertised it; report=the selected claim explicitly says a document, dataset, or publisher reported a past/current fact; estimate=an explicitly approximate quantity; allegation=an explicit accusation or disputed charge; forecast=a future prediction only; analysis=an interpretation. Use attribution=null for an event actor, author/byline, or page date when the selected claim has no speech/report wrapper. Do not use report merely because SOURCE_TEXT is a news page, allegation merely because a claim is unverified, or forecast for current/historical data.",
                     },
                   },
                 },
@@ -242,6 +242,10 @@ function nullableString(value: unknown, max: number): string | null | undefined 
   return value === null ? null : boundedString(value, max);
 }
 
+function containsPrivateRecordRequest(value: string): boolean {
+  return /\b(?:medical|patient) records?\b|(?:私人|非公開)?(?:病歷|醫療紀錄)/iu.test(value);
+}
+
 function normalizeDraft(value: unknown): InvestigationPlanDraft | undefined {
   const root = record(value);
   if (!root || root.schemaVersion !== 2 || typeof root.eligible !== "boolean") return undefined;
@@ -297,6 +301,7 @@ function normalizeDraft(value: unknown): InvestigationPlanDraft | undefined {
       !Array.isArray(raw.preferredSourceRoles) || raw.preferredSourceRoles.length < 1 || raw.preferredSourceRoles.length > 3) return undefined;
     const queryCandidates = raw.queryCandidates.map((candidate) => boundedString(candidate, 240));
     if (queryCandidates.some((candidate) => !candidate)) return undefined;
+    if (queryCandidates.some((candidate) => candidate && containsPrivateRecordRequest(candidate))) return undefined;
     if (raw.preferredSourceRoles.some((role) => !SOURCE_ROLES.has(role as EvidenceSourceRole))) return undefined;
     questions.push({
       basis: raw.basis as InvestigationQuestionBasis,
@@ -486,11 +491,12 @@ If eligible:
 - Select exactly one atomic proposition. If the source sentence combines an event with a cause, consequence, evaluation, second event, or separately verifiable quantity, select only one clause that can be copied safely; otherwise abstain with unsafe_to_plan.
 - originalSpan must be copied verbatim from the supplied text and contain only that selected proposition plus attribution required to interpret its modality.
 - normalizedClaim may clarify references but may not add facts.
-- Preserve attribution and modality as subject attributes. Use statement only when the actor directly said or announced something; report when a document or publisher reports a past or current fact; estimate only for an explicitly approximate quantity; allegation only for an explicit accusation or disputed charge; forecast only for a future prediction; and analysis for an interpretation. Never use allegation merely because a claim is unverified, and never use forecast for historical or current data. A report, estimate, allegation, forecast, or analysis is not an established fact. Time, place, and quantity are proposition attributes, not additional propositions.
+- Preserve attribution and modality as subject attributes. Use statement when the actor directly said, announced, or advertised something; report only when the selected claim explicitly says a document, dataset, or publisher reported a past or current fact; estimate only for an explicitly approximate quantity; allegation only for an explicit accusation or disputed charge; forecast only for a future prediction; and analysis for an interpretation. Use attribution=null for an event actor, author/byline, or page date when the selected claim contains no speech/report wrapper. Do not use report merely because SOURCE_TEXT is a news page. Never use allegation merely because a claim is unverified, and never use forecast for historical or current data. A report, estimate, allegation, forecast, or analysis is not an established fact. Time, place, and quantity are proposition attributes, not additional propositions.
 - proposition.originalSpan must copy the one atomic claim character-for-character as a contiguous substring of subject.originalSpan. proposition.normalizedText may resolve references but must not add facts, combine clauses, or change attribution. Do not force English-style subject/predicate/object segmentation. If an exact atomic proposition cannot be copied, abstain with unsafe_to_plan.
-- Questions have two separate axes. basis=literal directly tests the proposition; basis=contextual supplies interpretation or counter-evidence. purpose describes whether it checks the proposition itself, identity, timeline, quantity, context, or counterevidence. Create at least one basis=literal answerable question. A number or date question can still have basis=literal with purpose=quantity or timeline.
+- Questions have two separate axes. basis=literal directly tests the same predicate as the proposition; basis=contextual supplies interpretation or counter-evidence. purpose describes whether it checks the proposition itself, identity, timeline, quantity, context, or counterevidence. Create at least one basis=literal answerable question. Do not substitute a related predicate: for example, completed is not published, announced is not implemented, and diagnosed is not recovered. A number or date question can still have basis=literal with purpose=quantity or timeline.
 - Questions and queryCandidates must name concrete entities and must not use vague references such as this article, this content, it, or the above claim.
-- queryCandidates are search data only. Do not include URLs, Markdown, search-engine names, or operational instructions.
+- Questions and queryCandidates may use only public evidence. Never request private medical, financial, employment, account, or other non-public personal records.
+- queryCandidates are search data only. Do not include URLs, Markdown, or operational instructions such as search Google for. A search-company or product name is allowed only when it is an entity in the selected proposition.
 - Prefer primary sources for official acts, datasets, laws, health, safety, money, and numeric claims. Existing fact checks are a discovery lane, not primary evidence.
 - timeCutoff is the latest evidence date allowed by the claim context, or null when the text gives no reliable cutoff.
 - stoppingConditions must describe what evidence is still required; do not assign a verdict.`;

@@ -43,11 +43,12 @@ export interface InvestigationRetrievalStep {
   verdictFromSnippetAllowed: false;
 }
 
-const ARTIFACT_RE = /https?:\/\/|\[[^\]]+\]\(|\b(?:google|bing|duckduckgo)\b|搜尋引擎/iu;
+const ARTIFACT_RE = /https?:\/\/|\[[^\]]+\]\(|\b(?:search|look up|query)\s+(?:on\s+)?(?:google|bing|duckduckgo)\b|\b(?:google|bing|duckduckgo)\s+(?:search|query)\s+(?:for|about)\b|(?:在|用|使用)(?:\s*)(?:google|bing|duckduckgo|搜尋引擎)(?:\s*)(?:搜尋|查詢)/iu;
+const PRIVATE_RECORD_RE = /\b(?:medical|patient) records?\b|(?:私人|非公開)?(?:病歷|醫療紀錄)/iu;
 
 function cleanQuery(value: string): string | undefined {
   const clean = value.replace(/\s+/g, " ").trim().slice(0, 240);
-  return clean.length >= 3 && !ARTIFACT_RE.test(clean) ? clean : undefined;
+  return clean.length >= 3 && !ARTIFACT_RE.test(clean) && !PRIVATE_RECORD_RE.test(clean) ? clean : undefined;
 }
 
 function uniqueQueries(values: string[]): string[] {

@@ -118,6 +118,10 @@ describe("Claim Investigation planner draft contract", () => {
     expect(prompt).toContain("attributes, not additional propositions");
     expect(prompt).toContain("Never use allegation merely because a claim is unverified");
     expect(prompt).toContain("never use forecast for historical or current data");
+    expect(prompt).toContain("Use attribution=null for an event actor, author/byline, or page date");
+    expect(prompt).toContain("completed is not published");
+    expect(prompt).toContain("Never request private medical, financial, employment, account");
+    expect(prompt).toContain("allowed only when it is an entity in the selected proposition");
   });
 
   it("separates human check-worthiness from retrieval-plan generation", () => {
@@ -174,5 +178,9 @@ describe("Claim Investigation planner draft contract", () => {
       .toBe("claim_plus_truth_judgment");
     expect(detectCompoundPropositionSignal("她宣稱推薦顏某加入組織的說法是謊言"))
       .toBe("claim_plus_truth_judgment");
+
+    const privateRecords = structuredClone(eligibleDraft);
+    privateRecords.plan.questions[0].queryCandidates = ["Lisa Faulkner medical records"];
+    expect(parseInvestigationPlanDraftContent(JSON.stringify(privateRecords))).toBeUndefined();
   });
 });

@@ -27,6 +27,25 @@ describe("investigation retrieval routes", () => {
     expect(steps.some((step) => /https?:|google|bing/i.test(step.query ?? ""))).toBe(false);
   });
 
+  it("allows a search-product entity but strips search-engine instructions and private-record requests", () => {
+    const bundle = plannedBundle();
+    bundle.subject.normalizedClaim = "Google Preferred Sources lets users prioritize publishers.";
+    bundle.subject.proposition = {
+      originalSpan: "Google Preferred Sources lets users prioritize publishers.",
+      normalizedText: "Google Preferred Sources lets users prioritize publishers.",
+    };
+    bundle.plan.questions = [{
+      ...bundle.plan.questions[0],
+      queryCandidates: [
+        "Google Preferred Sources publishers",
+        "search Google for preferred publishers",
+        "Lisa Faulkner medical records",
+      ],
+    }];
+    const steps = buildInvestigationRetrievalRoute(bundle, "question_decomposition");
+    expect(steps.map((step) => step.query)).toEqual(["Google Preferred Sources publishers"]);
+  });
+
   it("locates an authority and document before extracting an exact passage", () => {
     const steps = buildInvestigationRetrievalRoute(plannedBundle(), "authority_document_first");
     expect(steps).toHaveLength(9);
