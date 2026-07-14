@@ -50,22 +50,6 @@ describe("Claim Investigation model-neutral contract", () => {
     }));
   });
 
-  it("requires an exact attribution span when attribution is present", () => {
-    const value = cloneFixture();
-    value.subject.attribution = {
-      actor: "Example Agency",
-      relation: "announced",
-      modality: "statement",
-    };
-    const result = validateInvestigationBundle(value);
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.issues).toContainEqual(expect.objectContaining({
-      path: "subject.attribution.originalSpan",
-      code: "invalid_type",
-    }));
-  });
-
   it("does not count a source role as an evidence relation", () => {
     const value = cloneFixture();
     value.evidence[0].relation = "primary";

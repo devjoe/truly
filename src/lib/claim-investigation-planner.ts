@@ -30,7 +30,6 @@ export interface InvestigationPlanDraftProposition {
 }
 
 export interface InvestigationPlanDraftAttribution {
-  originalSpan: string;
   actor: string;
   relation: string;
   modality: InvestigationAttributionModality;
@@ -80,7 +79,7 @@ export interface MaterializeInvestigationPlanInput {
 export type MaterializeInvestigationPlanResult =
   | { ok: true; bundle: InvestigationBundle }
   | { ok: false; error: "abstained"; reason: InvestigationPlanAbstentionReason }
-  | { ok: false; error: "invalid_draft" | "ungrounded_span" | "ungrounded_proposition" | "ungrounded_attribution" | "compound_proposition"; detail?: string };
+  | { ok: false; error: "invalid_draft" | "ungrounded_span" | "ungrounded_proposition" | "compound_proposition"; detail?: string };
 
 const ABSTENTION_REASONS = new Set<InvestigationPlanAbstentionReason>([
   "no_checkworthy_claim", "missing_specifics", "opinion_or_prediction",
@@ -135,14 +134,8 @@ export const INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA = {
                 {
                   type: "object",
                   additionalProperties: false,
-                  required: ["originalSpan", "actor", "relation", "modality"],
+                  required: ["actor", "relation", "modality"],
                   properties: {
-                    originalSpan: {
-                      type: "string",
-                      minLength: 3,
-                      maxLength: 400,
-                      description: "An exact contiguous span from subject.originalSpan that explicitly expresses the attribution wrapper. Use attribution=null when no such wrapper exists.",
-                    },
                     actor: { type: "string", minLength: 2, maxLength: 160 },
                     relation: { type: "string", minLength: 1, maxLength: 80 },
                     modality: {
@@ -274,11 +267,10 @@ function normalizeDraft(value: unknown): InvestigationPlanDraft | undefined {
   if (subject.attribution !== null) {
     const raw = record(subject.attribution);
     if (!raw) return undefined;
-    const attributionSpan = boundedString(raw.originalSpan, 400);
     const actor = boundedString(raw.actor, 160);
     const relation = boundedString(raw.relation, 80);
-    if (!attributionSpan || !actor || !relation || !MODALITIES.has(raw.modality as InvestigationAttributionModality)) return undefined;
-    attribution = { originalSpan: attributionSpan, actor, relation, modality: raw.modality as InvestigationAttributionModality };
+    if (!actor || !relation || !MODALITIES.has(raw.modality as InvestigationAttributionModality)) return undefined;
+    attribution = { actor, relation, modality: raw.modality as InvestigationAttributionModality };
   }
 
   const rawProposition = record(subject.proposition);
@@ -404,9 +396,6 @@ export function materializeInvestigationPlan(
   }
   if (!draft.subject || !draft.plan) return { ok: false, error: "invalid_draft" };
   if (!groundedIn(input.sourceText, draft.subject.originalSpan)) return { ok: false, error: "ungrounded_span" };
-  if (draft.subject.attribution && !groundedIn(draft.subject.originalSpan, draft.subject.attribution.originalSpan)) {
-    return { ok: false, error: "ungrounded_attribution" };
-  }
   if (!groundedIn(draft.subject.originalSpan, draft.subject.proposition.originalSpan)) {
     return { ok: false, error: "ungrounded_proposition" };
   }
@@ -502,7 +491,7 @@ If eligible:
 - Select exactly one atomic proposition. If the source sentence combines an event with a cause, consequence, evaluation, second event, or separately verifiable quantity, select only one clause that can be copied safely; otherwise abstain with unsafe_to_plan.
 - originalSpan must be copied verbatim from the supplied text and contain only that selected proposition plus attribution required to interpret its modality.
 - normalizedClaim may clarify references but may not add facts.
-- Preserve attribution and modality as subject attributes. attribution.originalSpan must copy the exact contiguous words in subject.originalSpan that explicitly express who said, reported, estimated, alleged, forecast, or analyzed the proposition. Use statement when the actor directly said, announced, or advertised something; report only when the selected claim explicitly says a document, dataset, or publisher reported a past or current fact; estimate only for an explicitly approximate quantity; allegation only for an explicit accusation or disputed charge; forecast only for a future prediction; and analysis for an interpretation. Use attribution=null for an event actor, author/byline, or page date when the selected claim contains no speech/report wrapper or no exact attribution wrapper can be copied. Do not use report merely because SOURCE_TEXT is a news page. Never use allegation merely because a claim is unverified, and never use forecast for historical or current data. A report, estimate, allegation, forecast, or analysis is not an established fact. Time, place, and quantity are proposition attributes, not additional propositions.
+- Preserve attribution and modality as subject attributes. Use statement when the actor directly said, announced, or advertised something; report only when the selected claim explicitly says a document, dataset, or publisher reported a past or current fact; estimate only for an explicitly approximate quantity; allegation only for an explicit accusation or disputed charge; forecast only for a future prediction; and analysis for an interpretation. Use attribution=null for an event actor, author/byline, or page date when the selected claim contains no speech/report wrapper. Do not use report merely because SOURCE_TEXT is a news page. Never use allegation merely because a claim is unverified, and never use forecast for historical or current data. A report, estimate, allegation, forecast, or analysis is not an established fact. Time, place, and quantity are proposition attributes, not additional propositions.
 - proposition.originalSpan must copy the one atomic claim character-for-character as a contiguous substring of subject.originalSpan. proposition.normalizedText may resolve references but must not add facts, combine clauses, or change attribution. Do not force English-style subject/predicate/object segmentation. If an exact atomic proposition cannot be copied, abstain with unsafe_to_plan.
 - Questions have two separate axes. basis=literal directly tests the same predicate as the proposition; basis=contextual supplies interpretation or counter-evidence. purpose describes whether it checks the proposition itself, identity, timeline, quantity, context, or counterevidence. Create at least one basis=literal answerable question. Do not substitute a related predicate: for example, completed is not published, announced is not implemented, and diagnosed is not recovered. A number or date question can still have basis=literal with purpose=quantity or timeline.
 - Questions and queryCandidates must name concrete entities and must not use vague references such as this article, this content, it, or the above claim.
