@@ -42,6 +42,7 @@ describe("General Page analysis contract", () => {
         need: "Source",
         q: "Did Synthetic Agency publish one claim?",
         atom: { s: "Synthetic Agency", p: "published", o: "one claim" },
+        policy: { claimKind: "fact", consequence: "public_interest" },
       }],
       qs: [{ q: "What background would help the reader?", kind: "context" }],
       note: "Use source links.",
@@ -59,9 +60,46 @@ describe("General Page analysis contract", () => {
         need: "Source",
         q: "Did Synthetic Agency publish one claim?",
         atom: { s: "Synthetic Agency", p: "published", o: "one claim" },
+        policy: { claimKind: "fact", consequence: "public_interest" },
       }],
       qs: [{ q: "What background would help the reader?", kind: "context" }],
       note: "Use source links.",
+    });
+  });
+
+  it("normalizes typed attribution and action policy without inventing missing fields", () => {
+    const attributed = normalizeGeneralPageBrief({
+      schemaVersion: 1,
+      summary: "An attributed estimate.",
+      claims: [{
+        c: "Expert analysis estimated that the policy would cost households $200.",
+        why: "The estimate could affect household finances.",
+        need: "The analysis and its calculation.",
+        q: "Did expert analysis estimate that the policy would cost households $200?",
+        atom: { s: "the policy", p: "would cost", o: "households $200" },
+        attribution: { source: "Expert analysis", relation: "estimated", modality: "estimate" },
+        policy: { claimKind: "estimate", consequence: "money" },
+      }],
+    }, "mock-model", "en");
+
+    expect(attributed?.claims?.[0]).toMatchObject({
+      attribution: { source: "Expert analysis", relation: "estimated", modality: "estimate" },
+      policy: { claimKind: "estimate", consequence: "money" },
+    });
+
+    const missing = normalizeGeneralPageBrief({
+      schemaVersion: 1,
+      summary: "A legacy-shaped claim remains readable.",
+      claims: [{
+        c: "A claim without v3 action metadata.",
+        why: "It may still be useful reading context.",
+        need: "Primary evidence.",
+      }],
+    }, "mock-model", "en");
+    expect(missing?.claims?.[0]).toEqual({
+      c: "A claim without v3 action metadata.",
+      why: "It may still be useful reading context.",
+      need: "Primary evidence.",
     });
   });
 
@@ -218,6 +256,7 @@ describe("General Page analysis contract", () => {
     expect(englishPrompt).toContain("at most 6 English words");
     expect(englishPrompt).toContain("select only one and rewrite claim.c");
     expect(englishPrompt).toContain("Keep attribution and modality exact");
+    expect(englishPrompt).not.toContain("Every claim MUST include policy");
     expect(englishPrompt).toContain("complete sentence with terminal punctuation");
     expect(englishPrompt).toContain("broad marketing problem statements");
     expect(englishPrompt).toContain("arrested, charged, denied bail, convicted, and sentenced");
@@ -245,6 +284,7 @@ describe("General Page analysis contract", () => {
     expect(zhPrompt).toContain("最多 12 個中文字");
     expect(zhPrompt).toContain("只選一個並把 claims.c 改寫成該單一完整陳述");
     expect(zhPrompt).toContain("來源歸因與語氣必須保持原意");
+    expect(zhPrompt).not.toContain("每個 claim 都必須包含 policy");
     expect(zhPrompt).toContain("有句末標點的完整句");
     expect(zhPrompt).toContain("廣泛行銷問題陳述");
     expect(zhPrompt).toContain("被捕、被控、不得交保、被判有罪與被判刑");
@@ -254,6 +294,32 @@ describe("General Page analysis contract", () => {
     expect(zhPrompt).toContain("不得使用 verify/source");
     expect(zhPrompt).not.toContain("快速模式");
     expect(zhPrompt).not.toContain("完整模式");
+
+    const v3English = buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://127.0.0.1:4999/v1/chat/completions",
+      model: "candidate-model",
+      context,
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+      contract: "investigation_v3",
+    });
+    const v3EnglishPrompt = String(v3English.messages[0]?.content);
+    expect(v3EnglishPrompt).toContain("Every claim MUST include policy");
+    expect(v3EnglishPrompt).toContain("before or after the atom");
+    expect(v3EnglishPrompt).toContain("Product availability, personal opinion, and generic controversy");
+
+    const v3Zh = buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://127.0.0.1:4999/v1/chat/completions",
+      model: "candidate-model",
+      context,
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "zh-TW",
+      contract: "investigation_v3",
+    });
+    const v3ZhPrompt = String(v3Zh.messages[0]?.content);
+    expect(v3ZhPrompt).toContain("每個 claim 都必須包含 policy");
+    expect(v3ZhPrompt).toContain("claims.c 在 atom 前後另有");
+    expect(v3ZhPrompt).toContain("產品是否供應、個人意見與泛稱引發爭議");
 
     const withShot = buildTierBGeneralPageBriefChatBody({
       endpoint: "http://127.0.0.1:4999/v1/chat/completions",

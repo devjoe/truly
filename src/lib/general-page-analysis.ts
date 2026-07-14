@@ -37,8 +37,52 @@ export interface GeneralPageAtomicProposition {
   o: string;
 }
 
+export type GeneralPageClaimKind =
+  | "fact"
+  | "report"
+  | "estimate"
+  | "forecast"
+  | "allegation"
+  | "expert_analysis"
+  | "opinion";
+
+export type GeneralPageClaimConsequence =
+  | "health"
+  | "safety"
+  | "money"
+  | "rights"
+  | "law"
+  | "public_interest"
+  | "none";
+
+export type GeneralPageAttributionModality =
+  | "statement"
+  | "report"
+  | "estimate"
+  | "allegation"
+  | "forecast"
+  | "analysis";
+
+/** Explicit source framing outside the atomic proposition. All text fields
+ *  must be copied from claim.c so an investigation cannot silently promote an
+ *  attributed estimate, allegation, or analysis into an established fact. */
+export interface GeneralPageClaimAttribution {
+  source: string;
+  relation: string;
+  modality: GeneralPageAttributionModality;
+}
+
+/** Model-authored classification consumed by a deterministic, fail-closed
+ *  action policy. It is evidence for eligibility, never authority by itself. */
+export interface GeneralPageClaimPolicy {
+  claimKind: GeneralPageClaimKind;
+  consequence: GeneralPageClaimConsequence;
+}
+
 export interface GeneralPageBriefClaim extends ReadingBriefClaim {
   atom?: GeneralPageAtomicProposition;
+  attribution?: GeneralPageClaimAttribution;
+  policy?: GeneralPageClaimPolicy;
 }
 
 export type GeneralPageAnalysisEligibilityReason =
@@ -219,12 +263,16 @@ function normalizeClaim(value: unknown): GeneralPageBriefClaim | null {
   if (!c || !why || !need) return null;
   const q = boundedString(record?.q, 180);
   const atom = normalizeAtomicProposition(record?.atom);
+  const attribution = normalizeClaimAttribution(record?.attribution);
+  const policy = normalizeClaimPolicy(record?.policy);
   return {
     c,
     why,
     need,
     ...(q ? { q } : {}),
     ...(atom ? { atom } : {}),
+    ...(attribution ? { attribution } : {}),
+    ...(policy ? { policy } : {}),
   };
 }
 
@@ -235,6 +283,38 @@ function normalizeAtomicProposition(value: unknown): GeneralPageAtomicPropositio
   const o = boundedString(record?.o, 160);
   if (!s || !p || !o) return null;
   return { s, p, o };
+}
+
+function normalizeClaimAttribution(value: unknown): GeneralPageClaimAttribution | null {
+  const record = asRecord(value);
+  const source = boundedString(record?.source, 80);
+  const relation = boundedString(record?.relation, 40);
+  const modality = boundedString(record?.modality, 24);
+  if (!source || !relation || !isClaimAttributionModality(modality)) return null;
+  return { source, relation, modality };
+}
+
+function normalizeClaimPolicy(value: unknown): GeneralPageClaimPolicy | null {
+  const record = asRecord(value);
+  const claimKind = boundedString(record?.claimKind, 24);
+  const consequence = boundedString(record?.consequence, 24);
+  if (!isClaimKind(claimKind) || !isClaimConsequence(consequence)) return null;
+  return { claimKind, consequence };
+}
+
+function isClaimKind(value: string | undefined): value is GeneralPageClaimKind {
+  return value === "fact" || value === "report" || value === "estimate" || value === "forecast" ||
+    value === "allegation" || value === "expert_analysis" || value === "opinion";
+}
+
+function isClaimConsequence(value: string | undefined): value is GeneralPageClaimConsequence {
+  return value === "health" || value === "safety" || value === "money" ||
+    value === "rights" || value === "law" || value === "public_interest" || value === "none";
+}
+
+function isClaimAttributionModality(value: string | undefined): value is GeneralPageAttributionModality {
+  return value === "statement" || value === "report" || value === "estimate" ||
+    value === "allegation" || value === "forecast" || value === "analysis";
 }
 
 function normalizeQuestion(value: unknown): ReadingBriefQuestion | null {

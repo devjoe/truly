@@ -193,13 +193,17 @@ export function readingBriefSystemPrompt(outputLang?: Lang): string {
 export function generalPageBriefSystemPrompt(
   outputLang: Lang | undefined,
   allowedUse: GeneralPageEffectiveModelContextUse,
+  contract: "standard" | "investigation_v3" = "standard",
 ): string {
   const lang = tierBOutputLang(outputLang);
   const overview = allowedUse === "page_overview_only";
+  const investigation = contract === "investigation_v3";
   if (lang === "en") {
     return [
       "You are Truly's General Page reading assistant. Return exactly one JSON object and nothing else.",
-      "Required shape: {\"schemaVersion\":1,\"summary\":\"neutral summary\",\"bg\":[{\"t\":\"point\",\"why\":\"importance\"}],\"claims\":[{\"c\":\"claim\",\"why\":\"importance\",\"need\":\"evidence\",\"q\":\"verification question\",\"atom\":{\"s\":\"subject\",\"p\":\"one relation\",\"o\":\"object or outcome\"}}],\"qs\":[{\"q\":\"follow-up question\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"optional reminder\"}. schemaVersion and summary are always required. bg, claims, and qs must be arrays of objects or empty arrays, never arrays of strings.",
+      investigation
+        ? "Required shape: {\"schemaVersion\":1,\"summary\":\"neutral summary\",\"bg\":[{\"t\":\"point\",\"why\":\"importance\"}],\"claims\":[{\"c\":\"claim\",\"why\":\"importance\",\"need\":\"evidence\",\"q\":\"verification question\",\"atom\":{\"s\":\"subject\",\"p\":\"one relation\",\"o\":\"object or outcome\"},\"policy\":{\"claimKind\":\"fact|report|estimate|forecast|allegation|expert_analysis\",\"consequence\":\"health|safety|money|rights|law|public_interest\"}}],\"qs\":[{\"q\":\"follow-up question\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"optional reminder\"}. schemaVersion and summary are always required. bg, claims, and qs must be arrays of objects or empty arrays, never arrays of strings."
+        : "Required shape: {\"schemaVersion\":1,\"summary\":\"neutral summary\",\"bg\":[{\"t\":\"point\",\"why\":\"importance\"}],\"claims\":[{\"c\":\"claim\",\"why\":\"importance\",\"need\":\"evidence\",\"q\":\"verification question\",\"atom\":{\"s\":\"subject\",\"p\":\"one relation\",\"o\":\"object or outcome\"}}],\"qs\":[{\"q\":\"follow-up question\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"optional reminder\"}. schemaVersion and summary are always required. bg, claims, and qs must be arrays of objects or empty arrays, never arrays of strings.",
       "Write every natural-language field in English. summary <=32 words; bg <=2 items; claims <=1 item; qs <=1 item. Keep every other string under 28 words.",
       "Use only the supplied page context. Do not invent sources, dates, authors, facts, motives, or URLs.",
       "When targetKind is selection, summarize and analyze only the selected text; surrounding text is context only.",
@@ -214,6 +218,10 @@ export function generalPageBriefSystemPrompt(
       "If a source sentence contains multiple assertions, select only one and rewrite claim.c as that one complete assertion; never copy the compound sentence unchanged. Bad: ‘India recorded its driest June in 12 years and its fifth-driest since 1901.’ Good: ‘India recorded its driest June in 12 years.’",
       "claim.c must be a complete sentence with terminal punctuation. If the supplied page text or candidate sentence ends abruptly, omit the claim instead of completing or guessing it.",
       "Keep attribution and modality exact: said, reported, estimated, alleged, planned, and confirmed are different relations. Do not turn an attributed statement, forecast, or allegation into an established fact.",
+      ...(investigation ? [
+        "Every claim MUST include policy. claimKind classifies the atomic assertion; consequence names the one material health, safety, money, rights, law, or public-interest judgment that verification could change. Product availability, personal opinion, and generic controversy are never action-eligible and must be omitted from claims.",
+        "attribution is OPTIONAL and MUST be omitted for a direct atom. It is required only when claim.c frames the atom through a separate speaker, report, estimate, allegation, forecast, or analysis before or after the atom. Then add attribution:{source,relation,modality}, copy source and relation verbatim from claim.c outside the atom, and use modality statement|report|estimate|allegation|forecast|analysis. Never invent attribution, omit a real outer attribution, or place it only in why/need/q.",
+      ] : []),
       "claim.q must be one natural question about the same atom and copy atom.s, atom.p, and atom.o verbatim. It must not use vague references, URLs, domains, Markdown, search-engine names, commands, keyword lists, or facts absent from the page. Omit the claim if q is unreliable.",
       "Preserve legal stage exactly: arrested, charged, denied bail, convicted, and sentenced are never interchangeable. claim.q must preserve atom.p's legal wording.",
       "qs is only for understanding, context, counter-perspectives, or image interpretation; never verify/source and never duplicate the claim.",
@@ -222,7 +230,9 @@ export function generalPageBriefSystemPrompt(
   }
   return [
     "你是 Truly 的一般網頁閱讀助理。只能回傳一個 JSON 物件，不得輸出其他文字。",
-    "必須符合：{\"schemaVersion\":1,\"summary\":\"中立摘要\",\"bg\":[{\"t\":\"重點\",\"why\":\"為何重要\"}],\"claims\":[{\"c\":\"主張\",\"why\":\"為何重要\",\"need\":\"需要的證據\",\"q\":\"查核問題\",\"atom\":{\"s\":\"主體\",\"p\":\"單一關係\",\"o\":\"受詞或結果\"}}],\"qs\":[{\"q\":\"延伸問題\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"可選提醒\"}。schemaVersion 與 summary 永遠必填；bg、claims、qs 必須是物件陣列或空陣列，絕對不可使用字串陣列。",
+    investigation
+      ? "必須符合：{\"schemaVersion\":1,\"summary\":\"中立摘要\",\"bg\":[{\"t\":\"重點\",\"why\":\"為何重要\"}],\"claims\":[{\"c\":\"主張\",\"why\":\"為何重要\",\"need\":\"需要的證據\",\"q\":\"查核問題\",\"atom\":{\"s\":\"主體\",\"p\":\"單一關係\",\"o\":\"受詞或結果\"},\"policy\":{\"claimKind\":\"fact|report|estimate|forecast|allegation|expert_analysis\",\"consequence\":\"health|safety|money|rights|law|public_interest\"}}],\"qs\":[{\"q\":\"延伸問題\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"可選提醒\"}。schemaVersion 與 summary 永遠必填；bg、claims、qs 必須是物件陣列或空陣列，絕對不可使用字串陣列。"
+      : "必須符合：{\"schemaVersion\":1,\"summary\":\"中立摘要\",\"bg\":[{\"t\":\"重點\",\"why\":\"為何重要\"}],\"claims\":[{\"c\":\"主張\",\"why\":\"為何重要\",\"need\":\"需要的證據\",\"q\":\"查核問題\",\"atom\":{\"s\":\"主體\",\"p\":\"單一關係\",\"o\":\"受詞或結果\"}}],\"qs\":[{\"q\":\"延伸問題\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"可選提醒\"}。schemaVersion 與 summary 永遠必填；bg、claims、qs 必須是物件陣列或空陣列，絕對不可使用字串陣列。",
     `所有自然語言欄位使用台灣慣用繁體中文。summary 80 字內；bg 最多 2 項；claims 最多 1 項；qs 最多 1 項。${ZHTW_OUTPUT_GUIDANCE}。`,
     "只能使用提供的頁面脈絡。不要發明來源、日期、作者、事實、動機或網址。",
     "targetKind 是 selection 時，只摘要與分析選取文字；surrounding text 只能當脈絡，不可當成摘要主體。",
@@ -237,6 +247,10 @@ export function generalPageBriefSystemPrompt(
     "來源句若含多個陳述，只選一個並把 claims.c 改寫成該單一完整陳述，不得原樣複製複合句。錯誤：『6 月中古屋價格月減 0.42%，且跌幅較 5 月擴大。』正確：『6 月中古屋價格月減 0.42%。』",
     "claims.c 必須是有句末標點的完整句。頁面文字或候選句若在中途截斷，必須省略 claim，不得自行補完或猜測。",
     "來源歸因與語氣必須保持原意：表示、報導、估計、指稱、預計與確認是不同關係；不得把引述、預測或指控改寫成已成立的事實。",
+    ...(investigation ? [
+      "每個 claim 都必須包含 policy。claimKind 分類該原子主張；consequence 必須指出查證結果會改變的單一健康、安全、金錢、權利、法律或公共利益判斷。產品是否供應、個人意見與泛稱引發爭議都不得成為可查核 action，應省略 claim。",
+      "attribution 是選填；直接陳述 atom 時必須省略。只有 claims.c 在 atom 前後另有說話者、報導、估計、指控、預測或分析來源時才必填 attribution:{source,relation,modality}。source 與 relation 必須從 atom 之外的 claims.c 原樣複製，modality 使用 statement|report|estimate|allegation|forecast|analysis；不得捏造歸因、省略真正的外層歸因，或只把歸因放在 why、need、q。",
+    ] : []),
     "claims.q 必須是查核同一 atom 的一個自然問句，並原樣寫出 atom.s、atom.p、atom.o；不得使用代稱、網址、網域、Markdown、搜尋引擎名稱、操作指令、關鍵字清單或頁面未出現的事實。無法可靠產生 q 就省略 claim。",
     "法律程序必須保持原詞：被捕、被控、不得交保、被判有罪與被判刑絕對不可互換；claims.q 必須保持 atom.p 的法律狀態。",
     "qs 只放理解、背景、反方觀點或影像理解問題，不得使用 verify/source，不得重述 claim。",
@@ -394,6 +408,10 @@ export interface TierBGeneralPageBriefRequest {
   allowedUse: GeneralPageEffectiveModelContextUse;
   timeoutMs?: number;
   outputLang?: Lang;
+  /** Opt-in candidate contract used only by private evaluation. */
+  contract?: "standard" | "investigation_v3";
+  /** Opt-in format repair used only while evaluating an unstable candidate contract. */
+  enableFormatRepair?: boolean;
   /** User-confirmed visible-tab screenshot as a data URL (vision providers only). */
   screenshotDataUrl?: string;
 }
@@ -402,6 +420,10 @@ export interface TierBGeneralPageBriefResult {
   ok: boolean;
   brief: GeneralPageBrief | null;
   raw?: string;
+  /** Number of model requests used. A second request is allowed only when an
+   *  explicitly opted-in candidate response fails the General Page contract. */
+  attempts?: 1 | 2;
+  formatRecovered?: boolean;
   error?: "general_page_brief_network_error" | "general_page_brief_timeout" | "general_page_brief_http_error" | "general_page_brief_format_error";
 }
 
@@ -698,18 +720,11 @@ export function buildGeneralPageBriefPrompt(
 }
 
 export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefRequest): TierBChatBody {
-  const userText = buildGeneralPageBriefPrompt(req.context, req.outputLang);
-  const userContent: string | ChatContent[] = req.screenshotDataUrl
-    ? [
-        { type: "text", text: userText },
-        { type: "image_url", image_url: { url: req.screenshotDataUrl } },
-      ]
-    : userText;
   const body: TierBChatBody = {
     model: req.model,
     messages: [
-      { role: "system", content: generalPageBriefSystemPrompt(req.outputLang, req.allowedUse) },
-      { role: "user", content: userContent },
+      { role: "system", content: generalPageBriefSystemPrompt(req.outputLang, req.allowedUse, req.contract) },
+      { role: "user", content: generalPageBriefUserContent(req) },
     ],
     temperature: 0,
     max_tokens: 720,
@@ -721,6 +736,56 @@ export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefReq
     body.reasoning_effort = "none";
   }
   return body;
+}
+
+export function buildTierBGeneralPageBriefRepairChatBody(req: TierBGeneralPageBriefRequest): TierBChatBody {
+  const lang = tierBOutputLang(req.outputLang);
+  const overview = req.allowedUse === "page_overview_only";
+  const system = lang === "en"
+    ? [
+        "You are repairing a General Page reading response. Return JSON only, with exactly these top-level keys: schemaVersion, summary, bg, claims, qs, note.",
+        "Use schemaVersion:1. summary is required. bg, claims, and qs are object arrays; use [] when empty.",
+        "Keep the response compact: summary <=32 words, bg <=2 items, claims <=1 item, qs <=1 item, and every other string <=28 words. Do not reproduce the page text.",
+        overview
+          ? "This is page overview only. claims must be []."
+          : "claims has at most one consequential, externally checkable atomic assertion; otherwise use [].",
+        "A claim requires c, why, need, q, atom:{s,p,o}, and policy:{claimKind,consequence}. claimKind is fact|report|estimate|forecast|allegation|expert_analysis. consequence is health|safety|money|rights|law|public_interest.",
+        "Optional attribution:{source,relation,modality} is allowed only for a real outer source frame before or after the atom. Preserve it in q. Do not invent facts or use markdown.",
+      ].join("\n")
+    : [
+        "你正在修復一般網頁閱讀結果。只能回傳 JSON，頂層只能有 schemaVersion、summary、bg、claims、qs、note。",
+        "schemaVersion 必須是 1；summary 必填；bg、claims、qs 必須是物件陣列，沒有內容就用 []。所有自然語言欄位使用台灣慣用繁體中文。",
+        "輸出必須精簡：summary 80 字內、bg 最多 2 項、claims 最多 1 項、qs 最多 1 項，其他字串 60 字內；不得重述頁面全文。",
+        overview
+          ? "這只是頁面總覽，claims 必須是 []。"
+          : "claims 最多一項，只能放具後果、可由外部證據查核的原子主張；否則用 []。",
+        "claim 必須包含 c、why、need、q、atom:{s,p,o}、policy:{claimKind,consequence}。claimKind 只能是 fact|report|estimate|forecast|allegation|expert_analysis；consequence 只能是 health|safety|money|rights|law|public_interest。",
+        "只有 atom 前後確實有外層來源框架時才能加入 attribution:{source,relation,modality}，並在 q 保留歸因。不得發明事實，不得使用 Markdown。",
+      ].join("\n");
+  const body: TierBChatBody = {
+    model: req.model,
+    messages: [
+      { role: "system", content: system },
+      { role: "user", content: generalPageBriefUserContent(req) },
+    ],
+    temperature: 0,
+    max_tokens: 800,
+    response_format: { type: "json_object" },
+    truncate_prompt_tokens: TIER_B_CONTEXT_LIMIT_TOKENS,
+    chat_template_kwargs: { enable_thinking: false },
+  };
+  if (shouldRequestOpenAICompatNoThinking(req.endpoint, req.model)) body.reasoning_effort = "none";
+  return body;
+}
+
+function generalPageBriefUserContent(req: TierBGeneralPageBriefRequest): string | ChatContent[] {
+  const userText = buildGeneralPageBriefPrompt(req.context, req.outputLang);
+  return req.screenshotDataUrl
+    ? [
+        { type: "text", text: userText },
+        { type: "image_url", image_url: { url: req.screenshotDataUrl } },
+      ]
+    : userText;
 }
 
 export function buildTierBGeneralPageParserAdvisorChatBody(
@@ -853,27 +918,41 @@ export async function callTierBGeneralPageBrief(
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), req.timeoutMs ?? TIER_B_GENERAL_PAGE_BRIEF_TIMEOUT_MS);
   try {
-    const resp = await fetch(url, {
-      method: "POST",
-      headers: jsonRequestHeaders(req.apiKey),
-      body: JSON.stringify(buildTierBGeneralPageBriefChatBody(req)),
-      signal: ctrl.signal,
-    });
-    if (!resp.ok) {
-      let errBody = "";
-      try { errBody = (await resp.text()).slice(0, 400); } catch { /* ignore */ }
-      console.warn(`[Truly General Page Brief] HTTP ${resp.status}: ${errBody}`);
-      return { ok: false, brief: null, raw: errBody, error: "general_page_brief_http_error" };
+    const attempts = req.enableFormatRepair ? ([1, 2] as const) : ([1] as const);
+    for (const attempt of attempts) {
+      const body = attempt === 1
+        ? buildTierBGeneralPageBriefChatBody(req)
+        : buildTierBGeneralPageBriefRepairChatBody(req);
+      const resp = await fetch(url, {
+        method: "POST",
+        headers: jsonRequestHeaders(req.apiKey),
+        body: JSON.stringify(body),
+        signal: ctrl.signal,
+      });
+      if (!resp.ok) {
+        let errBody = "";
+        try { errBody = (await resp.text()).slice(0, 400); } catch { /* ignore */ }
+        console.warn(`[Truly General Page Brief] HTTP ${resp.status}`);
+        return { ok: false, brief: null, raw: errBody, attempts: attempt, error: "general_page_brief_http_error" };
+      }
+      const data = await resp.json();
+      const raw = String(data?.choices?.[0]?.message?.content || "").trim();
+      const parsed = parseGeneralPageBriefContent(raw, req.model, req.outputLang);
+      if (!parsed.ok || !parsed.value) {
+        console.warn(`[Truly General Page Brief] contract error: ${parsed.error}`);
+        if (attempt === 1 && req.enableFormatRepair) continue;
+        return { ok: false, brief: null, raw: raw.slice(0, 1200), attempts: attempt, error: "general_page_brief_format_error" };
+      }
+      const brief = applyGeneralPageBriefPostGuards(parsed.value, req.allowedUse);
+      return {
+        ok: true,
+        brief,
+        raw: raw.slice(0, 1200),
+        attempts: attempt,
+        ...(attempt === 2 ? { formatRecovered: true } : {}),
+      };
     }
-    const data = await resp.json();
-    const raw = String(data?.choices?.[0]?.message?.content || "").trim();
-    const parsed = parseGeneralPageBriefContent(raw, req.model, req.outputLang);
-    if (!parsed.ok || !parsed.value) {
-      console.warn(`[Truly General Page Brief] ${parsed.error}:`, raw.slice(0, 240));
-      return { ok: false, brief: null, raw: raw.slice(0, 1200), error: "general_page_brief_format_error" };
-    }
-    const brief = applyGeneralPageBriefPostGuards(parsed.value, req.allowedUse);
-    return { ok: true, brief, raw: raw.slice(0, 1200) };
+    return { ok: false, brief: null, attempts: req.enableFormatRepair ? 2 : 1, error: "general_page_brief_format_error" };
   } catch (error) {
     console.warn("[Truly General Page Brief] error:", error);
     const code = error instanceof DOMException && error.name === "AbortError"

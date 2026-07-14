@@ -8,7 +8,7 @@ session-only multi-page switching are implemented on this branch. The
 live-DOM review has been summarized in
 `general-page-reader-quality-findings-2026-07-03-live-dom.md`. Merge-readiness evidence is indexed in
 `general-page-reader-merge-readiness.md`.
-Last updated: 2026-07-03
+Last updated: 2026-07-14
 
 ## Decision
 
@@ -638,11 +638,85 @@ entered claims; one fallback dropped an expert-analysis attribution; two
 compound claims reached action eligibility. Candidate v2 is frozen as failed
 evidence and was not tuned after the holdout.
 
+Candidate v3 is a development-only probe over the existing v1 development
+split (20 Facebook + 20 news), not a new frozen candidate and not a holdout
+evaluation. It adds typed claim policy and attribution, exact effective-text
+grounding, generic-subject rejection, trailing-attribution preservation, and
+compound relative-clause guards. The normal Page/Focus reading runtime remains
+on the stable standard contract; only the private runner opts into the v3
+contract and its format-repair retry.
+
+The best v3 development run completed all 40 analyses and produced 90.9% claim
+precision, 83.3% recall, 87.5% abstention accuracy, and no blind-gold unsafe
+action. That success depended on format repair for 29/40 responses (72.5%),
+which is too costly and unstable for the normal runtime. The model emitted 22
+claims. Before the final local guards, six would have exposed an investigation
+action and manual review found only one clearly useful. Replaying the final
+fail-closed guards retained that one action and rejected the other 21 claims,
+mostly as compound structures, missing attribution, generic subjects, or text
+grounding failures. This demonstrates a safer boundary but unusably low action
+coverage; no new holdout was unsealed or collected for v3.
+
+The development work has now adopted the domain and evidence boundaries in
+[`claim-investigation-research.md`](claim-investigation-research.md) and tested
+server-side constrained JSON schema against that contract. Grammar fixed syntax
+but did not establish check-worthiness, atomicity, source independence, temporal
+fit, or evidence sufficiency. Manual review and retrieval results below keep the
+next candidate gate closed; no fresh holdout should be created yet.
+
+### Phase 3.75: Claim Investigation Research
+
+- Status: research, model-neutral domain contract, constrained-output audit,
+  synthetic evidence-first UI, and synthetic native-companion boundary are
+  implemented; no release runtime or verdict behavior was added.
+- Research supports a staged workflow of claim selection, decomposition,
+  question-driven retrieval, evidence-ledger construction, sufficiency review,
+  and a bounded finding that can remain insufficient or conflicting.
+- The current Chrome Extension is the consented capture and session-preview
+  surface. A future desktop companion is the preferred owner of resumable
+  multi-source work and durable evidence, while a standalone App can add
+  share/import surfaces without replacing browser-fidelity extraction.
+- A 30-sample development audit compared `json_object` with gx10 constrained
+  `json_schema`. Constrained output eliminated syntax drift. Replacing brittle
+  English-style subject/predicate/object segmentation with exact atomic clause
+  spans raised the best candidate to 13 grounded plans, 100% action precision,
+  72.2% recall, and 100% literal-question coverage on existing dev labels.
+- A retrieval-only 6 Facebook + 6 news positive-development set now has 12/12
+  grounded plans. Eleven passed directly; one used one grounding repair and an
+  explicitly recorded human-atomic segmentation fallback. This result measures
+  plan representation only, not check-worthiness detection.
+- The authorized 30-row manual review is complete. Check-worthiness accuracy was
+  83.3%, atomicity pass rate 53.8%, attribution fidelity 87.5%, temporal and
+  quantity fidelity 91.7%, literal-question coverage 100%, and query
+  answerability 92.3%, with no unsafe action.
+- The 12-row real-web retrieval pilot is also complete. Single-claim search
+  found relevant results for 9/12 but sufficient evidence for only 2/12.
+  Question decomposition found relevant results for 12/12 and sufficient
+  evidence for 5/12. Authority/document-first found primary documents for 8/12
+  but sufficient evidence for only 3/12.
+- The pilot therefore rejects both a single-search product flow and an
+  authority-only flow. The runtime-neutral v2 contract now represents an
+  adaptive evidence cascade: one atomic subject, question decomposition,
+  responsible-authority and canonical-document discovery, full-document fetch,
+  exact answering passage, separate sufficiency assessment, and an explicitly
+  downgraded independent-secondary fallback when primary evidence is unavailable
+  or insufficient. Search snippets remain discovery-only. The extension does
+  not execute this graph yet, and ClaimReview lookup is not a required dependency.
+- Synthetic public tests cover the three comparison routes plus the adaptive
+  cascade, evidence
+  deduplication and sufficiency ordering, and a native companion protocol with
+  capability negotiation, idempotent restart, resumable status, cancellation,
+  deletion, consent, and a 256 KiB product envelope limit.
+- Development evidence and gate decisions are summarized in
+  [`claim-investigation-development-audit-2026-07-14.md`](claim-investigation-development-audit-2026-07-14.md).
+- Full rationale, proposed domain language, platform matrix, and execution
+  sequence: [`claim-investigation-research.md`](claim-investigation-research.md).
+
 ### Phase 4: Session-only Claim Investigation
 
 - Status: implementation and fail-closed contract completed on the feature
-  branch, but candidates v1 and v2 did not clear their private holdout gates for
-  release.
+  branch, but candidates v1 and v2 did not clear their private holdout gates and
+  the v3 development probe did not clear the coverage/runtime-stability boundary.
 - A grounded `claims.q` is preferred; a bounded natural-question fallback from
   `claim.c + claim.need` is used only when the model question is missing or
   locally rejected. URLs, domains, search-engine instructions, vague references,
@@ -659,8 +733,8 @@ evidence and was not tuned after the holdout.
 ### Phase 5: Runtime and UX Gate
 
 - Status: implementation verification completed; product-quality holdout gates
-  failed for candidates v1 and v2, so the investigation action remains
-  unreleased.
+  failed for candidates v1 and v2, while v3 remains a development-only probe,
+  so the investigation action remains unreleased.
 - Focused unit coverage validates query sanitization, deterministic fallback,
   fail-closed eligibility, Page/Focus state isolation, and the two-step UI.
 - The CDP UI audit validates that preparing a task opens no browser target and

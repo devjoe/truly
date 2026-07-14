@@ -1,5 +1,6 @@
 import type {
   GeneralPageAtomicProposition,
+  GeneralPageClaimAttribution,
   GeneralPageBriefClaim,
 } from "../lib/general-page-analysis";
 import { cleanSearchContextText } from "./format";
@@ -12,7 +13,7 @@ export interface PageClaimInvestigationSource {
 }
 
 export interface PageClaimInvestigationTask {
-  version: 2;
+  version: 3;
   id: string;
   analysisKey: string;
   scope: "page" | "focus";
@@ -25,14 +26,42 @@ export interface PageClaimInvestigationTask {
   sourceUrl?: string;
 }
 
+export type PageClaimInvestigationIneligibilityReason =
+  | "missing_policy"
+  | "non_consequential"
+  | "unsupported_claim_kind"
+  | "low_consequence_availability"
+  | "generic_controversy"
+  | "generic_subject"
+  | "ungrounded_atom"
+  | "invalid_structure"
+  | "missing_attribution"
+  | "invalid_attribution";
+
+export type PageClaimInvestigationEligibility =
+  | { ok: true }
+  | { ok: false; reason: PageClaimInvestigationIneligibilityReason };
+
 const URL_RE = /https?:\/\/\S+/gi;
 const DOMAIN_OR_PATH_RE = /(?:^|\s|\b)(?:[a-z0-9-]+\.)+(?:com|org|net|edu|gov|io|ai|co|app|dev|tw|cn|jp|uk)(?:[/:?#][^\s]*)?/i;
 const COMMAND_OR_MARKDOWN_RE = /\[[^\]]+\]\([^\)]+\)|(?:^|\s)(?:curl|wget|npm|pnpm|brew|git)\s|(?:google.{0,80}(?:search|搜尋)|(?:search|搜尋).{0,80}google|bing|duckduckgo|搜尋引擎)/i;
 const VAGUE_ONLY_RE = /^(?:這篇文章|此內容|它|上述說法|this article|this content|it|the above claim)[？?。.\s]*$/i;
 const VAGUE_ATOMIC_PART_RE = /^(?:這段內容|此內容|上述內容|這件事|它|this content|the content|it)$/i;
-const COMPOUND_CLAIM_RE = /(?:且|並|以及|同時|；|;)|(?:，|,)\s*(?:並|且|也|另|同時)|(?:，|,)\s*[^，,。.!?]{0,28}(?:因此|隨後|未來|已|將|會|成立|出版|推動|聚焦|買(?:了|下)|購買|禁止|擴大|創下)|\b(?:and|while|as)\s+(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)?(?:is|are|was|were|has|have|had|did|does|will|can|must|take|takes|took)\b/iu;
+const GENERIC_ATOMIC_SUBJECT_RE = /^(?:(?:the|a|an)\s+)?(?:death toll|number|figure|rate|treaty|agreement|report|study|officials?|authorities|government|company|agency|experts?|researchers?)$|^(?:死亡人數|數字|比率|條約|協議|報告|研究|官員|當局|政府|公司|機構|專家|研究人員)$/iu;
+const COMPOUND_CLAIM_RE = /(?:且|並|以及|同時|；|;)|(?:，|,)\s*(?:並|且|也|另|同時)|(?:，|,)\s*[^，,。.!?]{0,28}(?:因此|隨後|未來|已|將|會|成立|出版|推動|聚焦|買(?:了|下)|購買|禁止|擴大|創下)|\b(?:and|while|as)\s+(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)?(?:is|are|was|were|has|have|had|did|does|will|can|must|take|takes|took)\b|\b(?:signed|announced|released|approved|passed|launched)\b[^.!?]{0,100}\b(?:that|which)\b/iu;
 const SECOND_PROPOSITION_RE = /(?:，|,)\s*(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)(?:said|says|reported|announced|is|are|was|were|has|have|had|did|does|will|can)\b/iu;
 const ATTRIBUTION_RELATION_RE = /(?:數據顯示|表示|指出|指稱|宣稱|估計|聲稱|報導|according to|said|reported|estimated|alleged|claimed)/iu;
+const LOW_CONSEQUENCE_AVAILABILITY_RE = /(?:現已|目前)?(?:上市|開賣|販售|供應|有貨|可(?:供)?購買)|\b(?:now\s+)?(?:available|in stock|for sale)\b/iu;
+const GENERIC_CONTROVERSY_RE = /(?:引發|掀起|造成|受到).{0,12}(?:爭議|熱議|討論|批評)|\b(?:sparked|caused|drew|generated)\s+(?:online\s+)?(?:controversy|debate|discussion|criticism)\b/iu;
+
+const ATTRIBUTION_MODALITY_RE = {
+  statement: /(?:表示|指出|聲稱|said|stated|claimed)/iu,
+  report: /(?:報導|報告|數據顯示|according to|reported)/iu,
+  estimate: /(?:估計|estimated?)/iu,
+  allegation: /(?:指稱|宣稱|alleged?)/iu,
+  forecast: /(?:預計|預測|forecast|projected?)/iu,
+  analysis: /(?:分析|研判|analysis|analys(?:is|ed)|assessed?)/iu,
+} satisfies Record<GeneralPageClaimAttribution["modality"], RegExp>;
 
 type LegalStatus = "arrest" | "charge" | "bail" | "conviction" | "sentence" | "investigation";
 
@@ -95,17 +124,45 @@ function orderedAtomicSpan(claimText: string, atom: GeneralPageAtomicProposition
   return claimText.slice(subjectStart, objectStart + atom.o.length).trim();
 }
 
-function leadingAttribution(
+function outerAttribution(
   claimText: string,
   atom: GeneralPageAtomicProposition,
 ): { relation: string; entity?: string } | undefined {
   const subjectStart = claimText.indexOf(atom.s);
-  if (subjectStart <= 0) return undefined;
-  const prefix = claimText.slice(0, subjectStart).replace(/[，,:：\s]+$/u, "").trim();
-  const match = prefix.match(ATTRIBUTION_RELATION_RE);
-  if (!match?.[0]) return undefined;
-  const entity = prefix.replace(match[0], " ").replace(/[，,:：\s]+/gu, " ").trim();
-  return { relation: match[0], ...(normalizedMatchText(entity).length >= 2 ? { entity } : {}) };
+  const atomicSpan = orderedAtomicSpan(claimText, atom);
+  if (subjectStart < 0 || !atomicSpan) return undefined;
+  const objectStart = claimText.indexOf(atom.o, subjectStart + atom.s.length);
+  const objectEnd = objectStart + atom.o.length;
+  const outerRegions = [claimText.slice(0, subjectStart), claimText.slice(objectEnd)];
+  for (const region of outerRegions) {
+    const clean = region.replace(/^[，,:：\s]+|[，,:：。.!?\s]+$/gu, "").trim();
+    const match = clean.match(ATTRIBUTION_RELATION_RE);
+    if (!match?.[0]) continue;
+    const entity = clean.replace(match[0], " ").replace(/[，,:：\s]+/gu, " ").trim();
+    return { relation: match[0], ...(normalizedMatchText(entity).length >= 2 ? { entity } : {}) };
+  }
+  return undefined;
+}
+
+function validTypedAttribution(
+  claimText: string,
+  atom: GeneralPageAtomicProposition,
+  attribution: GeneralPageClaimAttribution,
+): boolean {
+  if ([attribution.source, attribution.relation].some((part) => hasInvestigationArtifact(part))) return false;
+  const subjectStart = claimText.indexOf(atom.s);
+  const atomicSpan = orderedAtomicSpan(claimText, atom);
+  if (!atomicSpan) return false;
+  const objectStart = claimText.indexOf(atom.o, subjectStart + atom.s.length);
+  const objectEnd = objectStart + atom.o.length;
+  const sourceStart = claimText.indexOf(attribution.source);
+  const relationStart = claimText.indexOf(attribution.relation);
+  const relationMatchesModality = ATTRIBUTION_MODALITY_RE[attribution.modality].test(attribution.relation);
+  const beforeAtom = sourceStart >= 0 && relationStart >= 0 &&
+    sourceStart + attribution.source.length <= subjectStart &&
+    relationStart + attribution.relation.length <= subjectStart;
+  const afterAtom = sourceStart >= objectEnd && relationStart >= objectEnd;
+  return relationMatchesModality && (beforeAtom || afterAtom);
 }
 
 function usableAtomicProposition(
@@ -115,9 +172,15 @@ function usableAtomicProposition(
   if (!atom) return undefined;
   if ([atom.s, atom.p, atom.o].some((part) => hasInvestigationArtifact(part))) return undefined;
   if ([atom.s, atom.p, atom.o].some((part) => VAGUE_ATOMIC_PART_RE.test(part.trim()))) return undefined;
-  if (!orderedAtomicSpan(claim.c, atom)) return undefined;
+  if (GENERIC_ATOMIC_SUBJECT_RE.test(atom.s.trim())) return undefined;
+  const atomicSpan = orderedAtomicSpan(claim.c, atom);
+  if (!atomicSpan) return undefined;
   if (!hasTerminalSentencePunctuation(claim.c)) return undefined;
-  if (!hasOneProposition(claim.c)) return undefined;
+  // A typed or recognizable source frame may precede the atom without making
+  // the inner proposition compound. The source frame is validated separately
+  // before an action can become eligible.
+  const propositionText = outerAttribution(claim.c, atom) ? atomicSpan : claim.c;
+  if (!hasOneProposition(propositionText)) return undefined;
   const statuses = legalStatuses(`${atom.p} ${claim.c}`);
   if (statuses.size > 1) return undefined;
   return atom;
@@ -127,6 +190,7 @@ export function usableClaimQuestion(
   value: string | undefined,
   atom?: GeneralPageAtomicProposition,
   claimText?: string,
+  attribution?: GeneralPageClaimAttribution,
 ): string | undefined {
   if (hasInvestigationArtifact(value)) return undefined;
   if (!/[？?][」』”’\"']?$/.test((value ?? "").trim())) return undefined;
@@ -139,9 +203,12 @@ export function usableClaimQuestion(
     if (!containsAtomicPart(question, atom.s) ||
       !containsAtomicPart(question, atom.p) ||
       !containsAtomicPart(question, atom.o)) return undefined;
-    const attribution = leadingAttribution(claimText ?? "", atom);
-    if (attribution && (!containsAtomicPart(question, attribution.relation) ||
-      (attribution.entity && !containsAtomicPart(question, attribution.entity)))) return undefined;
+    const inferredAttribution = outerAttribution(claimText ?? "", atom);
+    if (attribution) {
+      if (!containsAtomicPart(question, attribution.relation) ||
+        !containsAtomicPart(question, attribution.source)) return undefined;
+    } else if (inferredAttribution && (!containsAtomicPart(question, inferredAttribution.relation) ||
+      (inferredAttribution.entity && !containsAtomicPart(question, inferredAttribution.entity)))) return undefined;
     const claimStatuses = legalStatuses(`${atom.p} ${claimText ?? ""}`);
     const questionStatuses = legalStatuses(question);
     if (claimStatuses.size > 0 && !containsAtomicPart(question, atom.p)) return undefined;
@@ -150,12 +217,46 @@ export function usableClaimQuestion(
   return question;
 }
 
+export function pageClaimInvestigationEligibility(
+  claim: GeneralPageBriefClaim,
+  groundingText?: string,
+): PageClaimInvestigationEligibility {
+  if (!claim.policy) return { ok: false, reason: "missing_policy" };
+  if (claim.policy.consequence === "none") return { ok: false, reason: "non_consequential" };
+  if (claim.policy.claimKind === "opinion") return { ok: false, reason: "unsupported_claim_kind" };
+  if (LOW_CONSEQUENCE_AVAILABILITY_RE.test(claim.c)) {
+    return { ok: false, reason: "low_consequence_availability" };
+  }
+  if (GENERIC_CONTROVERSY_RE.test(claim.c)) return { ok: false, reason: "generic_controversy" };
+  if (claim.atom && GENERIC_ATOMIC_SUBJECT_RE.test(claim.atom.s.trim())) {
+    return { ok: false, reason: "generic_subject" };
+  }
+  const atom = usableAtomicProposition(claim);
+  if (!atom) return { ok: false, reason: "invalid_structure" };
+  if (groundingText && [atom.s, atom.p, atom.o].some((part) => !containsAtomicPart(groundingText, part))) {
+    return { ok: false, reason: "ungrounded_atom" };
+  }
+  const inferredAttribution = outerAttribution(claim.c, atom);
+  if (inferredAttribution && !claim.attribution) return { ok: false, reason: "missing_attribution" };
+  if (claim.attribution && !validTypedAttribution(claim.c, atom, claim.attribution)) {
+    return { ok: false, reason: "invalid_attribution" };
+  }
+  return { ok: true };
+}
+
 export function deterministicClaimQuestion(claim: GeneralPageBriefClaim): string | undefined {
   if (hasInvestigationArtifact(claim.c) || hasInvestigationArtifact(claim.need)) return undefined;
   const atom = usableAtomicProposition(claim);
   if (!atom) return undefined;
-  if (leadingAttribution(claim.c, atom)) return undefined;
-  const proposition = cleanInvestigationText(orderedAtomicSpan(claim.c, atom) ?? "", 160);
+  const inferredAttribution = outerAttribution(claim.c, atom);
+  if (inferredAttribution && (!claim.attribution || !validTypedAttribution(claim.c, atom, claim.attribution))) {
+    return undefined;
+  }
+  const completeClaim = claim.c.replace(/[。！？.!?][」』”’"']?$/u, "").trim();
+  const proposition = cleanInvestigationText(
+    claim.attribution ? completeClaim : orderedAtomicSpan(claim.c, atom) ?? "",
+    160,
+  );
   if (!proposition || proposition.length < 6) return undefined;
   if (/\p{Script=Han}/u.test(proposition)) {
     const question = `「${proposition}」是否有外部證據支持？`;
@@ -183,14 +284,20 @@ export function buildPageClaimInvestigationTask(input: {
   scope: "page" | "focus";
   claimIndex: number;
   claim: GeneralPageBriefClaim;
+  /** Exact effective Page or Focus text supplied to the model. */
+  groundingText?: string;
   source?: PageClaimInvestigationSource;
 }): PageClaimInvestigationTask | undefined {
   const claim = cleanInvestigationText(input.claim.c, 160);
   const why = cleanInvestigationText(input.claim.why, 120);
   const evidenceNeed = cleanInvestigationText(input.claim.need, 100);
+  if (!input.groundingText?.trim()) return undefined;
+  const eligibility = pageClaimInvestigationEligibility(input.claim, input.groundingText);
+  if (!eligibility.ok) return undefined;
   const atom = usableAtomicProposition(input.claim);
   if (!atom) return undefined;
-  const question = usableClaimQuestion(input.claim.q, atom, claim) ?? deterministicClaimQuestion(input.claim);
+  const question = usableClaimQuestion(input.claim.q, atom, claim, input.claim.attribution) ??
+    deterministicClaimQuestion(input.claim);
   if (!input.analysisKey || !claim || !evidenceNeed || !question) return undefined;
   const context = [
     question,
@@ -200,7 +307,7 @@ export function buildPageClaimInvestigationTask(input: {
   ].filter(Boolean);
   const searchQuery = [...new Set(context)].join(" ").slice(0, 360);
   return {
-    version: 2,
+    version: 3,
     id: `${input.scope}:${input.analysisKey}:${input.claimIndex}`,
     analysisKey: input.analysisKey,
     scope: input.scope,

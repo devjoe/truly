@@ -3,18 +3,15 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
-import {
-  applyGeneralPageBriefPostGuards,
-  parseGeneralPageBriefContent,
-} from "../src/lib/general-page-analysis";
 import { buildGeneralPageModelContext } from "../src/lib/general-page-model-context";
 import {
   buildTierBGeneralPageBriefChatBody,
-  tierBCompletionsUrl,
+  callTierBGeneralPageBrief,
 } from "../src/lib/tier-b-client";
 import type { ReadingSurface } from "../src/lib/reading-surface-types";
 import {
   buildPageClaimInvestigationTask,
+  pageClaimInvestigationEligibility,
   usableClaimQuestion,
 } from "../src/sidepanel/page-claim-investigation";
 import {
@@ -88,6 +85,7 @@ function promptVariantSha(row: InputRow): string {
     context: buildGeneralPageModelContext(surfaceFor(row)),
     allowedUse: "page_full_text",
     outputLang: outputLanguageForPrivateEval(row.language),
+    contract: "investigation_v3",
   });
   const system = body.messages.find((message) => message.role === "system")?.content ?? "";
   return crypto.createHash("sha256").update(JSON.stringify(system)).digest("hex");
@@ -114,35 +112,27 @@ async function evaluateRow(row: InputRow) {
     context: buildGeneralPageModelContext(surfaceFor(row)),
     allowedUse: "page_full_text" as const,
     outputLang,
+    contract: "investigation_v3" as const,
+    enableFormatRepair: true,
   };
-  const body = buildTierBGeneralPageBriefChatBody(request);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
   const started = Date.now();
   try {
-    const response = await fetch(tierBCompletionsUrl(endpoint), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(process.env.TRULY_PRIVATE_EVAL_API_KEY ? { Authorization: `Bearer ${process.env.TRULY_PRIVATE_EVAL_API_KEY}` } : {}),
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
+    const response = await callTierBGeneralPageBrief({
+      ...request,
+      apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
+      timeoutMs,
     });
-    const responseText = await response.text();
-    if (!response.ok) return { schemaVersion: 1, sampleId: row.sampleId, surface: row.surface, sourceSha256: row.sourceSha256, ok: false, latencyMs: Date.now() - started, error: `http_${response.status}`, raw: responseText.slice(0, 1200) };
-    const payload = JSON.parse(responseText);
-    const raw = String(payload?.choices?.[0]?.message?.content ?? "").trim();
-    const parsed = parseGeneralPageBriefContent(raw, model, outputLang);
-    if (!parsed.ok || !parsed.value) return { schemaVersion: 1, sampleId: row.sampleId, surface: row.surface, sourceSha256: row.sourceSha256, ok: false, latencyMs: Date.now() - started, error: "format_error", raw };
-    const brief = applyGeneralPageBriefPostGuards(parsed.value, "page_full_text");
+    if (!response.ok || !response.brief) return { schemaVersion: 1, sampleId: row.sampleId, surface: row.surface, sourceSha256: row.sourceSha256, ok: false, latencyMs: Date.now() - started, error: response.error ?? "model_error", attempts: response.attempts, raw: response.raw };
+    const brief = response.brief;
     const claim = brief.claims?.[0];
-    const modelQuestion = claim ? usableClaimQuestion(claim.q, claim.atom, claim.c) : undefined;
+    const eligibility = claim ? pageClaimInvestigationEligibility(claim, row.text) : undefined;
+    const modelQuestion = claim ? usableClaimQuestion(claim.q, claim.atom, claim.c, claim.attribution) : undefined;
     const task = claim ? buildPageClaimInvestigationTask({
       analysisKey: row.sampleId,
       scope: "page",
       claimIndex: 0,
       claim,
+      groundingText: row.text,
     }) : undefined;
     return {
       schemaVersion: 1,
@@ -151,19 +141,20 @@ async function evaluateRow(row: InputRow) {
       sourceSha256: row.sourceSha256,
       ok: true,
       latencyMs: Date.now() - started,
+      attempts: response.attempts,
+      formatRecovered: response.formatRecovered,
       brief,
       investigation: {
         eligible: Boolean(task),
+        eligibilityReason: eligibility && !eligibility.ok ? eligibility.reason : undefined,
         questionSource: task ? (modelQuestion ? "model" : "deterministic_fallback") : "none",
         question: task?.question,
       },
-      raw,
+      raw: response.raw,
     };
   } catch (error) {
     const reason = error instanceof DOMException && error.name === "AbortError" ? "timeout" : "network_error";
     return { schemaVersion: 1, sampleId: row.sampleId, surface: row.surface, sourceSha256: row.sourceSha256, ok: false, latencyMs: Date.now() - started, error: reason };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -180,15 +171,28 @@ const completedAt = new Date().toISOString();
 fs.mkdirSync(path.dirname(paths.output), { recursive: true, mode: 0o700 });
 fs.writeFileSync(paths.output, `${results.map((result) => JSON.stringify(result)).join("\n")}\n`, { mode: 0o600 });
 const trulyCommit = execFileSync("git", ["rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+const trulyDiff = execFileSync("git", ["diff", "--binary", "HEAD"], { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+const trulyWorktreeDirty = trulyDiff.length > 0;
+const trulyDiffSha256 = trulyWorktreeDirty
+  ? crypto.createHash("sha256").update(trulyDiff).digest("hex")
+  : undefined;
 const manifest = {
   schemaVersion: 1,
   runId,
   datasetVersion,
   split,
   trulyCommit,
+  trulyWorktreeDirty,
+  trulyDiffSha256,
   promptSha256,
   promptVariantSha256ByLanguage,
-  model: { provider: "openai-compatible", name: model, temperature: 0, maxTokens: 720 },
+  model: {
+    provider: "openai-compatible",
+    name: model,
+    temperature: 0,
+    maxTokens: 720,
+    repairMaxTokens: 800,
+  },
   guardVersion: trulyCommit,
   startedAt,
   completedAt,

@@ -936,7 +936,7 @@ function analysisHtml(
   titleOverride?: string,
   investigation?: PageClaimInvestigationSession,
   scope: PageReadingScopeKind = "page",
-  source?: { title?: string; sourceName?: string; publishedAt?: string; url?: string },
+  source?: { groundingText?: string; title?: string; sourceName?: string; publishedAt?: string; url?: string },
 ): string {
   if (!analysis || analysis.status === "idle") return "";
   const overview = analysis.allowedUse === "page_overview_only";
@@ -966,6 +966,7 @@ function analysisHtml(
         analysisKey: analysis.key ?? "",
         scope,
         investigation,
+        groundingText: source?.groundingText ?? "",
         source,
       })
     : "";
@@ -991,6 +992,7 @@ function briefHtml(
     analysisKey: string;
     scope: PageReadingScopeKind;
     investigation?: PageClaimInvestigationSession;
+    groundingText: string;
     source?: { title?: string; sourceName?: string; publishedAt?: string; url?: string };
   },
 ): string {
@@ -1032,6 +1034,7 @@ function briefClaimsHtml(
       scope: context.scope,
       claimIndex,
       claim,
+      groundingText: context.groundingText,
       source: context.source,
     });
     const expanded = Boolean(task && context?.investigation?.expanded &&
@@ -1667,6 +1670,8 @@ export function createSidepanelPageReadingRuntime({
       viewSession?.investigation,
       activeWorkspace,
       {
+        groundingText: viewSession?.advisor?.effectiveModelContext?.mainText ??
+          (activeWorkspace === "focus" ? viewSession?.target?.text : modelContext?.mainText) ?? "",
         title: viewSession?.surface?.title || viewSession?.title,
         sourceName: viewSession?.surface?.sourceName,
         publishedAt: viewSession?.surface?.publishedAt,

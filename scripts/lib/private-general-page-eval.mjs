@@ -34,7 +34,14 @@ export function privateEvalInputErrors(rows, expectedCount, declaredCategories) 
     if (seenIds.has(row.sampleId)) errors.push(`${label}: duplicate sampleId`);
     seenIds.add(row.sampleId);
     if (!PRIVATE_EVAL_SURFACES.includes(row.surface)) errors.push(`${label}: invalid surface`);
-    else actual.add(`${row.surface}-original`);
+    else {
+      const category = typeof row.dataCategory === "string" && row.dataCategory.trim()
+        ? row.dataCategory.trim()
+        : `${row.surface}-original`;
+      if (!new RegExp(`^${row.surface}-(?:original|human-preselected-claim)$`).test(category)) {
+        errors.push(`${label}: invalid dataCategory`);
+      } else actual.add(category);
+    }
     if (!['zh-TW', 'en'].includes(row.language)) errors.push(`${label}: invalid language`);
     if (typeof row.text !== "string" || row.text.trim().length < 80 || row.text.length > 12000) errors.push(`${label}: text must be 80-12000 characters`);
     if (typeof row.sourceSha256 !== "string" || !/^[a-f0-9]{64}$/.test(row.sourceSha256)) errors.push(`${label}: invalid sourceSha256`);

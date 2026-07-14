@@ -1,0 +1,106 @@
+{
+  "subject": {
+    "version": 2,
+    "id": "subject:synthetic-food-recall",
+    "scope": "page",
+    "originalSpan": "Example Agency announced 232 affected products on 2026-07-08.",
+    "normalizedClaim": "Example Agency announced 232 affected products on 2026-07-08.",
+    "source": {
+      "title": "Synthetic food recall report",
+      "publisher": "Example News",
+      "url": "https://example.test/synthetic-food-recall",
+      "publishedAt": "2026-07-08T09:00:00Z",
+      "observedAt": "2026-07-14T02:00:00Z",
+      "contentFingerprint": "0123456789abcdef0123456789abcdef"
+    },
+    "proposition": {
+      "originalSpan": "Example Agency announced 232 affected products on 2026-07-08.",
+      "normalizedText": "Example Agency announced 232 affected products on 2026-07-08.",
+      "time": "2026-07-08",
+      "quantity": "232"
+    },
+    "consequence": "health"
+  },
+  "plan": {
+    "version": 2,
+    "subjectId": "subject:synthetic-food-recall",
+    "questions": [
+      {
+        "id": "question:product-count",
+        "basis": "literal",
+        "purpose": "quantity",
+        "question": "Did Example Agency announce 232 affected products on 2026-07-08?",
+        "queryCandidates": ["Example Agency 232 affected products 2026-07-08"],
+        "preferredSourceRoles": ["primary", "independent_secondary"]
+      },
+      {
+        "id": "question:notice-identity",
+        "basis": "contextual",
+        "purpose": "identity",
+        "question": "Which official Example Agency notice contains the affected-product list announced on 2026-07-08?",
+        "queryCandidates": ["Example Agency affected product notice 2026-07-08"],
+        "preferredSourceRoles": ["primary"]
+      },
+      {
+        "id": "question:list-scope",
+        "basis": "contextual",
+        "purpose": "context",
+        "question": "Does the Example Agency list count products, product variants, or individual lots?",
+        "queryCandidates": ["Example Agency affected product list count products variants lots"],
+        "preferredSourceRoles": ["primary", "independent_secondary"]
+      }
+    ],
+    "timeCutoff": "2026-07-08T23:59:59Z",
+    "minimumIndependentSources": 1,
+    "stoppingConditions": [
+      "The literal question has direct evidence or is explicitly marked unanswered.",
+      "Syndicated copies are grouped before source counts are evaluated."
+    ]
+  },
+  "evidence": [
+    {
+      "version": 2,
+      "id": "evidence:agency-list",
+      "questionId": "question:product-count",
+      "sourceRole": "primary",
+      "url": "https://agency.example.test/notices/synthetic-recall",
+      "publisher": "Example Agency",
+      "publishedAt": "2026-07-08T08:00:00Z",
+      "retrievedAt": "2026-07-14T02:10:00Z",
+      "exactExcerpt": "The synthetic affected-product list contains 232 entries.",
+      "contentFingerprint": "abcdef0123456789abcdef0123456789",
+      "relation": "supports"
+    },
+    {
+      "version": 2,
+      "id": "evidence:agency-archive",
+      "questionId": "question:notice-identity",
+      "sourceRole": "primary",
+      "url": "https://agency.example.test/notices/archive",
+      "publisher": "Example Agency",
+      "publishedAt": "2026-07-08T08:00:00Z",
+      "retrievedAt": "2026-07-14T02:12:00Z",
+      "exactExcerpt": "The archive identifies the July 8 synthetic recall notice as notice EX-232.",
+      "contentFingerprint": "fedcba9876543210fedcba9876543210",
+      "relation": "supports"
+    }
+  ],
+  "sufficiency": {
+    "version": 2,
+    "subjectId": "subject:synthetic-food-recall",
+    "state": "insufficient",
+    "answeredQuestionIds": ["question:product-count", "question:notice-identity"],
+    "unansweredQuestionIds": ["question:list-scope"],
+    "rationale": "The product count and official notice are identified, while the unit represented by each list entry remains unclear.",
+    "assessedAt": "2026-07-14T02:15:00Z"
+  },
+  "finding": {
+    "version": 2,
+    "subjectId": "subject:synthetic-food-recall",
+    "state": "insufficient",
+    "summary": "The available primary evidence supports the announced count, but the list-entry unit remains unclear.",
+    "evidenceArtifactIds": ["evidence:agency-list", "evidence:agency-archive"],
+    "unresolvedQuestionIds": ["question:list-scope"],
+    "generatedAt": "2026-07-14T02:16:00Z"
+  }
+}

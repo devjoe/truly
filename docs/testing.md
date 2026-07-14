@@ -85,6 +85,60 @@ blind-gold unsafe-action rate fell to 7.1%. It still failed the frozen release
 gates: claim precision was 88.2% against 90%, and manual useful/aligned eligible
 action rates were 50%/70% against 90%/95%. Do not tune v2 or reuse its holdout.
 
+Candidate v3 is intentionally limited to the existing 40-sample v1 development
+split. The private runner opts into `investigation_v3` and a single compact
+format-repair request; normal Page/Focus runtime requests use the `standard`
+contract and never perform that repair. The best v3 run needed repair for 29/40
+responses, and the final fail-closed guard retained only one of 22 emitted
+claims as action-eligible. Treat this as guard-design evidence, not a release
+candidate. Do not create or unseal another holdout until structured-output
+stability and development action coverage improve.
+
+### Private investigation-plan development audit
+
+The model-neutral investigation planner has a separate development-only runner:
+
+```bash
+npm run eval:gpr:investigation-plan:private -- \
+  --input /absolute/private/input.jsonl \
+  --output /absolute/private/output.jsonl \
+  --meta-output /absolute/private/manifest.json \
+  --endpoint http://approved-local-endpoint/v1 \
+  --model approved-model \
+  --split dev \
+  --run-id investigation-plan-example \
+  --dataset-version gpr-investigation-plan-v1 \
+  --sample-count 30 \
+  --data-categories facebook-original,news-original \
+  --response-format json_schema \
+  --thinking disabled \
+  --confirm-private-data-send
+```
+
+The caller must declare the exact endpoint, model, count, categories, response
+format, and thinking mode. The runner writes raw output only to an external
+private path and prints aggregate status. Development audit results and the
+12-claim route-pilot decision are documented in
+`docs/plans/claim-investigation-development-audit-2026-07-14.md`.
+
+The private control plane also supports an authorized manual review of the
+30-row plan worksheet and the 12-row real-web retrieval pilot. The latter
+compares single normalized-claim search, question decomposition, and
+authority/document-first retrieval. Raw queries, URLs, excerpts, and per-row
+decisions remain under gitignored `private-data/`; only anonymized aggregate
+rates are tracked. ClaimReview lookup is not required.
+
+Public-safe synthetic verification is available through:
+
+```bash
+npm run test:gpr:investigation
+npm run prototype:gpr:investigation
+npm run audit:gpr:investigation-prototype
+```
+
+The prototype audit uses a background CDP target at 430 px and does not call
+`bringToFront`. Its HTML and screenshot stay under gitignored `tmp/`.
+
 ## General Page Reader UI Gate
 
 After changing the Web or Focus information architecture, build the development

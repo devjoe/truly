@@ -379,6 +379,7 @@ async function startMockOpenAiEndpoint() {
               need: "Use the confirmed screenshot.",
               q: "Does the page need visual grounding?",
               atom: { s: "The page", p: "needs", o: "visual grounding" },
+              policy: { claimKind: "fact", consequence: "public_interest" },
             }]
           : [{
               c: "The analyzed content is synthetic.",
@@ -386,6 +387,7 @@ async function startMockOpenAiEndpoint() {
               need: "Confirm the expected scope.",
               q: "Is the analyzed content synthetic?",
               atom: { s: "The analyzed content", p: "is", o: "synthetic" },
+              policy: { claimKind: "fact", consequence: "public_interest" },
             }],
         qs: [{ q: hasImageUrl ? "What does the visible card show?" : "Which analysis scope is active?", kind: "understand" }],
       });
@@ -441,7 +443,10 @@ async function startSyntheticServer() {
       res.end(syntheticHtml("Third Synthetic Article", "This is a third synthetic article for multi-session Web switching."));
       return;
     }
-    res.end(syntheticHtml("Synthetic General Page Reader Article", "This is a synthetic article for the General Page Reader CDP acceptance test."));
+    res.end(syntheticHtml(
+      "Synthetic General Page Reader Article",
+      "This is a synthetic article for the General Page Reader CDP acceptance test. The analyzed content is synthetic.",
+    ));
   });
 
   await new Promise((resolveListen, rejectListen) => {
@@ -1767,6 +1772,7 @@ async function observeClaimInvestigation(side) {
     start.click();
     await new Promise((resolve) => setTimeout(resolve, 50));
     const card = document.querySelector('#page-pane .page-claim-investigation');
+    const currentStart = document.querySelector('#page-pane .page-claim-start');
     const links = [...(card?.querySelectorAll('a') || [])].map((link) => ({
       label: link.textContent?.trim() || '',
       href: link.href,
@@ -1775,7 +1781,7 @@ async function observeClaimInvestigation(side) {
     }));
     return {
       available: true,
-      expanded: start.getAttribute('aria-expanded') === 'true',
+      expanded: currentStart?.getAttribute('aria-expanded') === 'true' && Boolean(card),
       taskId: card?.getAttribute('data-task-id') || '',
       question: card?.querySelector('.page-claim-investigation-question')?.textContent?.trim() || '',
       links,
@@ -3625,6 +3631,16 @@ function assertUiOnlyAudit(result) {
   if (success?.responsive?.horizontalOverflow) errors.push("430px Web layout has horizontal overflow");
   if ((success?.responsive?.interactiveOverflows?.length ?? 0) > 0) errors.push("430px Web layout clips interactive controls");
   if ((success?.responsive?.unnamedInteractive?.length ?? 0) > 0) errors.push("Web layout contains unnamed interactive controls");
+  if (
+    success?.claimInvestigation?.available !== true ||
+    success?.claimInvestigation?.expanded !== true ||
+    !success?.claimInvestigation?.question ||
+    success?.claimInvestigation?.copyPresent !== true ||
+    success?.claimInvestigation?.openedTargetOnPrepare !== false ||
+    (success?.claimInvestigation?.links?.length ?? 0) < 2
+  ) {
+    errors.push("Claim investigation synthetic action was not available and safely prepared");
+  }
   errors.push(...assertWebFocusContinuity(success ?? {}));
   return errors;
 }

@@ -4,6 +4,7 @@ import {
   buildPageClaimInvestigationTask,
   deterministicClaimQuestion,
   geminiEvidenceSearchUrl,
+  pageClaimInvestigationEligibility,
   standardEvidenceSearchUrl,
   usableClaimQuestion,
 } from "@src/sidepanel/page-claim-investigation";
@@ -14,12 +15,14 @@ describe("page claim investigation contract", () => {
       analysisKey: "analysis:key",
       scope: "page",
       claimIndex: 0,
+      groundingText: "Example Agency reported 232 affected products on July 8.",
       claim: {
         c: "Example Agency reported 232 affected products on July 8.",
         why: "The number affects public risk assessment.",
         need: "The agency announcement and product list.",
         q: "Is it true that Example Agency reported 232 affected products on July 8?",
         atom: { s: "Example Agency", p: "reported", o: "232 affected products" },
+        policy: { claimKind: "fact", consequence: "safety" },
       },
       source: {
         title: "Synthetic public notice",
@@ -30,7 +33,7 @@ describe("page claim investigation contract", () => {
     });
 
     expect(task).toMatchObject({
-      version: 2,
+      version: 3,
       scope: "page",
       question: "Is it true that Example Agency reported 232 affected products on July 8",
       sourceUrl: "https://example.test/report",
@@ -39,6 +42,203 @@ describe("page claim investigation contract", () => {
     expect(task?.searchQuery).toContain("Example News");
     expect(standardEvidenceSearchUrl(task!.searchQuery)).not.toContain("udm=50");
     expect(geminiEvidenceSearchUrl(task!.searchQuery)).toContain("udm=50");
+  });
+
+  it("requires typed consequence policy before exposing an investigation action", () => {
+    const legacyClaim = {
+      c: "Example Agency reported 232 affected products.",
+      why: "The result affects public safety.",
+      need: "The agency announcement.",
+      q: "Did Example Agency report 232 affected products?",
+      atom: { s: "Example Agency", p: "reported", o: "232 affected products" },
+    };
+
+    expect(pageClaimInvestigationEligibility(legacyClaim)).toEqual({
+      ok: false,
+      reason: "missing_policy",
+    });
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: legacyClaim,
+    })).toBeUndefined();
+  });
+
+  it("keeps low-consequence availability, opinion, and generic controversy as context only", () => {
+    const cases = [
+      {
+        c: "Example Phone is now available in blue.",
+        why: "It affects a routine purchase choice.",
+        need: "The product page.",
+        q: "Is Example Phone now available in blue?",
+        atom: { s: "Example Phone", p: "is now available", o: "in blue" },
+        policy: { claimKind: "fact" as const, consequence: "money" as const },
+      },
+      {
+        c: "A reviewer said Example Phone is the most beautiful phone.",
+        why: "It is a personal product opinion.",
+        need: "The review.",
+        q: "Did a reviewer say Example Phone is the most beautiful phone?",
+        atom: { s: "Example Phone", p: "is", o: "the most beautiful phone" },
+        attribution: { source: "A reviewer", relation: "said", modality: "statement" as const },
+        policy: { claimKind: "opinion" as const, consequence: "money" as const },
+      },
+      {
+        c: "The redesign sparked controversy online.",
+        why: "It describes generic online reaction.",
+        need: "Representative reactions.",
+        q: "Did the redesign spark controversy online?",
+        atom: { s: "redesign", p: "sparked", o: "controversy online" },
+        policy: { claimKind: "fact" as const, consequence: "public_interest" as const },
+      },
+    ];
+
+    expect(cases.map((claim) => pageClaimInvestigationEligibility(claim).reason)).toEqual([
+      "low_consequence_availability",
+      "unsupported_claim_kind",
+      "generic_controversy",
+    ]);
+  });
+
+  it("uses typed attribution to preserve the source in a deterministic fallback", () => {
+    const claim = {
+      c: "專家分析估計，這項政策會使每戶增加 200 元成本。",
+      why: "涉及家戶支出。",
+      need: "專家分析與計算方式。",
+      atom: { s: "這項政策", p: "會使", o: "每戶增加 200 元成本" },
+      attribution: { source: "專家分析", relation: "估計", modality: "estimate" as const },
+      policy: { claimKind: "estimate" as const, consequence: "money" as const },
+    };
+
+    expect(pageClaimInvestigationEligibility(claim)).toEqual({ ok: true });
+    expect(deterministicClaimQuestion(claim)).toBe(
+      "「專家分析估計，這項政策會使每戶增加 200 元成本」是否有外部證據支持？",
+    );
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim,
+      groundingText: claim.c,
+    })?.question).toContain("專家分析估計");
+  });
+
+  it("rejects missing or inconsistent typed attribution", () => {
+    const base = {
+      c: "專家分析估計，這項政策會使每戶增加 200 元成本。",
+      why: "涉及家戶支出。",
+      need: "專家分析與計算方式。",
+      atom: { s: "這項政策", p: "會使", o: "每戶增加 200 元成本" },
+      policy: { claimKind: "estimate" as const, consequence: "money" as const },
+    };
+
+    expect(pageClaimInvestigationEligibility(base)).toEqual({
+      ok: false,
+      reason: "missing_attribution",
+    });
+    expect(pageClaimInvestigationEligibility({
+      ...base,
+      attribution: { source: "另一位專家", relation: "估計", modality: "estimate" as const },
+    })).toEqual({
+      ok: false,
+      reason: "invalid_attribution",
+    });
+    expect(pageClaimInvestigationEligibility({
+      ...base,
+      attribution: { source: "專家分析", relation: "估計", modality: "report" as const },
+    })).toEqual({
+      ok: false,
+      reason: "invalid_attribution",
+    });
+  });
+
+  it("accepts English according-to framing where the relation precedes the source", () => {
+    const claim = {
+      c: "According to Example Agency, the recall affected 232 products.",
+      why: "The recall affects public safety.",
+      need: "The agency recall notice.",
+      q: "According to Example Agency, did the recall affect 232 products?",
+      atom: { s: "the recall", p: "affected", o: "232 products" },
+      attribution: { source: "Example Agency", relation: "According to", modality: "report" as const },
+      policy: { claimKind: "fact" as const, consequence: "safety" as const },
+    };
+
+    expect(pageClaimInvestigationEligibility(claim)).toEqual({ ok: true });
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim,
+      groundingText: claim.c,
+    })?.question).toContain("According to Example Agency");
+  });
+
+  it("requires typed attribution when an according-to source follows the atom", () => {
+    const base = {
+      c: "India recorded its driest June in 12 years, according to the India Meteorological Department.",
+      why: "The rainfall record affects agricultural planning.",
+      need: "Official rainfall records.",
+      atom: { s: "India", p: "recorded", o: "its driest June in 12 years" },
+      policy: { claimKind: "report" as const, consequence: "public_interest" as const },
+    };
+
+    expect(pageClaimInvestigationEligibility(base)).toEqual({
+      ok: false,
+      reason: "missing_attribution",
+    });
+    const attributed = {
+      ...base,
+      attribution: {
+        source: "the India Meteorological Department",
+        relation: "according to",
+        modality: "report" as const,
+      },
+    };
+    expect(pageClaimInvestigationEligibility(attributed)).toEqual({ ok: true });
+    expect(deterministicClaimQuestion(attributed)).toContain("according to the India Meteorological Department");
+  });
+
+  it("rejects generic atom subjects and signed-treaty relative clauses", () => {
+    expect(pageClaimInvestigationEligibility({
+      c: "The death toll from last week's quakes has risen to 1,943.",
+      why: "The count affects disaster response.",
+      need: "Official casualty records.",
+      atom: { s: "The death toll", p: "has risen to", o: "1,943" },
+      policy: { claimKind: "report", consequence: "public_interest" },
+    })).toEqual({ ok: false, reason: "generic_subject" });
+
+    expect(pageClaimInvestigationEligibility({
+      c: "Australia and Vanuatu signed a treaty that prevents China creating a military base.",
+      why: "The treaty affects regional security.",
+      need: "The treaty text.",
+      atom: { s: "Australia and Vanuatu", p: "signed", o: "a treaty" },
+      policy: { claimKind: "fact", consequence: "public_interest" },
+    })).toEqual({ ok: false, reason: "invalid_structure" });
+  });
+
+  it("requires every atom part to be grounded in the effective Page or Focus text", () => {
+    const claim = {
+      c: "The US Supreme Court upheld bans on transgender athletes in female sports.",
+      why: "The ruling affects rights.",
+      need: "The court ruling.",
+      q: "Did the US Supreme Court uphold bans on transgender athletes in female sports?",
+      atom: { s: "US Supreme Court", p: "upheld bans on", o: "transgender athletes in female sports" },
+      policy: { claimKind: "fact" as const, consequence: "rights" as const },
+    };
+    const unrelatedText = "The US Supreme Court issued a birthright citizenship decision.";
+
+    expect(pageClaimInvestigationEligibility(claim, unrelatedText)).toEqual({
+      ok: false,
+      reason: "ungrounded_atom",
+    });
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim,
+      groundingText: unrelatedText,
+    })).toBeUndefined();
   });
 
   it("rejects unsafe or vague model queries and forms a natural fallback question", () => {
@@ -167,6 +367,7 @@ describe("page claim investigation contract", () => {
       why: "涉及刑事司法程序",
       need: "檢方起訴文件",
       atom: { s: "Joseph Horner", p: "被控", o: "二級謀殺罪" },
+      policy: { claimKind: "fact" as const, consequence: "law" as const },
     };
 
     expect(buildPageClaimInvestigationTask({
@@ -177,6 +378,7 @@ describe("page claim investigation contract", () => {
         ...chargedClaim,
         q: "Joseph Horner 是否被控二級謀殺罪？",
       },
+      groundingText: chargedClaim.c,
     })).toBeDefined();
 
     const recovered = buildPageClaimInvestigationTask({
@@ -187,6 +389,7 @@ describe("page claim investigation contract", () => {
         ...chargedClaim,
         q: "紐約州法院是否裁定 Joseph Horner 二級謀殺罪成立？",
       },
+      groundingText: chargedClaim.c,
     });
     expect(recovered?.question).toContain("Joseph Horner 被控二級謀殺罪");
     expect(recovered?.question).not.toContain("法院");

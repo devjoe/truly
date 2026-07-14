@@ -121,6 +121,66 @@ describe("General Page model integration audit", () => {
     expect(result.brief?.outputReview?.findings.some((finding) => finding.ruleId === "general-page-overview-no-claims")).toBe(true);
     expect(messageContent(captured[0].body, "system")).toContain("page overview only");
   });
+
+  it("retries one invalid contract with a compact repair prompt", async () => {
+    const captured: CapturedRequest[] = [];
+    const endpoint = await startMockEndpoint(captured, [
+      { title: "Wrong model-owned schema", summary: "Usable prose in the wrong contract." },
+      {
+        schemaVersion: 1,
+        summary: "Recovered compact summary.",
+        bg: [],
+        claims: [],
+        qs: [],
+      },
+    ]);
+
+    const result = await callTierBGeneralPageBrief({
+      endpoint,
+      model: "audit-brief-model",
+      context: modelContext({}),
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+      contract: "investigation_v3",
+      enableFormatRepair: true,
+      timeoutMs: 5_000,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      attempts: 2,
+      formatRecovered: true,
+      brief: { summary: "Recovered compact summary." },
+    });
+    expect(captured).toHaveLength(2);
+    expect(messageContent(captured[1].body, "system")).toContain("repairing a General Page reading response");
+    expect(messageContent(captured[1].body, "system")).toContain("summary <=32 words");
+    expect(captured[1].body.max_tokens).toBe(800);
+  });
+
+  it("does not repair an invalid standard runtime response", async () => {
+    const captured: CapturedRequest[] = [];
+    const endpoint = await startMockEndpoint(captured, [
+      { title: "Wrong model-owned schema", summary: "Usable prose in the wrong contract." },
+      { schemaVersion: 1, summary: "This response must not be requested." },
+    ]);
+
+    const result = await callTierBGeneralPageBrief({
+      endpoint,
+      model: "audit-brief-model",
+      context: modelContext({}),
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+      timeoutMs: 5_000,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      attempts: 1,
+      error: "general_page_brief_format_error",
+    });
+    expect(captured).toHaveLength(1);
+  });
 });
 
 function modelContext(overrides: Partial<GeneralPageModelContext>): GeneralPageModelContext {
@@ -151,7 +211,7 @@ function modelContext(overrides: Partial<GeneralPageModelContext>): GeneralPageM
 
 async function startMockEndpoint(
   captured: CapturedRequest[],
-  responseContent: Record<string, unknown>,
+  responseContent: Record<string, unknown> | Record<string, unknown>[],
 ): Promise<string> {
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const chunks: Buffer[] = [];
@@ -162,10 +222,14 @@ async function startMockEndpoint(
       body: JSON.parse(rawBody) as Record<string, unknown>,
     });
     res.writeHead(200, { "content-type": "application/json" });
+    const responseIndex = captured.length - 1;
+    const selectedContent = Array.isArray(responseContent)
+      ? responseContent[Math.min(responseIndex, responseContent.length - 1)]
+      : responseContent;
     res.end(JSON.stringify({
       choices: [{
         message: {
-          content: JSON.stringify(responseContent),
+          content: JSON.stringify(selectedContent),
         },
       }],
     }));
