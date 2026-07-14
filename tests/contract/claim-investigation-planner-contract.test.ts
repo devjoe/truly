@@ -170,6 +170,18 @@ describe("Claim Investigation planner draft contract", () => {
       },
     );
     expect(result).toMatchObject({ ok: false, error: "compound_proposition", detail: "coordinated_clauses" });
+    const humanOverride = materializeHumanPreselectedAtomicPlan(
+      parseInvestigationPlanDraftContent(JSON.stringify(compound))!,
+      {
+        sampleId: "syn_human_compound_override",
+        scope: "page",
+        sourceText: compound.subject.originalSpan,
+        contentFingerprint: "0123456789abcdef0123456789abcdef",
+        observedAt: "2026-07-14T02:00:00Z",
+      },
+      compound.subject.originalSpan,
+    );
+    expect(humanOverride.ok).toBe(true);
     expect(detectCompoundPropositionSignal("Production fell from 120 to 90 units in June.")).toBeUndefined();
     expect(detectCompoundPropositionSignal("雙方已達成共識，雙方將加強執法合作。"))
       .toBe("new_clause_after_comma");

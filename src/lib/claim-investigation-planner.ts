@@ -391,6 +391,14 @@ export function materializeInvestigationPlan(
   draft: InvestigationPlanDraft,
   input: MaterializeInvestigationPlanInput,
 ): MaterializeInvestigationPlanResult {
+  return materializeInvestigationPlanWithPolicy(draft, input, false);
+}
+
+function materializeInvestigationPlanWithPolicy(
+  draft: InvestigationPlanDraft,
+  input: MaterializeInvestigationPlanInput,
+  humanPreselectedAtomic: boolean,
+): MaterializeInvestigationPlanResult {
   if (!draft.eligible) {
     return { ok: false, error: "abstained", reason: draft.abstentionReason ?? "unsafe_to_plan" };
   }
@@ -400,7 +408,7 @@ export function materializeInvestigationPlan(
     return { ok: false, error: "ungrounded_proposition" };
   }
   const compoundSignal = detectCompoundPropositionSignal(draft.subject.proposition.normalizedText);
-  if (compoundSignal) {
+  if (compoundSignal && !humanPreselectedAtomic) {
     return { ok: false, error: "compound_proposition", detail: compoundSignal };
   }
 
@@ -475,7 +483,7 @@ export function materializeHumanPreselectedAtomicPlan(
       },
     },
   };
-  return materializeInvestigationPlan(adjusted, input);
+  return materializeInvestigationPlanWithPolicy(adjusted, input, true);
 }
 
 export function investigationPlannerSystemPrompt(lang: Lang): string {

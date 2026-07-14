@@ -224,8 +224,9 @@ async function evaluateRow(row: InputRow) {
     const repairedError = repaired.materialized && !repaired.materialized.ok
       ? repaired.materialized.error
       : repaired.error;
-    const canUseHumanAtomicFallback = canRepair && row.preselectedAtomic === true && repaired.draft &&
-      (repairedError === "ungrounded_span" || repairedError === "ungrounded_proposition");
+    const canUseHumanAtomicFallback = row.preselectedAtomic === true && repaired.draft &&
+      (repairedError === "ungrounded_span" || repairedError === "ungrounded_proposition" ||
+        repairedError === "compound_proposition");
     const fallbackMaterialized = canUseHumanAtomicFallback
       ? materializeHumanPreselectedAtomicPlan(repaired.draft, {
           sampleId: row.sampleId,
