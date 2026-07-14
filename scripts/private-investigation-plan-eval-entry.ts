@@ -119,7 +119,7 @@ function responseFormatBody() {
     ? {
         type: "json_schema",
         json_schema: {
-          name: "truly_investigation_plan_v1",
+          name: "truly_investigation_plan_v2",
           strict: true,
           schema: INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA,
         },
