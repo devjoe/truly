@@ -119,6 +119,7 @@ describe("Claim Investigation planner draft contract", () => {
     expect(prompt).toContain("Never use allegation merely because a claim is unverified");
     expect(prompt).toContain("never use forecast for historical or current data");
     expect(prompt).toContain("Use attribution=null for an event actor, author/byline, or page date");
+    expect(prompt).toContain("attribution.originalSpan must copy the exact contiguous words");
     expect(prompt).toContain("completed is not published");
     expect(prompt).toContain("Never request private medical, financial, employment, account");
     expect(prompt).toContain("allowed only when it is an entity in the selected proposition");
@@ -182,5 +183,23 @@ describe("Claim Investigation planner draft contract", () => {
     const privateRecords = structuredClone(eligibleDraft);
     privateRecords.plan.questions[0].queryCandidates = ["Lisa Faulkner medical records"];
     expect(parseInvestigationPlanDraftContent(JSON.stringify(privateRecords))).toBeUndefined();
+
+    const ungroundedAttribution = structuredClone(eligibleDraft);
+    ungroundedAttribution.subject.attribution = {
+      originalSpan: "Agency officials privately said",
+      actor: "Agency officials",
+      relation: "said",
+      modality: "statement" as const,
+    };
+    expect(materializeInvestigationPlan(
+      parseInvestigationPlanDraftContent(JSON.stringify(ungroundedAttribution))!,
+      {
+        sampleId: "syn_ungrounded_attribution",
+        scope: "page",
+        sourceText: eligibleDraft.subject.originalSpan,
+        contentFingerprint: "0123456789abcdef0123456789abcdef",
+        observedAt: "2026-07-14T02:00:00Z",
+      },
+    )).toMatchObject({ ok: false, error: "ungrounded_attribution" });
   });
 });

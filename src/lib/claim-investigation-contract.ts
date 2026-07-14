@@ -64,6 +64,7 @@ export interface InvestigationSourceSnapshot {
 }
 
 export interface InvestigationAttribution {
+  originalSpan: string;
   actor: string;
   relation: string;
   modality: InvestigationAttributionModality;
@@ -316,6 +317,7 @@ function validateSubject(value: unknown, issues: InvestigationContractIssue[]): 
     if (!isRecord(value.attribution)) {
       issue(issues, "subject.attribution", "invalid_type", "must be an object");
     } else {
+      requireString(issues, value.attribution.originalSpan, "subject.attribution.originalSpan", 400);
       requireString(issues, value.attribution.actor, "subject.attribution.actor", 160);
       requireString(issues, value.attribution.relation, "subject.attribution.relation", 80);
       if (!ATTRIBUTION_MODALITIES.has(value.attribution.modality as InvestigationAttributionModality)) {
