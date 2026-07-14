@@ -116,6 +116,8 @@ describe("Claim Investigation planner draft contract", () => {
     expect(prompt).toContain("Do not force English-style subject/predicate/object segmentation");
     expect(prompt).toContain("Select exactly one atomic proposition");
     expect(prompt).toContain("attributes, not additional propositions");
+    expect(prompt).toContain("Never use allegation merely because a claim is unverified");
+    expect(prompt).toContain("never use forecast for historical or current data");
   });
 
   it("separates human check-worthiness from retrieval-plan generation", () => {
@@ -166,5 +168,11 @@ describe("Claim Investigation planner draft contract", () => {
     );
     expect(result).toMatchObject({ ok: false, error: "compound_proposition", detail: "coordinated_clauses" });
     expect(detectCompoundPropositionSignal("Production fell from 120 to 90 units in June.")).toBeUndefined();
+    expect(detectCompoundPropositionSignal("雙方已達成共識，雙方將加強執法合作。"))
+      .toBe("new_clause_after_comma");
+    expect(detectCompoundPropositionSignal("她宣稱推薦顏某加入組織，此說法是謊言。"))
+      .toBe("claim_plus_truth_judgment");
+    expect(detectCompoundPropositionSignal("她宣稱推薦顏某加入組織的說法是謊言"))
+      .toBe("claim_plus_truth_judgment");
   });
 });

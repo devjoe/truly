@@ -138,7 +138,10 @@ export const INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA = {
                   properties: {
                     actor: { type: "string", minLength: 2, maxLength: 160 },
                     relation: { type: "string", minLength: 1, maxLength: 80 },
-                    modality: { enum: ["statement", "report", "estimate", "allegation", "forecast", "analysis"] },
+                    modality: {
+                      enum: ["statement", "report", "estimate", "allegation", "forecast", "analysis"],
+                      description: "statement=the actor directly said or announced it; report=a document or publisher reported a past/current fact; estimate=an explicitly approximate quantity; allegation=an explicit accusation or disputed charge; forecast=a future prediction only; analysis=an interpretation. Do not use allegation merely because a claim is unverified or forecast for current/historical data.",
+                    },
                   },
                 },
               ],
@@ -366,6 +369,12 @@ export function detectCompoundPropositionSignal(value: string): string | undefin
   if (/[,，]\s*(?:and|but|while|whereas|且|並且|而且|同時|但|然而|以及)\s*/iu.test(clean)) {
     return "coordinated_clauses";
   }
+  if (/，\s*(?:雙方|並|且|同時|這些|其中|共同|禁止|導致|造成|使得)\s*/u.test(clean)) {
+    return "new_clause_after_comma";
+  }
+  if (/(?:宣稱|聲稱|妄稱).{0,100}(?:謊言|不實|虛假)/u.test(clean)) {
+    return "claim_plus_truth_judgment";
+  }
   if (/[,，]\s*(?:其中|另有|另|with|including)\s*[^,，]*\d/iu.test(clean) &&
     (clean.match(/\d+(?:[.,]\d+)?/gu)?.length ?? 0) > 1) {
     return "multiple_quantity_clauses";
@@ -477,7 +486,7 @@ If eligible:
 - Select exactly one atomic proposition. If the source sentence combines an event with a cause, consequence, evaluation, second event, or separately verifiable quantity, select only one clause that can be copied safely; otherwise abstain with unsafe_to_plan.
 - originalSpan must be copied verbatim from the supplied text and contain only that selected proposition plus attribution required to interpret its modality.
 - normalizedClaim may clarify references but may not add facts.
-- Preserve attribution and modality as subject attributes. A report, estimate, allegation, forecast, or analysis is not an established fact. Time, place, and quantity are proposition attributes, not additional propositions.
+- Preserve attribution and modality as subject attributes. Use statement only when the actor directly said or announced something; report when a document or publisher reports a past or current fact; estimate only for an explicitly approximate quantity; allegation only for an explicit accusation or disputed charge; forecast only for a future prediction; and analysis for an interpretation. Never use allegation merely because a claim is unverified, and never use forecast for historical or current data. A report, estimate, allegation, forecast, or analysis is not an established fact. Time, place, and quantity are proposition attributes, not additional propositions.
 - proposition.originalSpan must copy the one atomic claim character-for-character as a contiguous substring of subject.originalSpan. proposition.normalizedText may resolve references but must not add facts, combine clauses, or change attribution. Do not force English-style subject/predicate/object segmentation. If an exact atomic proposition cannot be copied, abstain with unsafe_to_plan.
 - Questions have two separate axes. basis=literal directly tests the proposition; basis=contextual supplies interpretation or counter-evidence. purpose describes whether it checks the proposition itself, identity, timeline, quantity, context, or counterevidence. Create at least one basis=literal answerable question. A number or date question can still have basis=literal with purpose=quantity or timeline.
 - Questions and queryCandidates must name concrete entities and must not use vague references such as this article, this content, it, or the above claim.
