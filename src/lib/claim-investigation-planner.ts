@@ -393,6 +393,34 @@ export function detectCompoundPropositionSignal(value: string): string | undefin
   return undefined;
 }
 
+/**
+ * Dynamic strict schema for the second stage of constrained claim planning.
+ * Claim selection and text representation have already been decided locally;
+ * the model is allowed to plan the investigation, not to rewrite the claim.
+ */
+export function candidateSelectedInvestigationPlanJsonSchema(selectedExactSpan: string) {
+  const length = [...selectedExactSpan].length;
+  if (length < 6 || length > 600 || detectCompoundPropositionSignal(selectedExactSpan)) {
+    throw new TypeError("selectedExactSpan must be an exact non-compound candidate");
+  }
+  const schema: any = structuredClone(INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA);
+  const subject = schema.properties.subject.anyOf[1];
+  const plan = schema.properties.plan.anyOf[1];
+  const exactString = { type: "string", enum: [selectedExactSpan] };
+  schema.properties.eligible = { type: "boolean", const: true };
+  schema.properties.abstentionReason = { type: "null" };
+  schema.properties.subject = subject;
+  schema.properties.plan = plan;
+  subject.properties.originalSpan = structuredClone(exactString);
+  subject.properties.normalizedClaim = structuredClone(exactString);
+  subject.properties.proposition.properties.originalSpan = structuredClone(exactString);
+  subject.properties.proposition.properties.normalizedText = structuredClone(exactString);
+  subject.properties.proposition.properties.time = { type: "null" };
+  subject.properties.proposition.properties.place = { type: "null" };
+  subject.properties.proposition.properties.quantity = { type: "null" };
+  return schema;
+}
+
 export function materializeInvestigationPlan(
   draft: InvestigationPlanDraft,
   input: MaterializeInvestigationPlanInput,
@@ -492,6 +520,40 @@ export function materializeHumanPreselectedAtomicPlan(
   return materializeInvestigationPlanWithPolicy(adjusted, input, true);
 }
 
+/**
+ * Bounded representation for an exact clause chosen from a locally enumerated
+ * candidate list. Unlike the human override, the chosen clause must also pass
+ * the conservative compound guard and its normalized claim is the exact text.
+ */
+export function materializeCandidateSelectedAtomicPlan(
+  draft: InvestigationPlanDraft,
+  input: MaterializeInvestigationPlanInput,
+  selectedExactSpan: string,
+): MaterializeInvestigationPlanResult {
+  if (!draft.eligible || !draft.subject || !draft.plan || !groundedIn(input.sourceText, selectedExactSpan)) {
+    return { ok: false, error: "invalid_draft" };
+  }
+  const compoundSignal = detectCompoundPropositionSignal(selectedExactSpan);
+  if (compoundSignal) return { ok: false, error: "compound_proposition", detail: compoundSignal };
+  const first = draft.subject.proposition;
+  const adjusted: InvestigationPlanDraft = {
+    ...draft,
+    subject: {
+      ...draft.subject,
+      originalSpan: selectedExactSpan,
+      normalizedClaim: selectedExactSpan,
+      proposition: {
+        originalSpan: selectedExactSpan,
+        normalizedText: selectedExactSpan,
+        time: first.time,
+        place: first.place,
+        quantity: first.quantity,
+      },
+    },
+  };
+  return materializeInvestigationPlanWithPolicy(adjusted, input, true);
+}
+
 export function investigationPlannerSystemPrompt(lang: Lang): string {
   const responseLanguage = lang === "zh-TW" ? "Traditional Chinese (Taiwan)" : "English";
   return `You prepare a bounded evidence investigation plan from one page or selected passage.
@@ -504,6 +566,8 @@ If abstaining, set eligible=false, choose one abstentionReason, and set subject 
 If eligible:
 - Select exactly one atomic proposition. If the source sentence combines an event with a cause, consequence, evaluation, second event, or separately verifiable quantity, select only one clause that can be copied safely; otherwise abstain with unsafe_to_plan. A comma must not introduce a second independently verifiable event into proposition.normalizedText.
 - originalSpan must be copied verbatim from the supplied text and contain only that selected proposition plus attribution required to interpret its modality.
+- Default to the same shortest copied clause for both originalSpan fields. Extend subject.originalSpan beyond proposition.originalSpan only when the nearby attribution is essential to preserve who said, reported, estimated, alleged, forecast, or analyzed the proposition.
+- Before returning JSON, silently verify that both copied spans occur in SOURCE_TEXT character-for-character and that proposition.originalSpan occurs inside subject.originalSpan. If either copy check fails, shorten and copy again; if no exact atomic clause is safe, abstain with unsafe_to_plan.
 - normalizedClaim may clarify references but may not add facts.
 - Preserve attribution and modality as subject attributes. Use statement only when the actor directly said or announced something; report when a document or publisher reports a past or current fact; estimate only for an explicitly approximate quantity; allegation only for an explicit accusation or disputed charge; forecast only for a future prediction; and analysis for an interpretation. Never use allegation merely because a claim is unverified, and never use forecast for historical or current data. A report, estimate, allegation, forecast, or analysis is not an established fact. Time, place, and quantity are proposition attributes, not additional propositions.
 - proposition.originalSpan must copy the one atomic claim character-for-character as a contiguous substring of subject.originalSpan. proposition.normalizedText may resolve references but must not add facts, combine clauses, or change attribution. Do not force English-style subject/predicate/object segmentation. If an exact atomic proposition cannot be copied, abstain with unsafe_to_plan.
@@ -543,6 +607,25 @@ export function preselectedInvestigationPlannerSystemPrompt(lang: Lang): string 
   return `${investigationPlannerSystemPrompt(lang)}
 
 For this request only, check-worthiness has already been decided by an independent human annotation. Plan the supplied APPROVED_CLAIM; do not select a different claim and do not abstain merely because the surrounding page contains noise. Abstain only if the approved span itself cannot be represented safely under the schema.`;
+}
+
+/** Development-only planner prompt after a constrained model choice from exact local spans. */
+export function candidateSelectedInvestigationPlannerSystemPrompt(lang: Lang): string {
+  return `${investigationPlannerSystemPrompt(lang)}
+
+For this request, a preceding constrained selector chose APPROVED_CLAIM from a locally enumerated list of exact, non-compound SOURCE_CONTEXT spans. Plan only that supplied clause; do not select another claim and do not describe the selector as human review. Keep both originalSpan fields equal to APPROVED_CLAIM. Abstain only if the chosen clause cannot be represented safely under the schema.`;
+}
+
+export function candidateSelectedInvestigationPlannerUserPrompt(claim: string, context: string): string {
+  return `Prepare an investigation plan for the constrained-selector claim below. Keep both originalSpan fields equal to APPROVED_CLAIM and ground all other facts in SOURCE_CONTEXT.
+
+<APPROVED_CLAIM>
+${claim}
+</APPROVED_CLAIM>
+
+<SOURCE_CONTEXT>
+${context}
+</SOURCE_CONTEXT>`;
 }
 
 export function preselectedInvestigationPlannerUserPrompt(claim: string, context: string): string {

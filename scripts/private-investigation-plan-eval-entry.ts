@@ -65,7 +65,7 @@ const concurrency = Math.max(1, Math.min(4, Number(option("--concurrency", "2"))
 const timeoutMs = Math.max(1000, Math.min(180000, Number(option("--timeout-ms", "90000")) || 90000));
 const maxTokens = Math.max(500, Math.min(3000, Number(option("--max-tokens", "1800")) || 1800));
 if (split !== "dev") throw new Error("Investigation-plan iteration may use only --split dev");
-if (!new Set(["gpr-investigation-plan-v1", "gpr-source-aware-forward-dev-v1", "gpr-source-aware-news-forward-dev-v1"]).has(datasetVersion)) {
+if (!new Set(["gpr-investigation-plan-v1", "gpr-source-aware-forward-dev-v1", "gpr-source-aware-news-forward-dev-v1", "gpr-authority-discovery-sequential-news-dev-v1"]).has(datasetVersion)) {
   throw new Error("Unexpected --dataset-version");
 }
 if (!/^https?:\/\//.test(endpoint)) throw new Error("--endpoint must be HTTP(S)");

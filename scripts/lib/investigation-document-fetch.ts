@@ -20,7 +20,7 @@ export interface InvestigationNodeAcquisitionOptions extends InvestigationDocume
   pdfTextExtractor?: (buffer: Buffer) => Promise<string>;
 }
 
-function parseDocumentText(html: string, url: string): { title?: string; text: string; parser: string } {
+export function parseDocumentText(html: string, url: string): { title?: string; text: string; parser: string } {
   const virtualConsole = new VirtualConsole();
   const dom = new JSDOM(html, { url, virtualConsole });
   const clone = dom.window.document.cloneNode(true) as Document;
@@ -31,7 +31,7 @@ function parseDocumentText(html: string, url: string): { title?: string; text: s
   return { title: dom.window.document.title || undefined, text: fallback, parser: "body_text" };
 }
 
-async function readBoundedResponseBody(response: Response, maxBytes: number): Promise<Buffer | undefined> {
+export async function readBoundedResponseBody(response: Response, maxBytes: number): Promise<Buffer | undefined> {
   const declaredLength = Number(response.headers.get("content-length"));
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) return undefined;
   if (!response.body) {

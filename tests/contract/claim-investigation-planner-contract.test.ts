@@ -2,10 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA,
+  candidateSelectedInvestigationPlannerSystemPrompt,
+  candidateSelectedInvestigationPlanJsonSchema,
   detectCompoundPropositionSignal,
   investigationPlannerSystemPrompt,
   investigationPlannerRepairPrompt,
   materializeHumanPreselectedAtomicPlan,
+  materializeCandidateSelectedAtomicPlan,
   materializeInvestigationPlan,
   parseInvestigationPlanDraftContent,
   preselectedInvestigationPlannerSystemPrompt,
@@ -117,6 +120,8 @@ describe("Claim Investigation planner draft contract", () => {
     expect(prompt).toContain("Do not force English-style subject/predicate/object segmentation");
     expect(prompt).toContain("Select exactly one atomic proposition");
     expect(prompt).toContain("A comma must not introduce a second independently verifiable event");
+    expect(prompt).toContain("Default to the same shortest copied clause for both originalSpan fields");
+    expect(prompt).toContain("silently verify that both copied spans occur in SOURCE_TEXT");
     expect(prompt).toContain("attributes, not additional propositions");
     expect(prompt).toContain("Never use allegation merely because a claim is unverified");
     expect(prompt).toContain("never use forecast for historical or current data");
@@ -164,6 +169,47 @@ describe("Claim Investigation planner draft contract", () => {
       expect(result.bundle.subject.proposition.originalSpan).toBe(eligibleDraft.subject.originalSpan);
       expect(result.bundle.plan.questions).toHaveLength(1);
     }
+  });
+
+  it("materializes a locally enumerated model choice without claiming human review", () => {
+    const drifted = structuredClone(eligibleDraft);
+    drifted.subject.originalSpan = "Paraphrased model span that is absent.";
+    drifted.subject.proposition.originalSpan = "Another absent paraphrase.";
+    const parsed = parseInvestigationPlanDraftContent(JSON.stringify(drifted))!;
+    const exact = eligibleDraft.subject.originalSpan;
+    const result = materializeCandidateSelectedAtomicPlan(parsed, {
+      sampleId: "syn_candidate_selected",
+      scope: "page",
+      sourceText: exact,
+      contentFingerprint: "0123456789abcdef0123456789abcdef",
+      observedAt: "2026-07-14T02:00:00Z",
+    }, exact);
+    expect(result.ok).toBe(true);
+    expect(candidateSelectedInvestigationPlannerSystemPrompt("en")).toContain("constrained selector");
+    expect(candidateSelectedInvestigationPlannerSystemPrompt("en")).not.toContain("independent human annotation");
+
+    const compound = `${exact}, and every retailer stopped sales.`;
+    expect(materializeCandidateSelectedAtomicPlan(parsed, {
+      sampleId: "syn_candidate_compound",
+      scope: "page",
+      sourceText: compound,
+      contentFingerprint: "0123456789abcdef0123456789abcdef",
+      observedAt: "2026-07-14T02:00:00Z",
+    }, compound)).toMatchObject({ ok: false, error: "compound_proposition" });
+  });
+
+  it("narrows candidate-selected decoding to the exact local span", () => {
+    const span = "主管機關公告召回 1600 件產品";
+    const schema = candidateSelectedInvestigationPlanJsonSchema(span) as any;
+    expect(schema.properties.eligible).toEqual({ type: "boolean", const: true });
+    expect(schema.properties.abstentionReason).toEqual({ type: "null" });
+    expect(schema.properties.subject.properties.originalSpan.enum).toEqual([span]);
+    expect(schema.properties.subject.properties.normalizedClaim.enum).toEqual([span]);
+    expect(schema.properties.subject.properties.proposition.properties.originalSpan.enum).toEqual([span]);
+    expect(schema.properties.subject.properties.proposition.properties.normalizedText.enum).toEqual([span]);
+    expect(schema.properties.subject.properties.proposition.properties.quantity).toEqual({ type: "null" });
+    expect(() => candidateSelectedInvestigationPlanJsonSchema("short")).toThrow(TypeError);
+    expect(() => candidateSelectedInvestigationPlanJsonSchema("Example Agency announced 232 products, and every retailer stopped sales.")).toThrow(TypeError);
   });
 
   it("rejects the legacy multi-proposition shape and obvious compound clauses", () => {

@@ -992,6 +992,41 @@ output, compare equal budgets, review exact passages rather than snippets, and
 keep absence claims unproven unless the searched record scope is demonstrably
 exhaustive.
 
+#### Query-free Authority-local Sequential v1 (2026-07-15)
+
+The follow-up candidate froze a generic traversal contract, three reviewed
+authority profiles and a 138-document snapshot before opening a new 48-row
+news-only development pool. Direct HTTP and background rendered-page adapters
+shared the same page, depth, byte and host budgets. They accepted no claim or
+private-derived query, never brought a browser page to the foreground, and
+could not infer absence from budget exhaustion.
+
+Claim representation improved materially. A constrained selector chose only
+from locally enumerated exact, non-compound spans; the second-stage planner was
+not permitted to rewrite that span. Across four sequential batches, 47/48
+plans were valid and all 47 materialized. The one failure was a recorded
+constrained-decoding length stop, not a grounding or compound-claim bypass.
+
+The downstream system did not qualify for promotion. Investigation Case
+materialization was 36/47, below the frozen 90% gate. Only six valid cases
+produced 11 matched-catalog routes, and the equal-budget offline audit produced
+12 automated passage candidates in each arm. Two independent reviewers agreed
+on all 11 trials: baseline and candidate each admitted one answerable result,
+with zero candidate-only rescues, zero net lift, two wrong-authority matches and
+zero false closures. No query left the private process and no evidence or
+verdict was produced.
+
+The 48-row pool is now closed for tuning. Claim selection, Case compilation,
+authority matching and canonical-document acquisition must be treated as four
+separate stages. The downstream zero-lift result does not independently isolate
+traversal quality because upstream coverage stopped at six matched cases and
+two reviewed agencies. A future candidate requires a new preregistered
+development slice; each stage advances only after its upstream gate passes,
+including 12 matched cases and four reviewed agencies before answer-rescue
+scoring. Confirmatory data and holdout remain closed. The full architectural
+decision is recorded in
+[ADR 0004](../adr/0004-query-free-authority-local-discovery.md).
+
 ### C. Sufficiency and UX audit
 
 Using the collected development evidence, test whether the system correctly

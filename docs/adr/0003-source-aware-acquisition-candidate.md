@@ -78,3 +78,7 @@ authority-local acquisition from index pages to dated announcements, records,
 datasets or PDFs. It must not widen the reviewed catalog, relax passage
 admission, open a holdout or enable a product action merely because authority
 routing improved.
+
+The follow-up query-free traversal architecture and its rejected 48-row
+development candidate are recorded in
+[ADR 0004](./0004-query-free-authority-local-discovery.md).

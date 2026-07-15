@@ -54,7 +54,11 @@ const outputPath = privatePath(required("--output"), false);
 const metaPath = privatePath(required("--meta-output"), false);
 const expectedCount = Number(required("--sample-count"));
 const datasetVersion = required("--dataset-version");
-if (!new Set(["gpr-source-aware-forward-dev-v1", "gpr-source-aware-news-forward-dev-v1"]).has(datasetVersion) ||
+if (!new Set([
+  "gpr-source-aware-forward-dev-v1",
+  "gpr-source-aware-news-forward-dev-v1",
+  "gpr-authority-discovery-sequential-news-dev-v1",
+]).has(datasetVersion) ||
   !Number.isInteger(expectedCount) || expectedCount < 1) {
   throw new Error("unexpected source-aware dataset contract");
 }
