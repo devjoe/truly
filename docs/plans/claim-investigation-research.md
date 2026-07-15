@@ -43,7 +43,7 @@ This document answers:
 
 This document does not:
 
-- enable the existing `開始查核` UI for release;
+- enable a Truly Agent investigation action for release;
 - add automated browsing, crawling, or a verdict generator;
 - authorize persistent storage of page text or model output;
 - choose a search vendor or paid API;
@@ -1027,6 +1027,28 @@ scoring. Confirmatory data and holdout remain closed. The full architectural
 decision is recorded in
 [ADR 0004](../adr/0004-query-free-authority-local-discovery.md).
 
+#### Product action split and semantic Case compiler v3 (2026-07-16)
+
+The user-triggered surface now treats three actions as different contracts
+rather than one generic investigation query. Standard Google Search receives a
+short claim-and-source keyword string. Google AI Mode receives a bounded
+natural-language request containing the exact claim, verification question,
+evidence need, source context, and instructions to distinguish evidence from
+uncertainty. `查核選項` only reveals these explicit external actions; it is not
+the name or trigger for the unreleased Truly Agent.
+
+The non-runtime Agent compiler also adds a semantic v3 draft while retaining
+the v2 draft for historical replay. The model no longer emits question IDs,
+verification requirements, discovery queries, target IDs, or stopping
+conditions. It chooses event/discovery context, document kinds, authority
+hints, source roles, and zero-based question coverage. Local code maps those
+indexes to the frozen plan, derives mandatory facets and acceptable roles,
+reuses frozen query candidates, fills missing coverage without inventing an
+authority, assigns stable IDs, and runs the existing deterministic validators.
+The private Case-plan runner is prepared for this v3 contract, but no closed
+development pool or holdout was reopened and no Agent runtime action is
+authorized by this implementation.
+
 ### C. Sufficiency and UX audit
 
 Using the collected development evidence, test whether the system correctly
@@ -1078,8 +1100,9 @@ gates should a fresh, independently labeled holdout be frozen.
 
 ## Open Decisions
 
-- Whether an Investigation Subject requires explicit user confirmation after
-  the model/local guard selects it, or whether clicking `開始查核` is sufficient.
+- Whether an Investigation Subject requires explicit user confirmation before
+  a future `交給 Truly 查核` action starts the Agent; expanding `查核選項` is not
+  sufficient and remains side-effect free.
 - Which source roles and minimum independence rules vary by consequence domain.
 - Whether the first companion is macOS-only, cross-platform desktop, or a
   shared core embedded in both desktop and mobile Apps.

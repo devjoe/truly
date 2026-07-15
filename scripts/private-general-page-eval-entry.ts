@@ -148,7 +148,7 @@ async function evaluateRow(row: InputRow) {
         eligible: Boolean(task),
         eligibilityReason: eligibility && !eligibility.ok ? eligibility.reason : undefined,
         questionSource: task ? (modelQuestion ? "model" : "deterministic_fallback") : "none",
-        question: task?.question,
+        question: task?.intent.question,
       },
       raw: response.raw,
     };

@@ -7,11 +7,11 @@ import { execFileSync } from "node:child_process";
 import type { InvestigationBundle } from "../src/lib/claim-investigation-contract";
 import { validateInvestigationBundle } from "../src/lib/claim-investigation-contract";
 import {
-  INVESTIGATION_CASE_DRAFT_JSON_SCHEMA,
-  investigationCasePlannerSystemPrompt,
-  investigationCasePlannerUserPrompt,
-  materializeInvestigationCase,
-  parseInvestigationCaseDraftContent,
+  INVESTIGATION_CASE_SEMANTIC_DRAFT_JSON_SCHEMA,
+  investigationCaseSemanticPlannerSystemPrompt,
+  investigationCaseSemanticPlannerUserPrompt,
+  materializeSemanticInvestigationCase,
+  parseInvestigationCaseSemanticDraftContent,
 } from "../src/lib/claim-investigation-case-planner";
 import type { Lang } from "../src/lib/types";
 
@@ -91,9 +91,9 @@ for (const row of rows) {
 const promptVariants = [...new Set(rows.map((row) => languageFor(row.materialized!.bundle!)))];
 const promptVariantSha256ByLanguage = Object.fromEntries(promptVariants.map((language) => [
   language,
-  sha256(investigationCasePlannerSystemPrompt(language)),
+  sha256(investigationCaseSemanticPlannerSystemPrompt(language)),
 ]));
-const schemaSha256 = sha256(JSON.stringify(INVESTIGATION_CASE_DRAFT_JSON_SCHEMA));
+const schemaSha256 = sha256(JSON.stringify(INVESTIGATION_CASE_SEMANTIC_DRAFT_JSON_SCHEMA));
 const startedAt = new Date().toISOString();
 const results = new Array(rows.length);
 let cursor = 0;
@@ -107,9 +107,9 @@ async function requestAttempt(
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const baseUser = investigationCasePlannerUserPrompt(bundle);
+    const baseUser = investigationCaseSemanticPlannerUserPrompt(bundle);
     const user = repairDetail
-      ? `The previous discovery plan failed deterministic local validation with: ${repairDetail}. Return a new full JSON object. Keep SUBJECT and QUESTIONS unchanged. Fix only the discovery plan and requirements; do not add facts.\n\n${baseUser}`
+      ? `The previous semantic discovery plan failed deterministic local validation with: ${repairDetail}. Return a new full JSON object. Keep SUBJECT and NUMBERED QUESTIONS unchanged. Fix only the semantic choices; local code owns IDs, requirements, queries, and stopping conditions. Do not add facts.\n\n${baseUser}`
       : baseUser;
     const response = await fetch(`${endpoint.replace(/\/+$/u, "")}/chat/completions`, {
       method: "POST",
@@ -126,14 +126,14 @@ async function requestAttempt(
         response_format: {
           type: "json_schema",
           json_schema: {
-            name: "truly_investigation_case_plan_v1",
+            name: "truly_investigation_semantic_case_plan_v3",
             strict: true,
-            schema: INVESTIGATION_CASE_DRAFT_JSON_SCHEMA,
+            schema: INVESTIGATION_CASE_SEMANTIC_DRAFT_JSON_SCHEMA,
           },
         },
         chat_template_kwargs: { enable_thinking: false },
         messages: [
-          { role: "system", content: investigationCasePlannerSystemPrompt(language) },
+          { role: "system", content: investigationCaseSemanticPlannerSystemPrompt(language) },
           { role: "user", content: user },
         ],
       }),
@@ -153,11 +153,11 @@ async function requestAttempt(
     if (typeof content !== "string") {
       return { ok: false as const, error: "missing_content", raw };
     }
-    const draft = parseInvestigationCaseDraftContent(content);
+    const draft = parseInvestigationCaseSemanticDraftContent(content);
     if (!draft) {
       return { ok: false as const, error: "invalid_draft", content, raw };
     }
-    const materialized = materializeInvestigationCase(draft, bundle, row.sampleId);
+    const materialized = materializeSemanticInvestigationCase(draft, bundle, row.sampleId);
     return {
       ok: materialized.ok,
       draft,

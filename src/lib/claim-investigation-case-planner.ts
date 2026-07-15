@@ -33,6 +33,22 @@ export interface InvestigationCaseDraft {
   stoppingConditions: string[];
 }
 
+export interface InvestigationCaseSemanticDraft {
+  schemaVersion: 3;
+  eventFrame: InvestigationCaseDraft["eventFrame"];
+  discoveryContext: InvestigationCaseDraft["discoveryContext"];
+  targets: Array<{
+    purpose: string;
+    questionIndexes: number[];
+    documentKinds: InvestigationDocumentKind[];
+    authorityHints: string[];
+    acceptedSourceRoles: DiscoverySourceRole[];
+    fallback: boolean;
+  }>;
+}
+
+export type InvestigationCasePlannerDraft = InvestigationCaseDraft | InvestigationCaseSemanticDraft;
+
 export type MaterializeInvestigationCaseResult =
   | { ok: true; investigationCase: InvestigationCase }
   | { ok: false; error: "invalid_bundle" | "invalid_draft" | "invalid_case"; detail?: string };
@@ -163,6 +179,91 @@ export const INVESTIGATION_CASE_DRAFT_JSON_SCHEMA = {
   },
 } as const;
 
+export const INVESTIGATION_CASE_SEMANTIC_DRAFT_JSON_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["schemaVersion", "eventFrame", "discoveryContext", "targets"],
+  properties: {
+    schemaVersion: { type: "integer", const: 3 },
+    eventFrame: {
+      type: "object",
+      additionalProperties: false,
+      required: ["description", "entities", "time", "place"],
+      properties: {
+        description: { type: "string", minLength: 6, maxLength: 320 },
+        entities: {
+          type: "array",
+          minItems: 1,
+          maxItems: 12,
+          items: { type: "string", minLength: 1, maxLength: 120 },
+        },
+        time: { type: ["string", "null"], maxLength: 80 },
+        place: { type: ["string", "null"], maxLength: 120 },
+      },
+    },
+    discoveryContext: {
+      type: "object",
+      additionalProperties: false,
+      required: ["aliases", "institutions", "languages", "jurisdictions", "timeFrom", "timeTo"],
+      properties: {
+        aliases: { type: "array", minItems: 0, maxItems: 24, items: { type: "string", minLength: 1, maxLength: 160 } },
+        institutions: { type: "array", minItems: 0, maxItems: 12, items: { type: "string", minLength: 1, maxLength: 160 } },
+        languages: { type: "array", minItems: 1, maxItems: 6, items: { type: "string", minLength: 2, maxLength: 35 } },
+        jurisdictions: { type: "array", minItems: 0, maxItems: 8, items: { type: "string", minLength: 1, maxLength: 120 } },
+        timeFrom: { type: ["string", "null"], maxLength: 40 },
+        timeTo: { type: ["string", "null"], maxLength: 40 },
+      },
+    },
+    targets: {
+      type: "array",
+      minItems: 1,
+      maxItems: 6,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "purpose", "questionIndexes", "documentKinds", "authorityHints",
+          "acceptedSourceRoles", "fallback",
+        ],
+        properties: {
+          purpose: { type: "string", minLength: 3, maxLength: 240 },
+          questionIndexes: {
+            type: "array",
+            minItems: 1,
+            maxItems: 8,
+            uniqueItems: true,
+            items: { type: "integer", minimum: 0, maximum: 7 },
+          },
+          documentKinds: {
+            type: "array",
+            minItems: 1,
+            maxItems: 4,
+            items: {
+              enum: [
+                "official_announcement", "official_record", "dataset", "ruling",
+                "event_result", "product_documentation", "independent_report",
+              ],
+            },
+          },
+          authorityHints: {
+            type: "array",
+            minItems: 0,
+            maxItems: 8,
+            items: { type: "string", minLength: 1, maxLength: 160 },
+          },
+          acceptedSourceRoles: {
+            type: "array",
+            minItems: 1,
+            maxItems: 3,
+            items: { enum: ["primary", "independent_secondary", "claim_origin"] },
+          },
+          fallback: { type: "boolean" },
+        },
+      },
+    },
+  },
+} as const;
+
 const DOCUMENT_KINDS = new Set<InvestigationDocumentKind>([
   "official_announcement", "official_record", "dataset", "ruling", "event_result",
   "product_documentation", "independent_report",
@@ -210,6 +311,12 @@ function enumStrings<T extends string>(
   if (!Array.isArray(value) || value.length < minimum || value.length > maximum) return undefined;
   if (value.some((entry) => !allowed.has(entry as T))) return undefined;
   return [...new Set(value as T[])];
+}
+
+function integers(value: unknown, minimum: number, maximum: number): number[] | undefined {
+  if (!Array.isArray(value) || value.length < minimum || value.length > maximum) return undefined;
+  if (value.some((entry) => !Number.isInteger(entry) || entry < 0 || entry > 7)) return undefined;
+  return [...new Set(value as number[])];
 }
 
 function normalizedGroundingText(value: string): string {
@@ -308,6 +415,65 @@ export function parseInvestigationCaseDraft(value: unknown): InvestigationCaseDr
 export function parseInvestigationCaseDraftContent(content: string): InvestigationCaseDraft | undefined {
   try {
     return parseInvestigationCaseDraft(JSON.parse(content));
+  } catch {
+    return undefined;
+  }
+}
+
+export function parseInvestigationCaseSemanticDraft(
+  value: unknown,
+): InvestigationCaseSemanticDraft | undefined {
+  const root = record(value);
+  const rawEventFrame = record(root?.eventFrame);
+  const rawDiscoveryContext = record(root?.discoveryContext);
+  if (!root || root.schemaVersion !== 3 || !rawEventFrame || !rawDiscoveryContext) return undefined;
+  const description = text(rawEventFrame.description, 320);
+  const entities = strings(rawEventFrame.entities, 1, 12, 120);
+  const time = rawEventFrame.time === null ? null : text(rawEventFrame.time, 80);
+  const place = rawEventFrame.place === null ? null : text(rawEventFrame.place, 120);
+  if (!description || !entities || time === undefined || place === undefined) return undefined;
+
+  const aliases = strings(rawDiscoveryContext.aliases, 0, 24, 160);
+  const institutions = strings(rawDiscoveryContext.institutions, 0, 12, 160);
+  const languages = strings(rawDiscoveryContext.languages, 1, 6, 35);
+  const jurisdictions = strings(rawDiscoveryContext.jurisdictions, 0, 8, 120);
+  const timeFrom = rawDiscoveryContext.timeFrom === null ? null : text(rawDiscoveryContext.timeFrom, 40);
+  const timeTo = rawDiscoveryContext.timeTo === null ? null : text(rawDiscoveryContext.timeTo, 40);
+  if (!aliases || !institutions || !languages || !jurisdictions || timeFrom === undefined || timeTo === undefined) return undefined;
+
+  if (!Array.isArray(root.targets) || root.targets.length < 1 || root.targets.length > 6) return undefined;
+  const targets: InvestigationCaseSemanticDraft["targets"] = [];
+  for (const value of root.targets) {
+    const item = record(value);
+    const purpose = text(item?.purpose, 240);
+    const questionIndexes = integers(item?.questionIndexes, 1, 8);
+    const documentKinds = enumStrings(item?.documentKinds, DOCUMENT_KINDS, 1, 4);
+    const authorityHints = strings(item?.authorityHints, 0, 8, 160);
+    const acceptedSourceRoles = enumStrings(item?.acceptedSourceRoles, SOURCE_ROLES, 1, 3);
+    if (!purpose || !questionIndexes || !documentKinds || !authorityHints || !acceptedSourceRoles ||
+      typeof item?.fallback !== "boolean") return undefined;
+    targets.push({
+      purpose,
+      questionIndexes,
+      documentKinds,
+      authorityHints,
+      acceptedSourceRoles,
+      fallback: item.fallback,
+    });
+  }
+  return {
+    schemaVersion: 3,
+    eventFrame: { description, entities, time, place },
+    discoveryContext: { aliases, institutions, languages, jurisdictions, timeFrom, timeTo },
+    targets,
+  };
+}
+
+export function parseInvestigationCaseSemanticDraftContent(
+  content: string,
+): InvestigationCaseSemanticDraft | undefined {
+  try {
+    return parseInvestigationCaseSemanticDraft(JSON.parse(content));
   } catch {
     return undefined;
   }
@@ -448,6 +614,59 @@ export function materializeInvestigationCase(
   return { ok: true, investigationCase };
 }
 
+export function materializeSemanticInvestigationCase(
+  draft: InvestigationCaseSemanticDraft,
+  bundle: InvestigationBundle,
+  sampleId: string,
+): MaterializeInvestigationCaseResult {
+  if (!validateInvestigationBundle(bundle).ok || bundle.evidence.length > 0) {
+    return { ok: false, error: "invalid_bundle" };
+  }
+  const normalized = parseInvestigationCaseSemanticDraft(draft);
+  if (!normalized) return { ok: false, error: "invalid_draft" };
+  if (normalized.targets.some((target) =>
+    target.questionIndexes.some((index) => index >= bundle.plan.questions.length))) {
+    return { ok: false, error: "invalid_draft", detail: "question index is outside the frozen plan" };
+  }
+  const requirements: InvestigationVerificationRequirement[] = bundle.plan.questions.map((question) => ({
+    questionId: question.id,
+    requiredFacets: mandatoryFacetsForQuestion(question),
+    acceptableSourceRoles: discoverySourceRoles(question),
+  }));
+  const legacyDraft: InvestigationCaseDraft = {
+    schemaVersion: 2,
+    eventFrame: normalized.eventFrame,
+    discoveryContext: normalized.discoveryContext,
+    requirements,
+    targets: normalized.targets.map((target) => {
+      const questions = target.questionIndexes.map((index) => bundle.plan.questions[index]);
+      return {
+        purpose: target.purpose,
+        questionIds: questions.map((question) => question.id),
+        documentKinds: target.documentKinds,
+        authorityHints: target.authorityHints,
+        queries: [...new Set(questions.flatMap((question) => question.queryCandidates))].slice(0, 4),
+        acceptedSourceRoles: target.acceptedSourceRoles,
+        fallback: target.fallback,
+      };
+    }),
+    stoppingConditions: bundle.plan.stoppingConditions,
+  };
+  const completed = completeMissingInvestigationDiscoveryCoverage(legacyDraft, bundle);
+  if (!completed) return { ok: false, error: "invalid_case", detail: "could not complete question coverage" };
+  return materializeInvestigationCase(completed, bundle, sampleId);
+}
+
+export function materializeInvestigationCasePlannerDraft(
+  draft: InvestigationCasePlannerDraft,
+  bundle: InvestigationBundle,
+  sampleId: string,
+): MaterializeInvestigationCaseResult {
+  return draft.schemaVersion === 3
+    ? materializeSemanticInvestigationCase(draft, bundle, sampleId)
+    : materializeInvestigationCase(draft, bundle, sampleId);
+}
+
 function mandatoryFacetsForQuestion(question: InvestigationQuestion): InvestigationVerificationFacet[] {
   switch (question.purpose) {
     case "proposition":
@@ -505,4 +724,39 @@ export function investigationCasePlannerUserPrompt(bundle: InvestigationBundle):
     attribution: bundle.subject.attribution ?? null,
     proposition: bundle.subject.proposition,
   })}\n\nQUESTIONS:\n${JSON.stringify(questions)}`;
+}
+
+export function investigationCaseSemanticPlannerSystemPrompt(lang: Lang): string {
+  const shared = `You select semantic document-discovery choices for one already-approved Claim Investigation subject.
+
+Local code assigns IDs, links every selected question index to the frozen question ID, derives verification requirements, reuses frozen query candidates, and copies frozen stopping conditions.
+
+Rules:
+1. Group related numbered questions into a small set of document targets. Use zero-based questionIndexes exactly as supplied.
+2. Choose only document kinds and source roles that can plausibly answer those questions. Use ruling only for explicit legal or adjudication context.
+3. Do not write search queries, question IDs, verification requirements, stopping conditions, URLs, citations, evidence, or verdicts.
+4. Use only entities, organizations, dates, places, and aliases explicitly present in SUBJECT or QUESTIONS. Do not invent a regulator, registry, parent organization, domain, or translation.
+5. authorityHints may name an authority explicitly present in the input. Otherwise use a generic role such as responsible regulator.
+6. Every numbered question should appear in at least one non-fallback target. Fallback targets are optional and cannot be the only route.
+7. discoveryContext is retrieval vocabulary, not an answer. Preserve proper nouns as written and use BCP 47 language tags.
+8. Return only the schema-valid JSON object.`;
+  return lang === "zh-TW"
+    ? `${shared}\nWrite descriptions, purposes, and authority hints in Traditional Chinese when the source is Chinese.`
+    : `${shared}\nWrite all generated text in English.`;
+}
+
+export function investigationCaseSemanticPlannerUserPrompt(bundle: InvestigationBundle): string {
+  const questions = bundle.plan.questions.map((question, index) => ({
+    index,
+    basis: question.basis,
+    purpose: question.purpose,
+    question: question.question,
+    preferredSourceRoles: question.preferredSourceRoles,
+  }));
+  return `SUBJECT:\n${JSON.stringify({
+    normalizedClaim: bundle.subject.normalizedClaim,
+    originalSpan: bundle.subject.originalSpan,
+    attribution: bundle.subject.attribution ?? null,
+    proposition: bundle.subject.proposition,
+  })}\n\nNUMBERED QUESTIONS:\n${JSON.stringify(questions)}`;
 }

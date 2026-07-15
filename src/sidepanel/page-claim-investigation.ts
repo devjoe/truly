@@ -12,17 +12,23 @@ export interface PageClaimInvestigationSource {
   url?: string;
 }
 
+export interface ClaimVerificationIntent {
+  exactClaim: string;
+  why: string;
+  evidenceNeed: string;
+  question: string;
+  sourceContext?: Omit<PageClaimInvestigationSource, "url">;
+}
+
 export interface PageClaimInvestigationTask {
-  version: 3;
+  version: 4;
   id: string;
   analysisKey: string;
   scope: "page" | "focus";
   claimIndex: number;
-  claim: string;
-  why: string;
-  evidenceNeed: string;
-  question: string;
-  searchQuery: string;
+  intent: ClaimVerificationIntent;
+  googleKeywords: string;
+  aiModePrompt: string;
   sourceUrl?: string;
 }
 
@@ -279,6 +285,41 @@ export function geminiEvidenceSearchUrl(query: string): string {
   return url.toString();
 }
 
+export function buildGoogleSearchKeywords(intent: ClaimVerificationIntent): string {
+  return [...new Set([
+    intent.exactClaim,
+    cleanInvestigationText(intent.sourceContext?.title, 100),
+    cleanInvestigationText(intent.sourceContext?.sourceName, 60),
+    cleanInvestigationText(intent.sourceContext?.publishedAt, 32),
+  ].filter(Boolean))].join(" ").slice(0, 240).trim();
+}
+
+export function buildGoogleAiModePrompt(intent: ClaimVerificationIntent): string {
+  const sourceContext = [
+    cleanInvestigationText(intent.sourceContext?.title, 100),
+    cleanInvestigationText(intent.sourceContext?.sourceName, 60),
+    cleanInvestigationText(intent.sourceContext?.publishedAt, 32),
+  ].filter(Boolean).join(" · ");
+  const terminate = (value: string, punctuation: "." | "。") =>
+    /[。！？.!?]$/u.test(value) ? value : `${value}${punctuation}`;
+  if (/\p{Script=Han}/u.test(intent.exactClaim)) {
+    return [
+      `請協助查核以下說法：「${intent.exactClaim}」`,
+      `查核問題：${intent.question}`,
+      `需要的證據：${terminate(intent.evidenceNeed, "。")}`,
+      sourceContext ? `頁面來源脈絡：${terminate(sourceContext, "。")}` : "",
+      "請優先引用能直接回答問題的原始或權威來源，標明來源與日期，並區分已證實、尚不確定與推論。",
+    ].filter(Boolean).join(" ").slice(0, 720);
+  }
+  return [
+    `Please verify this claim: “${intent.exactClaim}”`,
+    `Verification question: ${intent.question}`,
+    `Evidence needed: ${terminate(intent.evidenceNeed, ".")}`,
+    sourceContext ? `Page source context: ${terminate(sourceContext, ".")}` : "",
+    "Prioritize primary or authoritative sources that directly answer the question, cite the source and date, and distinguish verified facts, uncertainty, and inference.",
+  ].filter(Boolean).join(" ").slice(0, 720);
+}
+
 export function buildPageClaimInvestigationTask(input: {
   analysisKey: string;
   scope: "page" | "focus";
@@ -299,24 +340,27 @@ export function buildPageClaimInvestigationTask(input: {
   const question = usableClaimQuestion(input.claim.q, atom, claim, input.claim.attribution) ??
     deterministicClaimQuestion(input.claim);
   if (!input.analysisKey || !claim || !evidenceNeed || !question) return undefined;
-  const context = [
+  const sourceContext = {
+    ...(cleanInvestigationText(input.source?.title, 100) ? { title: cleanInvestigationText(input.source?.title, 100) } : {}),
+    ...(cleanInvestigationText(input.source?.sourceName, 60) ? { sourceName: cleanInvestigationText(input.source?.sourceName, 60) } : {}),
+    ...(cleanInvestigationText(input.source?.publishedAt, 32) ? { publishedAt: cleanInvestigationText(input.source?.publishedAt, 32) } : {}),
+  };
+  const intent: ClaimVerificationIntent = {
+    exactClaim: claim,
+    why,
+    evidenceNeed,
     question,
-    cleanInvestigationText(input.source?.title, 100),
-    cleanInvestigationText(input.source?.sourceName, 60),
-    cleanInvestigationText(input.source?.publishedAt, 32),
-  ].filter(Boolean);
-  const searchQuery = [...new Set(context)].join(" ").slice(0, 360);
+    ...(Object.keys(sourceContext).length > 0 ? { sourceContext } : {}),
+  };
   return {
-    version: 3,
+    version: 4,
     id: `${input.scope}:${input.analysisKey}:${input.claimIndex}`,
     analysisKey: input.analysisKey,
     scope: input.scope,
     claimIndex: input.claimIndex,
-    claim,
-    why,
-    evidenceNeed,
-    question,
-    searchQuery,
+    intent,
+    googleKeywords: buildGoogleSearchKeywords(intent),
+    aiModePrompt: buildGoogleAiModePrompt(intent),
     ...(input.source?.url && /^https?:\/\//i.test(input.source.url) ? { sourceUrl: input.source.url } : {}),
   };
 }

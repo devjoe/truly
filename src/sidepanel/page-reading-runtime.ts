@@ -1064,12 +1064,12 @@ function claimInvestigationHtml(
   return `
     <section class="page-claim-investigation" data-task-id="${escapeHtml(task.id)}">
       <div class="page-claim-investigation-label">${escapeHtml(tr("sidepanel.page.investigation.prepared"))}</div>
-      <p class="page-claim-investigation-question">${escapeHtml(task.question)}</p>
-      <p class="page-claim-investigation-need">${escapeHtml(tr("sidepanel.page.investigation.need", { need: task.evidenceNeed }))}</p>
+      <p class="page-claim-investigation-question">${escapeHtml(task.intent.question)}</p>
+      <p class="page-claim-investigation-need">${escapeHtml(tr("sidepanel.page.investigation.need", { need: task.intent.evidenceNeed }))}</p>
       <div class="page-claim-investigation-actions">
-        <a class="page-claim-action" href="${escapeHtml(standardEvidenceSearchUrl(task.searchQuery))}" target="_blank" rel="noopener noreferrer">${escapeHtml(tr("sidepanel.page.investigation.search"))}</a>
-        <a class="page-claim-action" href="${escapeHtml(geminiEvidenceSearchUrl(task.searchQuery))}" target="_blank" rel="noopener noreferrer">${escapeHtml(tr("sidepanel.dynamic.readingBrief.askGemini"))}</a>
-        <button class="page-claim-action page-claim-copy-question" type="button" data-question="${escapeHtml(task.question)}">${escapeHtml(tr("sidepanel.page.investigation.copy"))}</button>
+        <a class="page-claim-action" href="${escapeHtml(standardEvidenceSearchUrl(task.googleKeywords))}" target="_blank" rel="noopener noreferrer">${escapeHtml(tr("sidepanel.page.investigation.search"))}</a>
+        <a class="page-claim-action" href="${escapeHtml(geminiEvidenceSearchUrl(task.aiModePrompt))}" target="_blank" rel="noopener noreferrer">${escapeHtml(tr("sidepanel.dynamic.readingBrief.askGemini"))}</a>
+        <button class="page-claim-action page-claim-copy-question" type="button" data-question="${escapeHtml(task.intent.question)}">${escapeHtml(tr("sidepanel.page.investigation.copy"))}</button>
         ${sourceAction}
       </div>
     </section>`;

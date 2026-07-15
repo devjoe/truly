@@ -3050,6 +3050,34 @@ function runtimeReloadSafety(result) {
     (expectedFacebookReloads > 0 || reload.skippedReason === "already_fresh");
 }
 
+function claimActionPayloadContract(result) {
+  const links = result.success?.claimInvestigation?.links ?? [];
+  const standard = links.find((link) => /Google 搜尋|Search Google/.test(link.label || ""));
+  const aiMode = links.find((link) => /問 Gemini|Ask Gemini/.test(link.label || ""));
+  try {
+    const standardUrl = standard ? new URL(standard.href) : null;
+    const aiModeUrl = aiMode ? new URL(aiMode.href) : null;
+    const standardQuery = standardUrl?.searchParams.get("q") || "";
+    const aiModePrompt = aiModeUrl?.searchParams.get("q") || "";
+    return {
+      pass: Boolean(
+        standardUrl && aiModeUrl &&
+        /google\.com$/u.test(standardUrl.hostname) &&
+        /google\.com$/u.test(aiModeUrl.hostname) &&
+        standardUrl.searchParams.get("udm") !== "50" &&
+        aiModeUrl.searchParams.get("udm") === "50" &&
+        standardQuery && aiModePrompt && standardQuery !== aiModePrompt &&
+        !/Please verify this claim|請協助查核以下說法/u.test(standardQuery) &&
+        /Evidence needed|需要的證據/u.test(aiModePrompt)
+      ),
+      standardQueryLength: standardQuery.length,
+      aiModePromptLength: aiModePrompt.length,
+    };
+  } catch {
+    return { pass: false, standardQueryLength: 0, aiModePromptLength: 0 };
+  }
+}
+
 function qaMatrixRows(result) {
   const noisyAdvisorRows = result.noisy.ready.advisor?.rows || [];
   const candidateAdvisorRows = result.candidate.ready.advisor?.rows || [];
@@ -3080,6 +3108,7 @@ function qaMatrixRows(result) {
     result.noGrant.errorBlockPresent === false &&
     result.noGrant.emptyBlockPresent === false;
   const restraint = designRestraint(result);
+  const claimActions = claimActionPayloadContract(result);
   return [
     [
       "Runtime reload safety",
@@ -3189,6 +3218,12 @@ function qaMatrixRows(result) {
         "; expanded=" + Boolean(result.success.claimInvestigation?.expanded) +
         "; openedOnPrepare=" + Boolean(result.success.claimInvestigation?.openedTargetOnPrepare) +
         "; links=" + (result.success.claimInvestigation?.links?.length ?? 0),
+    ],
+    [
+      "Claim action payload split",
+      claimActions.pass,
+      "googleKeywords=" + claimActions.standardQueryLength +
+        "; aiModePrompt=" + claimActions.aiModePromptLength,
     ],
     [
       "Responsive Web layout",
@@ -3640,6 +3675,9 @@ function assertUiOnlyAudit(result) {
     (success?.claimInvestigation?.links?.length ?? 0) < 2
   ) {
     errors.push("Claim investigation synthetic action was not available and safely prepared");
+  }
+  if (!claimActionPayloadContract(result).pass) {
+    errors.push("Google Search keywords and AI Mode prompt were not safely separated");
   }
   errors.push(...assertWebFocusContinuity(success ?? {}));
   return errors;

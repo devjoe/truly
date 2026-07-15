@@ -4,7 +4,11 @@ import caseFixture from "../fixtures/claim-investigation/food-recall-case.json";
 import type { InvestigationBundle } from "../../src/lib/claim-investigation-contract";
 import type { InvestigationCaseDraft } from "../../src/lib/claim-investigation-case-planner";
 import {
+  INVESTIGATION_CASE_SEMANTIC_DRAFT_JSON_SCHEMA,
   completeMissingInvestigationDiscoveryCoverage,
+  investigationCaseSemanticPlannerSystemPrompt,
+  investigationCaseSemanticPlannerUserPrompt,
+  materializeSemanticInvestigationCase,
   investigationCasePlannerSystemPrompt,
   investigationCasePlannerUserPrompt,
   materializeInvestigationCase,
@@ -44,6 +48,65 @@ function draft(): InvestigationCaseDraft {
 }
 
 describe("investigation case planner boundary", () => {
+  it("compiles a semantic draft into local IDs, requirements, queries, and stopping conditions", () => {
+    const bundle = plannedBundle();
+    const result = materializeSemanticInvestigationCase({
+      schemaVersion: 3,
+      eventFrame: {
+        description: "Synthetic food recall notice",
+        entities: ["Example Foods"],
+        time: null,
+        place: null,
+      },
+      discoveryContext: {
+        aliases: [],
+        institutions: [],
+        languages: ["en"],
+        jurisdictions: [],
+        timeFrom: null,
+        timeTo: null,
+      },
+      targets: [{
+        purpose: "Locate the primary recall record",
+        questionIndexes: bundle.plan.questions.map((_question, index) => index),
+        documentKinds: ["official_record"],
+        authorityHints: [],
+        acceptedSourceRoles: ["primary"],
+        fallback: false,
+      }],
+    }, bundle, "semantic-1");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.investigationCase.id).toBe("case:semantic-1");
+    expect(result.investigationCase.requirements.map((entry) => entry.questionId))
+      .toEqual(bundle.plan.questions.map((question) => question.id));
+    expect(result.investigationCase.discoveryPlan.targets[0]).toMatchObject({
+      id: "target:semantic-1:1",
+      questionIds: bundle.plan.questions.map((question) => question.id),
+      queries: bundle.plan.questions.flatMap((question) => question.queryCandidates).slice(0, 4),
+    });
+    expect(result.investigationCase.discoveryPlan.stoppingConditions)
+      .toEqual(bundle.plan.stoppingConditions);
+  });
+
+  it("asks the semantic planner only for choices that require model judgment", () => {
+    const schema = JSON.stringify(INVESTIGATION_CASE_SEMANTIC_DRAFT_JSON_SCHEMA);
+    expect(schema).toContain("questionIndexes");
+    expect(schema).not.toContain("questionIds");
+    expect(schema).not.toContain("queries");
+    expect(schema).not.toContain("requirements");
+    expect(schema).not.toContain("stoppingConditions");
+
+    const system = investigationCaseSemanticPlannerSystemPrompt("zh-TW");
+    expect(system).toContain("Local code assigns IDs");
+    expect(system).toContain("Do not write search queries");
+    const user = investigationCaseSemanticPlannerUserPrompt(plannedBundle());
+    expect(user).toContain('"index":0');
+    expect(user).not.toContain("question:product-count");
+    expect(user).not.toContain("queryCandidates");
+  });
+
   it("materializes a model draft into stable case and target IDs", () => {
     const result = materializeInvestigationCase(draft(), plannedBundle(), "sample-1");
     expect(result.ok).toBe(true);

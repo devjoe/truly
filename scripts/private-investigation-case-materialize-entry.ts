@@ -4,8 +4,11 @@ import path from "node:path";
 import process from "node:process";
 
 import type { InvestigationBundle } from "../src/lib/claim-investigation-contract";
-import type { InvestigationCaseDraft } from "../src/lib/claim-investigation-case-planner";
-import { materializeInvestigationCase } from "../src/lib/claim-investigation-case-planner";
+import type {
+  InvestigationCaseDraft,
+  InvestigationCasePlannerDraft,
+} from "../src/lib/claim-investigation-case-planner";
+import { materializeInvestigationCasePlannerDraft } from "../src/lib/claim-investigation-case-planner";
 
 interface PlanRow {
   sampleId: string;
@@ -16,13 +19,13 @@ interface PlanRow {
 interface CaseRow {
   sampleId: string;
   surface: "facebook" | "news";
-  draft?: InvestigationCaseDraft;
+  draft?: InvestigationCasePlannerDraft;
 }
 
 interface OverrideRow {
   sampleId: string;
   reason: string;
-  draft?: InvestigationCaseDraft;
+  draft?: InvestigationCasePlannerDraft;
   appendTargets?: InvestigationCaseDraft["targets"];
 }
 
@@ -80,10 +83,13 @@ const outputRows = plans.map((planRow) => {
   if (!bundle || !caseRow) throw new Error(`${planRow.sampleId}: missing plan or case`);
   const baseDraft = override?.draft ?? caseRow.draft;
   if (!baseDraft) throw new Error(`${planRow.sampleId}: missing draft`);
-  const draft = override?.appendTargets?.length
+  if (baseDraft.schemaVersion === 3 && override?.appendTargets?.length) {
+    throw new Error(`${planRow.sampleId}: legacy appendTargets cannot modify a semantic draft`);
+  }
+  const draft: InvestigationCasePlannerDraft = baseDraft.schemaVersion === 2 && override?.appendTargets?.length
     ? { ...structuredClone(baseDraft), targets: [...baseDraft.targets, ...override.appendTargets] }
     : baseDraft;
-  const materialized = materializeInvestigationCase(draft, bundle, planRow.sampleId);
+  const materialized = materializeInvestigationCasePlannerDraft(draft, bundle, planRow.sampleId);
   if (!materialized.ok) throw new Error(`${planRow.sampleId}: ${materialized.error}: ${materialized.detail ?? ""}`);
   return {
     schemaVersion: 1,

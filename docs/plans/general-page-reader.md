@@ -721,12 +721,18 @@ next candidate gate closed; no fresh holdout should be created yet.
   `claim.c + claim.need` is used only when the model question is missing or
   locally rejected. URLs, domains, search-engine instructions, vague references,
   and likely compound claims fail closed instead of bypassing the guard.
-- The first `開始查核` action only prepares a bounded, session-only task in the
-  current Page or Focus scope. It does not open a tab, send another model
-  request, persist history, or assign a verdict.
-- Evidence search, Gemini, copy, and original-source actions require a second
-  explicit user action. Page navigation, reread, a new analysis key, and a new
-  Focus target clear stale task state.
+- `查核選項` only expands a bounded, session-only intent in the current Page or
+  Focus scope. It does not start the future Truly Agent, open a tab, send
+  another model request, persist history, or assign a verdict.
+- The intent is compiled into two distinct external payloads: concise claim and
+  source keywords for standard Google Search, and a natural-language evidence
+  request for Google AI Mode. Copy and original-source actions remain explicit.
+  Page navigation, reread, a new analysis key, and a new Focus target clear
+  stale task state.
+- The future Truly Agent uses a separate non-runtime semantic Case draft. The
+  model selects document families, source roles, authority hints, and numbered
+  question coverage; local code owns IDs, question linkage, verification
+  requirements, frozen query candidates, and stopping conditions.
 - Overview-only output remains ineligible because its deterministic guard
   removes claims.
 

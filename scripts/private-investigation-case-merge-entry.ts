@@ -3,14 +3,14 @@ import path from "node:path";
 import process from "node:process";
 
 import type { InvestigationBundle } from "../src/lib/claim-investigation-contract";
-import type { InvestigationCaseDraft } from "../src/lib/claim-investigation-case-planner";
+import type { InvestigationCasePlannerDraft } from "../src/lib/claim-investigation-case-planner";
 import {
   completeMissingInvestigationDiscoveryCoverage,
-  materializeInvestigationCase,
+  materializeInvestigationCasePlannerDraft,
 } from "../src/lib/claim-investigation-case-planner";
 
 interface PlanRow { sampleId: string; surface: "facebook" | "news"; materialized?: { ok: boolean; bundle?: InvestigationBundle } }
-interface CaseRow { sampleId: string; surface: "facebook" | "news"; ok: boolean; draft?: InvestigationCaseDraft; materialized?: { ok: boolean } }
+interface CaseRow { sampleId: string; surface: "facebook" | "news"; ok: boolean; draft?: InvestigationCasePlannerDraft; materialized?: { ok: boolean } }
 function option(name: string): string | undefined { const index = process.argv.indexOf(name); return index >= 0 ? process.argv[index + 1] : undefined; }
 function required(name: string): string { const value = option(name); if (!value) throw new Error(`Missing ${name}`); return value; }
 function privatePath(value: string, exists: boolean): string { const resolved = path.resolve(value); if (!resolved.includes(`${path.sep}private-data${path.sep}`)) throw new Error("path must stay under private-data"); if (exists && !fs.existsSync(resolved)) throw new Error(`missing ${resolved}`); return resolved; }
@@ -29,12 +29,12 @@ const output = plans.map((plan) => {
   const preferred = primary.get(plan.sampleId);
   const source = preferred?.ok && preferred.materialized?.ok ? preferred : fallback.get(plan.sampleId);
   if (!source?.draft || !plan.materialized?.bundle) throw new Error(`${plan.sampleId}: no valid case draft`);
-  const firstMaterialized = materializeInvestigationCase(source.draft, plan.materialized.bundle, plan.sampleId);
-  const repairedDraft = !firstMaterialized.ok
+  const firstMaterialized = materializeInvestigationCasePlannerDraft(source.draft, plan.materialized.bundle, plan.sampleId);
+  const repairedDraft = source.draft.schemaVersion === 2 && !firstMaterialized.ok
     ? completeMissingInvestigationDiscoveryCoverage(source.draft, plan.materialized.bundle)
     : undefined;
   const materialized = repairedDraft
-    ? materializeInvestigationCase(repairedDraft, plan.materialized.bundle, plan.sampleId)
+    ? materializeInvestigationCasePlannerDraft(repairedDraft, plan.materialized.bundle, plan.sampleId)
     : firstMaterialized;
   if (!materialized.ok) throw new Error(`${plan.sampleId}: fallback draft invalid: ${materialized.detail ?? materialized.error}`);
   if (repairedDraft) localRepairCount += 1;

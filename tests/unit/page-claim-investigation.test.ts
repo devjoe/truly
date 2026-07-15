@@ -33,15 +33,23 @@ describe("page claim investigation contract", () => {
     });
 
     expect(task).toMatchObject({
-      version: 3,
+      version: 4,
       scope: "page",
-      question: "Is it true that Example Agency reported 232 affected products on July 8",
+      intent: {
+        exactClaim: "Example Agency reported 232 affected products on July 8.",
+        evidenceNeed: "The agency announcement and product list.",
+        question: "Is it true that Example Agency reported 232 affected products on July 8",
+      },
       sourceUrl: "https://example.test/report",
     });
-    expect(task?.searchQuery).toContain("Synthetic public notice");
-    expect(task?.searchQuery).toContain("Example News");
-    expect(standardEvidenceSearchUrl(task!.searchQuery)).not.toContain("udm=50");
-    expect(geminiEvidenceSearchUrl(task!.searchQuery)).toContain("udm=50");
+    expect(task?.googleKeywords).toContain("Synthetic public notice");
+    expect(task?.googleKeywords).not.toContain("Is “Synthetic public notice");
+    expect(task?.aiModePrompt).toContain("Synthetic public notice");
+    expect(task?.aiModePrompt).toContain("The agency announcement and product list");
+    expect(task?.aiModePrompt).not.toContain("..");
+    expect(task?.aiModePrompt).not.toBe(task?.googleKeywords);
+    expect(standardEvidenceSearchUrl(task!.googleKeywords)).not.toContain("udm=50");
+    expect(geminiEvidenceSearchUrl(task!.aiModePrompt)).toContain("udm=50");
   });
 
   it("requires typed consequence policy before exposing an investigation action", () => {
@@ -121,7 +129,7 @@ describe("page claim investigation contract", () => {
       claimIndex: 0,
       claim,
       groundingText: claim.c,
-    })?.question).toContain("專家分析估計");
+    })?.intent.question).toContain("專家分析估計");
   });
 
   it("rejects missing or inconsistent typed attribution", () => {
@@ -171,7 +179,7 @@ describe("page claim investigation contract", () => {
       claimIndex: 0,
       claim,
       groundingText: claim.c,
-    })?.question).toContain("According to Example Agency");
+    })?.intent.question).toContain("According to Example Agency");
   });
 
   it("requires typed attribution when an according-to source follows the atom", () => {
@@ -391,8 +399,8 @@ describe("page claim investigation contract", () => {
       },
       groundingText: chargedClaim.c,
     });
-    expect(recovered?.question).toContain("Joseph Horner 被控二級謀殺罪");
-    expect(recovered?.question).not.toContain("法院");
+    expect(recovered?.intent.question).toContain("Joseph Horner 被控二級謀殺罪");
+    expect(recovered?.intent.question).not.toContain("法院");
 
     expect(buildPageClaimInvestigationTask({
       analysisKey: "analysis:key",
