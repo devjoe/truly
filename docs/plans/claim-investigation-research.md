@@ -576,6 +576,422 @@ evidence. Search snippets are explicitly `discovery_only` and cannot become an
 Evidence Artifact or support a finding. This is a contract and fixture boundary;
 the Chrome Extension does not execute the graph yet.
 
+#### Case-level discovery correction (2026-07-15)
+
+The adaptive pilot exposed a category error in the graph above: an atomic
+verification question is the unit used to judge evidence, but it is often too
+narrow to be the unit used to discover a document. Searching each atomic
+question independently produced pages with lexical overlap while missing the
+announcement, record, dataset, ruling, event result, or product document that
+could answer several sibling questions together.
+
+The development-only architecture now separates:
+
+1. `InvestigationCase`: the shared event frame and question set;
+2. `InvestigationDiscoveryPlan`: document-family targets, authority hints, and
+   a query portfolio; one target may cover multiple questions;
+3. `InvestigationVerificationRequirement`: the actor, predicate, object,
+   attribution, time, place, and quantity facets an answering passage needs;
+4. `EvidencePassageAssessment`: a fetched excerpt plus an exact answer span and
+   covered/missing facets;
+5. `EvidenceSufficiency`: conservative aggregation after shared-origin
+   deduplication, with no finding or truth verdict.
+
+The case route searches once per document target, fetches a selected document
+once, and only then fans out into per-question passage extraction and
+sufficiency assessment. A fallback target cannot be the only path for a
+question. Verdict-seeking queries, unresolved relative-date placeholders,
+private-record requests, and generic use of legal rulings fail closed.
+
+`claim_origin` is permitted only when a question asks what the source said,
+attributed, or characterized. It can establish the source wording but cannot
+independently establish the underlying real-world proposition.
+
+The first 12-row development audit used 6 Facebook and 6 news subjects. Eight
+model-generated case plans passed the current local guards; four needed human
+overrides and were preserved as reviewed private fixtures. A discovery-only
+search of the first non-fallback target found an evidence-bearing document
+candidate for 9/12 cases and a preferred primary-document candidate for 6/12.
+Three cases had only a secondary-document candidate and three cases had no
+useful result. These are search-stage observations, not answering-passage or
+sufficiency results, and are not directly comparable to the previous
+full-document passage-candidate metric. Raw inputs, queries, URLs, and row-level
+decisions remain in the private evaluation control plane.
+
+This result authorizes a bounded full-document replay over the reviewed
+development fixtures. It does not authorize a product action, Extension UI,
+new holdout, verdict, or persistence.
+
+#### Bounded full-document replay (2026-07-15)
+
+The 12 reviewed development cases were replayed with nine manually selected
+document candidates. Eight documents were fetched and one secondary legal
+database candidate rejected the Node audit client with HTTP 403. Fetching once
+per document target produced nine passage candidates across six cases.
+
+Manual facet-level assessment admitted only two passages as qualifying evidence:
+one primary public-health rule and one primary agricultural data passage. None
+of the 12 cases reached `sufficient`, because every case still had unanswered
+sibling questions or an unmet source requirement. Six cases were
+`insufficient`; six were `not_yet_verifiable`. Search snippets admitted as
+evidence and truth verdicts produced both remained zero.
+
+The replay confirms that document discovery and atomic verification must remain
+separate. It also exposes the next retrieval bottleneck: a fetched official
+document can contain the requested fact while a lexical passage selector picks
+a nearby generic sentence instead. Improving passage proposal should therefore
+use the question's required facets and a bounded local context window before
+any model-based evidence assessment. It must not relax sufficiency guards or
+convert search snippets into evidence.
+
+A bounded v2 passage proposal added a hard numeric-signal requirement for
+quantity questions and a limited neighboring-paragraph window. On the same
+documents it increased passage candidates from 9 to 11 and qualifying evidence
+from 2 to 3, recovering the official postal-service quantity passage. The case
+states did not become more optimistic: 6 remained `insufficient`, 6 remained
+`not_yet_verifiable`, and 0 were `sufficient`. A secondary Dynaudio passage that
+answered one question still failed the primary-source requirement, while a
+different-arrest timeline passage remained incomplete after timeline and
+quantity questions were locally required to bind actor, predicate, object, and
+time or quantity. This is the intended separation between recall improvement
+and evidence admission.
+
+#### Candidate-depth and typed-obligation replay (2026-07-15)
+
+Round 1 tested ranked candidate depth rather than immediately shipping an
+adaptive scheduler. The same 12 reviewed development cases (6 Facebook and 6
+news) received 49 human-reviewed public-document candidates, capped at three
+candidates per target and twelve per case. Forty-three documents were fetched;
+the explicit failures were four PDFs that exceeded or lacked the bounded PDF
+capability and two access-denied pages. Search-result snippets remained outside
+the evidence ledger.
+
+The current-code replay produced 62 passage candidates. Complete manual review
+admitted 15 evidence artifacts across 5/12 cases, compared with 3 artifacts
+across 3/12 in v2. Rank-one documents contributed eight qualifying artifacts,
+rank two contributed five, and rank three contributed two. No case depended
+exclusively on rank-two or rank-three evidence. Deeper candidates therefore
+improved corroboration but did not expand case coverage; broader target and
+document-family discovery mattered more than a deeper generic scheduler.
+
+The conservative `EvidenceSufficiency` state remained non-releaseable: 11 cases
+were `insufficient`, one was `not_yet_verifiable`, and none was `sufficient`.
+The parallel typed-obligation prototype marked all 12 cases `collecting`; only
+10/54 mandatory obligations were satisfied. Remaining blockers were 14 missing
+answering-evidence obligations, 19 independent-origin shortfalls, and 12
+counterevidence searches without a coverage receipt. A receipt can close a
+bounded search obligation but cannot create evidence, prove absence, or produce
+a verdict.
+
+The replay also hardened the audit infrastructure before scoring: origin
+fallback now uses confirmed origin groups or publisher/domain rather than
+content fingerprints; subset cases create obligations only for their own
+questions; acquisition capability failures remain visible in progress;
+response bodies stop at the byte bound; reused URLs survive case-budget
+exhaustion; and review parts must cover the exact sample and artifact set.
+
+Round 1 did not clear the development gate. The next round must start from the
+observed blockers, not relax evidence admission or reuse a holdout. Its design
+questions are whether to repair temporally invalid investigation questions,
+which PDF or rendered-document capability is justified, how bounded
+counterevidence search earns an auditable receipt, and when a canonical primary
+record should replace rather than multiply a generic independent-origin
+minimum.
+
+#### Proof responsibility and coverage replay (2026-07-15)
+
+Round 2 replaced the broad per-case risk profile with record-scoped proof
+responsibilities. Canonical records may now answer only record-content or
+record-existence questions and only when the source is primary; they do not
+silently waive unrelated independent-origin requirements. A bounded coverage
+receipt records hypotheses, source families, languages, time scope, aliases,
+attempted documents, actions, and blind spots. A partial receipt remains
+pending and can never create evidence or prove absence.
+
+The private evaluator also gained a text-layer-only PDF adapter with explicit
+page, character, byte, and time bounds. It does not render pages or run OCR.
+Across the same 12 development cases, 49 documents produced 64 manually
+reviewed passage artifacts, including four PDF passages. Fifteen artifacts
+qualified across five cases. Mandatory obligations improved from 10/54 to
+15/45 because proof responsibilities removed invalid generic minima and six
+bounded coverage receipts were complete. The remaining blockers were 14
+missing-answer obligations, 11 origin shortfalls, and six incomplete searches.
+All 12 cases remained `collecting`; no finding, verdict, product action, or
+holdout authorization was produced.
+
+#### Immutable block-pointer recovery replay (2026-07-15)
+
+Round 3 tested whether gx10 could recover answering text missed by the lexical
+passage selector without allowing the model to quote, rewrite, or admit
+evidence. Each fetched document was split into locally fingerprinted contiguous
+blocks. The model could only return a question ID, a bounded block range,
+covered facets, or an abstention. The evaluator reconstructed the exact source
+text locally and retained human admission as a separate step.
+
+The first transport attempt exposed an unsupported `uniqueItems` grammar key;
+the transport schema removed that redundant keyword while the local guard
+continued rejecting duplicate facets. A second issue came from constrained
+grammars filling candidate-only fields on abstentions. The parser now discards
+those fields when `status=abstain`; question-ID mismatches, stale fingerprints,
+invalid block windows, invented facets, and candidate pointer errors still fail
+closed.
+
+On 33 document/question groups, 27 completed, four failed the pointer contract,
+and two documents exceeded the bounded input. The model proposed one exact
+span and abstained on 34 question/document pairs. Human review found the span
+relevant to an identity question, but its independent-secondary source could
+not satisfy the question's primary-source responsibility. Mandatory obligation
+rescue was therefore zero. The round preserved all safety invariants but did
+not clear the causal development gate. The main bottleneck is no longer finding
+missed text inside the current documents; it is acquiring answerable source
+families under fair, auditable budgets.
+
+#### Equal-budget source-first paired replay (2026-07-15)
+
+Round 4 compared the existing atomic-query route with a source-first route on
+24 unresolved answer or origin obligations from the same private development
+cases. Both routes were frozen before search and received at most two queries
+and three opened documents per trial. Search snippets remained discovery-only.
+Candidate passages were stripped of route labels and reviewed independently by
+two reviewers before route outcomes were compiled.
+
+The replay produced 48 scored route executions. After question-scoped review,
+the two routes shared three rescued answer obligations; neither route had an
+exclusive rescued obligation. Twenty-one trials remained unresolved. No origin
+shortfall was rescued. The source-first candidate therefore had zero
+candidate-preferred cases and did not establish a causal gain over the atomic
+baseline.
+
+The audit compiler also found three contract problems that the pre-review
+aggregate had hidden:
+
+- one route proposal had no corresponding blind-review packet;
+- two candidate occurrences were reused for a different question than the one
+  independently reviewed;
+- multi-passage and origin claims had only passage-level review, not a blind
+  review of the complete proof obligation.
+
+Two trials contained candidate-admission disagreement, affecting two cases,
+and one case had an explicitly excluded post-budget query deviation. The frozen
+development gate result was therefore `safetyPass=true`,
+`evidenceUtilityPass=false`, `processCapabilityPass=false`, and `pass=false`.
+The three accepted rescues covered Facebook and news, but only the
+`missing_answering_evidence` blocker; the gate requires multiple blocker types,
+at least two candidate-preferred cases, and zero reviewer disagreement.
+
+This round demonstrates bounded retrieval capability and confirms that
+source-first discovery can reach useful documents. It does not establish an
+incremental route advantage. The next round must not add more generic search
+depth. It must decide how a question-scoped evidence set, shared-origin
+lineage, temporal entailment, and review adjudication become one inspectable
+proof object without relaxing evidence admission.
+
+#### Proof-certificate and proof-slot acquisition replay (2026-07-15)
+
+Round 5A first isolated the proof compiler from retrieval. Five real private
+development fixtures covered Facebook and news, answer and independent-origin
+proofs, one shared-origin negative, and five witness-withholding checks. All
+expected admissions and rejections matched: false closure and false rejection
+were both zero. This contract-only gate authorized the matched acquisition
+experiment, not development promotion, holdout use, product UI, or a verdict.
+
+Round 5B then froze six unresolved obligations before search: three Facebook
+and three news trials, including the only independent-origin target. Generic
+atomic search and proof-slot source-family acquisition received equal limits of
+two queries and three opened documents per route. The audit retained exact
+spans, measured document access within the frozen byte/time ceilings, and used
+two route-blind reviewers. The reviewers agreed on all five submitted
+certificate decisions; incomplete but relevant official text stayed rejected.
+
+The causal acquisition-only analysis gave both arms the same proof-certificate
+compiler. It found one candidate-only rescue, one candidate-preferred case, one
+rescued blocker type, and improvement on news only. A second diagnostic compared
+the older passage-only stack with the certificate-plus-targeted stack. It found
+two rescues and two candidate-preferred cases, but both improvements were still
+news answer obligations; there was no Facebook or independent-origin rescue.
+The diagnostic is not promotion-eligible because it combines compiler and
+acquisition changes.
+
+Both analyses preserved the safety and process gates: no search snippet became
+evidence, no verdict was produced, false closures and regressions were zero,
+and reviewer disagreement was zero. Both failed the unchanged evidence-utility
+gate. Round 5 therefore does not authorize a product action, a release
+candidate, or a new holdout. It establishes two narrower results: a complete
+proof may legitimately require multiple exact spans from one origin, and a
+source-family query can find a canonical record missed by generic search. It
+does not show that proof-slot search reliably handles Facebook claims or
+independent-origin requirements.
+
+The next design phase should treat a search query as a document-discovery
+instrument rather than a serialized claim. It should model discovery context
+(subject, event, date/place, source family, language and aliases) separately
+from proof obligations, and explicitly plan lineage-diverse origin acquisition.
+That work requires a fresh development design and gate; it must not retune this
+frozen Round 5 result or open the holdout.
+
+#### Investigation Constitution and Discovery Planner v2 (2026-07-15)
+
+The next development slice formalized the discovery/proof boundary in
+ADR 0002. `InvestigationCase` v2 now carries retrieval-only discovery context;
+proof obligations compile into conditional canonical, contextual, or
+lineage-diverse route families; every route has a bounded budget and a stopping
+receipt that is permanently non-evidentiary. Source lineage is explicit, and
+Proof Compiler v2 permits multiple exact spans from one lineage to jointly
+cover a proposition while requiring every counted lineage to independently
+cover all required facets. Syndicated or derived artifacts cannot increase the
+origin count.
+
+A Grill-based architecture review rejected a universal three-route template.
+The accepted policy is obligation-driven: canonical routes appear only for
+canonical-record responsibilities, lineage-diverse routes only for independent
+origin responsibilities, and contextual routes only when required or declared
+as a genuine fallback. Search completion never satisfies a proof obligation.
+
+The development cohort and paired-audit rule were preregistered before Planner
+v2 output was inspected. All 30 private dev rows were accounted for; 14 had no
+materialized checkworthy claim, and all 16 applicable rows produced valid
+cases and route plans. Five bounded iterations corrected a lexical false
+positive around Google as a product subject, removed ungrounded discovery
+context, deduplicated obligation routes, aligned canonical responsibilities,
+and made fallback and lineage paths explicit. On the frozen final iteration,
+both independent reviewers accepted discovery-context grounding for all 16
+cases. Route fit passed 13/16 and 14/16 respectively; two cases were rejected by
+both reviewers, so planner semantics are improved but not yet release quality.
+No unsafe action, evidence admission, verdict, product action, holdout use, or
+persistent content history was added.
+
+The preregistered matched audit then used 12 development cases, 23 answer or
+origin obligations, 46 equal-budget route executions, one public-search query
+and at most two opened documents per arm. It considered 276 search candidates,
+fetched 84 documents, and extracted 63 exact passage candidates. The atomic
+baseline produced 35 passage candidates and the SourceFamilyPlan candidate 28.
+At the raw-passage level, 16 trials had candidates in both arms, four were
+baseline-only, one candidate-only, and two in neither arm. After applying each
+obligation's frozen minimum passage threshold (one for answering evidence and
+the declared independent-origin minimum for origin trials), the conservative
+proof-admission ceiling was 14 both, five baseline-only, two candidate-only,
+and two neither. Search snippets remained excluded.
+
+The frozen gate required at least three candidate-only rescues. Because proof
+review can reject a passage but cannot create a route-only rescue where no
+exact passage exists, the candidate-only proof ceiling was two: one answering
+trial and one independent-origin trial. The gate was
+therefore mathematically unreachable before evidence admission. The evaluator
+stopped without sending the 63 excerpts to another model, issuing a proof
+certificate, running a route-preference review, or producing a verdict. This is
+a failed candidate, not an inconclusive proof review: the obligation-driven
+contract is sound, but the current one-query SourceFamilyPlan does not beat the
+atomic baseline on this frozen real-data cohort.
+
+The immutable matched-search log was upgraded locally, without another public
+search request, into 46 typed route receipts. Every receipt is validated against
+its acquisition route, records non-exhausted candidates as a budget stop rather
+than false family exhaustion, and fixes `evidenceProduced` and
+`verdictProduced` to false. The final two-reviewer Planner v2 decisions are also
+retained in a gitignored per-row ledger bound to the planner-output hash.
+
+The next candidate must not retune these 30 rows or open the holdout. It should
+focus on the two jointly rejected planner cases and on acquisition recall:
+question-specific document-family selection, authoritative-site or registry
+locators before open-web search, and lineage-diverse acquisition that finds a
+second origin rather than appending generic independent-report wording. A new
+development cohort or preregistered forward slice is required before another
+causal comparison.
+
+#### Source-aware Acquisition Candidate v1 (2026-07-15)
+
+A new forward-development slice was preregistered before candidate output was
+inspected. It excludes the v1 development rows and both existing holdouts. The
+remaining private corpus supplied 16 new Facebook rows but no unused news rows,
+so cross-surface acquisition remains explicitly unevaluated. The gx10 run used
+the declared `qwen3.6-35b` model on those 16 Facebook originals; raw inputs,
+model outputs and per-row review stayed under gitignored `private-data`, while
+only anonymous aggregates were retained.
+
+All 16 rows were accounted for: 12 had no materialized checkworthy claim and
+four produced valid Investigation Case v2 plans. Three cases materialized
+directly; one required an explicit local coverage repair that reused only the
+frozen verification question and source-role contract. The repair exposed and
+fixed a contract mismatch: the upstream `fact_check` role now maps to
+`independent_secondary` at the narrower discovery-draft boundary instead of
+leaking an unsupported enum or widening that boundary.
+
+The candidate compiles every mandatory proof obligation into a distinct source
+responsibility: canonical record, first-party answer, independent
+corroboration or counterevidence discovery. A reviewed-locator catalog is the
+only mechanism that may select a registry, authoritative domain index or direct
+URL. Exact authority, source-family, document-kind, language and jurisdiction
+matching is required. Missing coverage remains an explicit open-web fallback;
+model output cannot create a trusted locator.
+
+Human review found two important design errors before the final replay. First,
+a primary press release or product page had been receiving canonical-record
+entitlement merely because the question asked for an identity, date or number.
+The conservative compiler now grants canonical status only when a primary
+target explicitly asks for an `official_record` or `ruling`; ordinary company
+material produces a first-party answer plus an independent-corroboration
+responsibility. Second, independent routes could inherit first-party discovery
+terms such as `official announcement` or `press release`. A narrow local guard
+now removes those source-intent terms only for independent corroboration while
+preserving grounded entities, events, products, numbers and dates.
+
+The final private planning replay had four planned rows, zero invalid rows and
+23 responsibility routes: 11 first-party answers, 11 independent-corroboration
+routes and one counterevidence route. Human review accepted responsibility
+coverage and document-discovery query alignment for all four planned rows.
+None of the 11 independent routes retained first-party discovery intent, and
+no trusted locator was invented. Because the catalog was intentionally empty,
+all 23 routes remained explicit open-web fallbacks. No private-derived query
+was sent to a public search service.
+
+This is a positive architecture and planning result, not evidence of retrieval
+lift. Synthetic catalog fixtures confirm that a reviewed registry can serve a
+canonical responsibility while independent-origin discovery remains separate,
+but synthetic execution cannot measure real-world recall. No evidence, proof
+certificate, verdict, product action or holdout was produced. The next eligible
+experiment requires a human-reviewed locator catalog and a new source-covered
+development slice, including news, followed by a matched acquisition audit
+against the frozen baseline. Until then the UI remains disabled.
+
+#### Source-aware News Local Snapshot v1 (2026-07-15)
+
+A second forward-development slice was preregistered after collecting 15 fresh
+news pages through background CDP targets; 14 were new and 12 were selected by
+the frozen stable-ranking rule. The reviewed locator catalog and its query-free
+official-site snapshot were frozen first. Raw pages, catalog records, model
+outputs, queries, documents and per-trial reviews remained gitignored; only an
+anonymous aggregate report was retained in the private evaluation repository.
+
+The investigation-plan contract exposed one real schema drift: `timeCutoff`
+allowed any short string in constrained JSON while the local parser required a
+parseable date. The schema and prompt now require `YYYY-MM-DD`. An atomic-only
+development retry was also added without weakening grounding or compound-claim
+guards. Final accounting was 11 valid claim plans from 12 rows and 10 valid
+cases from 11 plans; the preregistered zero-invalid planning gate therefore did
+not pass.
+
+The reviewed catalog matched five responsibilities across three cases. The
+paired audit used the same frozen 23-document snapshot for both arms, one local
+query and at most two documents per arm. Baseline ranked the whole snapshot;
+candidate ranked only documents bound to the matched catalog entry. No query
+was sent externally, and neither arm produced evidence or a verdict.
+
+Automated passage ranking proposed eight candidates per arm, but single-reviewer
+question-answerability review admitted none. Generic ranking produced unrelated
+numeric matches; source-aware routing found the intended authority but only a
+shallow index or homepage, not an answer-bearing announcement or record. The
+result was zero candidate-only answer rescues and zero false closures. Both the
+planning gate and matched-acquisition gate remain failed; no holdout was opened
+and no product action is authorized.
+
+The next development slice should preserve the reviewed authority boundary but
+replace shallow seed-page snapshots with bounded, authority-local document
+discovery: dated announcement lists, record detail pages, datasets and PDFs.
+The experiment must continue to freeze acquisition infrastructure before model
+output, compare equal budgets, review exact passages rather than snippets, and
+keep absence claims unproven unless the searched record scope is demonstrably
+exhaustive.
+
 ### C. Sufficiency and UX audit
 
 Using the collected development evidence, test whether the system correctly

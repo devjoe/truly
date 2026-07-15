@@ -1,3 +1,5 @@
+import type { InvestigationVerificationFacet } from "./claim-investigation-case";
+
 export interface ExactPassageSelectionInput {
   documentText: string;
   question: string;
@@ -5,6 +7,7 @@ export interface ExactPassageSelectionInput {
   normalizedClaim: string;
   minimumScore?: number;
   allowTwoCharacterSignals?: boolean;
+  requiredFacets?: InvestigationVerificationFacet[];
 }
 
 export interface ExactPassageSelection {
@@ -57,8 +60,17 @@ function segmentsFrom(value: string): string[] {
       if (window.length >= 36) segments.push(window.slice(0, 900));
     }
   }
-  return [...new Set(segments)];
+  const boundedWindows = segments.flatMap((segment, index) => {
+    if (segment.length > 520) return [segment];
+    const neighbors = [segments[index - 1], segment, segments[index + 1]].filter(Boolean);
+    const window = neighbors.join(" ");
+    return window.length <= 1100 && window !== segment ? [segment, window] : [segment];
+  });
+  return [...new Set(boundedWindows)];
 }
+
+const QUANTITY_SIGNAL_RE = /(?:\d+(?:[.,]\d+)*(?:\s*%|\s*(?:million|billion|thousand|hundred|萬|万|億|亿|千|百|項|项|件|人|年|倍))?)|(?:百分之|約|约|超過|超过|近|將近|将近)\s*[零一二三四五六七八九十百千萬万億亿兩两]+/iu;
+const TIME_SIGNAL_RE = /(?:\b(?:19|20)\d{2}\b|\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\b|\b(?:spring|summer|fall|autumn|winter)\b|\d{1,2}[月日]|(?:去年|今年|明年|上月|本月|近日|近期))/iu;
 
 /**
  * Development retrieval helper. It ranks fetched document passages only; it
@@ -75,16 +87,19 @@ export function selectExactInvestigationPassage(input: ExactPassageSelectionInpu
   let best: ExactPassageSelection | undefined;
   for (const segment of segmentsFrom(input.documentText)) {
     const haystack = normalized(segment);
+    if (input.requiredFacets?.includes("quantity") && !QUANTITY_SIGNAL_RE.test(haystack)) continue;
     const matchedTerms = terms.filter((term) => haystack.includes(term));
     const distinctSignals = matchedTerms.filter((term) =>
       /^\d/u.test(term) || term.length >= 3 || (input.allowTwoCharacterSignals && term.length === 2)
     );
     if (new Set(distinctSignals).size < 2) continue;
+    const facetSignalBonus = (input.requiredFacets?.includes("quantity") && QUANTITY_SIGNAL_RE.test(haystack) ? 8 : 0) +
+      (input.requiredFacets?.includes("time") && TIME_SIGNAL_RE.test(haystack) ? 4 : 0);
     const score = matchedTerms.reduce((total, term) => {
       if (/^\d/u.test(term)) return total + 6;
       if (/^[a-z]/u.test(term)) return total + Math.min(5, term.length / 2);
       return total + (term.length > 2 ? 3 : 1);
-    }, 0) + Math.min(12, 240 / Math.max(40, segment.length));
+    }, 0) + facetSignalBonus + Math.min(12, 240 / Math.max(40, segment.length));
     if (score < (input.minimumScore ?? 10)) continue;
     if (!best || score > best.score || (score === best.score && segment.length < best.exactExcerpt.length)) {
       best = {

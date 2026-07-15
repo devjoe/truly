@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 
 import {
   INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA,
+  investigationPlannerRepairPrompt,
   investigationPlannerSystemPrompt,
   investigationPlannerUserPrompt,
   materializeHumanPreselectedAtomicPlan,
@@ -64,7 +65,9 @@ const concurrency = Math.max(1, Math.min(4, Number(option("--concurrency", "2"))
 const timeoutMs = Math.max(1000, Math.min(180000, Number(option("--timeout-ms", "90000")) || 90000));
 const maxTokens = Math.max(500, Math.min(3000, Number(option("--max-tokens", "1800")) || 1800));
 if (split !== "dev") throw new Error("Investigation-plan iteration may use only --split dev");
-if (datasetVersion !== "gpr-investigation-plan-v1") throw new Error("Unexpected --dataset-version");
+if (!new Set(["gpr-investigation-plan-v1", "gpr-source-aware-forward-dev-v1", "gpr-source-aware-news-forward-dev-v1"]).has(datasetVersion)) {
+  throw new Error("Unexpected --dataset-version");
+}
 if (!/^https?:\/\//.test(endpoint)) throw new Error("--endpoint must be HTTP(S)");
 if (responseFormat !== "json_object" && responseFormat !== "json_schema") {
   throw new Error("--response-format must be json_object or json_schema");
@@ -75,11 +78,14 @@ if (thinking !== "disabled" && thinking !== "default") {
 if (selectionPolicy !== "auto" && selectionPolicy !== "human_preselected") {
   throw new Error("--selection-policy must be auto or human_preselected");
 }
-if (repairMode !== "none" && repairMode !== "grounding_once") {
-  throw new Error("--repair-mode must be none or grounding_once");
+if (repairMode !== "none" && repairMode !== "grounding_once" && repairMode !== "atomic_once") {
+  throw new Error("--repair-mode must be none, grounding_once, or atomic_once");
 }
 if (repairMode === "grounding_once" && selectionPolicy !== "human_preselected") {
   throw new Error("grounding_once is limited to human_preselected development runs");
+}
+if (repairMode === "atomic_once" && selectionPolicy !== "auto") {
+  throw new Error("atomic_once is limited to auto-selected development runs");
 }
 
 const paths = assertPrivateEvalPaths(inputPath, outputPath, metaOutputPath, process.cwd());
@@ -155,8 +161,9 @@ async function requestAttempt(row: InputRow, text: string, outputLang: "zh-TW" |
     ? preselectedInvestigationPlannerUserPrompt(row.preselectedClaim ?? "", text)
     : investigationPlannerUserPrompt(text);
   const user = repairError
-    ? `The previous plan failed deterministic local validation with ${repairError}. Return a new full JSON object. Keep eligible=true and the same APPROVED_CLAIM. proposition.originalSpan must be an exact contiguous substring of the subject originalSpan; do not change claim selection or add facts.\n\n${baseUser}`
+    ? investigationPlannerRepairPrompt(repairError, baseUser, selectionPolicy)
     : baseUser;
+  if (!user) throw new Error(`Unsupported repair request: ${repairError}`);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   let response: Response;
@@ -218,8 +225,9 @@ async function evaluateRow(row: InputRow) {
     const firstError = first.materialized && !first.materialized.ok
       ? first.materialized.error
       : first.error;
-    const canRepair = repairMode === "grounding_once" &&
-      (firstError === "ungrounded_span" || firstError === "ungrounded_proposition");
+    const canRepair = (repairMode === "grounding_once" &&
+      (firstError === "ungrounded_span" || firstError === "ungrounded_proposition")) ||
+      (repairMode === "atomic_once" && firstError === "compound_proposition");
     const repaired = canRepair ? await requestAttempt(row, text, outputLang, firstError) : first;
     const repairedError = repaired.materialized && !repaired.materialized.ok
       ? repaired.materialized.error

@@ -211,7 +211,13 @@ export const INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA = {
                 },
               },
             },
-            timeCutoff: { type: ["string", "null"], maxLength: 40 },
+            timeCutoff: {
+              anyOf: [
+                { type: "null" },
+                { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+              ],
+              description: "Latest allowed evidence date as YYYY-MM-DD, or null when the source gives no reliable cutoff.",
+            },
             minimumIndependentSources: { type: "integer", minimum: 0, maximum: 5 },
             stoppingConditions: {
               type: "array",
@@ -496,7 +502,7 @@ Select at most one consequential, externally verifiable claim. A claim must affe
 If abstaining, set eligible=false, choose one abstentionReason, and set subject and plan to null.
 
 If eligible:
-- Select exactly one atomic proposition. If the source sentence combines an event with a cause, consequence, evaluation, second event, or separately verifiable quantity, select only one clause that can be copied safely; otherwise abstain with unsafe_to_plan.
+- Select exactly one atomic proposition. If the source sentence combines an event with a cause, consequence, evaluation, second event, or separately verifiable quantity, select only one clause that can be copied safely; otherwise abstain with unsafe_to_plan. A comma must not introduce a second independently verifiable event into proposition.normalizedText.
 - originalSpan must be copied verbatim from the supplied text and contain only that selected proposition plus attribution required to interpret its modality.
 - normalizedClaim may clarify references but may not add facts.
 - Preserve attribution and modality as subject attributes. Use statement only when the actor directly said or announced something; report when a document or publisher reports a past or current fact; estimate only for an explicitly approximate quantity; allegation only for an explicit accusation or disputed charge; forecast only for a future prediction; and analysis for an interpretation. Never use allegation merely because a claim is unverified, and never use forecast for historical or current data. A report, estimate, allegation, forecast, or analysis is not an established fact. Time, place, and quantity are proposition attributes, not additional propositions.
@@ -506,12 +512,29 @@ If eligible:
 - Questions and queryCandidates may use only public evidence. Never request private medical, financial, employment, account, or other non-public personal records.
 - queryCandidates are search data only. Do not include URLs, Markdown, or operational instructions such as search Google for. A search-company or product name is allowed only when it is an entity in the selected proposition.
 - Prefer primary sources for official acts, datasets, laws, health, safety, money, and numeric claims. Existing fact checks are a discovery lane, not primary evidence.
-- timeCutoff is the latest evidence date allowed by the claim context, or null when the text gives no reliable cutoff.
+- timeCutoff is the latest evidence date allowed by the claim context, written as an ISO calendar date in YYYY-MM-DD form, or null when the text gives no reliable cutoff.
 - stoppingConditions must describe what evidence is still required; do not assign a verdict.`;
 }
 
 export function investigationPlannerUserPrompt(text: string): string {
   return `Prepare an investigation plan using only the source text below.\n\n<SOURCE_TEXT>\n${text}\n</SOURCE_TEXT>`;
+}
+
+/** Development-runner retry instruction. It narrows representation after a
+ * deterministic rejection; it never bypasses grounding or compound guards. */
+export function investigationPlannerRepairPrompt(
+  error: string,
+  baseUserPrompt: string,
+  selectionPolicy: "auto" | "human_preselected",
+): string | undefined {
+  if (error === "compound_proposition" && selectionPolicy === "auto") {
+    return `The previous plan failed deterministic local validation because proposition.normalizedText combined more than one independently verifiable event. Return a new full JSON object. Re-select one shorter atomic proposition whose proposition.originalSpan is an exact contiguous substring of subject.originalSpan and SOURCE_TEXT. A comma must not introduce another event. Do not add facts, join clauses, or weaken attribution. If no safe exact atomic span exists, abstain with unsafe_to_plan.\n\n${baseUserPrompt}`;
+  }
+  if ((error === "ungrounded_span" || error === "ungrounded_proposition") &&
+    selectionPolicy === "human_preselected") {
+    return `The previous plan failed deterministic local validation with ${error}. Return a new full JSON object. Keep eligible=true and the same APPROVED_CLAIM. proposition.originalSpan must be an exact contiguous substring of the subject originalSpan; do not change claim selection or add facts.\n\n${baseUserPrompt}`;
+  }
+  return undefined;
 }
 
 /** Development-only prompt for route evaluation after an independent human

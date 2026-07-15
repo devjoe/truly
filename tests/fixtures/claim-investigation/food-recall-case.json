@@ -1,0 +1,76 @@
+{
+  "version": 2,
+  "id": "case:synthetic-food-recall",
+  "subjectId": "subject:synthetic-food-recall",
+  "eventFrame": {
+    "description": "Example Agency published a synthetic affected-product notice on 2026-07-08.",
+    "entities": ["Example Agency", "affected products"],
+    "time": "2026-07-08"
+  },
+  "discoveryContext": {
+    "aliases": ["affected products"],
+    "institutions": ["Example Agency"],
+    "languages": ["en"],
+    "jurisdictions": [],
+    "timeBounds": { "from": "2026-07-08", "to": "2026-07-08" }
+  },
+  "questionIds": [
+    "question:product-count",
+    "question:notice-identity",
+    "question:list-scope"
+  ],
+  "requirements": [
+    {
+      "questionId": "question:product-count",
+      "requiredFacets": ["actor", "predicate", "object", "time", "quantity"],
+      "acceptableSourceRoles": ["primary", "independent_secondary"]
+    },
+    {
+      "questionId": "question:notice-identity",
+      "requiredFacets": ["actor", "object", "time"],
+      "acceptableSourceRoles": ["primary"]
+    },
+    {
+      "questionId": "question:list-scope",
+      "requiredFacets": ["object", "quantity"],
+      "acceptableSourceRoles": ["primary", "independent_secondary"]
+    }
+  ],
+  "discoveryPlan": {
+    "version": 2,
+    "caseId": "case:synthetic-food-recall",
+    "targets": [
+      {
+        "id": "target:agency-notice",
+        "purpose": "Locate the agency notice and affected-product list for the July 8 event.",
+        "questionIds": [
+          "question:product-count",
+          "question:notice-identity",
+          "question:list-scope"
+        ],
+        "documentKinds": ["official_announcement", "dataset"],
+        "authorityHints": ["Example Agency"],
+        "queries": [
+          "Example Agency affected product notice July 8 2026",
+          "Example Agency affected product list 2026"
+        ],
+        "acceptedSourceRoles": ["primary"],
+        "fallback": false
+      },
+      {
+        "id": "target:independent-report",
+        "purpose": "Locate an independent report if the primary notice is unavailable or incomplete.",
+        "questionIds": ["question:product-count", "question:list-scope"],
+        "documentKinds": ["independent_report"],
+        "authorityHints": [],
+        "queries": ["Example Agency July 2026 affected product recall report"],
+        "acceptedSourceRoles": ["independent_secondary"],
+        "fallback": true
+      }
+    ],
+    "stoppingConditions": [
+      "Every case question has an exact answering passage or is explicitly unresolved.",
+      "Syndicated copies are grouped before independent origins are counted."
+    ]
+  }
+}

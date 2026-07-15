@@ -4,13 +4,11 @@ import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
 
-import { Readability } from "@mozilla/readability";
-import { JSDOM, VirtualConsole } from "jsdom";
-
 import type { EvidenceSourceRole, InvestigationBundle, InvestigationQuestion } from "../src/lib/claim-investigation-contract";
 import { validateInvestigationBundle } from "../src/lib/claim-investigation-contract";
 import { selectExactInvestigationPassage } from "../src/lib/claim-investigation-passage";
 import { buildInvestigationRetrievalRoute } from "../src/lib/claim-investigation-retrieval";
+import { fetchInvestigationDocument } from "./lib/investigation-document-fetch";
 
 interface PlanRow {
   sampleId: string;
@@ -104,56 +102,6 @@ function assertPrivatePath(file: string, kind: "input" | "output"): string {
   return resolved;
 }
 
-function parseDocumentText(html: string, url: string): { title?: string; text: string; parser: string } {
-  const virtualConsole = new VirtualConsole();
-  const dom = new JSDOM(html, { url, virtualConsole });
-  const clone = dom.window.document.cloneNode(true) as Document;
-  const article = new Readability(clone, { charThreshold: 40 }).parse();
-  const readabilityText = article?.textContent?.replace(/\s*\n\s*/gu, "\n\n").trim() ?? "";
-  if (readabilityText.length >= 80) return { title: article?.title ?? undefined, text: readabilityText, parser: "readability" };
-  const fallback = dom.window.document.body?.textContent?.replace(/\s*\n\s*/gu, "\n\n").replace(/[ \t]+/gu, " ").trim() ?? "";
-  return { title: dom.window.document.title || undefined, text: fallback, parser: "body_text" };
-}
-
-async function fetchDocument(candidate: DiscoveryCandidate, timeoutMs: number, maxBytes: number) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(candidate.url, {
-      redirect: "follow",
-      signal: controller.signal,
-      headers: {
-        accept: "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.1",
-        "user-agent": "Truly development evidence retrieval audit/1.0",
-      },
-    });
-    if (!response.ok) return { ok: false as const, error: `http_${response.status}` };
-    const contentType = response.headers.get("content-type") ?? "";
-    if (!/(?:text\/html|application\/xhtml\+xml|text\/plain)/iu.test(contentType)) {
-      return { ok: false as const, error: "unsupported_content_type", contentType };
-    }
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.byteLength > maxBytes) return { ok: false as const, error: "document_too_large" };
-    const raw = buffer.toString("utf8");
-    const parsed = contentType.includes("text/plain")
-      ? { text: raw.trim(), parser: "plain_text", title: candidate.title }
-      : parseDocumentText(raw, response.url);
-    if (parsed.text.length < 40) return { ok: false as const, error: "empty_document" };
-    return {
-      ok: true as const,
-      finalUrl: response.url,
-      contentType,
-      documentSha256: sha256(parsed.text),
-      ...parsed,
-    };
-  } catch (error) {
-    const name = error instanceof Error ? error.name : "Error";
-    return { ok: false as const, error: name === "AbortError" ? "timeout" : "network_error" };
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 async function executeQuestion(
   sampleId: string,
   bundle: InvestigationBundle,
@@ -184,7 +132,11 @@ async function executeQuestion(
       continue;
     }
     for (const candidate of phase.candidates) {
-      const fetched = await fetchDocument(candidate, timeoutMs, maxBytes);
+      const fetched = await fetchInvestigationDocument(candidate.url, {
+        timeoutMs,
+        maxBytes,
+        titleHint: candidate.title,
+      });
       traces.push({
         phase: phase.name,
         operation: "fetch_document",

@@ -4,6 +4,7 @@ import {
   INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA,
   detectCompoundPropositionSignal,
   investigationPlannerSystemPrompt,
+  investigationPlannerRepairPrompt,
   materializeHumanPreselectedAtomicPlan,
   materializeInvestigationPlan,
   parseInvestigationPlanDraftContent,
@@ -115,12 +116,16 @@ describe("Claim Investigation planner draft contract", () => {
     expect(prompt).toContain("character-for-character");
     expect(prompt).toContain("Do not force English-style subject/predicate/object segmentation");
     expect(prompt).toContain("Select exactly one atomic proposition");
+    expect(prompt).toContain("A comma must not introduce a second independently verifiable event");
     expect(prompt).toContain("attributes, not additional propositions");
     expect(prompt).toContain("Never use allegation merely because a claim is unverified");
     expect(prompt).toContain("never use forecast for historical or current data");
     expect(prompt).toContain("completed is not published");
     expect(prompt).toContain("Never request private medical, financial, employment, account");
     expect(prompt).toContain("allowed only when it is an entity in the selected proposition");
+    expect(prompt).toContain("YYYY-MM-DD");
+    expect(INVESTIGATION_PLAN_DRAFT_JSON_SCHEMA.properties.plan.anyOf[1].properties.timeCutoff)
+      .toMatchObject({ anyOf: [{ type: "null" }, { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" }] });
   });
 
   it("separates human check-worthiness from retrieval-plan generation", () => {
@@ -130,6 +135,19 @@ describe("Claim Investigation planner draft contract", () => {
     expect(system).toContain("do not select a different claim");
     expect(user).toContain("<APPROVED_CLAIM>");
     expect(user).toContain("<SOURCE_CONTEXT>");
+  });
+
+  it("bounds an atomic-only retry without weakening deterministic guards", () => {
+    const repair = investigationPlannerRepairPrompt(
+      "compound_proposition",
+      "Prepare from <SOURCE_TEXT>source</SOURCE_TEXT>",
+      "auto",
+    );
+    expect(repair).toContain("one shorter atomic proposition");
+    expect(repair).toContain("exact contiguous substring");
+    expect(repair).toContain("Do not add facts");
+    expect(repair).toContain("<SOURCE_TEXT>");
+    expect(investigationPlannerRepairPrompt("invalid_draft", "base", "auto")).toBeUndefined();
   });
 
   it("can replace the exact span only for a human-preselected atomic claim", () => {

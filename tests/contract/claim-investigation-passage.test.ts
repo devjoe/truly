@@ -37,4 +37,29 @@ describe("investigation exact-passage selection", () => {
     };
     expect(selectExactInvestigationPassage(input)).toBeUndefined();
   });
+
+  it("requires a numeric signal when the verification contract requires quantity", () => {
+    const result = selectExactInvestigationPassage({
+      normalizedClaim: "USPS detected about 9 million counterfeit-postage packages.",
+      question: "Did USPS report about 9 million counterfeit-postage packages?",
+      queryCandidates: ["USPS 9 million counterfeit postage packages"],
+      requiredFacets: ["actor", "predicate", "object", "quantity", "attribution"],
+      documentText: [
+        "The agency continues interdictions of packages with counterfeit labels affixed and reviews shipments on postal docks.",
+        "In May, an Inspection Service analysis led to an arrest involving more than 9 million pieces of mail with counterfeit postage.",
+      ].join("\n\n"),
+    });
+
+    expect(result?.exactExcerpt).toContain("more than 9 million pieces of mail");
+  });
+
+  it("does not propose a quantity answer from a high-overlap passage with no number", () => {
+    expect(selectExactInvestigationPassage({
+      normalizedClaim: "USPS detected about 9 million counterfeit-postage packages.",
+      question: "Did USPS report about 9 million counterfeit-postage packages?",
+      queryCandidates: ["USPS counterfeit postage packages"],
+      requiredFacets: ["actor", "predicate", "object", "quantity", "attribution"],
+      documentText: "The agency continues interdictions of packages with counterfeit labels affixed.",
+    })).toBeUndefined();
+  });
 });

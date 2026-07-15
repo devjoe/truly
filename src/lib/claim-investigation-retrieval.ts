@@ -1,11 +1,14 @@
 import type { EvidenceSourceRole, InvestigationBundle } from "./claim-investigation-contract";
 import { validateInvestigationBundle } from "./claim-investigation-contract";
+import type { InvestigationCase, InvestigationDiscoveryTarget } from "./claim-investigation-case";
+import { validateInvestigationCase } from "./claim-investigation-case";
 
 export type InvestigationRetrievalRoute =
   | "single_search"
   | "question_decomposition"
   | "authority_document_first"
-  | "adaptive_evidence_cascade";
+  | "adaptive_evidence_cascade"
+  | "case_document_discovery";
 
 export type InvestigationRetrievalOperation =
   | "search_web"
@@ -31,7 +34,10 @@ export interface InvestigationRetrievalStep {
   route: InvestigationRetrievalRoute;
   operation: InvestigationRetrievalOperation;
   phase: "discovery" | "question" | "authority" | "document" | "fetch" | "passage" | "assessment" | "fallback";
+  caseId?: string;
+  discoveryTargetId?: string;
   questionId?: string;
+  questionIds?: string[];
   query?: string;
   acceptedSourceRoles: EvidenceSourceRole[];
   dependsOnStepIds: string[];
@@ -147,6 +153,140 @@ function fallbackStep(
     runWhen: "primary_unavailable_or_insufficient",
     evidenceQualityDowngrade: true,
   };
+}
+
+function caseStep(input: {
+  id: string;
+  operation: InvestigationRetrievalOperation;
+  phase: InvestigationRetrievalStep["phase"];
+  investigationCase: InvestigationCase;
+  target: InvestigationDiscoveryTarget;
+  dependsOnStepIds: string[];
+  resultUse: InvestigationRetrievalResultUse;
+  query?: string;
+  questionId?: string;
+  requiresFetchedDocument?: boolean;
+}): InvestigationRetrievalStep {
+  const runWhen = input.target.fallback ? "primary_unavailable_or_insufficient" : "always";
+  return {
+    id: input.id,
+    route: "case_document_discovery",
+    operation: input.operation,
+    phase: input.phase,
+    caseId: input.investigationCase.id,
+    discoveryTargetId: input.target.id,
+    questionId: input.questionId,
+    questionIds: input.questionId ? [input.questionId] : [...input.target.questionIds],
+    query: input.query,
+    acceptedSourceRoles: [...input.target.acceptedSourceRoles],
+    dependsOnStepIds: input.dependsOnStepIds,
+    runWhen,
+    resultUse: input.resultUse,
+    evidenceQualityDowngrade: false,
+    requiresFetchedDocument: input.requiresFetchedDocument ?? false,
+    evidenceFromSnippetAllowed: false,
+    verdictFromSnippetAllowed: false,
+  };
+}
+
+/**
+ * Build a document-first route. Discovery targets can serve multiple atomic
+ * questions, so a document is fetched once and then fans out into per-question
+ * passage extraction and sufficiency assessment.
+ */
+export function buildInvestigationCaseRetrievalRoute(
+  bundle: InvestigationBundle,
+  investigationCase: InvestigationCase,
+): InvestigationRetrievalStep[] {
+  if (!validateInvestigationBundle(bundle).ok || bundle.evidence.length > 0) return [];
+  if (!validateInvestigationCase(investigationCase, bundle).ok) return [];
+
+  const primaryAssessmentIdsByQuestion = new Map<string, string[]>();
+  investigationCase.discoveryPlan.targets.forEach((target, targetIndex) => {
+    if (target.fallback) return;
+    target.questionIds.forEach((questionId, questionIndex) => {
+      const ids = primaryAssessmentIdsByQuestion.get(questionId) ?? [];
+      ids.push(`step:case:${targetIndex + 1}:assessment:${questionIndex + 1}`);
+      primaryAssessmentIdsByQuestion.set(questionId, ids);
+    });
+  });
+
+  return investigationCase.discoveryPlan.targets.flatMap((target, targetIndex) => {
+    const prefix = `step:case:${targetIndex + 1}`;
+    const fallbackDependencies = target.fallback
+      ? [...new Set(target.questionIds.flatMap((questionId) => primaryAssessmentIdsByQuestion.get(questionId) ?? []))]
+      : [];
+    const querySteps = target.queries.map((query, queryIndex) => caseStep({
+      id: `${prefix}:query:${queryIndex + 1}`,
+      operation: target.fallback ? "search_secondary_fallback" : "search_web",
+      phase: target.fallback ? "fallback" : "discovery",
+      investigationCase,
+      target,
+      dependsOnStepIds: fallbackDependencies,
+      resultUse: "discovery_only",
+      query,
+    }));
+    const authorityId = `${prefix}:authority`;
+    const documentId = `${prefix}:document`;
+    const fetchId = `${prefix}:fetch`;
+    const sharedSteps = [
+      caseStep({
+        id: authorityId,
+        operation: "locate_authority",
+        phase: target.fallback ? "fallback" : "authority",
+        investigationCase,
+        target,
+        dependsOnStepIds: querySteps.map((step) => step.id),
+        resultUse: "discovery_only",
+      }),
+      caseStep({
+        id: documentId,
+        operation: "locate_document",
+        phase: target.fallback ? "fallback" : "document",
+        investigationCase,
+        target,
+        dependsOnStepIds: [authorityId],
+        resultUse: "candidate_document",
+      }),
+      caseStep({
+        id: fetchId,
+        operation: "fetch_document",
+        phase: target.fallback ? "fallback" : "fetch",
+        investigationCase,
+        target,
+        dependsOnStepIds: [documentId],
+        resultUse: "candidate_document",
+      }),
+    ];
+    const questionSteps = target.questionIds.flatMap((questionId, questionIndex) => {
+      const passageId = `${prefix}:passage:${questionIndex + 1}`;
+      return [
+        caseStep({
+          id: passageId,
+          operation: "extract_exact_passage",
+          phase: target.fallback ? "fallback" : "passage",
+          investigationCase,
+          target,
+          questionId,
+          dependsOnStepIds: [fetchId],
+          resultUse: "exact_passage",
+          requiresFetchedDocument: true,
+        }),
+        caseStep({
+          id: `${prefix}:assessment:${questionIndex + 1}`,
+          operation: "assess_sufficiency",
+          phase: target.fallback ? "fallback" : "assessment",
+          investigationCase,
+          target,
+          questionId,
+          dependsOnStepIds: [passageId],
+          resultUse: "sufficiency_assessment",
+          requiresFetchedDocument: true,
+        }),
+      ];
+    });
+    return [...querySteps, ...sharedSteps, ...questionSteps];
+  });
 }
 
 /** Build inspectable retrieval steps; adapters execute them separately. */

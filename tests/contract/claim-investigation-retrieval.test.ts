@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 import fixture from "../fixtures/claim-investigation/food-recall-contract.json";
+import caseFixture from "../fixtures/claim-investigation/food-recall-case.json";
 import type { InvestigationBundle } from "../../src/lib/claim-investigation-contract";
-import { buildInvestigationRetrievalRoute } from "../../src/lib/claim-investigation-retrieval";
+import type { InvestigationCase } from "../../src/lib/claim-investigation-case";
+import {
+  buildInvestigationCaseRetrievalRoute,
+  buildInvestigationRetrievalRoute,
+} from "../../src/lib/claim-investigation-retrieval";
 
 function plannedBundle(): InvestigationBundle {
   const bundle = structuredClone(fixture) as InvestigationBundle;
@@ -98,5 +103,41 @@ describe("investigation retrieval routes", () => {
 
   it("does not create a new route over an existing evidence ledger", () => {
     expect(buildInvestigationRetrievalRoute(fixture as InvestigationBundle, "single_search")).toEqual([]);
+  });
+
+  it("searches at document level, fetches once, then fans out to atomic questions", () => {
+    const steps = buildInvestigationCaseRetrievalRoute(
+      plannedBundle(),
+      structuredClone(caseFixture) as InvestigationCase,
+    );
+    const primaryTarget = steps.filter((step) => step.discoveryTargetId === "target:agency-notice");
+    expect(primaryTarget.filter((step) => step.operation === "search_web")).toHaveLength(2);
+    expect(primaryTarget.filter((step) => step.operation === "fetch_document")).toHaveLength(1);
+    expect(primaryTarget.filter((step) => step.operation === "extract_exact_passage")).toHaveLength(3);
+    expect(primaryTarget.filter((step) => step.operation === "assess_sufficiency")).toHaveLength(3);
+    expect(primaryTarget.filter((step) => step.operation === "search_web").every((step) =>
+      step.questionId === undefined && step.questionIds?.length === 3 && step.resultUse === "discovery_only"
+    )).toBe(true);
+
+    const fetch = primaryTarget.find((step) => step.operation === "fetch_document")!;
+    expect(primaryTarget.filter((step) => step.operation === "extract_exact_passage").every((step) =>
+      step.dependsOnStepIds.includes(fetch.id) && step.requiresFetchedDocument
+    )).toBe(true);
+  });
+
+  it("activates a case fallback only after primary sufficiency assessments", () => {
+    const steps = buildInvestigationCaseRetrievalRoute(
+      plannedBundle(),
+      structuredClone(caseFixture) as InvestigationCase,
+    );
+    const fallback = steps.filter((step) => step.discoveryTargetId === "target:independent-report");
+    expect(fallback.every((step) => step.runWhen === "primary_unavailable_or_insufficient")).toBe(true);
+    const fallbackSearch = fallback.find((step) => step.operation === "search_secondary_fallback")!;
+    expect(fallbackSearch.dependsOnStepIds).toEqual(expect.arrayContaining([
+      "step:case:1:assessment:1",
+      "step:case:1:assessment:3",
+    ]));
+    expect(fallbackSearch.evidenceQualityDowngrade).toBe(false);
+    expect(fallback.every((step) => step.evidenceFromSnippetAllowed === false)).toBe(true);
   });
 });
