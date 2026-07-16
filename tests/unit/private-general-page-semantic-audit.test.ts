@@ -4,6 +4,9 @@ import type { GeneralPageBrief } from "@src/lib/general-page-analysis";
 import {
   assertPrivateSemanticAuditFetchTarget,
   installPrivateSemanticAuditNetworkGuard,
+  privateSemanticAuditAdapterManifestMetadata,
+  privateSemanticAuditAdapterModelMetadata,
+  privateSemanticAuditAdapterResponseFormat,
   privateSemanticAuditRepairMode,
   semanticAuditCompletionsUrl,
 } from "../../scripts/lib/private-general-page-semantic-audit.mjs";
@@ -15,6 +18,35 @@ describe("private General Page semantic audit boundary", () => {
     expect(privateSemanticAuditRepairMode(["--repair-mode", "semantic_once"])).toBe("semantic_once");
     expect(() => privateSemanticAuditRepairMode(["--repair-mode", "automatic"]))
       .toThrow(/--repair-mode must be none or semantic_once/);
+  });
+
+  it("keeps the historical adapter format by default and requires an explicit schema candidate", () => {
+    expect(privateSemanticAuditAdapterResponseFormat([])).toBe("json_object");
+    expect(privateSemanticAuditAdapterModelMetadata("json_object")).toEqual({
+      adapterMaxTokens: 480,
+    });
+    expect(privateSemanticAuditAdapterResponseFormat([
+      "--adapter-response-format",
+      "json_schema",
+    ])).toBe("json_schema");
+    expect(privateSemanticAuditAdapterModelMetadata("json_schema")).toEqual({
+      responseFormat: "json_schema",
+      adapterMaxTokens: 1_800,
+    });
+    expect(privateSemanticAuditAdapterManifestMetadata("json_object", { type: "json_object" }))
+      .toEqual({});
+    expect(privateSemanticAuditAdapterManifestMetadata("json_schema", {
+      type: "json_schema",
+      json_schema: { strict: true, schema: { type: "object", properties: {} } },
+    })).toEqual({
+      schemaSha256: "8243f0af367f188a376f2c17b5eabe872a2f7a979813e0d4e2be6d594c2aa259",
+    });
+    expect(() => privateSemanticAuditAdapterManifestMetadata("json_schema", { type: "json_object" }))
+      .toThrow(/format\/body mismatch/);
+    expect(() => privateSemanticAuditAdapterResponseFormat([
+      "--adapter-response-format",
+      "none",
+    ])).toThrow(/must be json_object or json_schema/);
   });
 
   it("allows only the declared model completions endpoint and never follows redirects", async () => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  investigationAdapterStructuredOutputMode,
   resolveTrustedTierARuntime,
   resolveTrustedTierBProviderRuntime,
 } from "@src/background/trusted-model-runtime";
@@ -36,6 +37,7 @@ describe("trusted model runtime resolution", () => {
         tierBProvider: "openai-compatible",
         tierBEndpoint: "https://trusted-tier-b.example.test/v1",
         tierBModel: "trusted-tier-b-model",
+        openAIResponseFormat: "json_schema",
       },
       ollamaEndpoint: "https://tier-a.example.test/v1",
       ollamaModel: "tier-a-model",
@@ -46,6 +48,7 @@ describe("trusted model runtime resolution", () => {
       effectiveProvider: "openai-compatible",
       endpoint: "https://trusted-tier-b.example.test/v1",
       model: "trusted-tier-b-model",
+      responseFormat: "json_schema",
       canUseModel: true,
     });
   });
@@ -66,7 +69,14 @@ describe("trusted model runtime resolution", () => {
       effectiveProvider: "ollama",
       endpoint: "http://127.0.0.1:11434",
       model: "trusted-shared-model",
+      responseFormat: "json_object",
       canUseModel: true,
     });
+  });
+
+  it("maps the trusted stored response format without endpoint inference", () => {
+    expect(investigationAdapterStructuredOutputMode("json_schema")).toBe("json_schema");
+    expect(investigationAdapterStructuredOutputMode("json_object")).toBe("json_object");
+    expect(investigationAdapterStructuredOutputMode("none")).toBe("json_object");
   });
 });

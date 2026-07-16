@@ -48,6 +48,7 @@ import { createTierBCaptureBuffer, maybeCaptureTierB } from "./tier-b-capture";
 import { classifyTierAPosts } from "./tier-a-classification";
 import { debugLog } from "../lib/logger";
 import {
+  investigationAdapterStructuredOutputMode,
   resolveTrustedTierARuntime,
   resolveTrustedTierBProviderRuntime,
   type StoredModelRuntimeInput,
@@ -428,6 +429,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
               brief: result.brief,
               endpoint: trustedRuntime.endpoint,
               model: trustedRuntime.model,
+              structuredOutputMode: investigationAdapterStructuredOutputMode(trustedRuntime.responseFormat),
               apiKey,
               resourceKey: modelWorkResourceKey(trustedRuntime),
               sendMessage: (outgoing) => chrome.runtime.sendMessage(outgoing),

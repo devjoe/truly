@@ -1,7 +1,7 @@
 # Claim Investigation Research and Platform Boundary
 
 Status: research synthesis; no release contract or runtime implementation
-Last updated: 2026-07-14
+Last updated: 2026-07-17
 
 ## Decision Summary
 
@@ -1130,14 +1130,39 @@ no model request, opened no search, and changed no source data. Its purpose is
 to freeze the intended preparation behavior and regression expectations, not
 to estimate release coverage.
 
-After the implementation and tests are frozen, the old 30-row slice may be
-used for one final v5 parity run against the approved gx10 model endpoint. That
-single run is confirmation only: its output must be archived as-is and must
-not drive another prompt, regex, guard, or threshold adjustment. The old slice
-is then retired from candidate development. The next product gate is a
-preregistered blind audit over fresh 15 Facebook plus 15 news rows, with the
-existing private raw-data and anonymized-aggregate boundary. A failure on that
-fresh cohort freezes the failure; it does not authorize tuning on those rows.
+The final old-30 v5 parity run was executed exactly once and archived as a
+technical-preflight partial result. All 30 reading calls succeeded. Sixteen
+rows emitted no claim; 14 requested the Adapter; two Adapter requests failed at
+the response protocol boundary; the unchanged local guard rejected eight
+outputs; and four became action-ready. The run issued no public search request
+and opened no external action. Because preregistration requires zero Adapter
+failures, the fresh gate remained closed.
+
+The old 30-row slice is retired. It must not be rerun or used for any further
+prompt, schema, regex, guard, or threshold tuning. The next candidate therefore
+addresses protocol stability only and is developed against fixed synthetic
+fixtures. Trusted runtime configuration selects `responseFormat` explicitly;
+the endpoint hostname does not imply capability and a failed schema request
+does not fall back silently. The constrained response has exactly four root
+keys: `schemaVersion`, `decision`, `reason`, and `claim`. Abstention is
+`claim: null`; an emitted claim always includes an `attribution` key whose value
+may be `null`. Strict schema mode receives an 1800-token budget, while the
+historical `json_object` path remains at 480 tokens. Neither path performs
+automatic JSON repair. Diagnostics distinguish truncated output, invalid JSON,
+invalid schema, and source-quote grounding failure from network, timeout, and
+HTTP failures.
+
+Runtime and the future fresh-audit runner must bind to the same schema digest.
+Before preregistration can reopen, a fixed 30-case synthetic-only protocol smoke
+must achieve 30/30 success from a clean worktree. It refuses output overwrite,
+uses one explicitly declared endpoint, stores no raw payload in tracked files,
+and permits zero public search requests or opened actions. This smoke has not
+yet run. A pass would establish constrained-response stability only; it is not
+semantic-coverage or release evidence. The semantic product gate remains a new,
+preregistered, one-shot blind v2 audit over fresh 15 Facebook plus 15 news rows,
+with raw inputs and per-sample outputs kept private and only anonymized aggregate
+results eligible for public documentation. A failure on that cohort is frozen
+rather than tuned against.
 
 ### C. Sufficiency and UX audit
 

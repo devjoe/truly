@@ -8,7 +8,7 @@ session-only multi-page switching are implemented on this branch. The
 live-DOM review has been summarized in
 `general-page-reader-quality-findings-2026-07-03-live-dom.md`. Merge-readiness evidence is indexed in
 `general-page-reader-merge-readiness.md`.
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Decision
 
@@ -836,12 +836,34 @@ next candidate gate closed; no fresh holdout should be created yet.
   prepared four and rejected nine; the previously ready but underspecified
   market comparison is among the rejects. This count is a deterministic
   regression expectation, not a coverage result or shipping gate.
-- Once this implementation is frozen, only one old-30 v5 gx10 parity run is
-  permitted. The old slice must not be used for any later prompt, guard,
-  regex, or threshold tuning. Release eligibility instead depends on a
-  preregistered blind audit of fresh 15 Facebook and 15 news rows; raw rows and
-  per-sample output remain private, and a failed fresh audit is frozen rather
-  than tuned against.
+- The permitted old-30 v5 gx10 parity run was executed exactly once and frozen
+  as a technical-preflight partial result. All 30 reading calls succeeded: 16
+  rows emitted no claim, 14 requested the Adapter, two Adapter calls failed at
+  the response protocol boundary, eight outputs were rejected by the unchanged
+  local guard, and four became action-ready. The run opened no public search
+  and no external action.
+- The old 30-row slice is now retired and must not be rerun or used to tune a
+  prompt, schema, guard, regex, or threshold. Fresh-audit preregistration stayed
+  closed because its technical prerequisite requires zero Adapter failures;
+  the v5 result did not satisfy that boundary.
+- The replacement candidate is protocol-only. A trusted provider must opt in
+  through an explicit `responseFormat`; hostname inference and silent fallback
+  are forbidden. Schema mode uses a strict fixed four-key root
+  (`schemaVersion`, `decision`, `reason`, and `claim`), represents abstention as
+  `claim: null`, and requires the `attribution` key on a claim while allowing
+  its value to be `null`. It receives an 1800-token budget; the historical
+  `json_object` path remains at 480 tokens. Neither path performs automatic JSON
+  repair. Protocol errors distinguish truncation, invalid JSON, invalid schema,
+  and source-quote grounding failure in addition to transport failures.
+- Before another private cohort can be opened, the protocol-only candidate
+  must complete a fixed 30-case synthetic-only smoke test with 30/30 protocol
+  success. The smoke binds runtime and audit to the same schema digest, requires
+  a clean worktree, refuses output overwrite, calls one declared endpoint, keeps
+  raw payloads untracked, and opens zero public searches or external actions.
+  It has not yet run. Passing it would establish transport/schema stability
+  only, not semantic coverage or release eligibility. The next semantic gate
+  remains a separately preregistered, one-shot blind v2 audit over fresh 15
+  Facebook and 15 news rows.
 
 ## Verification Gates
 

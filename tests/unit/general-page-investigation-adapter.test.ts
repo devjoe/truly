@@ -1,11 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA,
   buildGeneralPageInvestigationAdapterPrompt,
   parseGeneralPageInvestigationAdapterContent,
   resolveSourceQuote,
 } from "@src/lib/general-page-investigation-adapter";
-import { buildTierBGeneralPageInvestigationAdapterChatBody } from "@src/lib/tier-b-client";
+import {
+  buildTierBGeneralPageInvestigationAdapterChatBody,
+  callTierBGeneralPageInvestigationAdapter,
+} from "@src/lib/tier-b-client";
 
 const input = {
   candidateClaim: {
@@ -34,15 +38,23 @@ describe("General Page investigation adapter", () => {
     expect(prompt).toContain("不得把網址複製到任何輸出欄位");
   });
 
-  it("uses one compact structured-output request", () => {
+  it("uses the strict fixed-key schema only when the caller declares that capability", () => {
     const body = buildTierBGeneralPageInvestigationAdapterChatBody({
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
+      structuredOutputMode: "json_schema",
       ...input,
     });
 
-    expect(body.response_format).toEqual({ type: "json_object" });
-    expect(body.max_tokens).toBeLessThanOrEqual(480);
+    expect(body.response_format).toEqual({
+      type: "json_schema",
+      json_schema: {
+        name: "truly_general_page_investigation_adapter_v1",
+        strict: true,
+        schema: GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA,
+      },
+    });
+    expect(body.max_tokens).toBe(1_800);
     expect(body.temperature).toBe(0);
     expect(body.messages).toHaveLength(2);
     expect(body.messages[0]?.content).toContain("c, q, and atom s, p, and o in the source text language");
@@ -54,6 +66,102 @@ describe("General Page investigation adapter", () => {
     expect(body.messages[0]?.content).toContain("related or recommended link");
     expect(body.messages[0]?.content).toContain("named evidence family");
     expect(body.messages[0]?.content).toContain("comparative claim");
+    expect(body.messages[0]?.content).toContain("claim=null");
+    expect(body.messages[0]?.content).toContain("attribution:null");
+
+    expect(GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA).toMatchObject({
+      additionalProperties: false,
+      required: ["schemaVersion", "decision", "reason", "claim"],
+      properties: {
+        schemaVersion: { type: "integer", const: 1 },
+        decision: { enum: ["prepared", "abstain"] },
+        claim: {
+          anyOf: [
+            { type: "null" },
+            {
+              additionalProperties: false,
+              required: ["c", "why", "need", "q", "atom", "attribution", "policy", "sourceQuote"],
+            },
+          ],
+        },
+      },
+    });
+    const claimSchema = GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA.properties.claim.anyOf[1];
+    expect(claimSchema.properties.c.maxLength).toBe(200);
+    expect(claimSchema.properties.sourceQuote).toEqual({ type: "string", minLength: 8, maxLength: 360 });
+    expect(claimSchema.properties.atom).toMatchObject({
+      additionalProperties: false,
+      required: ["s", "p", "o"],
+    });
+    expect(claimSchema.properties.attribution.anyOf[1]).toMatchObject({
+      additionalProperties: false,
+      required: ["source", "relation", "modality"],
+    });
+  });
+
+  it("keeps the explicit legacy capability on json_object without silent upgrade", () => {
+    const body = buildTierBGeneralPageInvestigationAdapterChatBody({
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_object",
+      ...input,
+    });
+
+    expect(body.response_format).toEqual({ type: "json_object" });
+    expect(body.max_tokens).toBe(480);
+  });
+
+  it("rejects a missing runtime capability instead of silently using json_object", () => {
+    expect(() => buildTierBGeneralPageInvestigationAdapterChatBody({
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      ...input,
+    } as never)).toThrow("investigation_adapter_structured_output_mode_required");
+  });
+
+  it("normalizes the canonical constrained wire shape into the existing union", () => {
+    const canonicalClaim = {
+      c: "中聯油品下架29項產品。",
+      why: "涉及食品安全。",
+      need: "食藥署公告與產品清單。",
+      q: "中聯油品是否下架29項產品？",
+      atom: { s: "中聯油品", p: "下架", o: "29項產品" },
+      attribution: null,
+      policy: { claimKind: "fact", consequence: "safety" },
+      sourceQuote: "中聯油品下架29項產品。",
+    };
+    const internalClaim = {
+      c: canonicalClaim.c,
+      why: canonicalClaim.why,
+      need: canonicalClaim.need,
+      q: canonicalClaim.q,
+      atom: canonicalClaim.atom,
+      policy: canonicalClaim.policy,
+      sourceQuote: canonicalClaim.sourceQuote,
+    };
+    expect(parseGeneralPageInvestigationAdapterContent(JSON.stringify({
+      schemaVersion: 1,
+      decision: "prepared",
+      reason: "actionable",
+      claim: canonicalClaim,
+    }))).toEqual({
+      ok: true,
+      value: {
+        schemaVersion: 1,
+        decision: "prepared",
+        reason: "actionable",
+        claim: internalClaim,
+      },
+    });
+    expect(parseGeneralPageInvestigationAdapterContent(JSON.stringify({
+      schemaVersion: 1,
+      decision: "abstain",
+      reason: "unsafe_structure",
+      claim: null,
+    }))).toEqual({
+      ok: true,
+      value: { schemaVersion: 1, decision: "abstain", reason: "unsafe_structure" },
+    });
   });
 
   it("normalizes a prepared atomic claim for the existing local guard", () => {
@@ -187,6 +295,144 @@ describe("General Page investigation adapter", () => {
       reason: "actionable",
       claim: { c: "不完整。" },
     }))).toMatchObject({ ok: false, value: null });
+  });
+
+  it("requires the canonical four-key wire contract only for schema-capable requests", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const schemaRequest = {
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_schema" as const,
+      ...input,
+    };
+    const legacyRequest = { ...schemaRequest, structuredOutputMode: "json_object" as const };
+    const response = (content: string) => ({
+      ok: true,
+      json: async () => ({ choices: [{ finish_reason: "stop", message: { content } }] }),
+    });
+    const legacyAbstain = JSON.stringify({
+      schemaVersion: 1,
+      decision: "abstain",
+      reason: "unsupported_claim",
+    });
+    const legacyPrepared = JSON.stringify({
+      schemaVersion: 1,
+      decision: "prepared",
+      reason: "actionable",
+      claim: {
+        c: "中聯油品下架29項產品。",
+        why: "涉及食品安全。",
+        need: "食藥署公告與產品清單。",
+        q: "中聯油品是否下架29項產品？",
+        atom: { s: "中聯油品", p: "下架", o: "29項產品" },
+        policy: { claimKind: "fact", consequence: "safety" },
+        sourceQuote: "中聯油品下架29項產品。",
+      },
+    });
+    try {
+      fetchMock.mockResolvedValueOnce(response(legacyAbstain));
+      await expect(callTierBGeneralPageInvestigationAdapter(schemaRequest)).resolves.toMatchObject({
+        ok: false,
+        error: "investigation_adapter_invalid_schema",
+      });
+
+      fetchMock.mockResolvedValueOnce(response(legacyPrepared));
+      await expect(callTierBGeneralPageInvestigationAdapter(schemaRequest)).resolves.toMatchObject({
+        ok: false,
+        error: "investigation_adapter_invalid_schema",
+      });
+
+      fetchMock.mockResolvedValueOnce(response(legacyAbstain));
+      await expect(callTierBGeneralPageInvestigationAdapter(legacyRequest)).resolves.toMatchObject({
+        ok: true,
+        value: { decision: "abstain", reason: "unsupported_claim" },
+      });
+
+      fetchMock.mockResolvedValueOnce(response(legacyPrepared));
+      await expect(callTierBGeneralPageInvestigationAdapter(legacyRequest)).resolves.toMatchObject({
+        ok: true,
+        value: { decision: "prepared", claim: { sourceQuote: "中聯油品下架29項產品。" } },
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("classifies truncated, parse, schema, and source-quote failures without retrying", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const request = {
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_schema" as const,
+      ...input,
+    };
+    const response = (content: string, finishReason = "stop") => ({
+      ok: true,
+      json: async () => ({ choices: [{ finish_reason: finishReason, message: { content } }] }),
+    });
+    try {
+      fetchMock.mockResolvedValueOnce({
+        ok: true,
+        json: async () => { throw new SyntaxError("Unexpected token < in JSON"); },
+      });
+      await expect(callTierBGeneralPageInvestigationAdapter(request)).resolves.toMatchObject({
+        ok: false,
+        error: "investigation_adapter_invalid_json",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      fetchMock.mockResolvedValueOnce(response("{}", "length"));
+      await expect(callTierBGeneralPageInvestigationAdapter(request)).resolves.toMatchObject({
+        ok: false,
+        error: "investigation_adapter_truncated",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+
+      fetchMock.mockResolvedValueOnce(response("not-json"));
+      await expect(callTierBGeneralPageInvestigationAdapter(request)).resolves.toMatchObject({
+        ok: false,
+        error: "investigation_adapter_invalid_json",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+
+      fetchMock.mockResolvedValueOnce(response(JSON.stringify({
+        schemaVersion: 1,
+        decision: "prepared",
+        reason: "unsupported_claim",
+        claim: null,
+      })));
+      await expect(callTierBGeneralPageInvestigationAdapter(request)).resolves.toMatchObject({
+        ok: false,
+        error: "investigation_adapter_invalid_schema",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(4);
+
+      fetchMock.mockResolvedValueOnce(response(JSON.stringify({
+        schemaVersion: 1,
+        decision: "prepared",
+        reason: "actionable",
+        claim: {
+          c: "中聯油品下架29項產品。",
+          why: "涉及食品安全。",
+          need: "食藥署公告與產品清單。",
+          q: "中聯油品是否下架29項產品？",
+          atom: { s: "中聯油品", p: "下架", o: "29項產品" },
+          attribution: null,
+          policy: { claimKind: "fact", consequence: "safety" },
+          sourceQuote: "這段來源引文不在 grounding text 裡。",
+        },
+      })));
+      await expect(callTierBGeneralPageInvestigationAdapter(request)).resolves.toMatchObject({
+        ok: false,
+        error: "investigation_adapter_source_quote_error",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it("marks a reason-specific prompt as evaluation-only semantic repair", () => {

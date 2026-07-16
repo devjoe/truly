@@ -185,6 +185,8 @@ export interface GeneralPageParserAdvisorProviderRuntime {
   effectiveProvider: TierAProvider | TierBProvider;
   endpoint: string;
   model: string;
+  /** Stored provider capability used by trusted background request builders. */
+  responseFormat: OpenAIResponseFormatMode;
   canUseModel: boolean;
   mode: "rule-based-runtime-baseline" | "tier-b-short-json" | "tier-b-short-json-fallback";
   blockedReason?: string;

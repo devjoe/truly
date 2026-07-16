@@ -813,6 +813,7 @@ function resolveAdvisorProviderRuntime(
     effectiveProvider,
     endpoint,
     model,
+    responseFormat: settings.openAIResponseFormat,
     canUseModel,
     mode: canUseModel ? "tier-b-short-json" : "rule-based-runtime-baseline",
     blockedReason,

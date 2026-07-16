@@ -25,6 +25,35 @@ export function privateSemanticAuditRepairMode(argv) {
   return value;
 }
 
+export function privateSemanticAuditAdapterResponseFormat(argv) {
+  const index = argv.indexOf("--adapter-response-format");
+  const value = index >= 0 ? argv[index + 1] : "json_object";
+  if (value !== "json_object" && value !== "json_schema") {
+    throw new Error("--adapter-response-format must be json_object or json_schema");
+  }
+  return value;
+}
+
+export function privateSemanticAuditAdapterModelMetadata(responseFormat) {
+  if (responseFormat === "json_schema") {
+    return { responseFormat: "json_schema", adapterMaxTokens: 1_800 };
+  }
+  if (responseFormat === "json_object") return { adapterMaxTokens: 480 };
+  throw new Error("adapter response format must be json_object or json_schema");
+}
+
+export function privateSemanticAuditAdapterManifestMetadata(responseFormat, wireResponseFormat) {
+  if (responseFormat === "json_object") {
+    if (wireResponseFormat?.type !== "json_object") throw new Error("adapter response format/body mismatch");
+    return {};
+  }
+  if (responseFormat !== "json_schema" || wireResponseFormat?.type !== "json_schema" ||
+      wireResponseFormat?.json_schema?.strict !== true || !wireResponseFormat?.json_schema?.schema) {
+    throw new Error("adapter response format/body mismatch");
+  }
+  return { schemaSha256: sha256Text(JSON.stringify(wireResponseFormat.json_schema.schema)) };
+}
+
 export function semanticAuditCompletionsUrl(endpoint) {
   const url = new URL(endpoint);
   if (!/^https?:$/.test(url.protocol) || url.username || url.password || url.search || url.hash) {

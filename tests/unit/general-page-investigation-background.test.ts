@@ -72,6 +72,7 @@ describe("background General Page investigation preparation", () => {
       brief,
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
+      structuredOutputMode: "json_schema",
       resourceKey: "gx10|fixture-model",
       callAdapter,
       sendMessage,
@@ -84,6 +85,7 @@ describe("background General Page investigation preparation", () => {
     });
     expect(callAdapter).toHaveBeenCalledWith(expect.objectContaining({
       groundingText: request.context.mainText,
+      structuredOutputMode: "json_schema",
       source: expect.objectContaining({ url: request.context.url }),
     }));
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
@@ -117,6 +119,7 @@ describe("background General Page investigation preparation", () => {
       brief,
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
+      structuredOutputMode: "json_object",
       resourceKey: "gx10|fixture-model",
       callAdapter,
       sendMessage,
@@ -163,6 +166,7 @@ describe("background General Page investigation preparation", () => {
       brief,
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
+      structuredOutputMode: "json_object",
       resourceKey: "gx10|fixture-model",
       callAdapter,
       sendMessage,
@@ -205,6 +209,7 @@ describe("background General Page investigation preparation", () => {
       brief,
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
+      structuredOutputMode: "json_object",
       resourceKey: "gx10|fixture-model",
       callAdapter,
       sendMessage,
@@ -227,6 +232,7 @@ describe("background General Page investigation preparation", () => {
       brief,
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
+      structuredOutputMode: "json_object",
       resourceKey: "gx10|fixture-model",
       callAdapter: vi.fn(),
       sendMessage: vi.fn(),
@@ -237,6 +243,7 @@ describe("background General Page investigation preparation", () => {
       brief: { ...brief, claims: [] },
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
+      structuredOutputMode: "json_object",
       resourceKey: "gx10|fixture-model",
       callAdapter: vi.fn(),
       sendMessage: vi.fn(),
@@ -247,6 +254,7 @@ describe("background General Page investigation preparation", () => {
       brief,
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
+      structuredOutputMode: "json_object",
       resourceKey: "local|fixture-model",
       callAdapter: vi.fn(),
       sendMessage: vi.fn(),

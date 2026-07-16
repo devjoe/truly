@@ -18,6 +18,7 @@ import {
 } from "./general-page-analysis";
 import { buildGeneralPageModelUserPrompt } from "./general-page-model-context";
 import {
+  GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA,
   buildGeneralPageInvestigationAdapterPrompt,
   buildGeneralPageInvestigationAdapterSystemPrompt,
   parseGeneralPageInvestigationAdapterContent,
@@ -459,6 +460,8 @@ export interface TierBGeneralPageBriefResult {
 export interface TierBGeneralPageInvestigationAdapterRequest extends GeneralPageInvestigationAdapterInput {
   endpoint: string;
   model: string;
+  /** Explicit provider capability. Callers must not infer or silently downgrade it. */
+  structuredOutputMode: "json_schema" | "json_object";
   apiKey?: string;
   timeoutMs?: number;
 }
@@ -466,7 +469,14 @@ export interface TierBGeneralPageInvestigationAdapterRequest extends GeneralPage
 export interface TierBGeneralPageInvestigationAdapterResult {
   ok: boolean;
   value: GeneralPageInvestigationAdapterValue | null;
-  error?: "investigation_adapter_network_error" | "investigation_adapter_timeout" | "investigation_adapter_http_error" | "investigation_adapter_format_error";
+  error?:
+    | "investigation_adapter_network_error"
+    | "investigation_adapter_timeout"
+    | "investigation_adapter_http_error"
+    | "investigation_adapter_truncated"
+    | "investigation_adapter_invalid_json"
+    | "investigation_adapter_invalid_schema"
+    | "investigation_adapter_source_quote_error";
 }
 
 export interface TierBGeneralPageParserAdvisorResult {
@@ -494,7 +504,16 @@ export interface TierBChatBody {
   messages: Array<{ role: "system" | "user"; content: string | ChatContent[] }>;
   temperature: number;
   max_tokens: number;
-  response_format?: { type: "json_object" };
+  response_format?:
+    | { type: "json_object" }
+    | {
+        type: "json_schema";
+        json_schema: {
+          name: string;
+          strict: true;
+          schema: typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA;
+        };
+      };
   reasoning_effort?: "none";
   truncate_prompt_tokens: number;
   chat_template_kwargs: { enable_thinking: boolean };
@@ -787,6 +806,10 @@ export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefReq
 export function buildTierBGeneralPageInvestigationAdapterChatBody(
   req: TierBGeneralPageInvestigationAdapterRequest,
 ): TierBChatBody {
+  if (req.structuredOutputMode !== "json_schema" && req.structuredOutputMode !== "json_object") {
+    throw new Error("investigation_adapter_structured_output_mode_required");
+  }
+  const constrained = req.structuredOutputMode === "json_schema";
   const body: TierBChatBody = {
     model: req.model,
     messages: [
@@ -794,8 +817,17 @@ export function buildTierBGeneralPageInvestigationAdapterChatBody(
       { role: "user", content: buildGeneralPageInvestigationAdapterPrompt(req) },
     ],
     temperature: 0,
-    max_tokens: 480,
-    response_format: { type: "json_object" },
+    max_tokens: constrained ? 1_800 : 480,
+    response_format: constrained
+      ? {
+          type: "json_schema",
+          json_schema: {
+            name: "truly_general_page_investigation_adapter_v1",
+            strict: true,
+            schema: GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA,
+          },
+        }
+      : { type: "json_object" },
     truncate_prompt_tokens: TIER_B_CONTEXT_LIMIT_TOKENS,
     chat_template_kwargs: { enable_thinking: false },
   };
@@ -1051,11 +1083,34 @@ export async function callTierBGeneralPageInvestigationAdapter(
     if (!resp.ok) {
       return { ok: false, value: null, error: "investigation_adapter_http_error" };
     }
-    const data = await resp.json();
-    const raw = String(data?.choices?.[0]?.message?.content || "").trim();
-    const parsed = parseGeneralPageInvestigationAdapterContent(raw);
+    let data: any;
+    try {
+      data = await resp.json();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return { ok: false, value: null, error: "investigation_adapter_timeout" };
+      }
+      if (error instanceof SyntaxError) {
+        return { ok: false, value: null, error: "investigation_adapter_invalid_json" };
+      }
+      throw error;
+    }
+    const choice = data?.choices?.[0];
+    if (choice?.finish_reason === "length") {
+      return { ok: false, value: null, error: "investigation_adapter_truncated" };
+    }
+    const raw = String(choice?.message?.content || "").trim();
+    const parsed = parseGeneralPageInvestigationAdapterContent(raw, {
+      canonicalWire: req.structuredOutputMode === "json_schema",
+    });
     if (!parsed.ok || !parsed.value) {
-      return { ok: false, value: null, error: "investigation_adapter_format_error" };
+      return {
+        ok: false,
+        value: null,
+        error: parsed.error === "invalid_schema"
+          ? "investigation_adapter_invalid_schema"
+          : "investigation_adapter_invalid_json",
+      };
     }
     if (parsed.value.decision === "prepared") {
       const sourceQuote = resolveSourceQuote(
@@ -1064,7 +1119,7 @@ export async function callTierBGeneralPageInvestigationAdapter(
         parsed.value.claim.c,
       );
       if (!sourceQuote || !sourceQuoteMatchesGroundingText(sourceQuote, req.groundingText)) {
-        return { ok: false, value: null, error: "investigation_adapter_format_error" };
+        return { ok: false, value: null, error: "investigation_adapter_source_quote_error" };
       }
       return {
         ok: true,

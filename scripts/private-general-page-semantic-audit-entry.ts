@@ -24,6 +24,9 @@ import {
   assertPrivateSemanticAuditFetchTarget,
   hashPrivateSemanticAuditCoreFiles,
   installPrivateSemanticAuditNetworkGuard,
+  privateSemanticAuditAdapterManifestMetadata,
+  privateSemanticAuditAdapterModelMetadata,
+  privateSemanticAuditAdapterResponseFormat,
   privateSemanticAuditRepairMode,
   semanticAuditCompletionsUrl,
   sha256Text,
@@ -132,6 +135,26 @@ const expectedCount = Number(required("--sample-count"));
 const concurrency = Math.max(1, Math.min(4, Number(option("--concurrency", "2")) || 2));
 const timeoutMs = Math.max(1_000, Math.min(120_000, Number(option("--timeout-ms", "45_000")) || 45_000));
 const repairMode = privateSemanticAuditRepairMode(process.argv);
+const adapterResponseFormat = privateSemanticAuditAdapterResponseFormat(process.argv);
+const adapterModelMetadata = privateSemanticAuditAdapterModelMetadata(adapterResponseFormat);
+const adapterMaxTokens = adapterModelMetadata.adapterMaxTokens;
+const adapterProtocolBody = buildTierBGeneralPageInvestigationAdapterChatBody({
+  endpoint,
+  model,
+  structuredOutputMode: adapterResponseFormat,
+  candidateClaim: {
+    c: "Protocol schema hash fixture.",
+    why: "Protocol metadata only.",
+    need: "Protocol metadata only.",
+    q: "What is the protocol schema hash fixture?",
+  },
+  groundingText: "Protocol schema hash fixture.",
+  outputLang: "en",
+});
+const adapterManifestMetadata = privateSemanticAuditAdapterManifestMetadata(
+  adapterResponseFormat,
+  adapterProtocolBody.response_format,
+);
 if (split !== "dev" && split !== "holdout") throw new Error("--split must be dev or holdout");
 
 const allowedCompletionsUrl = semanticAuditCompletionsUrl(endpoint);
@@ -273,6 +296,7 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
   const adapterRequest: TierBGeneralPageInvestigationAdapterRequest = {
     endpoint,
     model,
+    structuredOutputMode: adapterResponseFormat,
     apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
     timeoutMs,
     candidateClaim: claim,
@@ -444,13 +468,14 @@ const manifest = {
     name: model,
     temperature: 0,
     readingMaxTokens: 720,
-    adapterMaxTokens: 480,
+    ...adapterModelMetadata,
     timeoutMs,
     concurrency,
   },
   adapter: {
     repairMode,
     runtimeParity: repairMode === "none",
+    ...adapterManifestMetadata,
   },
   data: {
     sampleCount: rows.length,
@@ -494,6 +519,8 @@ console.log(JSON.stringify({
   runId,
   split,
   repairMode,
+  adapterResponseFormat,
+  adapterMaxTokens,
   samples: rows.length,
   ...manifest.counts,
   publicSearchRequests: 0,

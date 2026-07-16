@@ -23,6 +23,7 @@ export interface ScheduleGeneralPageInvestigationPreparationOptions {
   brief: GeneralPageBrief;
   endpoint: string;
   model: string;
+  structuredOutputMode: TierBGeneralPageInvestigationAdapterRequest["structuredOutputMode"];
   apiKey?: string;
   resourceKey: string;
   callAdapter?: (
@@ -71,6 +72,7 @@ export function scheduleGeneralPageInvestigationPreparation(
   const adapterRequest: TierBGeneralPageInvestigationAdapterRequest = {
     endpoint: options.endpoint,
     model: options.model,
+    structuredOutputMode: options.structuredOutputMode,
     apiKey: options.apiKey,
     candidateClaim,
     groundingText: request.context.mainText,
