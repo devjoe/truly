@@ -10,6 +10,71 @@ import {
 } from "@src/sidepanel/page-claim-investigation";
 
 describe("page claim investigation contract", () => {
+  it("keeps URL out of Google keywords but includes it as AI Mode metadata", () => {
+    const claimText = "食藥署表示，中聯油品下架29項產品。";
+    const task = buildPageClaimInvestigationTask({
+      analysisKey: "analysis:url-metadata",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: claimText,
+        why: "涉及食品安全。",
+        need: "食藥署公告與產品清單。",
+        q: "食藥署是否表示中聯油品下架29項產品？",
+        atom: { s: "中聯油品", p: "下架", o: "29項產品" },
+        attribution: { source: "食藥署", relation: "表示", modality: "statement" },
+        policy: { claimKind: "report", consequence: "safety" },
+      },
+      groundingText: claimText,
+      source: {
+        title: "問題油品流向公告",
+        sourceName: "食藥署",
+        publishedAt: "2026-07-16",
+        url: "https://www.fda.gov.tw/example?id=29",
+      },
+    });
+
+    expect(task).toBeDefined();
+    expect(task?.googleKeywords).not.toContain("https://");
+    expect(task?.googleKeywords).not.toContain("fda.gov.tw");
+    expect(task?.aiModePrompt).toContain("來源網址（metadata）");
+    expect(task?.aiModePrompt).toContain("https://www.fda.gov.tw/example?id=29");
+  });
+
+  it("ignores metadata-only attribution when the claim has no outer source frame", () => {
+    const claimText = "美國國防部長赫格塞斯宣布將為30歲以上的美國軍人提供睪固酮篩檢與治療計畫。";
+    const sourceQuote = "Troops 30 years old and over would have their testosterone levels tested annually, while younger soldiers could opt in to the test, Hegseth said.";
+    const task = buildPageClaimInvestigationTask({
+      analysisKey: "analysis:ft-runtime",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: claimText,
+        why: "此為具體軍事政策變動，涉及軍人健康與軍事準備度。",
+        need: "國防部官方公告或赫格塞斯的正式聲明文件。",
+        q: "美國國防部長赫格塞斯是否宣布將為30歲以上的美國軍人提供睪固酮篩檢與治療計畫？",
+        atom: {
+          s: "美國國防部長赫格塞斯",
+          p: "宣布將為",
+          o: "30歲以上的美國軍人提供睪固酮篩檢與治療計畫",
+        },
+        policy: { claimKind: "fact", consequence: "health" },
+        attribution: { source: "ft.com", relation: "report", modality: "report" },
+        sourceQuote,
+      },
+      groundingText: `The programme was announced by Pete Hegseth. ${sourceQuote}`,
+      source: {
+        title: "US troops to get testosterone treatment to make them strong",
+        sourceName: "ft.com",
+        url: "https://www.ft.com/content/example",
+      },
+    });
+
+    expect(task).toBeDefined();
+    expect(task?.intent.question).toContain("美國國防部長赫格塞斯");
+    expect(task?.intent.question).not.toContain("ft.com");
+  });
+
   it("prefers a grounded model question and adds bounded source context", () => {
     const task = buildPageClaimInvestigationTask({
       analysisKey: "analysis:key",
@@ -417,6 +482,21 @@ describe("page claim investigation contract", () => {
   });
 
   it("fails closed when the claim cannot form a useful task", () => {
+    const multiEventReport = "北榮院長陳威明表示，巴威颱風假導致重症患者手術延後，引發家屬抗議，他強調醫療單位最怕放假。";
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:key",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: multiEventReport,
+        why: "涉及公共醫療調度。",
+        need: "醫院手術與抗議紀錄。",
+        q: "北榮院長陳威明是否表示醫療單位最怕放假？",
+        atom: { s: "北榮院長陳威明", p: "表示", o: "醫療單位最怕放假" },
+        policy: { claimKind: "report", consequence: "public_interest" },
+      },
+      groundingText: multiEventReport,
+    })).toBeUndefined();
     expect(buildPageClaimInvestigationTask({
       analysisKey: "analysis:key",
       scope: "focus",

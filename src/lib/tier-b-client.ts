@@ -18,6 +18,15 @@ import {
 } from "./general-page-analysis";
 import { buildGeneralPageModelUserPrompt } from "./general-page-model-context";
 import {
+  buildGeneralPageInvestigationAdapterPrompt,
+  buildGeneralPageInvestigationAdapterSystemPrompt,
+  parseGeneralPageInvestigationAdapterContent,
+  resolveSourceQuote,
+  sourceQuoteMatchesGroundingText,
+  type GeneralPageInvestigationAdapterInput,
+  type GeneralPageInvestigationAdapterValue,
+} from "./general-page-investigation-adapter";
+import {
   buildGeneralPageParserAdvisorSystemPrompt,
   buildGeneralPageParserAdvisorUserPrompt,
   type GeneralPageEffectiveModelContextUse,
@@ -36,6 +45,7 @@ export const TIER_B_DEEP_TIMEOUT_MS = 45_000;
 export const TIER_B_READING_BRIEF_TIMEOUT_MS = 45_000;
 export const TIER_B_GENERAL_PAGE_BRIEF_TIMEOUT_MS = 45_000;
 export const TIER_B_GENERAL_PAGE_PARSER_ADVISOR_TIMEOUT_MS = 20_000;
+export const TIER_B_GENERAL_PAGE_INVESTIGATION_ADAPTER_TIMEOUT_MS = 30_000;
 export const TIER_B_CONTEXT_LIMIT_TOKENS = 16_384;
 // Keep a client-side guard even though vLLM also receives
 // `truncate_prompt_tokens`. CJK-heavy posts can approach two tokens per
@@ -221,6 +231,8 @@ export function generalPageBriefSystemPrompt(
       ...(investigation ? [
         "Every claim MUST include policy. claimKind classifies the atomic assertion; consequence names the one material health, safety, money, rights, law, or public-interest judgment that verification could change. Product availability, personal opinion, and generic controversy are never action-eligible and must be omitted from claims.",
         "attribution is OPTIONAL and MUST be omitted for a direct atom. It is required only when claim.c frames the atom through a separate speaker, report, estimate, allegation, forecast, or analysis before or after the atom. Then add attribution:{source,relation,modality}, copy source and relation verbatim from claim.c outside the atom, and use modality statement|report|estimate|allegation|forecast|analysis. Never invent attribution, omit a real outer attribution, or place it only in why/need/q.",
+        "Good attributed atomic example: c=‘Agency A said Company B recalled 29 products.’ atom={s:‘Company B’,p:‘recalled’,o:‘29 products’} attribution={source:‘Agency A’,relation:‘said’,modality:‘statement’} q=‘Did Agency A say Company B recalled 29 products?’ Bad: making Agency A/said the atom, keeping two events in c, paraphrasing atom text, or returning a statement instead of a question in q.",
+        "Before emitting claims, silently verify all of these: c has terminal punctuation and one assertion only; s, p, and o are exact ordered non-overlapping substrings of c; p is an action/relation rather than a date or preposition; q ends with ? and contains the exact s, p, and o; any outer source frame has attribution. If any check fails, return claims:[].",
       ] : []),
       "claim.q must be one natural question about the same atom and copy atom.s, atom.p, and atom.o verbatim. It must not use vague references, URLs, domains, Markdown, search-engine names, commands, keyword lists, or facts absent from the page. Omit the claim if q is unreliable.",
       "Preserve legal stage exactly: arrested, charged, denied bail, convicted, and sentenced are never interchangeable. claim.q must preserve atom.p's legal wording.",
@@ -250,6 +262,8 @@ export function generalPageBriefSystemPrompt(
     ...(investigation ? [
       "每個 claim 都必須包含 policy。claimKind 分類該原子主張；consequence 必須指出查證結果會改變的單一健康、安全、金錢、權利、法律或公共利益判斷。產品是否供應、個人意見與泛稱引發爭議都不得成為可查核 action，應省略 claim。",
       "attribution 是選填；直接陳述 atom 時必須省略。只有 claims.c 在 atom 前後另有說話者、報導、估計、指控、預測或分析來源時才必填 attribution:{source,relation,modality}。source 與 relation 必須從 atom 之外的 claims.c 原樣複製，modality 使用 statement|report|estimate|allegation|forecast|analysis；不得捏造歸因、省略真正的外層歸因，或只把歸因放在 why、need、q。",
+      "正確的歸因原子範例：c＝『甲機關表示，乙公司下架29項產品。』atom＝{s:『乙公司』,p:『下架』,o:『29項產品』}，attribution＝{source:『甲機關』,relation:『表示』,modality:『statement』}，q＝『甲機關是否表示乙公司下架29項產品？』錯誤做法包括把甲機關／表示當成 atom、在 c 保留兩個事件、改寫 atom 文字，或讓 q 成為陳述句。",
+      "輸出 claims 前，必須在內部逐項確認：c 有句末標點且只有一個陳述；s、p、o 是 c 中依序出現且不重疊的原文；p 是動作或關係而非日期、期間或介系詞；q 以問號結尾並原樣包含 s、p、o；外層來源框架已寫入 attribution。任一項不成立就回傳 claims:[]。",
     ] : []),
     "claims.q 必須是查核同一 atom 的一個自然問句，並原樣寫出 atom.s、atom.p、atom.o；不得使用代稱、網址、網域、Markdown、搜尋引擎名稱、操作指令、關鍵字清單或頁面未出現的事實。無法可靠產生 q 就省略 claim。",
     "法律程序必須保持原詞：被捕、被控、不得交保、被判有罪與被判刑絕對不可互換；claims.q 必須保持 atom.p 的法律狀態。",
@@ -425,6 +439,19 @@ export interface TierBGeneralPageBriefResult {
   attempts?: 1 | 2;
   formatRecovered?: boolean;
   error?: "general_page_brief_network_error" | "general_page_brief_timeout" | "general_page_brief_http_error" | "general_page_brief_format_error";
+}
+
+export interface TierBGeneralPageInvestigationAdapterRequest extends GeneralPageInvestigationAdapterInput {
+  endpoint: string;
+  model: string;
+  apiKey?: string;
+  timeoutMs?: number;
+}
+
+export interface TierBGeneralPageInvestigationAdapterResult {
+  ok: boolean;
+  value: GeneralPageInvestigationAdapterValue | null;
+  error?: "investigation_adapter_network_error" | "investigation_adapter_timeout" | "investigation_adapter_http_error" | "investigation_adapter_format_error";
 }
 
 export interface TierBGeneralPageParserAdvisorResult {
@@ -738,6 +765,27 @@ export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefReq
   return body;
 }
 
+export function buildTierBGeneralPageInvestigationAdapterChatBody(
+  req: TierBGeneralPageInvestigationAdapterRequest,
+): TierBChatBody {
+  const body: TierBChatBody = {
+    model: req.model,
+    messages: [
+      { role: "system", content: buildGeneralPageInvestigationAdapterSystemPrompt(req.outputLang) },
+      { role: "user", content: buildGeneralPageInvestigationAdapterPrompt(req) },
+    ],
+    temperature: 0,
+    max_tokens: 480,
+    response_format: { type: "json_object" },
+    truncate_prompt_tokens: TIER_B_CONTEXT_LIMIT_TOKENS,
+    chat_template_kwargs: { enable_thinking: false },
+  };
+  if (shouldRequestOpenAICompatNoThinking(req.endpoint, req.model)) {
+    body.reasoning_effort = "none";
+  }
+  return body;
+}
+
 export function buildTierBGeneralPageBriefRepairChatBody(req: TierBGeneralPageBriefRequest): TierBChatBody {
   const lang = tierBOutputLang(req.outputLang);
   const overview = req.allowedUse === "page_overview_only";
@@ -751,6 +799,7 @@ export function buildTierBGeneralPageBriefRepairChatBody(req: TierBGeneralPageBr
           : "claims has at most one consequential, externally checkable atomic assertion; otherwise use [].",
         "A claim requires c, why, need, q, atom:{s,p,o}, and policy:{claimKind,consequence}. claimKind is fact|report|estimate|forecast|allegation|expert_analysis. consequence is health|safety|money|rights|law|public_interest.",
         "Optional attribution:{source,relation,modality} is allowed only for a real outer source frame before or after the atom. Preserve it in q. Do not invent facts or use markdown.",
+        "For any repaired claim: c is one complete assertion; s, p, and o are exact ordered non-overlapping substrings; p is a relation; q ends with ? and includes exact s, p, and o. Otherwise use claims:[].",
       ].join("\n")
     : [
         "你正在修復一般網頁閱讀結果。只能回傳 JSON，頂層只能有 schemaVersion、summary、bg、claims、qs、note。",
@@ -761,6 +810,7 @@ export function buildTierBGeneralPageBriefRepairChatBody(req: TierBGeneralPageBr
           : "claims 最多一項，只能放具後果、可由外部證據查核的原子主張；否則用 []。",
         "claim 必須包含 c、why、need、q、atom:{s,p,o}、policy:{claimKind,consequence}。claimKind 只能是 fact|report|estimate|forecast|allegation|expert_analysis；consequence 只能是 health|safety|money|rights|law|public_interest。",
         "只有 atom 前後確實有外層來源框架時才能加入 attribution:{source,relation,modality}，並在 q 保留歸因。不得發明事實，不得使用 Markdown。",
+        "修復後的 claim 必須符合：c 只有一個完整陳述；s、p、o 是依序且不重疊的原文；p 是關係；q 以問號結尾並原樣包含 s、p、o。任一項無法成立就用 claims:[]。",
       ].join("\n");
   const body: TierBChatBody = {
     model: req.model,
@@ -959,6 +1009,61 @@ export async function callTierBGeneralPageBrief(
       ? "general_page_brief_timeout"
       : "general_page_brief_network_error";
     return { ok: false, brief: null, error: code };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function callTierBGeneralPageInvestigationAdapter(
+  req: TierBGeneralPageInvestigationAdapterRequest,
+): Promise<TierBGeneralPageInvestigationAdapterResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(
+    () => ctrl.abort(),
+    req.timeoutMs ?? TIER_B_GENERAL_PAGE_INVESTIGATION_ADAPTER_TIMEOUT_MS,
+  );
+  try {
+    const resp = await fetch(tierBCompletionsUrl(req.endpoint), {
+      method: "POST",
+      headers: jsonRequestHeaders(req.apiKey),
+      body: JSON.stringify(buildTierBGeneralPageInvestigationAdapterChatBody(req)),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      return { ok: false, value: null, error: "investigation_adapter_http_error" };
+    }
+    const data = await resp.json();
+    const raw = String(data?.choices?.[0]?.message?.content || "").trim();
+    const parsed = parseGeneralPageInvestigationAdapterContent(raw);
+    if (!parsed.ok || !parsed.value) {
+      return { ok: false, value: null, error: "investigation_adapter_format_error" };
+    }
+    if (parsed.value.decision === "prepared") {
+      const sourceQuote = resolveSourceQuote(
+        parsed.value.claim.sourceQuote,
+        req.groundingText,
+        parsed.value.claim.c,
+      );
+      if (!sourceQuote || !sourceQuoteMatchesGroundingText(sourceQuote, req.groundingText)) {
+        return { ok: false, value: null, error: "investigation_adapter_format_error" };
+      }
+      return {
+        ok: true,
+        value: {
+          ...parsed.value,
+          claim: { ...parsed.value.claim, sourceQuote },
+        },
+      };
+    }
+    return { ok: true, value: parsed.value };
+  } catch (error) {
+    return {
+      ok: false,
+      value: null,
+      error: error instanceof DOMException && error.name === "AbortError"
+        ? "investigation_adapter_timeout"
+        : "investigation_adapter_network_error",
+    };
   } finally {
     clearTimeout(timer);
   }

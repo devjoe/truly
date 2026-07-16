@@ -40,7 +40,9 @@ export interface PageReadingAnalysisSession {
 export interface PageClaimInvestigationSession {
   analysisKey: string;
   claimIndex: number;
-  expanded: boolean;
+  /** Missing only for older synthetic fixtures that predate background preparation. */
+  status?: "preparing" | "ready" | "ineligible" | "unavailable";
+  preparedClaim?: import("../lib/general-page-analysis").GeneralPageBriefClaim;
 }
 
 export interface PageReadingScopeState {

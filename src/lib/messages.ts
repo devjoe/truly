@@ -36,6 +36,7 @@ import type { ReadingActivation } from "./reading-action-types";
 import type { ReadingCommandEnvelope } from "./reading-command-envelope";
 import type { GeneralPageBrief } from "./general-page-analysis";
 import type { GeneralPageModelContext } from "./general-page-model-context";
+import type { DeepModelWorkSource, ModelWorkPriority, ReadingBriefModelWorkSource } from "./model-work";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./readiness";
 import type {
   GeneralPageEffectiveModelContext,
@@ -210,6 +211,9 @@ export interface GeneralPageParserAdvisorResultMsg {
 export interface GeneralPageAnalysisRequestMsg {
   type: "GENERAL_PAGE_ANALYSIS_REQUEST";
   tabId: number;
+  analysisKey: string;
+  scope: "page" | "focus";
+  priority: Extract<ModelWorkPriority, "user_blocking" | "foreground">;
   context: GeneralPageModelContext;
   allowedUse: GeneralPageEffectiveModelContextUse;
   providerRuntime: GeneralPageParserAdvisorProviderRuntime;
@@ -223,7 +227,19 @@ export interface GeneralPageAnalysisResultMsg {
   tabId: number;
   ok: boolean;
   brief?: GeneralPageBrief;
+  /** A lower-priority, ephemeral action candidate is being prepared. */
+  investigationPending?: boolean;
   error?: string;
+}
+
+export interface GeneralPageInvestigationResultMsg {
+  type: "GENERAL_PAGE_INVESTIGATION_RESULT";
+  tabId: number;
+  analysisKey: string;
+  scope: "page" | "focus";
+  claimIndex: number;
+  status: "prepared" | "ineligible" | "unavailable";
+  preparedClaim?: import("./general-page-analysis").GeneralPageBriefClaim;
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +403,7 @@ export interface DeepClassifyMsg {
   outputLang?: Lang;
   /** Why Tier B was triggered. "auto" is the sequential-queue path.
    *  "manual" is retained for legacy captured/replayed payloads. */
-  source?: "expand" | "manual" | "auto";
+  source?: DeepModelWorkSource;
 }
 
 export interface DeepClassifyResultMsg {
@@ -414,6 +430,7 @@ export interface ReadingBriefRequestMsg {
    *  extension settings, not Facebook UI locale or post language. */
   outputLang?: Lang;
   event: DashboardPostEvent;
+  source?: ReadingBriefModelWorkSource;
 }
 
 export interface ReadingBriefResultMsg {
@@ -583,6 +600,7 @@ export type TrulyMessage =
   | GeneralPageParserAdvisorResultMsg
   | GeneralPageAnalysisRequestMsg
   | GeneralPageAnalysisResultMsg
+  | GeneralPageInvestigationResultMsg
   | SelectorHealthUpdateMsg
   | OllamaClassifyMsg
   | OllamaResultMsg

@@ -27,6 +27,12 @@ interface InputRow {
   language: "zh-TW" | "en";
   sourceSha256: string;
   text: string;
+  sourceContext?: {
+    title?: string;
+    sourceName?: string;
+    publishedAt?: string;
+    url?: string;
+  };
 }
 
 function option(name: string, fallback?: string): string | undefined {
@@ -133,6 +139,7 @@ async function evaluateRow(row: InputRow) {
       claimIndex: 0,
       claim,
       groundingText: row.text,
+      source: row.sourceContext,
     }) : undefined;
     return {
       schemaVersion: 1,
@@ -149,6 +156,8 @@ async function evaluateRow(row: InputRow) {
         eligibilityReason: eligibility && !eligibility.ok ? eligibility.reason : undefined,
         questionSource: task ? (modelQuestion ? "model" : "deterministic_fallback") : "none",
         question: task?.intent.question,
+        googleKeywords: task?.googleKeywords,
+        aiModePrompt: task?.aiModePrompt,
       },
       raw: response.raw,
     };

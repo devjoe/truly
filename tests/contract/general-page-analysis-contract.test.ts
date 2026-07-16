@@ -307,6 +307,8 @@ describe("General Page analysis contract", () => {
     expect(v3EnglishPrompt).toContain("Every claim MUST include policy");
     expect(v3EnglishPrompt).toContain("before or after the atom");
     expect(v3EnglishPrompt).toContain("Product availability, personal opinion, and generic controversy");
+    expect(v3EnglishPrompt).toContain("Good attributed atomic example");
+    expect(v3EnglishPrompt).toContain("Before emitting claims, silently verify");
 
     const v3Zh = buildTierBGeneralPageBriefChatBody({
       endpoint: "http://127.0.0.1:4999/v1/chat/completions",
@@ -320,6 +322,8 @@ describe("General Page analysis contract", () => {
     expect(v3ZhPrompt).toContain("每個 claim 都必須包含 policy");
     expect(v3ZhPrompt).toContain("claims.c 在 atom 前後另有");
     expect(v3ZhPrompt).toContain("產品是否供應、個人意見與泛稱引發爭議");
+    expect(v3ZhPrompt).toContain("正確的歸因原子範例");
+    expect(v3ZhPrompt).toContain("輸出 claims 前，必須在內部逐項確認");
 
     const withShot = buildTierBGeneralPageBriefChatBody({
       endpoint: "http://127.0.0.1:4999/v1/chat/completions",

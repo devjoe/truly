@@ -2,6 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const PRIVATE_EVAL_SURFACES = ["facebook", "news"];
+const SOURCE_CONTEXT_LIMITS = {
+  title: 100,
+  sourceName: 60,
+  publishedAt: 32,
+};
+const SOURCE_CONTEXT_ARTIFACT_RE = /https?:\/\/|\[[^\]]+\]\([^\)]+\)|(?:^|\s)(?:curl|wget|npm|pnpm|brew|git)\s/i;
 
 export function parsePrivateEvalJsonl(text) {
   return String(text)
@@ -45,6 +51,31 @@ export function privateEvalInputErrors(rows, expectedCount, declaredCategories) 
     if (!['zh-TW', 'en'].includes(row.language)) errors.push(`${label}: invalid language`);
     if (typeof row.text !== "string" || row.text.trim().length < 80 || row.text.length > 12000) errors.push(`${label}: text must be 80-12000 characters`);
     if (typeof row.sourceSha256 !== "string" || !/^[a-f0-9]{64}$/.test(row.sourceSha256)) errors.push(`${label}: invalid sourceSha256`);
+    if (row.sourceContext !== undefined) {
+      if (!row.sourceContext || typeof row.sourceContext !== "object" || Array.isArray(row.sourceContext)) {
+        errors.push(`${label}: sourceContext must be an object`);
+      } else {
+        for (const [key, limit] of Object.entries(SOURCE_CONTEXT_LIMITS)) {
+          const value = row.sourceContext[key];
+          if (value === undefined) continue;
+          if (typeof value !== "string" || !value.trim() || value.length > limit || SOURCE_CONTEXT_ARTIFACT_RE.test(value)) {
+            errors.push(`${label}: invalid sourceContext.${key}`);
+          }
+        }
+        if (row.sourceContext.url !== undefined) {
+          try {
+            const url = new URL(row.sourceContext.url);
+            if (!/^https?:$/.test(url.protocol) || url.username || url.password || row.sourceContext.url.length > 320) {
+              errors.push(`${label}: invalid sourceContext.url`);
+            }
+          } catch {
+            errors.push(`${label}: invalid sourceContext.url`);
+          }
+        }
+        const unknownKeys = Object.keys(row.sourceContext).filter((key) => !(key in SOURCE_CONTEXT_LIMITS) && key !== "url");
+        if (unknownKeys.length > 0) errors.push(`${label}: unsupported sourceContext fields`);
+      }
+    }
   }
   if ([...actual].some((category) => !declared.has(category)) || [...declared].some((category) => !actual.has(category))) {
     errors.push(`data categories mismatch: declared ${[...declared].sort().join(",")}; actual ${[...actual].sort().join(",")}`);

@@ -19,6 +19,40 @@ describe("private general page eval boundary", () => {
     expect(privateEvalInputErrors(rows, 1, "facebook-original")).toEqual([]);
   });
 
+  it("accepts bounded source context used by the real claim actions", () => {
+    const rows = [{
+      ...record,
+      sourceContext: {
+        title: "Example public notice",
+        sourceName: "Example News",
+        publishedAt: "2026-07-16",
+        url: "https://example.test/notice?id=29",
+      },
+    }];
+    expect(privateEvalInputErrors(rows, 1, "facebook-original")).toEqual([]);
+  });
+
+  it("rejects unsafe source URL metadata", () => {
+    const rows = [{
+      ...record,
+      sourceContext: { url: "https://user:secret@example.test/private" },
+    }];
+    expect(privateEvalInputErrors(rows, 1, "facebook-original").join(" ")).toMatch(/sourceContext\.url/);
+  });
+
+  it("rejects unsafe or unbounded source context", () => {
+    const rows = [{
+      ...record,
+      sourceContext: {
+        title: "https://example.invalid/private-source",
+        sourceName: "N".repeat(61),
+      },
+    }];
+    const errors = privateEvalInputErrors(rows, 1, "facebook-original").join(" ");
+    expect(errors).toMatch(/sourceContext\.title/);
+    expect(errors).toMatch(/sourceContext\.sourceName/);
+  });
+
   it("fails closed on count, category, duplicate, or raw-id drift", () => {
     const rows = [record, record];
     const errors = privateEvalInputErrors(rows, 1, "news-original");

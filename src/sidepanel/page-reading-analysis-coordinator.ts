@@ -156,6 +156,9 @@ export function planPageReadingAnalysis(input: {
       message: {
         type: "GENERAL_PAGE_ANALYSIS_REQUEST",
         tabId: input.tabId,
+        analysisKey: key,
+        scope: input.scope,
+        priority: input.force ? "user_blocking" : "foreground",
         context,
         allowedUse: effective.allowedUse,
         providerRuntime,

@@ -202,6 +202,7 @@ installSidepanelRuntimeMessageListener({
   activateAnalysisTab: tabActivationRuntime.activateAnalysisTab,
   pageReadingResult: pageReadingRuntime.handlePageReadingResult,
   pageReadingError: pageReadingRuntime.handlePageReadingError,
+  generalPageInvestigationResult: pageReadingRuntime.handleGeneralPageInvestigationResult,
 });
 
 // Request replay on mount so the panel doesn't start empty after reopen.

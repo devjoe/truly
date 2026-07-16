@@ -83,6 +83,8 @@ export interface GeneralPageBriefClaim extends ReadingBriefClaim {
   atom?: GeneralPageAtomicProposition;
   attribution?: GeneralPageClaimAttribution;
   policy?: GeneralPageClaimPolicy;
+  /** Session-only source-language span used to ground a localized claim. */
+  sourceQuote?: string;
 }
 
 export type GeneralPageAnalysisEligibilityReason =

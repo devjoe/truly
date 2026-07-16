@@ -104,6 +104,7 @@ export class ReadingBriefController {
       model: gate.model,
       provider: gate.effectiveProvider,
       outputLang: resolveLanguage(this.deps.settings().language),
+      source: "user",
       event,
     };
     this.deps.sendMessage(msg, (response: TrulyMessage | undefined) => {

@@ -1288,12 +1288,14 @@ describe("sidepanel page reading runtime", () => {
     expect(askLink?.href).toContain("google.com/search");
     expect(pagePaneEl.querySelector(".page-reader-analysis-header span")).toBeNull();
     expect(pagePaneEl.querySelectorAll(".page-reader-analysis-section.is-single")).toHaveLength(2);
-    const startCheck = pagePaneEl.querySelector<HTMLButtonElement>(".page-claim-start");
-    expect(startCheck?.textContent).toBe("查核選項");
-    expect(pagePaneEl.querySelector(".page-claim-investigation")).toBeNull();
-    expect(pagePaneEl.querySelector(".page-claim-action")).toBeNull();
-    startCheck?.click();
-    expect(pagePaneEl.querySelector(".page-claim-investigation")?.textContent).toContain("Is it true that Runtime fixture reports one synthetic claim");
+    expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
+    const expandedClaimRow = pagePaneEl.querySelector(".page-claim-row");
+    const investigationCard = pagePaneEl.querySelector(".page-claim-investigation");
+    expect(expandedClaimRow?.classList.contains("is-ready")).toBe(true);
+    expect(expandedClaimRow?.querySelector(":scope > .page-claim-copy")).toBeNull();
+    expect(expandedClaimRow?.children).toHaveLength(1);
+    expect(investigationCard?.textContent).toContain("Is it true that Runtime fixture reports one synthetic claim");
+    expect(investigationCard?.querySelector(".page-claim-investigation-header")).toBeNull();
     const actionLinks = [...pagePaneEl.querySelectorAll<HTMLAnchorElement>(".page-claim-investigation-actions a")];
     const evidenceLink = actionLinks[0];
     const aiModeLink = actionLinks[1];
@@ -1303,10 +1305,23 @@ describe("sidepanel page reading runtime", () => {
     expect(aiModeLink?.href).toContain("udm=50");
     expect(new URL(evidenceLink!.href).searchParams.get("q")).not.toBe(new URL(aiModeLink!.href).searchParams.get("q"));
     expect(new URL(aiModeLink!.href).searchParams.get("q")).toContain("Evidence needed");
-    expect(actionLinks).toHaveLength(3);
-    pagePaneEl.querySelector<HTMLButtonElement>(".page-claim-copy-question")?.click();
+    expect(actionLinks).toHaveLength(2);
+    expect(pagePaneEl.textContent).not.toContain("原始來源");
+    expect(pagePaneEl.querySelector(".page-claim-investigation-actions a[href='https://example.test/article']")).toBeNull();
+    for (const action of pagePaneEl.querySelectorAll(".page-claim-investigation-actions .page-claim-action")) {
+      expect(action.classList.contains("btn-investigation-secondary")).toBe(true);
+      expect(action.classList.contains("page-reader-card-action")).toBe(true);
+      expect(action.querySelector("svg")).not.toBeNull();
+      expect(action.querySelector(".btn-investigation-text")).not.toBeNull();
+    }
+    const copyQuestion = pagePaneEl.querySelector<HTMLButtonElement>(".page-claim-copy-question");
+    expect(copyQuestion?.textContent).toBe("複製");
+    expect(copyQuestion?.getAttribute("aria-label")).toBe("複製查核問題");
+    copyQuestion?.click();
     await flushMicrotasks();
     expect(copiedTexts.at(-1)).toBe("Is it true that Runtime fixture reports one synthetic claim");
+    expect(copyQuestion?.textContent).toBe("已複製");
+    expect(copyQuestion?.querySelector("svg")).not.toBeNull();
     const questionList = pagePaneEl.querySelector(".page-reader-analysis-questions .reading-brief-question-list");
     expect(questionList?.tagName).toBe("UL");
     expect(questionList?.querySelectorAll(":scope > .reading-brief-question-row")).toHaveLength(1);
@@ -3386,5 +3401,227 @@ describe("sidepanel page reading runtime", () => {
     onRemoved?.(42, { windowId: 1, isWindowClosing: false });
 
     expect(pagePaneEl.textContent).not.toContain("Closed tab excerpt.");
+  });
+
+  it("shows automatic investigation preparation and keeps URL as AI Mode metadata", async () => {
+    const pagePaneEl = setupDom();
+    const view = pagePaneEl.ownerDocument.defaultView!;
+    const prefersReducedMotion = vi.fn(() => ({ matches: false }) as MediaQueryList);
+    const animateInvestigationState = vi.fn(() => ({ finished: Promise.resolve() }) as Animation);
+    Object.defineProperty(view, "matchMedia", {
+      configurable: true,
+      value: prefersReducedMotion,
+    });
+    Object.defineProperty(view.HTMLElement.prototype, "animate", {
+      configurable: true,
+      value: animateInvestigationState,
+    });
+    let analysisKey = "";
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return { type: "PAGE_READING_RESULT", tabId: 42, surface: surface() } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        analysisKey = message.analysisKey;
+        return {
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: 42,
+          ok: true,
+          investigationPending: true,
+          brief: {
+            schemaVersion: 1,
+            summary: "Synthetic background-preparation summary.",
+            claims: [{
+              c: "Runtime fixture reports one synthetic claim.",
+              why: "It matters.",
+              need: "An authoritative record.",
+              q: "Does Runtime fixture report one synthetic claim?",
+            }],
+            model: "brief-model",
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{ id: 42, url: "https://example.test/article", title: "Runtime Fixture" }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    expect(analysisKey).not.toBe("");
+    expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
+    const preparing = pagePaneEl.querySelector(".page-claim-preparing");
+    expect(preparing?.textContent).toBe("正在準備查核問題…");
+    expect(preparing?.getAttribute("role")).toBe("status");
+    expect(preparing?.getAttribute("aria-live")).toBe("polite");
+    expect(pagePaneEl.querySelector(".page-claim-copy")?.textContent)
+      .toContain("Runtime fixture reports one synthetic claim");
+    expect(animateInvestigationState).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(animateInvestigationState.mock.calls[0]?.[0])).toContain("height");
+
+    runtime.handleGeneralPageInvestigationResult({
+      type: "GENERAL_PAGE_INVESTIGATION_RESULT",
+      tabId: 42,
+      analysisKey: "stale-analysis",
+      scope: "page",
+      claimIndex: 0,
+      status: "prepared",
+      preparedClaim: {
+        c: "Runtime fixture reports one synthetic claim.",
+        why: "It matters.",
+        need: "An authoritative record.",
+        q: "Does Runtime fixture report one synthetic claim?",
+        atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
+        policy: { claimKind: "fact", consequence: "public_interest" },
+      },
+    });
+    expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
+    expect(animateInvestigationState).toHaveBeenCalledTimes(1);
+
+    runtime.handleGeneralPageInvestigationResult({
+      type: "GENERAL_PAGE_INVESTIGATION_RESULT",
+      tabId: 42,
+      analysisKey,
+      scope: "page",
+      claimIndex: 0,
+      status: "prepared",
+      preparedClaim: {
+        c: "Runtime fixture reports one synthetic claim.",
+        why: "It matters.",
+        need: "An authoritative record.",
+        q: "Does Runtime fixture report one synthetic claim?",
+        atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
+        policy: { claimKind: "fact", consequence: "public_interest" },
+      },
+    });
+    expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-claim-copy")).toBeNull();
+    const readyCard = pagePaneEl.querySelector(".page-claim-investigation");
+    expect(readyCard).not.toBeNull();
+    expect(readyCard?.textContent).not.toContain("查核問題");
+    expect(readyCard?.textContent).toContain("Runtime fixture reports one synthetic claim");
+    expect(animateInvestigationState).toHaveBeenCalledTimes(2);
+    const links = [...pagePaneEl.querySelectorAll<HTMLAnchorElement>(".page-claim-investigation-actions a")];
+    const normalQuery = new URL(links[0]!.href).searchParams.get("q") ?? "";
+    const aiModeQuery = new URL(links[1]!.href).searchParams.get("q") ?? "";
+    expect(normalQuery).not.toContain("example.test/article");
+    expect(aiModeQuery).toContain("https://example.test/article");
+
+    prefersReducedMotion.mockReturnValue({ matches: true } as MediaQueryList);
+    for (const status of ["ineligible", "unavailable"] as const) {
+      runtime.handleGeneralPageInvestigationResult({
+        type: "GENERAL_PAGE_INVESTIGATION_RESULT",
+        tabId: 42,
+        analysisKey,
+        scope: "page",
+        claimIndex: 0,
+        status,
+      });
+      expect(pagePaneEl.querySelector(".page-claim-investigation")).toBeNull();
+      expect(pagePaneEl.querySelector(".page-claim-preparing")).toBeNull();
+      expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
+      expect(pagePaneEl.querySelector(".page-claim-copy")?.textContent)
+        .toContain("Runtime fixture reports one synthetic claim");
+      expect(pagePaneEl.textContent).not.toContain("暫時無法準備");
+    }
+    expect(animateInvestigationState).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a prepared action that arrives before the main analysis settles", async () => {
+    const pagePaneEl = setupDom();
+    let analysisKey = "";
+    let settleAnalysis: ((value: TrulyMessage) => void) | undefined;
+    const analysisResponse = new Promise<TrulyMessage>((resolve) => {
+      settleAnalysis = resolve;
+    });
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return { type: "PAGE_READING_RESULT", tabId: 42, surface: surface() } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        analysisKey = message.analysisKey;
+        return analysisResponse;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{ id: 42, url: "https://example.test/article", title: "Runtime Fixture" }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    expect(analysisKey).not.toBe("");
+
+    runtime.handleGeneralPageInvestigationResult({
+      type: "GENERAL_PAGE_INVESTIGATION_RESULT",
+      tabId: 42,
+      analysisKey,
+      scope: "page",
+      claimIndex: 0,
+      status: "prepared",
+      preparedClaim: {
+        c: "Runtime fixture reports one synthetic claim.",
+        why: "It matters.",
+        need: "An authoritative record.",
+        q: "Does Runtime fixture report one synthetic claim?",
+        atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
+        policy: { claimKind: "fact", consequence: "public_interest" },
+      },
+    });
+
+    settleAnalysis?.({
+      type: "GENERAL_PAGE_ANALYSIS_RESULT",
+      tabId: 42,
+      ok: true,
+      investigationPending: true,
+      brief: {
+        schemaVersion: 1,
+        summary: "Synthetic background-preparation summary.",
+        claims: [{
+          c: "Runtime fixture reports one synthetic claim.",
+          why: "It matters.",
+          need: "An authoritative record.",
+          q: "Does Runtime fixture report one synthetic claim?",
+        }],
+        model: "brief-model",
+      },
+    } satisfies TrulyMessage);
+    await flushMicrotasks();
+
+    expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-claim-copy")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-claim-investigation")?.textContent)
+      .toContain("Runtime fixture reports one synthetic claim");
   });
 });

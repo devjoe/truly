@@ -24,7 +24,7 @@ function session(): PageReadingSession {
     activationSource: "sidepanel",
     pageScope: {
       analysis: { status: "ready", updatedAt: 900, brief: { schemaVersion: 1, summary: "Web" } },
-      investigation: { analysisKey: "page-key", claimIndex: 0, expanded: true },
+      investigation: { analysisKey: "page-key", claimIndex: 0 },
     },
     focusScope: {
       target: {
@@ -35,7 +35,7 @@ function session(): PageReadingSession {
         extraction: { method: "selection", status: "complete", warnings: [] },
       },
       analysis: { status: "ready", updatedAt: 950, brief: { schemaVersion: 1, summary: "Focus" } },
-      investigation: { analysisKey: "focus-key", claimIndex: 0, expanded: false },
+      investigation: { analysisKey: "focus-key", claimIndex: 0 },
     },
   };
 }

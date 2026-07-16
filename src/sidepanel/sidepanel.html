@@ -1067,7 +1067,10 @@
     .page-claim-copy {
       min-width: 0;
     }
-    .page-claim-start,
+    .page-claim-preparing {
+      margin: 2px 0 0 16px;
+      font-size: var(--truly-type-caption);
+    }
     .page-claim-action {
       min-height: 30px;
       padding: 4px 7px;
@@ -1082,10 +1085,9 @@
       text-decoration: none;
       cursor: pointer;
     }
-    .page-claim-start {
-      justify-self: end;
+    .page-claim-action {
+      white-space: nowrap;
     }
-    .page-claim-start:hover,
     .page-claim-action:hover {
       background: color-mix(in srgb, var(--truly-sidepanel-link) 10%, transparent);
     }
@@ -1097,12 +1099,6 @@
       border-left: 2px solid color-mix(in srgb, var(--truly-sidepanel-link) 42%, var(--truly-sidepanel-soft-border));
       background: color-mix(in srgb, var(--truly-sidepanel-soft-border) 22%, transparent);
     }
-    .page-claim-investigation-label {
-      color: var(--truly-sidepanel-muted-text);
-      font-size: var(--truly-type-caption);
-      font-weight: 600;
-      line-height: 1.35;
-    }
     .page-claim-investigation .page-claim-investigation-question {
       color: var(--truly-sidepanel-text);
     }
@@ -1113,9 +1109,9 @@
     .page-claim-investigation-actions {
       display: flex;
       flex-wrap: wrap;
-      gap: 2px 4px;
-      justify-content: flex-end;
-      margin-top: 2px;
+      gap: 6px;
+      justify-content: flex-start;
+      margin-top: 4px;
     }
     .page-reader-analysis .reading-brief-question-block {
       margin-top: 9px;

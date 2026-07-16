@@ -55,10 +55,18 @@ import {
 import { isSupportedScreenshotDataUrl } from "../lib/screenshot-data-url";
 import { queueReadingCommand } from "./reading-command-mailbox";
 import { createPageReaderTabTransport } from "./page-reader-tab-transport";
+import {
+  modelWorkPriorityForDeepSource,
+  modelWorkPriorityForReadingBriefSource,
+  modelWorkResourceKey,
+} from "../lib/model-work";
+import { ModelWorkScheduler } from "./model-work-scheduler";
+import { scheduleGeneralPageInvestigationPreparation } from "./general-page-investigation-background";
 
 // Capture console output for the debug snapshot bundle. Idempotent — if
 // the SW wakes from suspension this is a no-op. See lib/log-buffer.ts.
 installLogBuffer();
+const modelWorkScheduler = new ModelWorkScheduler({ foregroundBurstLimit: 3 });
 
 const CLASSIFICATION_CACHE_KEY_RE = /^classificationCacheV\d+$/;
 const CLASSIFICATION_CACHE_BUILD_ID_KEY = "classificationCacheBuildId";
@@ -306,12 +314,18 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
         );
         if (trustedRuntime.canUseModel && trustedRuntime.endpoint && trustedRuntime.model) {
           modelAttempted = true;
-          const modelResult = await callTierBGeneralPageParserAdvisor({
-            endpoint: trustedRuntime.endpoint,
-            model: trustedRuntime.model,
-            apiKey: await tierBApiKeyForProvider(trustedRuntime.effectiveProvider),
-            request: message.request,
-            outputLang: message.outputLang,
+          const apiKey = await tierBApiKeyForProvider(trustedRuntime.effectiveProvider);
+          const modelResult = await modelWorkScheduler.enqueue({
+            id: `parser-advisor:${message.tabId}:${Date.now()}`,
+            resourceKey: modelWorkResourceKey(trustedRuntime),
+            priority: "foreground",
+            run: () => callTierBGeneralPageParserAdvisor({
+              endpoint: trustedRuntime.endpoint!,
+              model: trustedRuntime.model!,
+              apiKey,
+              request: message.request,
+              outputLang: message.outputLang,
+            }),
           });
           if (
             modelResult.ok &&
@@ -378,25 +392,47 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           throw new Error("general_page_brief_invalid_screenshot_data_url");
         }
         const startedAt = Date.now();
-        const result = await callTierBGeneralPageBrief({
-          endpoint: trustedRuntime.endpoint,
-          model: trustedRuntime.model,
-          apiKey: await tierBApiKeyForProvider(trustedRuntime.effectiveProvider),
-          context: message.context,
-          allowedUse: message.allowedUse,
-          outputLang: message.outputLang,
-          screenshotDataUrl,
+        const apiKey = await tierBApiKeyForProvider(trustedRuntime.effectiveProvider);
+        const result = await modelWorkScheduler.enqueue({
+          id: `general-page:${message.tabId}:${message.scope}:${message.analysisKey}`,
+          resourceKey: modelWorkResourceKey(trustedRuntime),
+          priority: message.priority,
+          dedupeKey: `general-page:${message.tabId}:${message.scope}:${message.analysisKey}`,
+          run: () => callTierBGeneralPageBrief({
+            endpoint: trustedRuntime.endpoint!,
+            model: trustedRuntime.model!,
+            apiKey,
+            context: message.context,
+            allowedUse: message.allowedUse,
+            outputLang: message.outputLang,
+            screenshotDataUrl,
+          }),
         });
         if (result.ok && result.brief) {
+          const investigationPending = message.allowedUse !== "page_overview_only" &&
+            !message.screenshotDataUrl && Boolean(result.brief.claims?.[0]);
           sendResponse({
             type: "GENERAL_PAGE_ANALYSIS_RESULT",
             tabId: message.tabId,
             ok: true,
+            ...(investigationPending ? { investigationPending: true } : {}),
             brief: {
               ...result.brief,
               elapsedMs: Date.now() - startedAt,
             },
           } satisfies GeneralPageAnalysisResultMsg);
+          if (investigationPending) {
+            scheduleGeneralPageInvestigationPreparation({
+              scheduler: modelWorkScheduler,
+              request: message,
+              brief: result.brief,
+              endpoint: trustedRuntime.endpoint,
+              model: trustedRuntime.model,
+              apiKey,
+              resourceKey: modelWorkResourceKey(trustedRuntime),
+              sendMessage: (outgoing) => chrome.runtime.sendMessage(outgoing),
+            });
+          }
           return;
         }
         sendResponse({
@@ -602,17 +638,23 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
         if (provider !== GEMINI_NANO_PROVIDER && (!trustedRuntime.endpoint || !trustedRuntime.model)) {
           throw new Error("tier_b_endpoint_model_unavailable");
         }
-        const result = provider === GEMINI_NANO_PROVIDER
-          ? await callGeminiNanoTierB({ text, imageUrls, filteredImageCount, outputLang })
-          : await callTierBDeepDetailed({
-              endpoint: trustedRuntime.endpoint,
-              model: trustedRuntime.model,
-              apiKey: await tierBApiKeyForProvider(provider),
-              text,
-              imageUrls,
-              filteredImageCount,
-              outputLang,
-            });
+        const apiKey = await tierBApiKeyForProvider(provider);
+        const result = await modelWorkScheduler.enqueue({
+          id: `deep:${postId}:${Date.now()}`,
+          resourceKey: modelWorkResourceKey(trustedRuntime),
+          priority: modelWorkPriorityForDeepSource(message.source),
+          run: () => provider === GEMINI_NANO_PROVIDER
+            ? callGeminiNanoTierB({ text, imageUrls, filteredImageCount, outputLang })
+            : callTierBDeepDetailed({
+                endpoint: trustedRuntime.endpoint!,
+                model: trustedRuntime.model!,
+                apiKey,
+                text,
+                imageUrls,
+                filteredImageCount,
+                outputLang,
+              }),
+        });
         const reply: DeepClassifyResultMsg = result.ok && result.deep
           ? { type: "DEEP_CLASSIFY_RESULT", postId, ok: true, deep: result.deep }
           : { type: "DEEP_CLASSIFY_RESULT", postId, ok: false, error: result.error ?? "tier_b_failed" };
@@ -652,15 +694,21 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           readingBriefError: undefined,
         });
         const startedAt = Date.now();
-        const brief = provider === GEMINI_NANO_PROVIDER
-          ? await callGeminiNanoReadingBrief({ event, outputLang })
-          : await callTierBReadingBrief({
-              endpoint: trustedRuntime.endpoint,
-              model: trustedRuntime.model,
-              apiKey: await tierBApiKeyForProvider(provider),
-              event,
-              outputLang,
-            });
+        const apiKey = await tierBApiKeyForProvider(provider);
+        const brief = await modelWorkScheduler.enqueue({
+          id: `reading-brief:${postId}:${Date.now()}`,
+          resourceKey: modelWorkResourceKey(trustedRuntime),
+          priority: modelWorkPriorityForReadingBriefSource(message.source),
+          run: () => provider === GEMINI_NANO_PROVIDER
+            ? callGeminiNanoReadingBrief({ event, outputLang })
+            : callTierBReadingBrief({
+                endpoint: trustedRuntime.endpoint!,
+                model: trustedRuntime.model!,
+                apiKey,
+                event,
+                outputLang,
+              }),
+        });
         if (brief) {
           const timedBrief = { ...brief, elapsedMs: Date.now() - startedAt };
           const updated = dashboardState.patchEvent(postId, {

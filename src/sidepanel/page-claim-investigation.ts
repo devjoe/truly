@@ -3,6 +3,7 @@ import type {
   GeneralPageClaimAttribution,
   GeneralPageBriefClaim,
 } from "../lib/general-page-analysis";
+import { sourceQuoteMatchesGroundingText } from "../lib/general-page-investigation-adapter";
 import { cleanSearchContextText } from "./format";
 
 export interface PageClaimInvestigationSource {
@@ -17,7 +18,8 @@ export interface ClaimVerificationIntent {
   why: string;
   evidenceNeed: string;
   question: string;
-  sourceContext?: Omit<PageClaimInvestigationSource, "url">;
+  /** URL is allowed only as source metadata for conversational AI search. */
+  sourceContext?: PageClaimInvestigationSource;
 }
 
 export interface PageClaimInvestigationTask {
@@ -54,7 +56,7 @@ const COMMAND_OR_MARKDOWN_RE = /\[[^\]]+\]\([^\)]+\)|(?:^|\s)(?:curl|wget|npm|pn
 const VAGUE_ONLY_RE = /^(?:這篇文章|此內容|它|上述說法|this article|this content|it|the above claim)[？?。.\s]*$/i;
 const VAGUE_ATOMIC_PART_RE = /^(?:這段內容|此內容|上述內容|這件事|它|this content|the content|it)$/i;
 const GENERIC_ATOMIC_SUBJECT_RE = /^(?:(?:the|a|an)\s+)?(?:death toll|number|figure|rate|treaty|agreement|report|study|officials?|authorities|government|company|agency|experts?|researchers?)$|^(?:死亡人數|數字|比率|條約|協議|報告|研究|官員|當局|政府|公司|機構|專家|研究人員)$/iu;
-const COMPOUND_CLAIM_RE = /(?:且|並|以及|同時|；|;)|(?:，|,)\s*(?:並|且|也|另|同時)|(?:，|,)\s*[^，,。.!?]{0,28}(?:因此|隨後|未來|已|將|會|成立|出版|推動|聚焦|買(?:了|下)|購買|禁止|擴大|創下)|\b(?:and|while|as)\s+(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)?(?:is|are|was|were|has|have|had|did|does|will|can|must|take|takes|took)\b|\b(?:signed|announced|released|approved|passed|launched)\b[^.!?]{0,100}\b(?:that|which)\b/iu;
+const COMPOUND_CLAIM_RE = /(?:且|並|以及|同時|；|;)|(?:，|,)\s*(?:並|且|也|另|同時)|(?:，|,)\s*[^，,。.!?]{0,28}(?:因此|隨後|未來|已|將|會|成立|出版|推動|聚焦|導致|引發|強調|要求|呼籲|批評|質疑|抗議|指出|買(?:了|下)|購買|禁止|擴大|創下)|\b(?:and|while|as)\s+(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)?(?:is|are|was|were|has|have|had|did|does|will|can|must|take|takes|took)\b|\b(?:signed|announced|released|approved|passed|launched)\b[^.!?]{0,100}\b(?:that|which)\b/iu;
 const SECOND_PROPOSITION_RE = /(?:，|,)\s*(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)(?:said|says|reported|announced|is|are|was|were|has|have|had|did|does|will|can)\b/iu;
 const ATTRIBUTION_RELATION_RE = /(?:數據顯示|表示|指出|指稱|宣稱|估計|聲稱|報導|according to|said|reported|estimated|alleged|claimed)/iu;
 const LOW_CONSEQUENCE_AVAILABILITY_RE = /(?:現已|目前)?(?:上市|開賣|販售|供應|有貨|可(?:供)?購買)|\b(?:now\s+)?(?:available|in stock|for sale)\b/iu;
@@ -87,6 +89,18 @@ function cleanInvestigationText(value: string | undefined, limit: number): strin
     .trim();
 }
 
+function cleanSourceMetadataUrl(value: string | undefined): string | undefined {
+  if (!value || /[\u0000-\u001f\u007f]/u.test(value)) return undefined;
+  try {
+    const url = new URL(value);
+    if (!/^https?:$/i.test(url.protocol) || url.username || url.password) return undefined;
+    const normalized = url.toString();
+    return normalized.length <= 320 ? normalized : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function hasInvestigationArtifact(value: string | undefined): boolean {
   const text = value ?? "";
   return /https?:\/\/\S+/i.test(text) || DOMAIN_OR_PATH_RE.test(text) || COMMAND_OR_MARKDOWN_RE.test(text);
@@ -99,6 +113,15 @@ function normalizedMatchText(value: string): string {
 function containsAtomicPart(text: string, part: string): boolean {
   const normalizedPart = normalizedMatchText(part);
   return normalizedPart.length >= 2 && normalizedMatchText(text).includes(normalizedPart);
+}
+
+function hasSharedGroundingAnchor(claimText: string, sourceQuote: string): boolean {
+  const quote = normalizedMatchText(sourceQuote);
+  const anchors = claimText.match(/\d+(?:[.,]\d+)*|[A-Za-z][A-Za-z0-9._-]{3,}|[\p{Script=Han}]{2,}/gu) ?? [];
+  return anchors.some((anchor) => {
+    const normalized = normalizedMatchText(anchor);
+    return normalized.length >= 2 && quote.includes(normalized);
+  });
 }
 
 function legalStatuses(text: string): Set<LegalStatus> {
@@ -240,11 +263,15 @@ export function pageClaimInvestigationEligibility(
   const atom = usableAtomicProposition(claim);
   if (!atom) return { ok: false, reason: "invalid_structure" };
   if (groundingText && [atom.s, atom.p, atom.o].some((part) => !containsAtomicPart(groundingText, part))) {
-    return { ok: false, reason: "ungrounded_atom" };
+    if (!claim.sourceQuote || hasInvestigationArtifact(claim.sourceQuote) ||
+      !sourceQuoteMatchesGroundingText(claim.sourceQuote, groundingText) ||
+      !hasSharedGroundingAnchor(claim.c, claim.sourceQuote)) {
+      return { ok: false, reason: "ungrounded_atom" };
+    }
   }
   const inferredAttribution = outerAttribution(claim.c, atom);
   if (inferredAttribution && !claim.attribution) return { ok: false, reason: "missing_attribution" };
-  if (claim.attribution && !validTypedAttribution(claim.c, atom, claim.attribution)) {
+  if (inferredAttribution && claim.attribution && !validTypedAttribution(claim.c, atom, claim.attribution)) {
     return { ok: false, reason: "invalid_attribution" };
   }
   return { ok: true };
@@ -260,7 +287,7 @@ export function deterministicClaimQuestion(claim: GeneralPageBriefClaim): string
   }
   const completeClaim = claim.c.replace(/[。！？.!?][」』”’"']?$/u, "").trim();
   const proposition = cleanInvestigationText(
-    claim.attribution ? completeClaim : orderedAtomicSpan(claim.c, atom) ?? "",
+    inferredAttribution ? completeClaim : orderedAtomicSpan(claim.c, atom) ?? "",
     160,
   );
   if (!proposition || proposition.length < 6) return undefined;
@@ -302,22 +329,25 @@ export function buildGoogleAiModePrompt(intent: ClaimVerificationIntent): string
   ].filter(Boolean).join(" · ");
   const terminate = (value: string, punctuation: "." | "。") =>
     /[。！？.!?]$/u.test(value) ? value : `${value}${punctuation}`;
+  const sourceUrl = cleanSourceMetadataUrl(intent.sourceContext?.url);
   if (/\p{Script=Han}/u.test(intent.exactClaim)) {
     return [
       `請協助查核以下說法：「${intent.exactClaim}」`,
       `查核問題：${intent.question}`,
       `需要的證據：${terminate(intent.evidenceNeed, "。")}`,
       sourceContext ? `頁面來源脈絡：${terminate(sourceContext, "。")}` : "",
+      sourceUrl ? `來源網址（metadata）：${sourceUrl}` : "",
       "請優先引用能直接回答問題的原始或權威來源，標明來源與日期，並區分已證實、尚不確定與推論。",
-    ].filter(Boolean).join(" ").slice(0, 720);
+    ].filter(Boolean).join(" ").slice(0, 960);
   }
   return [
     `Please verify this claim: “${intent.exactClaim}”`,
     `Verification question: ${intent.question}`,
     `Evidence needed: ${terminate(intent.evidenceNeed, ".")}`,
     sourceContext ? `Page source context: ${terminate(sourceContext, ".")}` : "",
+    sourceUrl ? `Source URL (metadata): ${sourceUrl}` : "",
     "Prioritize primary or authoritative sources that directly answer the question, cite the source and date, and distinguish verified facts, uncertainty, and inference.",
-  ].filter(Boolean).join(" ").slice(0, 720);
+  ].filter(Boolean).join(" ").slice(0, 960);
 }
 
 export function buildPageClaimInvestigationTask(input: {
@@ -337,13 +367,20 @@ export function buildPageClaimInvestigationTask(input: {
   if (!eligibility.ok) return undefined;
   const atom = usableAtomicProposition(input.claim);
   if (!atom) return undefined;
-  const question = usableClaimQuestion(input.claim.q, atom, claim, input.claim.attribution) ??
+  const inferredAttribution = outerAttribution(input.claim.c, atom);
+  const question = usableClaimQuestion(
+    input.claim.q,
+    atom,
+    claim,
+    inferredAttribution ? input.claim.attribution : undefined,
+  ) ??
     deterministicClaimQuestion(input.claim);
   if (!input.analysisKey || !claim || !evidenceNeed || !question) return undefined;
   const sourceContext = {
     ...(cleanInvestigationText(input.source?.title, 100) ? { title: cleanInvestigationText(input.source?.title, 100) } : {}),
     ...(cleanInvestigationText(input.source?.sourceName, 60) ? { sourceName: cleanInvestigationText(input.source?.sourceName, 60) } : {}),
     ...(cleanInvestigationText(input.source?.publishedAt, 32) ? { publishedAt: cleanInvestigationText(input.source?.publishedAt, 32) } : {}),
+    ...(cleanSourceMetadataUrl(input.source?.url) ? { url: cleanSourceMetadataUrl(input.source?.url) } : {}),
   };
   const intent: ClaimVerificationIntent = {
     exactClaim: claim,
@@ -361,6 +398,6 @@ export function buildPageClaimInvestigationTask(input: {
     intent,
     googleKeywords: buildGoogleSearchKeywords(intent),
     aiModePrompt: buildGoogleAiModePrompt(intent),
-    ...(input.source?.url && /^https?:\/\//i.test(input.source.url) ? { sourceUrl: input.source.url } : {}),
+    ...(cleanSourceMetadataUrl(input.source?.url) ? { sourceUrl: cleanSourceMetadataUrl(input.source?.url) } : {}),
   };
 }

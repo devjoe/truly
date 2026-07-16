@@ -8,7 +8,7 @@ session-only multi-page switching are implemented on this branch. The
 live-DOM review has been summarized in
 `general-page-reader-quality-findings-2026-07-03-live-dom.md`. Merge-readiness evidence is indexed in
 `general-page-reader-merge-readiness.md`.
-Last updated: 2026-07-14
+Last updated: 2026-07-16
 
 ## Decision
 
@@ -714,21 +714,37 @@ next candidate gate closed; no fresh holdout should be created yet.
 
 ### Phase 4: Session-only Claim Investigation
 
-- Status: implementation and fail-closed contract completed on the feature
-  branch, but candidates v1 and v2 did not clear their private holdout gates and
-  the v3 development probe did not clear the coverage/runtime-stability boundary.
+- Status: the session-only prepared-action vertical slice and its fail-closed
+  contract are implemented on the feature branch. Candidates v1 and v2 did not
+  clear their private holdout gates and the v3 development probe did not clear
+  the coverage/runtime-stability boundary, so this remains unreleased.
 - A grounded `claims.q` is preferred; a bounded natural-question fallback from
   `claim.c + claim.need` is used only when the model question is missing or
   locally rejected. URLs, domains, search-engine instructions, vague references,
   and likely compound claims fail closed instead of bypassing the guard.
-- `查核選項` only expands a bounded, session-only intent in the current Page or
-  Focus scope. It does not start the future Truly Agent, open a tab, send
-  another model request, persist history, or assign a verdict.
-- The intent is compiled into two distinct external payloads: concise claim and
-  source keywords for standard Google Search, and a natural-language evidence
-  request for Google AI Mode. Copy and original-source actions remain explicit.
-  Page navigation, reread, a new analysis key, and a new Focus target clear
-  stale task state.
+- When a completed Page or Focus reading contains a candidate claim, the
+  service worker schedules one lower-priority `derived` adapter request. The
+  claim stays visible with a compact preparing status, then changes directly to
+  the prepared question and actions. Abstention, malformed output, a stale
+  analysis key, or an unavailable side panel quietly falls back to the original
+  claim. This preparation is ephemeral and never creates durable history.
+- Model work shares one resource-aware scheduler: explicit user work is
+  `user_blocking`, current reading is `foreground`, prepared actions are
+  `derived`, and speculative work is `prefetch`. Each model resource executes
+  one request at a time; deduplication, supersession, and a bounded foreground
+  burst keep Page preparation from starving Feed work without increasing the
+  number of model calls.
+- A prepared intent exposes three explicit actions: standard Google Search,
+  Google AI Mode, and copy. Standard Search receives concise claim/source
+  keywords only. AI Mode receives a natural-language evidence request and may
+  receive the current HTTP(S) URL as metadata; the URL is never treated as
+  evidence or copied into model output. The former original-source action is
+  intentionally absent because it duplicated the page the user is already on.
+- The adapter requires an exact `sourceQuote` grounding span, preserves source
+  language for the atomic claim/question, tolerates harmless schema-version and
+  optional-attribution drift, and applies the existing deterministic eligibility
+  guard after model output. Page navigation, reread, a new analysis key, and a
+  new Focus target clear stale task state; Page and Focus keep separate slots.
 - The future Truly Agent uses a separate non-runtime semantic Case draft. The
   model selects document families, source roles, authority hints, and numbered
   question coverage; local code owns IDs, question linkage, verification
@@ -738,14 +754,23 @@ next candidate gate closed; no fresh holdout should be created yet.
 
 ### Phase 5: Runtime and UX Gate
 
-- Status: implementation verification completed; product-quality holdout gates
-  failed for candidates v1 and v2, while v3 remains a development-only probe,
-  so the investigation action remains unreleased.
-- Focused unit coverage validates query sanitization, deterministic fallback,
-  fail-closed eligibility, Page/Focus state isolation, and the two-step UI.
-- The CDP UI audit validates that preparing a task opens no browser target and
-  captures the expanded card at 430px alongside Page, Focus, screenshot
-  recovery, loading, and ready states.
+- Status: implementation and live UX verification completed; product-quality
+  holdout gates failed for candidates v1 and v2, while v3 remains a
+  development-only probe, so the investigation action remains unreleased.
+- Focused unit coverage validates scheduler priority/fairness, adapter parsing
+  and grounding, query sanitization, deterministic fallback, fail-closed
+  eligibility, Page/Focus race isolation, and the automatic
+  preparing-to-ready/fallback transitions. The 180 ms height/fade transition is
+  skipped for reduced motion and never delays the underlying session update.
+- A 2026-07-16 no-focus CDP check used dev build
+  `1784200373031-0ae1017-dirty` on a real Financial Times page. It observed an
+  automatic `preparing -> ready` transition with no manual click, no redundant
+  label, and Google Search / Gemini / Copy actions at 430 px. A separate live
+  run exercised `preparing -> fallback`, confirming that unavailable model
+  output clears the loading state and restores the original claim.
+- Review screenshots remain local-only:
+  `/private/tmp/truly-auto-investigation-preparing-430-2026-07-16.png` and
+  `/private/tmp/truly-auto-investigation-ready-430-2026-07-16.png`.
 - Real-content paired audit artifacts remain private under `tmp/`; only
   anonymized aggregate findings may be copied into tracked documentation.
 

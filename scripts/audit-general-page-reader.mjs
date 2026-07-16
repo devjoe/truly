@@ -328,6 +328,8 @@ async function startMockOpenAiEndpoint() {
     const hasImageUrl = JSON.stringify(userContent).includes('"image_url"');
     const kind = /parser recovery classifier/i.test(systemText)
       ? "parser-advisor"
+      : /prepare one candidate fact-check action/i.test(systemText)
+      ? "investigation-adapter"
       : hasImageUrl
       ? "screenshot-brief"
       : /dominant color/i.test(systemText)
@@ -354,6 +356,20 @@ async function startMockOpenAiEndpoint() {
         needsScreenshot: true,
         riskTags: ["needs_visual_grounding"],
         rationale: "The synthetic fixture needs visible screenshot grounding.",
+      });
+    } else if (kind === "investigation-adapter") {
+      content = JSON.stringify({
+        schemaVersion: 1,
+        decision: "prepared",
+        reason: "actionable",
+        claim: {
+          c: "The analyzed content is synthetic.",
+          why: "The UI check must not depend on live page content.",
+          need: "Confirm the expected scope.",
+          q: "Is the analyzed content synthetic?",
+          atom: { s: "The analyzed content", p: "is", o: "synthetic" },
+          policy: { claimKind: "fact", consequence: "public_interest" },
+        },
       });
     } else {
       const targetKind = /targetKind:\s*selection/i.test(userText)
@@ -1458,6 +1474,12 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     })()`);
 
     const pageBrief = await observePageBrief(side, "page-analysis-ready.png");
+    await waitFor(
+      side,
+      `Boolean(document.querySelector('#page-pane .page-claim-start'))`,
+      5000,
+      "background claim investigation preparation",
+    );
     const claimInvestigation = await observeClaimInvestigation(side);
     const initialLoadTimeline = await side.evaluateJson(`(() => {
       const timeline = globalThis.__trulyPagePaneTimeline;
@@ -3068,7 +3090,10 @@ function claimActionPayloadContract(result) {
         aiModeUrl.searchParams.get("udm") === "50" &&
         standardQuery && aiModePrompt && standardQuery !== aiModePrompt &&
         !/Please verify this claim|請協助查核以下說法/u.test(standardQuery) &&
-        /Evidence needed|需要的證據/u.test(aiModePrompt)
+        !/https?:\/\//u.test(standardQuery) &&
+        /Evidence needed|需要的證據/u.test(aiModePrompt) &&
+        /Source URL \(metadata\)|來源網址（metadata）/u.test(aiModePrompt) &&
+        /127\.0\.0\.1/u.test(aiModePrompt)
       ),
       standardQueryLength: standardQuery.length,
       aiModePromptLength: aiModePrompt.length,
