@@ -16,7 +16,10 @@ import {
 } from "../src/lib/tier-b-client";
 import type { ReadingSurface } from "../src/lib/reading-surface-types";
 import type { Lang } from "../src/lib/types";
-import { buildPageClaimInvestigationTask } from "../src/sidepanel/page-claim-investigation";
+import {
+  buildPageClaimInvestigationTask,
+  pageClaimInvestigationEligibility,
+} from "../src/sidepanel/page-claim-investigation";
 import {
   assertPrivateSemanticAuditFetchTarget,
   hashPrivateSemanticAuditCoreFiles,
@@ -132,7 +135,12 @@ if (split !== "dev" && split !== "holdout") throw new Error("--split must be dev
 const allowedCompletionsUrl = semanticAuditCompletionsUrl(endpoint);
 assertPrivateSemanticAuditFetchTarget(allowedCompletionsUrl, endpoint);
 const paths = assertPrivateEvalPaths(inputPath, outputPath, metaOutputPath, process.cwd());
-const rows = parsePrivateEvalJsonl(fs.readFileSync(paths.input, "utf8")) as InputRow[];
+if (fs.existsSync(paths.output) || fs.existsSync(paths.metaOutput)) {
+  throw new Error("Private semantic audit output already exists; an evaluation path may run only once");
+}
+const inputFile = fs.readFileSync(paths.input, "utf8");
+const inputSha256 = sha256Text(inputFile);
+const rows = parsePrivateEvalJsonl(inputFile) as InputRow[];
 const inputErrors = privateEvalInputErrors(rows, expectedCount, declaredCategories);
 if (inputErrors.length > 0) throw new Error(inputErrors.join("; "));
 
@@ -310,6 +318,9 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
         source: row.sourceContext,
       })
     : undefined;
+  const localGuardReason = preparedClaim && !investigationTask
+    ? pageClaimInvestigationEligibility(preparedClaim, row.text)
+    : undefined;
   return {
     ...base,
     ok: true,
@@ -335,6 +346,7 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
       prompt: adapterPrompt,
     },
     investigationTask: investigationTask ?? null,
+    ...(localGuardReason && !localGuardReason.ok ? { localGuardReason: localGuardReason.reason } : {}),
     questionActions,
   };
 }
@@ -365,7 +377,9 @@ const categoryCounts = Object.fromEntries([...new Set(rows.map((row) => row.data
   .map((category) => [category, rows.filter((row) => (row.dataCategory || `${row.surface}-original`) === category).length]));
 const completedAt = new Date().toISOString();
 fs.mkdirSync(path.dirname(paths.output), { recursive: true, mode: 0o700 });
-fs.writeFileSync(paths.output, `${results.map((result) => JSON.stringify(result)).join("\n")}\n`, { mode: 0o600 });
+const resultsFile = `${results.map((result) => JSON.stringify(result)).join("\n")}\n`;
+const resultsSha256 = sha256Text(resultsFile);
+fs.writeFileSync(paths.output, resultsFile, { flag: "wx", mode: 0o600 });
 const manifest = {
   schemaVersion: 1,
   task: "general_page_product_semantic_audit",
@@ -425,10 +439,14 @@ const manifest = {
     adapterRawExposedByRuntimeHelper: false,
     adapterParsedValueAndPromptHashesRecorded: true,
   },
+  artifacts: {
+    inputSha256,
+    resultsSha256,
+  },
   startedAt,
   completedAt,
 };
-fs.writeFileSync(paths.metaOutput, `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
+fs.writeFileSync(paths.metaOutput, `${JSON.stringify(manifest, null, 2)}\n`, { flag: "wx", mode: 0o600 });
 console.log(JSON.stringify({
   result: results.every((result) => result.ok) ? "pass" : "partial",
   runId,
@@ -438,4 +456,3 @@ console.log(JSON.stringify({
   publicSearchRequests: 0,
   output: "private-eval/<private>",
 }, null, 2));
-

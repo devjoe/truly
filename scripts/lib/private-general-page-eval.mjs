@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -51,6 +52,9 @@ export function privateEvalInputErrors(rows, expectedCount, declaredCategories) 
     if (!['zh-TW', 'en'].includes(row.language)) errors.push(`${label}: invalid language`);
     if (typeof row.text !== "string" || row.text.trim().length < 80 || row.text.length > 12000) errors.push(`${label}: text must be 80-12000 characters`);
     if (typeof row.sourceSha256 !== "string" || !/^[a-f0-9]{64}$/.test(row.sourceSha256)) errors.push(`${label}: invalid sourceSha256`);
+    else if (typeof row.text === "string" && row.sourceSha256 !== crypto.createHash("sha256").update(row.text, "utf8").digest("hex")) {
+      errors.push(`${label}: sourceSha256 does not match text`);
+    }
     if (row.sourceContext !== undefined) {
       if (!row.sourceContext || typeof row.sourceContext !== "object" || Array.isArray(row.sourceContext)) {
         errors.push(`${label}: sourceContext must be an object`);

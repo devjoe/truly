@@ -1049,6 +1049,32 @@ The private Case-plan runner is prepared for this v3 contract, but no closed
 development pool or holdout was reopened and no Agent runtime action is
 authorized by this implementation.
 
+#### Product semantic-action development baseline (2026-07-16)
+
+The product-equivalent private runner now evaluates the Standard Reading Brief,
+the Investigation Adapter, the unchanged local claim guard, and typed follow-up
+actions as one pipeline. A frozen 30-row development replay completed 30/30
+reading calls and 15/15 requested Adapter calls without parser or transport
+failure. Fifteen rows emitted no claim; four became action-ready and eleven
+prepared Adapter outputs were rejected by the local guard. No public search or
+external action was opened.
+
+Private review showed that the rejected rows were not constrained-decoding
+failures. The Adapter usually preserved the candidate claim and added fields
+instead of rebuilding one source-grounded proposition. Failures included atom
+span paraphrases, compound claims, vague or generic subjects, and invalid
+attribution. The Adapter prompt now treats the candidate as a clue, requires
+verbatim ordered atom parts, selects only one consequential proposition, and
+adds explicit low-risk abstention guidance. The local guard remains strict and
+now exposes precise structure reason codes for private development audits.
+
+The private runner also verifies that each source hash is derived from the
+actual input text, refuses to overwrite an evaluation path, and records exact
+input and result digests. These changes improve evaluation integrity; they do
+not authorize the Agent action or establish release-level coverage. The same
+old development replay must improve before a preregistered fresh cohort is
+opened, and fresh rows cannot be used for further tuning.
+
 ### C. Sufficiency and UX audit
 
 Using the collected development evidence, test whether the system correctly

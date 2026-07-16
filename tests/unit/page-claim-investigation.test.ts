@@ -287,7 +287,25 @@ describe("page claim investigation contract", () => {
       need: "The treaty text.",
       atom: { s: "Australia and Vanuatu", p: "signed", o: "a treaty" },
       policy: { claimKind: "fact", consequence: "public_interest" },
-    })).toEqual({ ok: false, reason: "invalid_structure" });
+    })).toEqual({ ok: false, reason: "compound_claim" });
+  });
+
+  it("reports actionable structure failures without weakening the guard", () => {
+    const base = {
+      c: "Example Agency announced a public safety recall.",
+      why: "The recall affects public safety.",
+      need: "The official recall notice.",
+      q: "Did Example Agency announce a public safety recall?",
+      policy: { claimKind: "fact" as const, consequence: "safety" as const },
+    };
+    expect(pageClaimInvestigationEligibility({
+      ...base,
+      atom: { s: "Example Agency", p: "declared", o: "a public safety recall" },
+    })).toEqual({ ok: false, reason: "atom_span_mismatch" });
+    expect(pageClaimInvestigationEligibility({
+      ...base,
+      atom: { s: "this content", p: "announced", o: "a public safety recall" },
+    })).toEqual({ ok: false, reason: "vague_atom" });
   });
 
   it("requires every atom part to be grounded in the effective Page or Focus text", () => {

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { describe, expect, it } from "vitest";
 import {
   outputLanguageForPrivateEval,
@@ -5,12 +6,13 @@ import {
   privateEvalInputErrors,
 } from "../../scripts/lib/private-general-page-eval.mjs";
 
+const recordText = "原始內容".repeat(30);
 const record = {
   sampleId: "fb_0123456789abcdef0123456789abcdef",
   surface: "facebook",
   language: "zh-TW",
-  sourceSha256: "a".repeat(64),
-  text: "原始內容".repeat(30),
+  sourceSha256: crypto.createHash("sha256").update(recordText, "utf8").digest("hex"),
+  text: recordText,
 };
 
 describe("private general page eval boundary", () => {
@@ -59,6 +61,11 @@ describe("private general page eval boundary", () => {
     expect(errors.join(" ")).toMatch(/count mismatch/);
     expect(errors.join(" ")).toMatch(/duplicate sampleId/);
     expect(errors.join(" ")).toMatch(/categories mismatch/);
+  });
+
+  it("rejects a source hash that is not derived from the supplied text", () => {
+    const errors = privateEvalInputErrors([{ ...record, sourceSha256: "a".repeat(64) }], 1, "facebook-original");
+    expect(errors.join(" ")).toMatch(/does not match text/);
   });
 
   it("maps only the supported answer languages", () => {

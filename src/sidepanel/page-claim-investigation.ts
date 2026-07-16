@@ -41,6 +41,9 @@ export type PageClaimInvestigationIneligibilityReason =
   | "low_consequence_availability"
   | "generic_controversy"
   | "generic_subject"
+  | "atom_span_mismatch"
+  | "compound_claim"
+  | "vague_atom"
   | "ungrounded_atom"
   | "invalid_structure"
   | "missing_attribution"
@@ -194,25 +197,29 @@ function validTypedAttribution(
   return relationMatchesModality && (beforeAtom || afterAtom);
 }
 
-function usableAtomicProposition(
+function inspectAtomicProposition(
   claim: GeneralPageBriefClaim,
-): GeneralPageAtomicProposition | undefined {
+): { atom?: GeneralPageAtomicProposition; reason?: PageClaimInvestigationIneligibilityReason } {
   const atom = claim.atom;
-  if (!atom) return undefined;
-  if ([atom.s, atom.p, atom.o].some((part) => hasInvestigationArtifact(part))) return undefined;
-  if ([atom.s, atom.p, atom.o].some((part) => VAGUE_ATOMIC_PART_RE.test(part.trim()))) return undefined;
-  if (GENERIC_ATOMIC_SUBJECT_RE.test(atom.s.trim())) return undefined;
+  if (!atom) return { reason: "invalid_structure" };
+  if ([atom.s, atom.p, atom.o].some((part) => hasInvestigationArtifact(part))) return { reason: "invalid_structure" };
+  if ([atom.s, atom.p, atom.o].some((part) => VAGUE_ATOMIC_PART_RE.test(part.trim()))) return { reason: "vague_atom" };
+  if (GENERIC_ATOMIC_SUBJECT_RE.test(atom.s.trim())) return { reason: "generic_subject" };
   const atomicSpan = orderedAtomicSpan(claim.c, atom);
-  if (!atomicSpan) return undefined;
-  if (!hasTerminalSentencePunctuation(claim.c)) return undefined;
+  if (!atomicSpan) return { reason: "atom_span_mismatch" };
+  if (!hasTerminalSentencePunctuation(claim.c)) return { reason: "invalid_structure" };
   // A typed or recognizable source frame may precede the atom without making
   // the inner proposition compound. The source frame is validated separately
   // before an action can become eligible.
   const propositionText = outerAttribution(claim.c, atom) ? atomicSpan : claim.c;
-  if (!hasOneProposition(propositionText)) return undefined;
+  if (!hasOneProposition(propositionText)) return { reason: "compound_claim" };
   const statuses = legalStatuses(`${atom.p} ${claim.c}`);
-  if (statuses.size > 1) return undefined;
-  return atom;
+  if (statuses.size > 1) return { reason: "compound_claim" };
+  return { atom };
+}
+
+function usableAtomicProposition(claim: GeneralPageBriefClaim): GeneralPageAtomicProposition | undefined {
+  return inspectAtomicProposition(claim).atom;
 }
 
 export function usableClaimQuestion(
@@ -260,8 +267,9 @@ export function pageClaimInvestigationEligibility(
   if (claim.atom && GENERIC_ATOMIC_SUBJECT_RE.test(claim.atom.s.trim())) {
     return { ok: false, reason: "generic_subject" };
   }
-  const atom = usableAtomicProposition(claim);
-  if (!atom) return { ok: false, reason: "invalid_structure" };
+  const inspected = inspectAtomicProposition(claim);
+  const atom = inspected.atom;
+  if (!atom) return { ok: false, reason: inspected.reason ?? "invalid_structure" };
   if (groundingText && [atom.s, atom.p, atom.o].some((part) => !containsAtomicPart(groundingText, part))) {
     if (!claim.sourceQuote || hasInvestigationArtifact(claim.sourceQuote) ||
       !sourceQuoteMatchesGroundingText(claim.sourceQuote, groundingText) ||

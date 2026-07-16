@@ -48,6 +48,9 @@ describe("General Page investigation adapter", () => {
     expect(body.messages[0]?.content).toContain("c, q, and atom s, p, and o in the source text language");
     expect(body.messages[0]?.content).toContain("Only why and need use the requested UI language");
     expect(body.messages[0]?.content).toContain("sourceQuote");
+    expect(body.messages[0]?.content).toContain("candidate is only a clue");
+    expect(body.messages[0]?.content).toContain("exact substrings of c");
+    expect(body.messages[0]?.content).toContain("low-risk product availability");
   });
 
   it("normalizes a prepared atomic claim for the existing local guard", () => {
