@@ -18,6 +18,7 @@ import type { ReadingSurface } from "../src/lib/reading-surface-types";
 import type { Lang } from "../src/lib/types";
 import {
   buildPageClaimInvestigationTask,
+  isRepairablePageClaimIneligibilityReason,
   pageClaimInvestigationEligibility,
 } from "../src/sidepanel/page-claim-investigation";
 import {
@@ -280,7 +281,34 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
   };
   const adapterPrompt = bodyPromptHashes(buildTierBGeneralPageInvestigationAdapterChatBody(adapterRequest));
   const adapterStarted = Date.now();
-  const adapter = await callTierBGeneralPageInvestigationAdapter(adapterRequest);
+  let adapter = await callTierBGeneralPageInvestigationAdapter(adapterRequest);
+  let adapterAttempts: 1 | 2 = 1;
+  let repairReason: TierBGeneralPageInvestigationAdapterRequest["repairReason"];
+  let repairPrompt: ReturnType<typeof bodyPromptHashes> | undefined;
+  const firstPreparedClaim = adapter.ok && adapter.value?.decision === "prepared" ? adapter.value.claim : undefined;
+  if (firstPreparedClaim) {
+    const firstEligibility = pageClaimInvestigationEligibility(firstPreparedClaim, row.text);
+    const firstTask = firstEligibility.ok ? buildPageClaimInvestigationTask({
+      analysisKey: row.sampleId,
+      scope: "page",
+      claimIndex: 0,
+      claim: firstPreparedClaim,
+      groundingText: row.text,
+      source: row.sourceContext,
+    }) : undefined;
+    const firstReason = firstEligibility.ok ? (firstTask ? undefined : "invalid_question") : firstEligibility.reason;
+    if (firstReason && isRepairablePageClaimIneligibilityReason(firstReason)) {
+      repairReason = firstReason;
+      const repairRequest: TierBGeneralPageInvestigationAdapterRequest = {
+        ...adapterRequest,
+        candidateClaim: firstPreparedClaim,
+        repairReason,
+      };
+      repairPrompt = bodyPromptHashes(buildTierBGeneralPageInvestigationAdapterChatBody(repairRequest));
+      adapter = await callTierBGeneralPageInvestigationAdapter(repairRequest);
+      adapterAttempts = 2;
+    }
+  }
   if (!adapter.ok || !adapter.value) {
     return {
       ...base,
@@ -301,6 +329,8 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
         error: adapter.error || "model_error",
         rawAvailable: false,
         prompt: adapterPrompt,
+        attempts: adapterAttempts,
+        ...(repairReason ? { repairReason, repairPrompt } : {}),
       },
       investigationTask: null,
       questionActions,
@@ -318,8 +348,11 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
         source: row.sourceContext,
       })
     : undefined;
-  const localGuardReason = preparedClaim && !investigationTask
+  const finalEligibility = preparedClaim && !investigationTask
     ? pageClaimInvestigationEligibility(preparedClaim, row.text)
+    : undefined;
+  const localGuardReason = finalEligibility
+    ? (finalEligibility.ok ? "invalid_question" : finalEligibility.reason)
     : undefined;
   return {
     ...base,
@@ -344,9 +377,11 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
       value: adapter.value,
       rawAvailable: false,
       prompt: adapterPrompt,
+      attempts: adapterAttempts,
+      ...(repairReason ? { repairReason, repairPrompt } : {}),
     },
     investigationTask: investigationTask ?? null,
-    ...(localGuardReason && !localGuardReason.ok ? { localGuardReason: localGuardReason.reason } : {}),
+    ...(localGuardReason ? { localGuardReason } : {}),
     questionActions,
   };
 }

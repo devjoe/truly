@@ -47,7 +47,25 @@ export type PageClaimInvestigationIneligibilityReason =
   | "ungrounded_atom"
   | "invalid_structure"
   | "missing_attribution"
-  | "invalid_attribution";
+  | "invalid_attribution"
+  | "invalid_question";
+
+const REPAIRABLE_INELIGIBILITY_REASONS = new Set<PageClaimInvestigationIneligibilityReason>([
+  "atom_span_mismatch",
+  "compound_claim",
+  "vague_atom",
+  "generic_subject",
+  "ungrounded_atom",
+  "missing_attribution",
+  "invalid_attribution",
+  "invalid_question",
+]);
+
+export function isRepairablePageClaimIneligibilityReason(
+  reason: PageClaimInvestigationIneligibilityReason,
+): boolean {
+  return REPAIRABLE_INELIGIBILITY_REASONS.has(reason);
+}
 
 export type PageClaimInvestigationEligibility =
   | { ok: true }

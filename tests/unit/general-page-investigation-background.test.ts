@@ -126,6 +126,54 @@ describe("background General Page investigation preparation", () => {
     expect(callAdapter).toHaveBeenCalledWith(expect.objectContaining({ outputLang: "en" }));
   });
 
+  it("performs at most one reason-specific semantic repair inside the same derived job", async () => {
+    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const sendMessage = vi.fn();
+    const callAdapter = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          schemaVersion: 1,
+          decision: "prepared",
+          reason: "actionable",
+          claim: {
+            ...brief.claims[0],
+            atom: { s: "Runtime fixture", p: "reported", o: "one synthetic claim" },
+            policy: { claimKind: "fact", consequence: "public_interest" },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        value: {
+          schemaVersion: 1,
+          decision: "prepared",
+          reason: "actionable",
+          claim: {
+            ...brief.claims[0],
+            atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
+            policy: { claimKind: "fact", consequence: "public_interest" },
+          },
+        },
+      });
+
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request,
+      brief,
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      resourceKey: "gx10|fixture-model",
+      callAdapter,
+      sendMessage,
+    });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled());
+
+    expect(callAdapter).toHaveBeenCalledTimes(2);
+    expect(callAdapter).toHaveBeenLastCalledWith(expect.objectContaining({ repairReason: "atom_span_mismatch" }));
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ status: "prepared" }));
+  });
+
   it("does not schedule overview or claim-free reading results", () => {
     const scheduler = { enqueue: vi.fn() };
     expect(scheduleGeneralPageInvestigationPreparation({

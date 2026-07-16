@@ -174,4 +174,11 @@ describe("General Page investigation adapter", () => {
       claim: { c: "不完整。" },
     }))).toMatchObject({ ok: false, value: null });
   });
+
+  it("marks a reason-specific prompt as the only semantic repair attempt", () => {
+    const prompt = buildGeneralPageInvestigationAdapterPrompt({ ...input, repairReason: "compound_claim" });
+    expect(prompt).toContain("single allowed semantic repair attempt");
+    expect(prompt).toContain("Local guard reason: compound_claim");
+    expect(prompt).toContain("never work around the guard");
+  });
 });

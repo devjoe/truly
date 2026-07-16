@@ -15,6 +15,9 @@ export interface GeneralPageInvestigationAdapterInput {
   groundingText: string;
   source?: GeneralPageInvestigationSourceMetadata;
   outputLang?: Lang;
+  /** One bounded retry after the unchanged local guard rejects a prepared claim. */
+  repairReason?: "atom_span_mismatch" | "compound_claim" | "vague_atom" | "generic_subject" |
+    "ungrounded_atom" | "missing_attribution" | "invalid_attribution" | "invalid_question";
 }
 
 export type GeneralPageInvestigationAdapterReason =
@@ -206,6 +209,10 @@ export function buildGeneralPageInvestigationAdapterPrompt(input: GeneralPageInv
     ...(safeMetadataUrl(input.source?.url) ? { url: safeMetadataUrl(input.source?.url) } : {}),
   };
   return [
+    ...(input.repairReason ? [
+      "This is the single allowed semantic repair attempt. The previous prepared claim failed the unchanged local guard.",
+      `Local guard reason: ${input.repairReason}. Rebuild from Exact grounding text or abstain; never work around the guard.`,
+    ] : []),
     "Prepare or abstain. URL is metadata only; it is not evidence.",
     "不得把網址複製到任何輸出欄位。",
     "## Candidate claim",

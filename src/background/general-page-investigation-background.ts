@@ -13,6 +13,11 @@ import {
   ModelWorkScheduler,
   ModelWorkSupersededError,
 } from "./model-work-scheduler";
+import {
+  buildPageClaimInvestigationTask,
+  isRepairablePageClaimIneligibilityReason,
+  pageClaimInvestigationEligibility,
+} from "../sidepanel/page-claim-investigation";
 
 export interface ScheduleGeneralPageInvestigationPreparationOptions {
   scheduler: ModelWorkScheduler;
@@ -59,6 +64,21 @@ export function scheduleGeneralPageInvestigationPreparation(
 
   const { request } = options;
   const callAdapter = options.callAdapter ?? callTierBGeneralPageInvestigationAdapter;
+  const source = {
+    title: request.context.title,
+    sourceName: request.context.sourceName || request.context.domain,
+    publishedAt: request.context.publishedAt,
+    url: request.context.canonicalUrl || request.context.url,
+  };
+  const adapterRequest: TierBGeneralPageInvestigationAdapterRequest = {
+    endpoint: options.endpoint,
+    model: options.model,
+    apiKey: options.apiKey,
+    candidateClaim,
+    groundingText: request.context.mainText,
+    source,
+    outputLang: investigationSourceLanguage(request.context.mainText, request.outputLang),
+  };
   const id = `general-page-investigation:${request.tabId}:${request.scope}:${request.analysisKey}:0`;
   const work = options.scheduler.enqueue({
     id,
@@ -66,26 +86,39 @@ export function scheduleGeneralPageInvestigationPreparation(
     priority: "derived",
     dedupeKey: id,
     supersedeKey: `general-page-investigation:${request.tabId}:${request.scope}`,
-    run: () => callAdapter({
-      endpoint: options.endpoint,
-      model: options.model,
-      apiKey: options.apiKey,
-      candidateClaim,
-      groundingText: request.context.mainText,
-      source: {
-        title: request.context.title,
-        sourceName: request.context.sourceName || request.context.domain,
-        publishedAt: request.context.publishedAt,
-        url: request.context.canonicalUrl || request.context.url,
-      },
-      outputLang: investigationSourceLanguage(request.context.mainText, request.outputLang),
-    }),
+    run: async () => {
+      const first = await callAdapter(adapterRequest);
+      const firstClaim = first.ok && first.value?.decision === "prepared" ? first.value.claim : undefined;
+      if (!firstClaim) return first;
+      const eligibility = pageClaimInvestigationEligibility(firstClaim, request.context.mainText);
+      const task = eligibility.ok ? buildPageClaimInvestigationTask({
+        analysisKey: request.analysisKey,
+        scope: request.scope,
+        claimIndex: 0,
+        claim: firstClaim,
+        groundingText: request.context.mainText,
+        source,
+      }) : undefined;
+      const repairReason = eligibility.ok ? (task ? undefined : "invalid_question") : eligibility.reason;
+      if (!repairReason || !isRepairablePageClaimIneligibilityReason(repairReason)) return first;
+      return callAdapter({
+        ...adapterRequest,
+        candidateClaim: firstClaim,
+        repairReason: repairReason as TierBGeneralPageInvestigationAdapterRequest["repairReason"],
+      });
+    },
   });
 
   void work.then((result) => {
-    const preparedClaim = result.ok && result.value?.decision === "prepared"
-      ? result.value.claim
-      : undefined;
+    const candidate = result.ok && result.value?.decision === "prepared" ? result.value.claim : undefined;
+    const preparedClaim = candidate && buildPageClaimInvestigationTask({
+      analysisKey: request.analysisKey,
+      scope: request.scope,
+      claimIndex: 0,
+      claim: candidate,
+      groundingText: request.context.mainText,
+      source,
+    }) ? candidate : undefined;
     sendSafely(options.sendMessage, {
       type: "GENERAL_PAGE_INVESTIGATION_RESULT",
       tabId: request.tabId,

@@ -1068,6 +1068,14 @@ verbatim ordered atom parts, selects only one consequential proposition, and
 adds explicit low-risk abstention guidance. The local guard remains strict and
 now exposes precise structure reason codes for private development audits.
 
+The Adapter may now make one reason-specific semantic repair inside the same
+low-priority derived queue job, but only after a prepared output fails one of a
+small set of repairable local-guard reasons. The retry receives the rejected
+claim and reason, must rebuild from exact grounding text or abstain, and cannot
+bypass the unchanged guard. Non-consequential and unsupported outputs are not
+retried. The UI receives `prepared` only after the final claim forms the same
+validated action task; there is no extra foreground job or persisted content.
+
 The private runner also verifies that each source hash is derived from the
 actual input text, refuses to overwrite an evaluation path, and records exact
 input and result digests. These changes improve evaluation integrity; they do
