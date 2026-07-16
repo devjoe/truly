@@ -66,7 +66,10 @@ import {
   requestGeneralPageHostPermission,
 } from "../lib/general-page-host-permission";
 import { copyReadingBriefQuestion, safeFilenamePart, saveMarkdownTextFile } from "./browser-actions";
-import { readingBriefQuestionDisplay } from "./reading-brief-text";
+import {
+  buildReadingBriefQuestionActionPayload,
+  type ReadingBriefQuestionActionSource,
+} from "./reading-brief-text";
 import { createReadingBriefQuestionList } from "./reading-brief-renderer";
 import {
   buildPageClaimInvestigationTask,
@@ -1018,7 +1021,11 @@ function briefHtml(
     <p class="page-reader-analysis-summary">${escapeHtml(brief.summary)}</p>
     ${briefSectionHtml("", brief.bg?.map((item) => `${item.t}: ${item.why}${item.q ? ` ${item.q}` : ""}`) ?? [])}
     ${overview ? "" : briefClaimsHtml(brief.claims ?? [], investigationContext, tr)}
-    ${briefQuestionsHtml(brief.qs ?? [], pageTitle, tr, lang)}
+    ${briefQuestionsHtml(brief.qs ?? [], {
+      title: investigationContext?.source?.title || pageTitle,
+      summary: brief.summary,
+      url: investigationContext?.source?.url,
+    }, tr, lang)}
     <div class="page-reader-analysis-closing">
       ${noteHtml}
       <p class="page-reader-analysis-footer reading-brief-model-note" role="note" title="${escapeHtml(attributionTitle)}" aria-label="${escapeHtml(attributionTitle)}">${escapeHtml(attribution)}</p>
@@ -1156,19 +1163,20 @@ function animateClaimRowStateChange(root: ParentNode, previous: ClaimRowSnapshot
  * Reading binds its copy handlers after the generated markup enters the pane.
  */
 function briefQuestionsHtml(
-  questions: Array<{ q: string }>,
-  pageTitle: string | undefined,
+  questions: NonNullable<GeneralPageBrief["qs"]>,
+  source: ReadingBriefQuestionActionSource,
   tr: (key: string, params?: Record<string, string | number>) => string,
   lang: Lang,
 ): string {
   if (questions.length === 0) return "";
   return createReadingBriefQuestionList({
     label: tr("sidepanel.page.analysis.questions"),
-    items: questions.map((question) => {
-    const display = readingBriefQuestionDisplay(question.q);
-    const query = [display, pageTitle?.trim()].filter(Boolean).join(" ").slice(0, 200);
-      return { displayQuestion: display, searchQuery: query };
-    }),
+    items: questions.map((question) => buildReadingBriefQuestionActionPayload({
+      question: question.q,
+      kind: question.kind,
+      lang,
+      source,
+    })),
     lang,
     blockClassName: "page-reader-analysis-section page-reader-analysis-questions",
     copyButtonClassName: "page-analysis-question-copy",

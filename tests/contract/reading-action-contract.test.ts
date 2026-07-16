@@ -10,6 +10,7 @@ import {
   READING_ACTIVATION_SOURCES,
   READING_ACTIVATION_TARGET_KINDS,
 } from "@src/lib/reading-action-types";
+import { buildReadingBriefQuestionActionPayload } from "@src/sidepanel/reading-brief-text";
 
 describe("reading action contract", () => {
   it("keeps the future action vocabulary explicit and stable", () => {
@@ -93,5 +94,37 @@ describe("reading action contract", () => {
     expect(isReadingActivation({ source: "hotkey", targetKind: "selection" })).toBe(false);
     expect(isReadingActivation({ source: "sidepanel", targetKind: "paragraph", action: "read" })).toBe(false);
     expect(isReadingActivation({ source: "hotkey", targetKind: "current-region", action: "auto_verdict" })).toBe(false);
+  });
+
+  it("versions follow-up question projections without enabling the agent task", () => {
+    const payload = buildReadingBriefQuestionActionPayload({
+      question: "此內容有哪些不同觀點？",
+      kind: "counter",
+      lang: "zh-TW",
+      source: {
+        title: "Synthetic policy page",
+        summary: "Synthetic context for a contract-only action.",
+        url: "https://example.com/policy",
+      },
+    });
+
+    expect(Object.keys(payload).sort()).toEqual([
+      "agentTask",
+      "aiModePrompt",
+      "copyText",
+      "displayText",
+      "googleQuery",
+      "modelText",
+      "version",
+    ]);
+    expect(payload.version).toBe(1);
+    expect(payload.agentTask).toMatchObject({
+      version: 1,
+      type: "reading_follow_up",
+      kind: "counter",
+    });
+    expect(payload.copyText).not.toContain("https://");
+    expect(payload.googleQuery).not.toContain("https://");
+    expect(payload.aiModePrompt).toContain("https://example.com/policy");
   });
 });

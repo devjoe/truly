@@ -11,6 +11,10 @@ import type { GeneralPageModelContext } from "./general-page-model-context";
 import type { GeneralPageEffectiveModelContextUse } from "./general-page-parser-advisor";
 import { providerCanRunTierBFeature } from "./feature-readiness";
 import { applyGeneralPageBriefOutputReview } from "./model-output-review";
+import {
+  duplicatesReadingBriefVerification,
+  isNaturalReadingBriefFollowUpQuestion,
+} from "./reading-question-policy";
 
 export interface GeneralPageBrief {
   schemaVersion: 1;
@@ -166,7 +170,13 @@ export function normalizeGeneralPageBrief(
   };
   const bg = normalizeArray(record.bg, 2, normalizeBackground);
   const claims = normalizeArray(record.claims, 1, normalizeClaim);
-  const qs = normalizeArray(record.qs, 1, normalizeQuestion);
+  const verificationTexts = claims.flatMap((claim) => [claim.c, claim.need, claim.q]);
+  const questionLang = outputLang === "en" ? "en" : "zh-TW";
+  const qs = normalizeArray(record.qs, 4, normalizeQuestion)
+    .filter((question) =>
+      isNaturalReadingBriefFollowUpQuestion(question.q, questionLang) &&
+      !duplicatesReadingBriefVerification(question.q, verificationTexts))
+    .slice(0, 1);
   const note = boundedString(record.note, 200);
   if (bg.length > 0) brief.bg = bg;
   if (claims.length > 0) brief.claims = claims;

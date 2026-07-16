@@ -272,6 +272,30 @@ evidence remains under
 - Do not add context menu or in-page selected-text buttons in this UI pass.
   Those remain separate permission and interaction decisions.
 
+### Feed Reading Brief loading continuity checkpoint (2026-07-16)
+
+Feed now keeps a compact 148-164 px content reserve while a Reading Brief is
+being prepared. The reserve uses static skeleton lines, is hidden from
+assistive technology, contains no interactive elements, and accompanies one
+polite live status. It prevents the card from growing from a single status row
+to a full Reading Brief without implying that the model has already produced
+real content.
+
+The ready Reading Brief itself appears without a section-level reveal
+animation. A background CDP first-frame capture showed that animating the
+newly inserted section could briefly omit otherwise stable compositor layers;
+the stable loading frame already provides enough visual continuity. Existing
+secondary action reveals remain intact, and `prefers-reduced-motion` disables
+their animation plus the loading pulse.
+
+The 430 px continuity gate checks initial and long-wait geometry, exactly one
+live status, hidden/noninteractive skeleton semantics, horizontal overflow,
+reduced motion, ready-first-frame content, absence of transform/clip effects,
+and scroll movement no greater than 8 px. The latest pass kept the reading
+section at 162 px throughout loading, rendered a complete ready first frame,
+and kept `scrollTop` at zero. Screenshots and measurements remain private under
+`tmp/`.
+
 ## Evidence Gates
 
 The current CDP audit includes Page/Web design restraint and interaction

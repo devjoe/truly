@@ -82,4 +82,18 @@ describe("page reading exports", () => {
     expect(text).toContain("Items to verify");
     expect(text).toContain("Follow-up questions");
   });
+
+  it("uses the shared concise display projection for exported follow-up questions", () => {
+    const text = formatCompactPageReadingExport(packet({
+      brief: {
+        schemaVersion: 1,
+        summary: "這是頁面內容的閱讀脈絡。",
+        qs: [{ q: "這篇文章有哪些不同觀點？", kind: "counter" }],
+        model: "synthetic-model",
+      },
+    }));
+
+    expect(text).toContain("延伸問題\n• 有哪些不同觀點？");
+    expect(text).not.toContain("• 這篇文章有哪些不同觀點？");
+  });
 });

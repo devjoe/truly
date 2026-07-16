@@ -158,6 +158,25 @@ describe("General Page analysis contract", () => {
     expect(brief?.qs).toEqual([{ q: "What background matters?", kind: "context" }]);
   });
 
+  it("applies the semantic follow-up boundary even when the model mislabels source intent", () => {
+    const brief = normalizeGeneralPageBrief({
+      schemaVersion: 1,
+      summary: "頁面說明一項合成政策。",
+      claims: [{
+        c: "合成機關公布一項政策。",
+        why: "可能影響公共判斷。",
+        need: "合成機關公告。",
+        q: "合成機關是否公布一項政策？",
+      }],
+      qs: [
+        { q: "此貼文所引用之時間線數據來源為何？", kind: "counter" },
+        { q: "這項政策有哪些不同觀點？", kind: "counter" },
+      ],
+    }, "mock-model", "zh-TW");
+
+    expect(brief?.qs).toEqual([{ q: "這項政策有哪些不同觀點？", kind: "counter" }]);
+  });
+
   it("rejects wrong schema versions and prose-wrapped JSON", () => {
     expect(normalizeGeneralPageBrief({ schemaVersion: 2, summary: "No" }, "model")).toBeNull();
     expect(parseGeneralPageBriefContent("Here is {\"schemaVersion\":1,\"summary\":\"No\"}", "model")).toMatchObject({

@@ -795,17 +795,29 @@ next candidate gate closed; no fresh holdout should be created yet.
   `qwen3.6-35b` completed with 30/30 parse success and no model request errors.
   Raw post text, per-row output, and screenshots remain gitignored under
   `tmp/`. Manual review found one remaining semantic blind spot: a
-  source-seeking question phrased as `counter` passed the current policy. A
-  separate 430 px loading-stage capture observed a compact loading row for at
-  least nine seconds before the full Reading Brief arrived, leaving a large
-  loading-to-ready height change. Both are explicitly deferred to the next
-  stabilization slice rather than described as resolved here.
-- The next slice must validate three separate question representations:
-  model-authored `qs.q`, the concise displayed/copied question, and the
-  context-enriched Google AI Mode payload. Deictic wording is not itself a
-  rejection reason when the final action payload is self-contained; the actual
-  fail-closed boundary is verification/source intent appearing in `qs` instead
-  of claims or checks.
+  source-seeking question phrased as `counter` passed the earlier policy.
+- That blind spot is now closed by a phrase-level semantic guard. Questions
+  that ask where quoted figures, cited material, or the post's sources came
+  from are rejected regardless of their model-authored kind. Ordinary
+  source-literacy questions remain allowed when they ask how to judge source
+  quality instead of requesting evidence for the current claim.
+- Question actions now have a versioned typed projection with separate
+  `modelText`, concise `displayText`, portable `copyText`, compact
+  `googleQuery`, context-enriched `aiModePrompt`, and a non-runtime
+  `agentTask`. Rendering, Page/Focus export, copy, and Google AI Mode consume
+  that shared contract instead of rebuilding meaning independently. HTTP(S)
+  source URLs are sanitized and appear only as optional AI Mode metadata.
+- Feed Reading Brief loading now reserves 148-164 px with a static,
+  `aria-hidden` skeleton and exactly one polite live status. The swap to ready
+  content does not animate the whole section, avoiding a transient compositor
+  frame in which surrounding UI layers disappeared. Secondary tool actions may
+  still use their existing staged reveal. Reduced motion removes the remaining
+  pulse/reveal animations.
+- A background-only 430 px CDP audit observed the same 162 px loading section
+  at start and after four seconds, no overflow, one live status, zero
+  interactive skeleton elements, no scroll movement, and a complete ready
+  first frame. Generated screenshots and measurements remain gitignored under
+  `tmp/`.
 
 ## Verification Gates
 

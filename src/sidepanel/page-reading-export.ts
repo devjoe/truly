@@ -4,6 +4,7 @@ import type { GeneralPageEffectiveModelContextUse } from "../lib/general-page-pa
 import { t } from "../lib/i18n";
 import { modelDisplayIdentity } from "../lib/model-display";
 import type { Lang } from "../lib/types";
+import { buildReadingBriefQuestionActionPayload } from "./reading-brief-text";
 
 const MAX_EXPORT_LINKS = 6;
 
@@ -110,7 +111,15 @@ function briefTextSections(packet: PageReadingExportPacket): string[] {
   }
   if (brief.qs?.length) {
     sections.push("", t("sidepanel.dynamic.readingBrief.questions", lang));
-    for (const question of brief.qs) sections.push(`• ${clean(question.q)}`);
+    for (const question of brief.qs) {
+      const action = buildReadingBriefQuestionActionPayload({
+        question: question.q,
+        kind: question.kind,
+        lang,
+        source: { title: packet.title, summary: brief.summary, url: packet.url },
+      });
+      sections.push(`• ${clean(action.displayText)}`);
+    }
   }
   if (clean(brief.note)) sections.push("", clean(brief.note));
   return sections;
@@ -157,7 +166,15 @@ export function formatFullPageReadingMarkdown(packet: PageReadingExportPacket): 
   }
   if (brief.qs?.length) {
     lines.push("", `### ${markdownText(t("sidepanel.dynamic.readingBrief.questions", lang))}`, "");
-    for (const question of brief.qs) lines.push(`- ${markdownText(question.q)}`);
+    for (const question of brief.qs) {
+      const action = buildReadingBriefQuestionActionPayload({
+        question: question.q,
+        kind: question.kind,
+        lang,
+        source: { title: packet.title, summary: brief.summary, url: packet.url },
+      });
+      lines.push(`- ${markdownText(action.displayText)}`);
+    }
   }
   if (clean(brief.note)) {
     lines.push("", `> ${markdownText(brief.note ?? "")}`);

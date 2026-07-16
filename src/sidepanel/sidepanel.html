@@ -35,6 +35,7 @@
       --truly-type-body: 12px;
       --truly-type-title: 14px;
       --truly-control-height: 32px;
+      --truly-reading-loading-reserve: clamp(148px, 18vh, 164px);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       font-size: var(--truly-type-body);
       color: var(--truly-sidepanel-text);
@@ -1391,9 +1392,6 @@
       animation-delay: calc(var(--truly-reveal-index, 0) * 45ms);
       transform-origin: top left;
     }
-    .sidepanel-reveal-reading {
-      animation-duration: 210ms;
-    }
     @keyframes truly-sidepanel-reveal-step {
       from {
         opacity: 0;
@@ -1753,6 +1751,9 @@
       background: transparent;
       gap: 8px;
     }
+    .reading-brief-section.is-loading {
+      min-height: var(--truly-reading-loading-reserve);
+    }
     .reading-brief-loading,
     .reading-brief-error {
       font-size: var(--truly-type-body);
@@ -1764,6 +1765,24 @@
       align-items: center;
       gap: 7px;
     }
+    .reading-brief-loading-reserve {
+      display: grid;
+      align-content: start;
+      gap: 9px;
+      min-height: 116px;
+      padding: 7px 0 2px;
+    }
+    .reading-brief-loading-reserve span {
+      display: block;
+      width: 26%;
+      height: 7px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--truly-sidepanel-muted-text) 14%, transparent);
+    }
+    .reading-brief-loading-reserve span:nth-child(2) { width: 92%; }
+    .reading-brief-loading-reserve span:nth-child(3) { width: 68%; }
+    .reading-brief-loading-reserve span:nth-child(4) { width: 24%; margin-top: 7px; }
+    .reading-brief-loading-reserve span:nth-child(5) { width: 84%; }
     .reading-brief-muted-note {
       font-size: var(--truly-type-body);
       line-height: 1.45;

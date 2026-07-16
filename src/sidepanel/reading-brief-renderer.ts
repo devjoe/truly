@@ -4,11 +4,11 @@ import { t } from "../lib/i18n";
 import { modelDisplayIdentity } from "../lib/model-display";
 import { copyReadingBriefQuestion } from "./browser-actions";
 import {
+  buildEventReadingBriefQuestionActionPayload,
   googleSearchUrl,
   readingBriefContextRows,
-  readingBriefQuestionDisplay,
   readingBriefQuestionLabel,
-  readingBriefQuestionSearchQuery,
+  type ReadingBriefQuestionActionPayload,
   type ReadingBriefQuestionItem,
 } from "./reading-brief-text";
 import {
@@ -43,14 +43,9 @@ function createCopyIcon(): SVGSVGElement {
   return svg;
 }
 
-export interface ReadingBriefQuestionListItem {
-  displayQuestion: string;
-  searchQuery: string;
-}
-
 interface ReadingBriefQuestionListOptions {
   label: string;
-  items: ReadingBriefQuestionListItem[];
+  items: ReadingBriefQuestionActionPayload[];
   lang: Lang;
   blockClassName?: string;
   copyButtonClassName?: string;
@@ -86,7 +81,7 @@ export function createReadingBriefQuestionList({
 
     const text = document.createElement("span");
     text.className = "reading-brief-question-text";
-    text.textContent = item.displayQuestion;
+    text.textContent = item.displayText;
     row.appendChild(text);
 
     const actions = document.createElement("span");
@@ -95,28 +90,28 @@ export function createReadingBriefQuestionList({
     const copy = document.createElement("button");
     copy.type = "button";
     copy.className = ["reading-brief-copy-btn", copyButtonClassName].filter(Boolean).join(" ");
-    copy.dataset.question = item.displayQuestion;
+    copy.dataset.question = item.copyText;
     copy.appendChild(createCopyIcon());
     copy.title = t("sidepanel.dynamic.readingBrief.copyQuestion", lang);
     copy.setAttribute("aria-label", t("sidepanel.dynamic.readingBrief.copyQuestionAria", lang, {
-      question: item.displayQuestion,
+      question: item.displayText,
     }));
     if (onCopy) {
       copy.addEventListener("click", (event) => {
         event.stopPropagation();
-        onCopy(copy, item.displayQuestion);
+        onCopy(copy, item.copyText);
       });
     }
     actions.appendChild(copy);
 
     const link = document.createElement("a");
     link.className = "reading-brief-google-link";
-    link.href = googleSearchUrl(item.searchQuery);
+    link.href = googleSearchUrl(item.aiModePrompt);
     link.target = "_blank";
     link.rel = "noopener noreferrer";
     link.textContent = t("sidepanel.dynamic.readingBrief.askGemini", lang);
     link.setAttribute("aria-label", t("sidepanel.dynamic.readingBrief.askGeminiAria", lang, {
-      query: item.searchQuery,
+      query: item.aiModePrompt,
     }));
     link.title = t("sidepanel.dynamic.readingBrief.askGeminiTitle", lang);
     actions.appendChild(link);
@@ -150,17 +145,13 @@ function appendReadingBriefList(parent: HTMLElement, title: string, rows: string
 function appendReadingBriefQuestions(
   parent: HTMLElement,
   event: DashboardPostEvent,
-  brief: ReadingBrief,
   questions: ReadingBriefQuestionItem[],
   lang: Lang,
 ): void {
   if (questions.length === 0) return;
   parent.appendChild(createReadingBriefQuestionList({
     label: readingBriefQuestionLabel(event, lang),
-    items: questions.map((item) => ({
-      displayQuestion: readingBriefQuestionDisplay(item.q),
-      searchQuery: readingBriefQuestionSearchQuery(event, item.q, brief, lang),
-    })),
+    items: questions.map((item) => buildEventReadingBriefQuestionActionPayload(event, item, lang)),
     lang,
     onCopy: (button, question) => copyReadingBriefQuestion(button, question, lang),
   }));
@@ -215,7 +206,7 @@ export function renderReadingBriefBody(event: DashboardPostEvent, brief: Reading
     body.appendChild(note);
   }
   appendReadingBriefList(body, t("sidepanel.dynamic.readingBrief.verify", lang), verificationRows.length > 0 ? verificationRows : fallbackRows);
-  appendReadingBriefQuestions(body, event, brief, visibleQuestions, lang);
+  appendReadingBriefQuestions(body, event, visibleQuestions, lang);
   if (hasVisibleContent) appendReadingBriefModelNote(body, brief, lang);
   return body;
 }
