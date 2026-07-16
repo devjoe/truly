@@ -126,7 +126,7 @@ describe("background General Page investigation preparation", () => {
     expect(callAdapter).toHaveBeenCalledWith(expect.objectContaining({ outputLang: "en" }));
   });
 
-  it("performs at most one reason-specific semantic repair inside the same derived job", async () => {
+  it("fails closed after the first rejected adapter result instead of repairing in runtime", async () => {
     const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
     const sendMessage = vi.fn();
     const callAdapter = vi.fn()
@@ -169,9 +169,9 @@ describe("background General Page investigation preparation", () => {
     });
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled());
 
-    expect(callAdapter).toHaveBeenCalledTimes(2);
-    expect(callAdapter).toHaveBeenLastCalledWith(expect.objectContaining({ repairReason: "atom_span_mismatch" }));
-    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ status: "prepared" }));
+    expect(callAdapter).toHaveBeenCalledTimes(1);
+    expect(callAdapter).not.toHaveBeenCalledWith(expect.objectContaining({ repairReason: expect.anything() }));
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ status: "unavailable" }));
   });
 
   it("does not schedule overview or claim-free reading results", () => {

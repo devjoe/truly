@@ -818,6 +818,14 @@ next candidate gate closed; no fresh holdout should be created yet.
   interactive skeleton elements, no scroll movement, and a complete ready
   first frame. Generated screenshots and measurements remain gitignored under
   `tmp/`.
+- An old-30 product-semantic replay showed that eight reason-specific Adapter
+  retries yielded no accepted actions. Runtime now performs one low-priority
+  Adapter attempt only; the private runner exposes repair solely through an
+  explicit diagnostic flag and records `repairMode` in run metadata. Local
+  action guards also reject incomplete navigation-tail quotes,
+  under-specified comparisons, and generic evidence requirements. Regular
+  Google search receives bounded claim/evidence anchors, while page metadata
+  and URL remain AI-Mode-only context.
 
 ## Verification Gates
 

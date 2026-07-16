@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildGoogleSearchKeywords,
   buildPageClaimInvestigationTask,
   deterministicClaimQuestion,
   geminiEvidenceSearchUrl,
@@ -35,10 +36,30 @@ describe("page claim investigation contract", () => {
     });
 
     expect(task).toBeDefined();
+    expect(task?.googleKeywords).not.toContain("食藥署表示 中聯油品下架29項產品");
+    expect(task?.googleKeywords).toContain("中聯油品");
+    expect(task?.googleKeywords).toContain("29項產品");
+    expect(task?.googleKeywords).toContain("食藥署公告與產品清單");
     expect(task?.googleKeywords).not.toContain("https://");
     expect(task?.googleKeywords).not.toContain("fda.gov.tw");
     expect(task?.aiModePrompt).toContain("來源網址（metadata）");
     expect(task?.aiModePrompt).toContain("https://www.fda.gov.tw/example?id=29");
+  });
+
+  it("plans compact Google keywords from claim anchors and a concrete evidence family", () => {
+    const exactClaim = "Example Agency reported 232 affected products on July 8.";
+    const googleKeywords = buildGoogleSearchKeywords({
+      exactClaim,
+      why: "The number affects public risk assessment.",
+      evidenceNeed: "The agency announcement and affected-product list.",
+      question: "Did Example Agency report 232 affected products on July 8?",
+    });
+
+    expect(googleKeywords).not.toBe(exactClaim);
+    expect(googleKeywords).toContain("Example Agency");
+    expect(googleKeywords).toContain("232");
+    expect(googleKeywords).toContain("agency announcement");
+    expect(googleKeywords).not.toContain("Did");
   });
 
   it("ignores metadata-only attribution when the claim has no outer source frame", () => {
@@ -107,8 +128,9 @@ describe("page claim investigation contract", () => {
       },
       sourceUrl: "https://example.test/report",
     });
-    expect(task?.googleKeywords).toContain("Synthetic public notice");
-    expect(task?.googleKeywords).not.toContain("Is “Synthetic public notice");
+    expect(task?.googleKeywords).toContain("agency announcement product list");
+    expect(task?.googleKeywords).not.toContain("Synthetic public notice");
+    expect(task?.googleKeywords).not.toContain("Example News");
     expect(task?.aiModePrompt).toContain("Synthetic public notice");
     expect(task?.aiModePrompt).toContain("The agency announcement and product list");
     expect(task?.aiModePrompt).not.toContain("..");
@@ -330,6 +352,141 @@ describe("page claim investigation contract", () => {
       claim,
       groundingText: unrelatedText,
     })).toBeUndefined();
+  });
+
+  it("keeps related-link tail fragments from becoming investigation actions", () => {
+    const relatedHeadline = "Example Agency announced a public safety recall.";
+    const claim = {
+      c: relatedHeadline,
+      why: "The recall could affect public safety.",
+      need: "The agency recall notice and affected-product list.",
+      q: "Did Example Agency announce a public safety recall?",
+      atom: { s: "Example Agency", p: "announced", o: "a public safety recall" },
+      policy: { claimKind: "fact" as const, consequence: "safety" as const },
+      sourceQuote: relatedHeadline,
+    };
+    const groundingText = [
+      "The article body discusses a different policy topic in detail.",
+      "Related stories",
+      relatedHeadline,
+    ].join("\n");
+
+    expect(pageClaimInvestigationEligibility(claim, groundingText)).toEqual({
+      ok: false,
+      reason: "navigation_fragment",
+    });
+    expect(buildPageClaimInvestigationTask({
+      analysisKey: "analysis:related-tail",
+      scope: "page",
+      claimIndex: 0,
+      claim,
+      groundingText,
+    })).toBeUndefined();
+  });
+
+  it("fails closed when the only source quote is an incomplete fragment at the extraction boundary", () => {
+    const tailFragment = "Example Agency announced a public safety recall affecting several";
+    const claim = {
+      c: `${tailFragment}.`,
+      why: "The recall could affect public safety.",
+      need: "The agency recall notice and affected-product list.",
+      q: `Did ${tailFragment}?`,
+      atom: { s: "Example Agency", p: "announced", o: "a public safety recall affecting several" },
+      policy: { claimKind: "fact" as const, consequence: "safety" as const },
+      sourceQuote: tailFragment,
+    };
+    const prefix = "The primary article body discusses a different policy topic in detail. ".repeat(40);
+    const groundingText = `${prefix.slice(0, 1_600 - tailFragment.length)}${tailFragment}`;
+
+    expect(groundingText).toHaveLength(1_600);
+    expect(pageClaimInvestigationEligibility(claim, groundingText)).toEqual({
+      ok: false,
+      reason: "navigation_fragment",
+    });
+  });
+
+  it("does not treat a complete final sentence as a truncated tail fragment", () => {
+    const quoteWithoutPunctuation = "Example Agency announced a public safety recall";
+    const claim = {
+      c: `${quoteWithoutPunctuation}.`,
+      why: "The recall could affect public safety.",
+      need: "The agency recall notice and affected-product list.",
+      q: `Did ${quoteWithoutPunctuation}?`,
+      atom: { s: "Example Agency", p: "announced", o: "a public safety recall" },
+      policy: { claimKind: "fact" as const, consequence: "safety" as const },
+      sourceQuote: quoteWithoutPunctuation,
+    };
+    const prefix = "The primary article body provides complete context. ".repeat(40);
+    const finalSentence = `${quoteWithoutPunctuation}.`;
+    const groundingText = `${prefix.slice(0, 1_600 - finalSentence.length)}${finalSentence}`;
+
+    expect(pageClaimInvestigationEligibility(claim, groundingText)).toEqual({ ok: true });
+  });
+
+  it("fails closed on comparative claims without a time, market, region, or metric", () => {
+    const claim = {
+      c: "Example Model performs better than competing tools.",
+      why: "The comparison could affect a purchase decision.",
+      need: "A named benchmark report with its measurement method.",
+      q: "Does Example Model perform better than competing tools?",
+      atom: { s: "Example Model", p: "performs better than", o: "competing tools" },
+      policy: { claimKind: "fact" as const, consequence: "money" as const },
+    };
+
+    expect(pageClaimInvestigationEligibility(claim, claim.c)).toEqual({
+      ok: false,
+      reason: "underspecified_comparison",
+    });
+
+    const missingMarketOrRegion = {
+      ...claim,
+      c: "In 2026, Example Model scored higher accuracy than Rival Model.",
+      q: "In 2026, did Example Model score higher accuracy than Rival Model?",
+      atom: { s: "Example Model", p: "scored higher accuracy than", o: "Rival Model" },
+    };
+    expect(pageClaimInvestigationEligibility(missingMarketOrRegion, missingMarketOrRegion.c)).toEqual({
+      ok: false,
+      reason: "underspecified_comparison",
+    });
+  });
+
+  it("keeps a bounded comparison when the source names its time, market, and metric", () => {
+    const claim = {
+      c: "In a 2026 Taiwan benchmark, Example Model scored 82 accuracy points versus Rival Model's 76.",
+      why: "The measured comparison could affect a purchase decision.",
+      need: "The named benchmark report, scoring method, and result table.",
+      q: "In a 2026 Taiwan benchmark, did Example Model score 82 accuracy points versus Rival Model's 76?",
+      atom: { s: "Example Model", p: "scored", o: "82 accuracy points" },
+      policy: { claimKind: "fact" as const, consequence: "money" as const },
+    };
+
+    expect(pageClaimInvestigationEligibility(claim, claim.c)).toEqual({ ok: true });
+
+    const marketShareClaim = {
+      c: "In the 2026 Taiwan smartphone market, Example Phone had a higher market share than Rival Phone.",
+      why: "The measured comparison could affect a purchase decision.",
+      need: "The 2026 Taiwan smartphone market-share dataset and methodology.",
+      q: "In the 2026 Taiwan smartphone market, did Example Phone have a higher market share than Rival Phone?",
+      atom: { s: "Example Phone", p: "had a higher market share than", o: "Rival Phone" },
+      policy: { claimKind: "fact" as const, consequence: "money" as const },
+    };
+    expect(pageClaimInvestigationEligibility(marketShareClaim, marketShareClaim.c)).toEqual({ ok: true });
+  });
+
+  it("requires an evidence family instead of a generic request for evidence", () => {
+    const claim = {
+      c: "Example Agency announced a public safety recall.",
+      why: "The recall could affect public safety.",
+      need: "External evidence.",
+      q: "Did Example Agency announce a public safety recall?",
+      atom: { s: "Example Agency", p: "announced", o: "a public safety recall" },
+      policy: { claimKind: "fact" as const, consequence: "safety" as const },
+    };
+
+    expect(pageClaimInvestigationEligibility(claim, claim.c)).toEqual({
+      ok: false,
+      reason: "generic_evidence_need",
+    });
   });
 
   it("rejects unsafe or vague model queries and forms a natural fallback question", () => {

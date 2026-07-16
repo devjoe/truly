@@ -4,11 +4,19 @@ import type { GeneralPageBrief } from "@src/lib/general-page-analysis";
 import {
   assertPrivateSemanticAuditFetchTarget,
   installPrivateSemanticAuditNetworkGuard,
+  privateSemanticAuditRepairMode,
   semanticAuditCompletionsUrl,
 } from "../../scripts/lib/private-general-page-semantic-audit.mjs";
 import { buildPrivateSemanticAuditQuestionActions } from "../../scripts/private-general-page-semantic-audit-projection";
 
 describe("private General Page semantic audit boundary", () => {
+  it("defaults to runtime-parity no-repair and requires an explicit evaluation-only mode", () => {
+    expect(privateSemanticAuditRepairMode([])).toBe("none");
+    expect(privateSemanticAuditRepairMode(["--repair-mode", "semantic_once"])).toBe("semantic_once");
+    expect(() => privateSemanticAuditRepairMode(["--repair-mode", "automatic"]))
+      .toThrow(/--repair-mode must be none or semantic_once/);
+  });
+
   it("allows only the declared model completions endpoint and never follows redirects", async () => {
     const endpoint = "https://model-runtime.example/v1";
     const expected = "https://model-runtime.example/v1/chat/completions";
@@ -57,7 +65,8 @@ describe("private General Page semantic audit boundary", () => {
         sourceUrl: "https://www.ft.com/content/example",
       },
     });
-    expect(action.copyText).toContain("來源：US troops to get testosterone treatment");
+    expect(action.copyText).toContain("摘要：美國國防部推出軍人荷爾蒙篩檢與治療計畫");
+    expect(action.copyText).not.toContain("來源：US troops to get testosterone treatment");
     expect(action.copyText).not.toContain("https://");
     expect(action.googleQuery).not.toContain("https://");
     expect(action.googleQuery).not.toBe(action.copyText);

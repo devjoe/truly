@@ -120,13 +120,48 @@ describe("reading brief question action payload", () => {
       },
     });
 
-    expect(action.copyText.endsWith(`問題：${action.displayText}`)).toBe(true);
+    expect(action.copyText.endsWith(action.displayText)).toBe(true);
     expect(action.googleQuery.endsWith(action.displayText)).toBe(true);
     expect(action.aiModePrompt).toContain(`問題：${action.displayText}`);
     expect(action.aiModePrompt.endsWith("請優先找可公開查證的來源。")).toBe(true);
     expect(Array.from(action.copyText).length).toBeLessThanOrEqual(520);
     expect(Array.from(action.googleQuery).length).toBeLessThanOrEqual(240);
     expect(Array.from(action.aiModePrompt).length).toBeLessThanOrEqual(760);
+  });
+
+  it("does not splice a page summary into a self-contained question action", () => {
+    const action = buildReadingBriefQuestionActionPayload({
+      question: "Which document supports the July 8 sports eligibility ruling?",
+      kind: "context",
+      lang: "en",
+      source: {
+        title: "Supreme Court policy coverage",
+        summary: "The Supreme Court issued a separate tax ruling with a different outcome.",
+        url: "https://example.com/policy",
+      },
+    });
+
+    expect(action.copyText).toBe(action.displayText);
+    expect(action.googleQuery).toBe(action.displayText);
+    expect(action.aiModePrompt).not.toContain("tax ruling");
+    expect(action.agentTask.context).toBeUndefined();
+    expect(action.agentTask.sourceUrl).toBe("https://example.com/policy");
+  });
+
+  it("uses the post summary instead of a link-preview title for a deictic post question", () => {
+    const action = buildReadingBriefQuestionActionPayload({
+      question: "這篇貼文有哪些不同觀點？",
+      kind: "counter",
+      source: {
+        title: "外部連結的另一個主題",
+        summary: "貼文整理合成政策的支持與反對意見。",
+      },
+    });
+
+    expect(action.copyText).toContain("合成政策的支持與反對意見");
+    expect(action.copyText).not.toContain("外部連結的另一個主題");
+    expect(action.googleQuery).toContain("合成政策的支持與反對意見");
+    expect(action.agentTask.context).toContain("合成政策的支持與反對意見");
   });
 
   it("does not send local, credentialed, or query metadata URLs to AI Mode", () => {

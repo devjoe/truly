@@ -51,6 +51,9 @@ describe("General Page investigation adapter", () => {
     expect(body.messages[0]?.content).toContain("candidate is only a clue");
     expect(body.messages[0]?.content).toContain("exact substrings of c");
     expect(body.messages[0]?.content).toContain("low-risk product availability");
+    expect(body.messages[0]?.content).toContain("related or recommended link");
+    expect(body.messages[0]?.content).toContain("named evidence family");
+    expect(body.messages[0]?.content).toContain("comparative claim");
   });
 
   it("normalizes a prepared atomic claim for the existing local guard", () => {
@@ -175,9 +178,10 @@ describe("General Page investigation adapter", () => {
     }))).toMatchObject({ ok: false, value: null });
   });
 
-  it("marks a reason-specific prompt as the only semantic repair attempt", () => {
+  it("marks a reason-specific prompt as evaluation-only semantic repair", () => {
     const prompt = buildGeneralPageInvestigationAdapterPrompt({ ...input, repairReason: "compound_claim" });
     expect(prompt).toContain("single allowed semantic repair attempt");
+    expect(prompt).toContain("evaluation-only");
     expect(prompt).toContain("Local guard reason: compound_claim");
     expect(prompt).toContain("never work around the guard");
   });

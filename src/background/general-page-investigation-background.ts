@@ -15,8 +15,6 @@ import {
 } from "./model-work-scheduler";
 import {
   buildPageClaimInvestigationTask,
-  isRepairablePageClaimIneligibilityReason,
-  pageClaimInvestigationEligibility,
 } from "../sidepanel/page-claim-investigation";
 
 export interface ScheduleGeneralPageInvestigationPreparationOptions {
@@ -86,27 +84,11 @@ export function scheduleGeneralPageInvestigationPreparation(
     priority: "derived",
     dedupeKey: id,
     supersedeKey: `general-page-investigation:${request.tabId}:${request.scope}`,
-    run: async () => {
-      const first = await callAdapter(adapterRequest);
-      const firstClaim = first.ok && first.value?.decision === "prepared" ? first.value.claim : undefined;
-      if (!firstClaim) return first;
-      const eligibility = pageClaimInvestigationEligibility(firstClaim, request.context.mainText);
-      const task = eligibility.ok ? buildPageClaimInvestigationTask({
-        analysisKey: request.analysisKey,
-        scope: request.scope,
-        claimIndex: 0,
-        claim: firstClaim,
-        groundingText: request.context.mainText,
-        source,
-      }) : undefined;
-      const repairReason = eligibility.ok ? (task ? undefined : "invalid_question") : eligibility.reason;
-      if (!repairReason || !isRepairablePageClaimIneligibilityReason(repairReason)) return first;
-      return callAdapter({
-        ...adapterRequest,
-        candidateClaim: firstClaim,
-        repairReason: repairReason as TierBGeneralPageInvestigationAdapterRequest["repairReason"],
-      });
-    },
+    // Semantic repair remains available to the private evaluation harness, but
+    // runtime intentionally performs one adapter attempt only. The old-30
+    // review found no accepted repair, so retrying here added latency without
+    // producing a trustworthy user action.
+    run: () => callAdapter(adapterRequest),
   });
 
   void work.then((result) => {

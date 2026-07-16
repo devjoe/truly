@@ -116,6 +116,14 @@ function boundedActionQuestion(value: string, limit: number): string {
   return Array.from(value.trim().replace(/\s+/g, " ")).slice(0, limit).join("");
 }
 
+function questionNeedsSourceContext(modelText: string, displayText: string): boolean {
+  if (/(?:這篇|此|該|本)(?:貼文|文章|內容)|(?:這|此|該)則(?:貼文|內容)?|\b(?:this|the)\s+(?:post|article|content)\b/iu.test(modelText)) {
+    return true;
+  }
+  return /^(?:有哪些不同觀點|有何不同觀點|背景是什麼|脈絡是什麼|為什麼重要|這代表什麼|what are the different views|what is the background|why does it matter|what does this mean)[？?]?$/iu
+    .test(displayText.trim());
+}
+
 function prependOptionalContext(
   context: string,
   requiredTail: string,
@@ -194,13 +202,21 @@ export function buildReadingBriefQuestionActionPayload(input: {
     ...(sourceSummary ? { summary: sourceSummary } : {}),
     ...(sourceUrl ? { url: sourceUrl } : {}),
   };
-  const portableContext = actionSourceContext(source, lang, false);
-  const fullContext = actionSourceContext(source, lang, true);
+  const needsSourceContext = questionNeedsSourceContext(modelText, displayText);
+  const refersToPost = /貼文|\bpost\b/iu.test(modelText);
+  const useSummaryContext = needsSourceContext && Boolean(source.summary) && (refersToPost || !source.title);
+  const actionSource: ReadingBriefQuestionActionSource = {
+    ...(useSummaryContext && source.summary ? { summary: source.summary } : {}),
+    ...(needsSourceContext && !useSummaryContext && source.title ? { title: source.title } : {}),
+    ...(source.url ? { url: source.url } : {}),
+  };
+  const portableContext = actionSourceContext(actionSource, lang, false);
+  const fullContext = actionSourceContext(actionSource, lang, true);
   const questionText = `${queryLabel("question", lang)}${querySeparator(lang)}${displayText}`;
   const copyText = portableContext
     ? prependOptionalContext(portableContext, questionText, 520, "\n")
     : displayText;
-  const googleContext = cleanSearchContextText(source.title || source.summary || "", 120);
+  const googleContext = cleanSearchContextText(actionSource.title || actionSource.summary || "", 120);
   const googleQuery = prependOptionalContext(googleContext, displayText, 240, " ");
   const aiModeTail = `${questionText} ${queryLabel("publicSources", lang)}`;
   const aiModePrompt = prependOptionalContext(fullContext, aiModeTail, 760, " ");

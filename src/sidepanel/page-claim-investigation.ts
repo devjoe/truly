@@ -3,7 +3,10 @@ import type {
   GeneralPageClaimAttribution,
   GeneralPageBriefClaim,
 } from "../lib/general-page-analysis";
-import { sourceQuoteMatchesGroundingText } from "../lib/general-page-investigation-adapter";
+import {
+  resolveSourceQuote,
+  sourceQuoteMatchesGroundingText,
+} from "../lib/general-page-investigation-adapter";
 import { cleanSearchContextText } from "./format";
 
 export interface PageClaimInvestigationSource {
@@ -41,6 +44,9 @@ export type PageClaimInvestigationIneligibilityReason =
   | "low_consequence_availability"
   | "generic_controversy"
   | "generic_subject"
+  | "navigation_fragment"
+  | "underspecified_comparison"
+  | "generic_evidence_need"
   | "atom_span_mismatch"
   | "compound_claim"
   | "vague_atom"
@@ -82,6 +88,17 @@ const SECOND_PROPOSITION_RE = /(?:，|,)\s*(?:(?:he|she|they|it|the|a|an|[A-Z][\
 const ATTRIBUTION_RELATION_RE = /(?:數據顯示|表示|指出|指稱|宣稱|估計|聲稱|報導|according to|said|reported|estimated|alleged|claimed)/iu;
 const LOW_CONSEQUENCE_AVAILABILITY_RE = /(?:現已|目前)?(?:上市|開賣|販售|供應|有貨|可(?:供)?購買)|\b(?:now\s+)?(?:available|in stock|for sale)\b/iu;
 const GENERIC_CONTROVERSY_RE = /(?:引發|掀起|造成|受到).{0,12}(?:爭議|熱議|討論|批評)|\b(?:sparked|caused|drew|generated)\s+(?:online\s+)?(?:controversy|debate|discussion|criticism)\b/iu;
+const NAVIGATION_SECTION_LABEL_RE = /^(?:related(?:\s+(?:stories|articles|news|links))?|read\s+more|recommended|more\s+(?:news|stories|articles)|see\s+also|相關(?:文章|新聞|報導|連結)|延伸閱讀|推薦閱讀|更多(?:新聞|報導|文章|內容))[：:]?$/iu;
+const COMPARATIVE_ASSERTION_RE = /\b(?:better|worse|higher|lower|faster|slower|cheaper|costlier|more\s+(?:effective|accurate|popular|expensive)|less\s+(?:effective|accurate|popular|expensive)|outperform(?:s|ed)?|best|worst|largest|smallest|highest|lowest)\b|(?:優於|劣於|勝過|不如|表現更好|較(?:高|低|快|慢|便宜|昂貴|準確|有效)|最(?:高|低|快|慢|便宜|昂貴|準確|有效)|排名第一)/iu;
+const COMPARISON_TIME_RE = /\b(?:19|20)\d{2}\b|\b(?:january|february|march|april|may|june|july|august|september|october|november|december|quarter|year)\b|(?:民國\s*\d{2,3}\s*年|\d{2,3}\s*年度|\d{1,2}\s*月|季度)/iu;
+const COMPARISON_MARKET_OR_REGION_RE = /\b(?:market|region|worldwide|global|national|nationwide|local)\b|(?:市場|地區|區域|全球|全國|台灣|臺灣|美國|中國|日本|歐盟)/iu;
+const COMPARISON_METRIC_RE = /\b(?:benchmark|score|rate|accuracy|latency|price|cost|revenue|sales|market\s+share|users?|cases?|points?|percent(?:age)?|seconds?|minutes?|hours?)\b|(?:基準測試|分數|得分|比率|準確率|延遲|價格|成本|營收|銷量|市占率|市場占有率|占有率|使用者|用戶|人數|件數|百分比|百分點|秒|分鐘|小時|指標)/iu;
+const GENERIC_EVIDENCE_NEED_RE = /^(?:(?:(?:an?|the)\s+)?(?:(?:external|supporting|reliable|authoritative|official|independent|additional|more)\s+)*(?:evidence|proof|sources?|data|information)|(?:(?:外部|支持|可靠|權威|官方|獨立|更多|相關)\s*)*(?:證據|證明|資料|來源|資訊))$/iu;
+const SEARCH_STOP_WORDS = new Set([
+  "a", "an", "and", "are", "as", "at", "be", "been", "being", "by", "did", "do", "does", "for",
+  "from", "has", "have", "had", "in", "is", "it", "of", "on", "or", "that", "the", "this", "to",
+  "was", "were", "will", "with",
+]);
 
 const ATTRIBUTION_MODALITY_RE = {
   statement: /(?:表示|指出|聲稱|said|stated|claimed)/iu,
@@ -143,6 +160,80 @@ function hasSharedGroundingAnchor(claimText: string, sourceQuote: string): boole
     const normalized = normalizedMatchText(anchor);
     return normalized.length >= 2 && quote.includes(normalized);
   });
+}
+
+function sourceQuoteIsNavigationFragment(claim: GeneralPageBriefClaim, groundingText: string): boolean {
+  const quote = resolveSourceQuote(claim.sourceQuote, groundingText, claim.c);
+  if (!quote) return false;
+  const positions: number[] = [];
+  for (let cursor = groundingText.indexOf(quote); cursor >= 0; cursor = groundingText.indexOf(quote, cursor + quote.length)) {
+    positions.push(cursor);
+  }
+  if (positions.length === 0) return false;
+  return positions.every((position) => {
+    const precedingLines = groundingText.slice(Math.max(0, position - 240), position)
+      .split(/\r?\n/u)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    const followsNavigationLabel = precedingLines.slice(-2)
+      .some((line) => NAVIGATION_SECTION_LABEL_RE.test(line));
+    const quoteEnd = position + quote.length;
+    const extractionBoundary = groundingText.slice(quoteEnd);
+    const touchesExtractionBoundary = groundingText.length >= 1_200 &&
+      position >= groundingText.length * 0.8 &&
+      groundingText.length - quoteEnd <= 2 &&
+      !hasTerminalSentencePunctuation(`${quote}${extractionBoundary}`);
+    return followsNavigationLabel || touchesExtractionBoundary;
+  });
+}
+
+function isUnderspecifiedComparison(claim: GeneralPageBriefClaim): boolean {
+  const proposition = `${claim.atom?.p ?? ""} ${claim.atom?.o ?? ""}`.trim();
+  if (!COMPARATIVE_ASSERTION_RE.test(proposition)) return false;
+  return !COMPARISON_TIME_RE.test(claim.c) ||
+    !COMPARISON_MARKET_OR_REGION_RE.test(claim.c) ||
+    !COMPARISON_METRIC_RE.test(claim.c);
+}
+
+function hasGenericEvidenceNeed(value: string): boolean {
+  return GENERIC_EVIDENCE_NEED_RE.test(value.replace(/[。！？.!?]+$/u, "").trim());
+}
+
+function searchKeywordSegment(value: string | undefined, limit: number): string {
+  const clean = cleanInvestigationText(value, limit)
+    .replace(/[「」『』“”‘’"()[\]{}，。！？、,;；:：?!.]/gu, " ")
+    .replace(/\s+/gu, " ")
+    .trim();
+  if (!clean || /\p{Script=Han}/u.test(clean)) return clean;
+  return (clean.match(/[\p{L}\p{N}][\p{L}\p{N}._'-]*/gu) ?? [])
+    .filter((token) => !SEARCH_STOP_WORDS.has(token.toLocaleLowerCase("en")))
+    .join(" ");
+}
+
+function boundedKeywordSegment(value: string | undefined, limit: number): string {
+  return Array.from(searchKeywordSegment(value, Math.max(limit * 2, limit)))
+    .slice(0, limit)
+    .join("")
+    .trim();
+}
+
+function claimNumberAndDateAnchors(value: string): string {
+  return [...new Set(value.match(
+    /\b(?:19|20)\d{2}(?:[-/]\d{1,2}(?:[-/]\d{1,2})?)?\b|\b\d+(?:[.,]\d+)*(?:%|％|萬|億|項|件|人|元|年|月|日|歲|points?|percent(?:age)?)?/giu,
+  ) ?? [])].join(" ");
+}
+
+function joinKeywordSegments(segments: string[], limit = 240): string {
+  const output: string[] = [];
+  for (const segment of segments.map((value) => value.trim()).filter(Boolean)) {
+    const normalized = normalizedMatchText(segment);
+    if (!normalized || output.some((value) => normalizedMatchText(value).includes(normalized))) continue;
+    const remaining = limit - Array.from(output.join(" ")).length - (output.length > 0 ? 1 : 0);
+    if (remaining <= 0) break;
+    const bounded = Array.from(segment).slice(0, remaining).join("").trim();
+    if (bounded) output.push(bounded);
+  }
+  return output.join(" ");
 }
 
 function legalStatuses(text: string): Set<LegalStatus> {
@@ -278,10 +369,15 @@ export function pageClaimInvestigationEligibility(
   if (!claim.policy) return { ok: false, reason: "missing_policy" };
   if (claim.policy.consequence === "none") return { ok: false, reason: "non_consequential" };
   if (claim.policy.claimKind === "opinion") return { ok: false, reason: "unsupported_claim_kind" };
+  if (hasGenericEvidenceNeed(claim.need)) return { ok: false, reason: "generic_evidence_need" };
   if (LOW_CONSEQUENCE_AVAILABILITY_RE.test(claim.c)) {
     return { ok: false, reason: "low_consequence_availability" };
   }
   if (GENERIC_CONTROVERSY_RE.test(claim.c)) return { ok: false, reason: "generic_controversy" };
+  if (isUnderspecifiedComparison(claim)) return { ok: false, reason: "underspecified_comparison" };
+  if (groundingText && sourceQuoteIsNavigationFragment(claim, groundingText)) {
+    return { ok: false, reason: "navigation_fragment" };
+  }
   if (claim.atom && GENERIC_ATOMIC_SUBJECT_RE.test(claim.atom.s.trim())) {
     return { ok: false, reason: "generic_subject" };
   }
@@ -338,13 +434,28 @@ export function geminiEvidenceSearchUrl(query: string): string {
   return url.toString();
 }
 
-export function buildGoogleSearchKeywords(intent: ClaimVerificationIntent): string {
-  return [...new Set([
-    intent.exactClaim,
-    cleanInvestigationText(intent.sourceContext?.title, 100),
-    cleanInvestigationText(intent.sourceContext?.sourceName, 60),
-    cleanInvestigationText(intent.sourceContext?.publishedAt, 32),
-  ].filter(Boolean))].join(" ").slice(0, 240).trim();
+export function buildGoogleSearchKeywords(
+  intent: ClaimVerificationIntent,
+  claim?: Pick<GeneralPageBriefClaim, "atom" | "attribution">,
+): string {
+  if (!claim?.atom) {
+    return joinKeywordSegments([
+      boundedKeywordSegment(intent.exactClaim, 140),
+      boundedKeywordSegment(intent.evidenceNeed, 70),
+      boundedKeywordSegment(intent.sourceContext?.publishedAt, 24),
+    ]);
+  }
+  return joinKeywordSegments([
+    boundedKeywordSegment(claim.attribution
+      ? `${claim.attribution.source} ${claim.attribution.relation}`
+      : undefined, 35),
+    boundedKeywordSegment(claim.atom.s, 40),
+    boundedKeywordSegment(claim.atom.p, 25),
+    boundedKeywordSegment(intent.evidenceNeed, 55),
+    boundedKeywordSegment(claim.atom.o, 55),
+    boundedKeywordSegment(claimNumberAndDateAnchors(intent.exactClaim), 25),
+    boundedKeywordSegment(intent.sourceContext?.publishedAt, 20),
+  ]);
 }
 
 export function buildGoogleAiModePrompt(intent: ClaimVerificationIntent): string {
@@ -422,7 +533,7 @@ export function buildPageClaimInvestigationTask(input: {
     scope: input.scope,
     claimIndex: input.claimIndex,
     intent,
-    googleKeywords: buildGoogleSearchKeywords(intent),
+    googleKeywords: buildGoogleSearchKeywords(intent, input.claim),
     aiModePrompt: buildGoogleAiModePrompt(intent),
     ...(cleanSourceMetadataUrl(input.source?.url) ? { sourceUrl: cleanSourceMetadataUrl(input.source?.url) } : {}),
   };

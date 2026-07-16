@@ -15,7 +15,7 @@ export interface GeneralPageInvestigationAdapterInput {
   groundingText: string;
   source?: GeneralPageInvestigationSourceMetadata;
   outputLang?: Lang;
-  /** One bounded retry after the unchanged local guard rejects a prepared claim. */
+  /** Evaluation-only bounded retry. Product runtime never issues this request. */
   repairReason?: "atom_span_mismatch" | "compound_claim" | "vague_atom" | "generic_subject" |
     "ungrounded_atom" | "missing_attribution" | "invalid_attribution" | "invalid_question";
 }
@@ -187,12 +187,15 @@ export function buildGeneralPageInvestigationAdapterSystemPrompt(outputLang?: La
     "Use decision=prepared and reason=actionable only when the supplied page text supports one consequential, externally checkable atomic assertion.",
     "A prepared claim must contain c, why, need, q, atom:{s,p,o}, policy:{claimKind,consequence}, and sourceQuote; attribution:{source,relation,modality} is allowed only for a real outer source frame.",
     "sourceQuote must be one concise verbatim span copied from Exact grounding text that directly supports c. Preserve its source language and do not translate it.",
+    "Never prepare an action from a related or recommended link, navigation-tail headline, or incomplete fragment touching the Exact grounding text boundary; abstain instead.",
     "atom.s, atom.p, and atom.o must each be exact substrings of c, appearing once in that order. Never paraphrase, shorten, translate, or recombine an atom part.",
     "c must end with sentence punctuation and contain exactly one proposition. If the candidate is compound, select only one consequential proposition that the sourceQuote supports; otherwise abstain.",
     "If attribution is present, modality must be statement|report|estimate|allegation|forecast|analysis. Omit attribution when uncertain; never invent another modality.",
     "Source metadata alone is never claim attribution. Add attribution only when claim c itself contains a verbatim source and reporting relation outside atom s, p, and o; attribution source and relation must both be exact substrings of c.",
     "Do not use generic atom subjects such as death toll, number, report, officials, government, company, or agency. Include the event, place, organization, or other identifier already present in Exact grounding text, or abstain.",
     "Keep one proposition and preserve legal stage and attribution exactly. q must be one natural question containing the exact source-language s, p, and o.",
+    "For a comparative claim, require the grounding text to name the comparison scope (time plus region or market) and measurement metric; otherwise abstain.",
+    "need must name a named evidence family that could answer q, such as an official notice, registry record, court ruling, dataset, benchmark report, or result table. Never write only evidence, sources, data, or proof.",
     "policy.claimKind is fact|report|estimate|forecast|allegation|expert_analysis. policy.consequence is health|safety|money|rights|law|public_interest.",
     "Abstain for low-risk product availability or promotion, celebrity purchases or anecdotes, vague AI or marketing claims, pure opinion, generic controversy, or any assertion without a consequential externally checkable proposition.",
     "Otherwise output decision=abstain with reason=insufficient_context|unsafe_structure|non_consequential|unsupported_claim and omit claim.",
@@ -210,7 +213,7 @@ export function buildGeneralPageInvestigationAdapterPrompt(input: GeneralPageInv
   };
   return [
     ...(input.repairReason ? [
-      "This is the single allowed semantic repair attempt. The previous prepared claim failed the unchanged local guard.",
+      "This is the single allowed semantic repair attempt in an evaluation-only audit. Product runtime does not issue repair requests. The previous prepared claim failed the unchanged local guard.",
       `Local guard reason: ${input.repairReason}. Rebuild from Exact grounding text or abstain; never work around the guard.`,
     ] : []),
     "Prepare or abstain. URL is metadata only; it is not evidence.",

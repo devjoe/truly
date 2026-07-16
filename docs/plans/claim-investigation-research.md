@@ -1068,20 +1068,32 @@ verbatim ordered atom parts, selects only one consequential proposition, and
 adds explicit low-risk abstention guidance. The local guard remains strict and
 now exposes precise structure reason codes for private development audits.
 
-The Adapter may now make one reason-specific semantic repair inside the same
-low-priority derived queue job, but only after a prepared output fails one of a
-small set of repairable local-guard reasons. The retry receives the rejected
-claim and reason, must rebuild from exact grounding text or abstain, and cannot
-bypass the unchanged guard. Non-consequential and unsupported outputs are not
-retried. The UI receives `prepared` only after the final claim forms the same
-validated action task; there is no extra foreground job or persisted content.
+An evaluation-only bounded semantic repair was then tested against the same old
+30-row development slice. Eight repair requests produced zero accepted actions:
+seven remained rejected by the unchanged guard and one ended in a format
+failure. The apparent four-to-seven increase between separate runs came from
+first-pass model variance, not from repair recovery. Product runtime therefore
+returns to one Adapter attempt. `semantic_once` remains available only as an
+explicit private diagnostic mode; the preregistered fresh audit requires
+`repairMode=none` so its execution path matches runtime.
+
+Independent review of the seven first-pass actions found five usable or
+usable-with-tightening results, one underspecified comparison, and one false
+action derived from a truncated related-link headline at the extraction tail.
+The candidate now rejects labeled navigation sections and incomplete
+tail-boundary fragments, rejects comparisons without a time, market or region,
+and metric, and requires a named evidence family rather than generic
+`evidence`. Regular Google search uses bounded claim/evidence anchors instead
+of copying the whole claim or publisher name. Self-contained follow-up
+questions no longer inherit an unrelated model summary; AI Mode alone may
+receive sanitized page metadata and URL.
 
 The private runner also verifies that each source hash is derived from the
 actual input text, refuses to overwrite an evaluation path, and records exact
 input and result digests. These changes improve evaluation integrity; they do
-not authorize the Agent action or establish release-level coverage. The same
-old development replay must improve before a preregistered fresh cohort is
-opened, and fresh rows cannot be used for further tuning.
+not authorize the Agent action or establish release-level coverage. The
+updated old-development replay is the final tuning check before opening a
+preregistered fresh cohort; fresh rows cannot be used for further tuning.
 
 ### C. Sufficiency and UX audit
 

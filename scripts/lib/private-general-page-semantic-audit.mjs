@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 export const PRIVATE_SEMANTIC_AUDIT_CORE_FILES = [
+  "src/background/general-page-investigation-background.ts",
   "src/lib/general-page-analysis.ts",
   "src/lib/general-page-investigation-adapter.ts",
   "src/lib/reading-question-policy.ts",
@@ -13,6 +14,15 @@ export const PRIVATE_SEMANTIC_AUDIT_CORE_FILES = [
 
 export function sha256Text(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
+}
+
+export function privateSemanticAuditRepairMode(argv) {
+  const index = argv.indexOf("--repair-mode");
+  const value = index >= 0 ? argv[index + 1] : "none";
+  if (value !== "none" && value !== "semantic_once") {
+    throw new Error("--repair-mode must be none or semantic_once");
+  }
+  return value;
 }
 
 export function semanticAuditCompletionsUrl(endpoint) {

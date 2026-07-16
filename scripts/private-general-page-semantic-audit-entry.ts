@@ -25,6 +25,7 @@ import {
   assertPrivateSemanticAuditFetchTarget,
   hashPrivateSemanticAuditCoreFiles,
   installPrivateSemanticAuditNetworkGuard,
+  privateSemanticAuditRepairMode,
   semanticAuditCompletionsUrl,
   sha256Text,
 } from "./lib/private-general-page-semantic-audit.mjs";
@@ -131,6 +132,7 @@ const declaredCategories = required("--data-categories");
 const expectedCount = Number(required("--sample-count"));
 const concurrency = Math.max(1, Math.min(4, Number(option("--concurrency", "2")) || 2));
 const timeoutMs = Math.max(1_000, Math.min(120_000, Number(option("--timeout-ms", "45_000")) || 45_000));
+const repairMode = privateSemanticAuditRepairMode(process.argv);
 if (split !== "dev" && split !== "holdout") throw new Error("--split must be dev or holdout");
 
 const allowedCompletionsUrl = semanticAuditCompletionsUrl(endpoint);
@@ -297,7 +299,7 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
       source: row.sourceContext,
     }) : undefined;
     const firstReason = firstEligibility.ok ? (firstTask ? undefined : "invalid_question") : firstEligibility.reason;
-    if (firstReason && isRepairablePageClaimIneligibilityReason(firstReason)) {
+    if (repairMode === "semantic_once" && firstReason && isRepairablePageClaimIneligibilityReason(firstReason)) {
       repairReason = firstReason;
       const repairRequest: TierBGeneralPageInvestigationAdapterRequest = {
         ...adapterRequest,
@@ -445,6 +447,10 @@ const manifest = {
     timeoutMs,
     concurrency,
   },
+  adapter: {
+    repairMode,
+    runtimeParity: repairMode === "none",
+  },
   data: {
     sampleCount: rows.length,
     declaredCategories: declaredCategories.split(",").map((value) => value.trim()).filter(Boolean).sort(),
@@ -486,6 +492,7 @@ console.log(JSON.stringify({
   result: results.every((result) => result.ok) ? "pass" : "partial",
   runId,
   split,
+  repairMode,
   samples: rows.length,
   ...manifest.counts,
   publicSearchRequests: 0,
