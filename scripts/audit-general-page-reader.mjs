@@ -347,17 +347,35 @@ async function startMockOpenAiEndpoint() {
     if (kind === "vision-probe") {
       content = "blue";
     } else if (kind === "parser-advisor") {
-      content = JSON.stringify({
-        schemaVersion: 1,
-        pageType: "app_shell",
-        decision: "request_screenshot_region",
-        confidence: "medium",
-        needsUserSelection: false,
-        needsScreenshot: true,
-        riskTags: ["needs_visual_grounding"],
-        rationale: "The synthetic fixture needs visible screenshot grounding.",
-      });
+      // Keep the checking state observable to the transition audit. The live
+      // provider is asynchronous; an immediate local mock can otherwise skip
+      // the user-visible intermediary state between DOM mutations.
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 900));
+      content = /Multi Article Teaser Hub Fixture|multi article teaser hub/i.test(userText)
+        ? JSON.stringify({
+            schemaVersion: 1,
+            pageType: "index_or_feed",
+            decision: "downgrade_to_index_or_feed",
+            confidence: "high",
+            needsUserSelection: false,
+            needsScreenshot: false,
+            riskTags: ["index_or_feed"],
+            rationale: "The synthetic fixture is a hub of short preview cards, not one complete article.",
+          })
+        : JSON.stringify({
+            schemaVersion: 1,
+            pageType: "app_shell",
+            decision: "request_screenshot_region",
+            confidence: "medium",
+            needsUserSelection: false,
+            needsScreenshot: true,
+            riskTags: ["needs_visual_grounding"],
+            rationale: "The synthetic fixture needs visible screenshot grounding.",
+          });
     } else if (kind === "investigation-adapter") {
+      // Keep the derived preparation visible long enough for the UI audit to
+      // prove the intermediate state instead of racing directly to ready.
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 350));
       content = JSON.stringify({
         schemaVersion: 1,
         decision: "prepared",
@@ -369,9 +387,13 @@ async function startMockOpenAiEndpoint() {
           q: "Is the analyzed content synthetic?",
           atom: { s: "The analyzed content", p: "is", o: "synthetic" },
           policy: { claimKind: "fact", consequence: "public_interest" },
+          sourceQuote: "The analyzed content is synthetic.",
         },
       });
     } else {
+      // Keep the ordinary reading-analysis state observable as a distinct UX
+      // phase instead of letting the deterministic mock resolve in one frame.
+      if (!hasImageUrl) await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
       const targetKind = /targetKind:\s*selection/i.test(userText)
         ? "selection"
         : /targetKind:\s*current-region/i.test(userText)
@@ -653,7 +675,8 @@ async function reloadFacebookTarget(target) {
   }
 }
 
-async function openSidePanelTestPage(extensionId, activePageTarget, suffix, activeTabId) {
+async function openSidePanelTestPage(extensionId, activePageTarget, suffix, activeTabId, options = {}) {
+  const settleMs = Number.isFinite(options.settleMs) ? Math.max(0, options.settleMs) : 600;
   const helperUrl = `chrome-extension://${extensionId}/options/options.html?generalPageReaderAuditHelper=${suffix}`;
   const helperTarget = await createTarget(helperUrl);
   const helper = connectCdp(helperTarget.webSocketDebuggerUrl);
@@ -677,10 +700,15 @@ async function openSidePanelTestPage(extensionId, activePageTarget, suffix, acti
     await helper.evaluate(`new Promise((resolve) => {
       chrome.tabs.create({ url: ${JSON.stringify(sideUrl)}, active: false }, () => resolve(undefined));
     })`);
-    await sleep(600);
-    const target = (await listTargets()).find((entry) => entry.url?.startsWith(sideUrl));
-    if (!target?.webSocketDebuggerUrl) throw new Error("Sidepanel audit target not found after chrome.tabs.create");
-    return target;
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const target = (await listTargets()).find((entry) => entry.url?.startsWith(sideUrl));
+      if (target?.webSocketDebuggerUrl) {
+        if (settleMs > 0) await sleep(settleMs);
+        return target;
+      }
+      await sleep(10);
+    }
+    throw new Error("Sidepanel audit target not found after chrome.tabs.create");
   } finally {
     await helper.closeTarget().catch(() => {});
     helper.close();
@@ -1256,6 +1284,8 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           pageContextPresent: Boolean(pane?.querySelector(".page-reader-context-details")),
           pageContextOpen: pane?.querySelector(".page-reader-context-details")?.hasAttribute("open") ?? null,
           analysisClass: pane?.querySelector(".page-reader-analysis")?.className || "",
+          liveStatusCount: pane?.querySelectorAll('[role="status"][aria-live]').length || 0,
+          secondaryLoadingStatusPresent: Boolean(pane?.querySelector('.page-reader-loading-analysis .page-reader-analysis-loading')),
           readActionPresent: Boolean(pane?.querySelector("#pageReadCurrent")),
           readActionClass: pane?.querySelector("#pageReadCurrent")?.className || "",
           readActionText: norm(pane?.querySelector("#pageReadCurrent")?.textContent),
@@ -1283,6 +1313,12 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       };
       capture();
     })()`);
+    await waitFor(
+      side,
+      `Boolean(document.querySelector('#page-pane .page-reader-card.is-loading-target'))`,
+      1200,
+      "initial reading skeleton",
+    ).then(() => side.screenshot(resolve(OUT_DIR, "page-loading-initial.png"))).catch(() => {});
     await sleep(800);
     const initial = await side.evaluateJson(`(() => ({
       activeTab: document.querySelector('.tab[aria-selected="true"]')?.textContent?.trim(),
@@ -1329,6 +1365,12 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       error.message = `${error.message}; diagnostics: ${relative(ROOT, resolve(OUT_DIR, "page-ready-timeout.json"))}`;
       throw error;
     });
+    await waitFor(
+      side,
+      `Boolean(document.querySelector('#page-pane .page-reader-card:not(.is-loading-target) .page-reader-analysis.is-running'))`,
+      1200,
+      "reading analysis running state",
+    ).then(() => side.screenshot(resolve(OUT_DIR, "page-analysis-running.png"))).catch(() => {});
     await waitFor(side, `(() => {
       const processingReady = /頁面狀態|Page status/.test(document.querySelector('#page-pane .page-reader-processing-status')?.textContent || '');
       const briefReady = Boolean(document.querySelector('#page-pane .page-reader-analysis:not(.is-running)'));
@@ -1476,11 +1518,30 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     const pageBrief = await observePageBrief(side, "page-analysis-ready.png");
     await waitFor(
       side,
-      `Boolean(document.querySelector('#page-pane .page-claim-start'))`,
+      `Boolean(document.querySelector('#page-pane .page-claim-preparing'))`,
+      1400,
+      "background claim investigation preparing state",
+    ).catch(() => {});
+    const preparingState = await side.evaluateJson(`(() => {
+      const row = document.querySelector('#page-pane .page-claim-row');
+      const preparing = row?.querySelector('.page-claim-preparing');
+      return {
+        observed: Boolean(preparing),
+        text: preparing?.textContent?.trim() || '',
+        originalClaimVisible: Boolean(row?.querySelector(':scope > .page-claim-copy')),
+        readyCardVisible: Boolean(row?.querySelector('.page-claim-investigation')),
+      };
+    })()`);
+    if (preparingState?.observed) {
+      await side.screenshot(resolve(OUT_DIR, "page-claim-investigation-preparing.png")).catch(() => {});
+    }
+    await waitFor(
+      side,
+      `Boolean(document.querySelector('#page-pane .page-claim-investigation'))`,
       5000,
       "background claim investigation preparation",
     );
-    const claimInvestigation = await observeClaimInvestigation(side);
+    const claimInvestigation = await observeClaimInvestigation(side, preparingState);
     const initialLoadTimeline = await side.evaluateJson(`(() => {
       const timeline = globalThis.__trulyPagePaneTimeline;
       return timeline?.stop?.() || timeline?.entries || [];
@@ -1786,15 +1847,12 @@ async function observePageBrief(side, readyScreenshotName) {
   return observation;
 }
 
-async function observeClaimInvestigation(side) {
+async function observeClaimInvestigation(side, preparingState = null) {
   const beforeTargets = await fetch(`${CDP_BASE}/json`).then((response) => response.json()).catch(() => []);
-  const state = await side.evaluateJson(`(async () => {
-    const start = document.querySelector('#page-pane .page-claim-start');
-    if (!(start instanceof HTMLButtonElement)) return { available: false };
-    start.click();
-    await new Promise((resolve) => setTimeout(resolve, 50));
+  const state = await side.evaluateJson(`(() => {
     const card = document.querySelector('#page-pane .page-claim-investigation');
-    const currentStart = document.querySelector('#page-pane .page-claim-start');
+    const row = card?.closest('.page-claim-row');
+    if (!card) return { available: false, ready: false };
     const links = [...(card?.querySelectorAll('a') || [])].map((link) => ({
       label: link.textContent?.trim() || '',
       href: link.href,
@@ -1803,17 +1861,21 @@ async function observeClaimInvestigation(side) {
     }));
     return {
       available: true,
-      expanded: currentStart?.getAttribute('aria-expanded') === 'true' && Boolean(card),
+      ready: true,
       taskId: card?.getAttribute('data-task-id') || '',
       question: card?.querySelector('.page-claim-investigation-question')?.textContent?.trim() || '',
       links,
       copyPresent: Boolean(card?.querySelector('.page-claim-copy-question')),
+      manualStartPresent: Boolean(document.querySelector('#page-pane .page-claim-start')),
+      originalClaimVisible: Boolean(row?.querySelector(':scope > .page-claim-copy')),
+      redundantLabelPresent: Boolean(card?.querySelector('.page-claim-investigation-label, .page-claim-investigation-header')),
     };
   })()`);
   const afterTargets = await fetch(`${CDP_BASE}/json`).then((response) => response.json()).catch(() => []);
   await side.screenshot(resolve(OUT_DIR, "page-claim-investigation.png")).catch(() => {});
   return {
     ...state,
+    preparing: preparingState,
     openedTargetOnPrepare: afterTargets.length !== beforeTargets.length,
     screenshot: relative(ROOT, resolve(OUT_DIR, "page-claim-investigation.png")),
   };
@@ -2185,17 +2247,25 @@ async function auditCandidateBlockRecovery(extensionId, allowedBase) {
 
 async function auditTeaserHubOverview(extensionId, allowedBase) {
   const teaserTarget = await createTarget(`${allowedBase}/teaser-hub`);
-  const sideTarget = await openSidePanelTestPage(extensionId, teaserTarget, "teaser");
+  // Attach the transition observer as soon as the audit page becomes
+  // inspectable. Waiting for the usual visual settle period lets fast local
+  // mocks finish the auto-read before the observer exists.
+  const sideTarget = await openSidePanelTestPage(
+    extensionId,
+    teaserTarget,
+    "teaser",
+    undefined,
+    { settleMs: 0 },
+  );
   const teaser = connectCdp(teaserTarget.webSocketDebuggerUrl);
   const side = connectCdp(sideTarget.webSocketDebuggerUrl);
 
   try {
-    await sleep(800);
+    await installAdvisorTransitionTimeline(side);
     await waitFor(side, `(() => {
       const button = document.querySelector('#pageReadCurrent');
       return Boolean(button && !button.disabled);
     })()`, 10000, "teaser hub read button ready");
-    await installAdvisorTransitionTimeline(side);
     await side.evaluate(`(() => {
       const button = document.querySelector('#pageReadCurrent');
       if (!button || button.disabled) return false;
@@ -2493,7 +2563,7 @@ function assertAudit(result) {
   }
   const autoReadTransition = autoReadTransitionState(result);
   if (result.success.autoRead?.allSites && !autoReadTransition.pass) {
-    errors.push(`all-sites auto-read exposed intermediate UI before loading: firstLoadingMs=${autoReadTransition.firstLoadingMs ?? "missing"}; technicalStates=${autoReadTransition.technicalStateCount}`);
+    errors.push(`all-sites auto-read exposed intermediate UI before loading: firstLoadingMs=${autoReadTransition.firstLoadingMs ?? "missing"}; technicalStates=${autoReadTransition.technicalStateCount}; duplicateLoadingStatuses=${autoReadTransition.duplicateLoadingStatusCount}`);
   }
   if (result.success.ready.title !== "Synthetic General Page Reader Article") {
     errors.push(`unexpected extracted title: ${result.success.ready.title}`);
@@ -2999,6 +3069,8 @@ function autoReadTransitionState(result) {
   const loadingEntries = entries.filter((entry) => entry.runtimeState?.displayedSession?.status === "loading");
   const initialReadActionEntries = loadingEntries.filter((entry) => entry.readActionPresent === true);
   const initialExportActionEntries = loadingEntries.filter((entry) => entry.exportActionCount > 0);
+  const duplicateLoadingStatusEntries = loadingEntries.filter((entry) =>
+    entry.liveStatusCount !== 1 || entry.secondaryLoadingStatusPresent === true);
   const firstAnalysis = entries.find((entry) => /page-reader-analysis is-(?:running|ready)/.test(entry.analysisClass || ""));
   const technicalStates = entries.filter((entry) =>
     (firstAnalysis ? entry.elapsedMs <= firstAnalysis.elapsedMs : true) &&
@@ -3014,11 +3086,13 @@ function autoReadTransitionState(result) {
   const firstLoadingMs = typeof firstLoading?.elapsedMs === "number" ? firstLoading.elapsedMs : undefined;
   return {
     pass: typeof firstLoadingMs === "number" && firstLoadingMs <= 100 &&
-      technicalStates.length === 0 && initialReadActionEntries.length === 0 && initialExportActionEntries.length === 0,
+      technicalStates.length === 0 && initialReadActionEntries.length === 0 && initialExportActionEntries.length === 0 &&
+      duplicateLoadingStatusEntries.length === 0,
     firstLoadingMs,
     technicalStateCount: technicalStates.length,
     initialReadActionCount: initialReadActionEntries.length,
     initialExportActionCount: initialExportActionEntries.length,
+    duplicateLoadingStatusCount: duplicateLoadingStatusEntries.length,
   };
 }
 
@@ -3199,7 +3273,8 @@ function qaMatrixRows(result) {
       "firstLoadingMs=" + (autoReadTransitionState(result).firstLoadingMs ?? "missing") +
         "; technicalStates=" + autoReadTransitionState(result).technicalStateCount +
         "; initialReadActions=" + autoReadTransitionState(result).initialReadActionCount +
-        "; initialExportActions=" + autoReadTransitionState(result).initialExportActionCount,
+        "; initialExportActions=" + autoReadTransitionState(result).initialExportActionCount +
+        "; duplicateLoadingStatuses=" + autoReadTransitionState(result).duplicateLoadingStatusCount,
     ],
     [
       "Initial analysis action lock",
@@ -3233,14 +3308,21 @@ function qaMatrixRows(result) {
     [
       "Claim investigation prepare",
       result.success.claimInvestigation?.available === true &&
-        result.success.claimInvestigation?.expanded === true &&
+        result.success.claimInvestigation?.ready === true &&
+        result.success.claimInvestigation?.preparing?.observed === true &&
+        result.success.claimInvestigation?.preparing?.originalClaimVisible === true &&
+        result.success.claimInvestigation?.preparing?.readyCardVisible === false &&
         Boolean(result.success.claimInvestigation?.question) &&
         result.success.claimInvestigation?.copyPresent === true &&
+        result.success.claimInvestigation?.manualStartPresent === false &&
+        result.success.claimInvestigation?.originalClaimVisible === false &&
+        result.success.claimInvestigation?.redundantLabelPresent === false &&
         result.success.claimInvestigation?.openedTargetOnPrepare === false &&
         (result.success.claimInvestigation?.links?.length ?? 0) >= 2 &&
         result.success.claimInvestigation.links.every((link) => link.target === "_blank" && /noopener/.test(link.rel)),
       "available=" + Boolean(result.success.claimInvestigation?.available) +
-        "; expanded=" + Boolean(result.success.claimInvestigation?.expanded) +
+        "; preparing=" + Boolean(result.success.claimInvestigation?.preparing?.observed) +
+        "; ready=" + Boolean(result.success.claimInvestigation?.ready) +
         "; openedOnPrepare=" + Boolean(result.success.claimInvestigation?.openedTargetOnPrepare) +
         "; links=" + (result.success.claimInvestigation?.links?.length ?? 0),
     ],
@@ -3654,8 +3736,12 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, PHASE_LOG_PATH)}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "runtime-reload.json"))}`,
     isPopupReadSkipped(result) ? null : `- ${relative(ROOT, resolve(OUT_DIR, "page-popup-read-result.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-loading-initial.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-analysis-running.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation-preparing.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation.png"))}`,
     result.success.responsive?.screenshot ? `- ${result.success.responsive.screenshot}` : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-context-expanded.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-web-history-hidden.png"))}`,
@@ -3693,9 +3779,15 @@ function assertUiOnlyAudit(result) {
   if ((success?.responsive?.unnamedInteractive?.length ?? 0) > 0) errors.push("Web layout contains unnamed interactive controls");
   if (
     success?.claimInvestigation?.available !== true ||
-    success?.claimInvestigation?.expanded !== true ||
+    success?.claimInvestigation?.ready !== true ||
+    success?.claimInvestigation?.preparing?.observed !== true ||
+    success?.claimInvestigation?.preparing?.originalClaimVisible !== true ||
+    success?.claimInvestigation?.preparing?.readyCardVisible !== false ||
     !success?.claimInvestigation?.question ||
     success?.claimInvestigation?.copyPresent !== true ||
+    success?.claimInvestigation?.manualStartPresent !== false ||
+    success?.claimInvestigation?.originalClaimVisible !== false ||
+    success?.claimInvestigation?.redundantLabelPresent !== false ||
     success?.claimInvestigation?.openedTargetOnPrepare !== false ||
     (success?.claimInvestigation?.links?.length ?? 0) < 2
   ) {
@@ -3745,7 +3837,11 @@ function writeUiOnlySummary(result, errors) {
     "",
     "## Screenshots",
     "",
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-loading-initial.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-analysis-running.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-analysis-ready.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation-preparing.png"))}`,
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-responsive-430.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-web-restored-after-focus.png"))}`,
@@ -3802,52 +3898,65 @@ try {
     console.log(`artifact: ${relative(ROOT, OUT_DIR)}`);
     if (!result.ok) exitCode = 1;
   } else {
-    const result = {
-    capturedAt: new Date().toISOString(),
-    cdpBase: CDP_BASE,
-    extensionId,
-    expectedBuildId,
-    version,
-    runtimeReload,
-    syntheticUrls: {
-      allowed: `${server.allowedBase}/article`,
-      popupRead: `${server.allowedBase}/article?popup=1`,
-      screenshotRecovery: `${server.allowedBase}/screenshot-recovery`,
-      noGrant: `${server.noGrantBase}/article`,
-    },
-    popup: await runAuditPhase("popup", PHASE_TIMEOUT_MS.popup, () =>
-      auditPopup(extensionId, `${server.allowedBase}/article`)),
-    popupRead: SKIP_POPUP_READ
-      ? { skipped: true, reason: "TRULY_AUDIT_SKIP_POPUP_READ=1" }
-      : await runAuditPhase("popup-read", PHASE_TIMEOUT_MS.popupRead, () =>
-        auditPopupReadClick(extensionId, server.allowedBase)),
-    success: await runAuditPhase("success", PHASE_TIMEOUT_MS.success, () =>
-      auditSuccessfulRead(extensionId, server.allowedBase)),
-    noisy: await runAuditPhase("noisy", PHASE_TIMEOUT_MS.noisy, () =>
-      auditNoisyFallbackRead(extensionId, server.allowedBase)),
-    candidate: await runAuditPhase("candidate", PHASE_TIMEOUT_MS.candidate, () =>
-      auditCandidateBlockRecovery(extensionId, server.allowedBase)),
-    teaser: await runAuditPhase("teaser", PHASE_TIMEOUT_MS.teaser, () =>
-      auditTeaserHubOverview(extensionId, server.allowedBase)),
-    screenshot: await runAuditPhase("screenshot-recovery", PHASE_TIMEOUT_MS.screenshot, () =>
-      auditScreenshotRecovery(extensionId, server.allowedBase)),
-    noGrant: await runAuditPhase("no-grant", PHASE_TIMEOUT_MS.noGrant, () =>
-      auditNoGrantGuidance(extensionId, server.noGrantBase)),
-    unsupportedPages: await runAuditPhase("unsupported-pages", PHASE_TIMEOUT_MS.unsupportedPages, () =>
-      auditUnsupportedPageGuidance(extensionId)),
-    storagePrivacy: await runAuditPhase("storage-privacy", PHASE_TIMEOUT_MS.storagePrivacy, () =>
-      auditStoragePrivacy(extensionId)),
-    artifactDir: relative(ROOT, OUT_DIR),
-  };
+    const mockEndpoint = await startMockOpenAiEndpoint();
+    let storageSnapshot;
+    try {
+      storageSnapshot = await configureScreenshotRecoveryAudit(extensionId, mockEndpoint.endpoint);
+      const result = {
+        capturedAt: new Date().toISOString(),
+        cdpBase: CDP_BASE,
+        extensionId,
+        expectedBuildId,
+        version,
+        runtimeReload,
+        syntheticUrls: {
+          allowed: `${server.allowedBase}/article`,
+          popupRead: `${server.allowedBase}/article?popup=1`,
+          screenshotRecovery: `${server.allowedBase}/screenshot-recovery`,
+          noGrant: `${server.noGrantBase}/article`,
+        },
+        popup: await runAuditPhase("popup", PHASE_TIMEOUT_MS.popup, () =>
+          auditPopup(extensionId, `${server.allowedBase}/article`)),
+        popupRead: SKIP_POPUP_READ
+          ? { skipped: true, reason: "TRULY_AUDIT_SKIP_POPUP_READ=1" }
+          : await runAuditPhase("popup-read", PHASE_TIMEOUT_MS.popupRead, () =>
+            auditPopupReadClick(extensionId, server.allowedBase)),
+        success: await runAuditPhase("success", PHASE_TIMEOUT_MS.success, () =>
+          auditSuccessfulRead(extensionId, server.allowedBase)),
+        noisy: await runAuditPhase("noisy", PHASE_TIMEOUT_MS.noisy, () =>
+          auditNoisyFallbackRead(extensionId, server.allowedBase)),
+        candidate: await runAuditPhase("candidate", PHASE_TIMEOUT_MS.candidate, () =>
+          auditCandidateBlockRecovery(extensionId, server.allowedBase)),
+        teaser: await runAuditPhase("teaser", PHASE_TIMEOUT_MS.teaser, () =>
+          auditTeaserHubOverview(extensionId, server.allowedBase)),
+        screenshot: await runAuditPhase("screenshot-recovery", PHASE_TIMEOUT_MS.screenshot, () =>
+          auditScreenshotRecovery(extensionId, server.allowedBase)),
+        noGrant: await runAuditPhase("no-grant", PHASE_TIMEOUT_MS.noGrant, () =>
+          auditNoGrantGuidance(extensionId, server.noGrantBase)),
+        unsupportedPages: await runAuditPhase("unsupported-pages", PHASE_TIMEOUT_MS.unsupportedPages, () =>
+          auditUnsupportedPageGuidance(extensionId)),
+        storagePrivacy: await runAuditPhase("storage-privacy", PHASE_TIMEOUT_MS.storagePrivacy, () =>
+          auditStoragePrivacy(extensionId)),
+        mockEndpoint: mockEndpoint.endpoint.replace(/:\d+\/v1$/, ":<port>/v1"),
+        mockRequests: mockEndpoint.requests.map((request) => ({
+          kind: request.kind,
+          hasImageUrl: request.hasImageUrl,
+        })),
+        artifactDir: relative(ROOT, OUT_DIR),
+      };
 
-    const errors = assertAudit(result);
-    result.ok = errors.length === 0;
-    result.errors = errors;
-    writeFileSync(resolve(OUT_DIR, "audit.json"), JSON.stringify(result, null, 2));
-    writeSummary(result, errors);
-    console.log(`General Page Reader CDP audit ${result.ok ? "passed" : "failed"}`);
-    console.log(`artifact: ${relative(ROOT, OUT_DIR)}`);
-    if (!result.ok) exitCode = 1;
+      const errors = assertAudit(result);
+      result.ok = errors.length === 0;
+      result.errors = errors;
+      writeFileSync(resolve(OUT_DIR, "audit.json"), JSON.stringify(result, null, 2));
+      writeSummary(result, errors);
+      console.log(`General Page Reader CDP audit ${result.ok ? "passed" : "failed"}`);
+      console.log(`artifact: ${relative(ROOT, OUT_DIR)}`);
+      if (!result.ok) exitCode = 1;
+    } finally {
+      await restoreScreenshotRecoveryAudit(extensionId, storageSnapshot).catch(() => {});
+      await mockEndpoint.close();
+    }
   }
 } catch (error) {
   const failure = {

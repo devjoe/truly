@@ -437,7 +437,7 @@ const READING_BRIEF_SCHEMA = {
         type: "object",
         properties: {
           q: { type: "string" },
-          kind: { type: "string", enum: ["understand", "context", "counter", "verify", "image", "source"] },
+          kind: { type: "string", enum: ["understand", "context", "counter", "image"] },
         },
         required: ["q", "kind"],
         additionalProperties: false,

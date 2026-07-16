@@ -7,6 +7,7 @@ import {
   buildTierBGeneralPageParserAdvisorChatBody,
   parseTierBDeepContent,
   parseTierBReadingBriefContent,
+  readingBriefSystemPrompt,
 } from "@src/lib/tier-b-client";
 import type { GeneralPageModelContext } from "@src/lib/general-page-model-context";
 import {
@@ -133,6 +134,48 @@ describe("Tier B-2 reading brief public contract", () => {
     }
     expect(parsed.ok).toBe(true);
     expect(parsed.value).toEqual(expect.objectContaining(fixture.expected ?? {}));
+  });
+
+  it("keeps verification tasks out of follow-up questions", () => {
+    const parsed = parseTierBReadingBriefContent(JSON.stringify({
+      bg: [],
+      claims: [{
+        c: "Enzo 稱梅西最後一次參加世界盃",
+        why: "貼文的核心時序主張",
+        need: "梅西 2026 世界盃參賽狀態",
+        q: "梅西是否參加 2026 世界盃？",
+      }],
+      qs: [
+        { q: "Lionel Messi 2026 World Cup participation", kind: "context" },
+        { q: "梅西是否參加 2026 世界盃？", kind: "verify" },
+        { q: "這項說法的來源在哪裡？", kind: "source" },
+        { q: "Enzo Fernández 在 2016 年是否真的寫信給梅西？", kind: "context" },
+        { q: "2026 世界盃四強賽的實際比分與進球者為何？", kind: "understand" },
+        { q: "2026 世界盃四強賽的實際賽況為何？", kind: "context" },
+        { q: "梅西是否已宣布退役或確定參加 2026 世界盃？", kind: "context" },
+        { q: "Enzo 對梅西的公開信內容為何？", kind: "context" },
+        { q: "Enzo 與梅西在阿根廷國家隊的合作歷程為何？", kind: "context" },
+      ],
+      checks: [],
+    }), "brief-contract-model", "zh-TW");
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.value?.qs).toEqual([{
+      q: "Enzo 與梅西在阿根廷國家隊的合作歷程為何？",
+      kind: "context",
+    }]);
+  });
+
+  it("defines follow-up questions as natural understanding prompts, not search tasks", () => {
+    const zhPrompt = readingBriefSystemPrompt("zh-TW");
+    const enPrompt = readingBriefSystemPrompt("en");
+
+    expect(zhPrompt).toContain('"kind":"understand|context|counter|image"');
+    expect(zhPrompt).toContain("不得重述 claims 或 checks");
+    expect(zhPrompt).toContain("不得寫成搜尋關鍵字");
+    expect(enPrompt).toContain('"kind":"understand|context|counter|image"');
+    expect(enPrompt).toContain("must not duplicate claims or checks");
+    expect(enPrompt).toContain("must not be a keyword list");
   });
 });
 

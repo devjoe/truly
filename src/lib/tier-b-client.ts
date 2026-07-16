@@ -38,6 +38,11 @@ import { compactZhtwEvidence } from "./zhtw-review";
 import { resolveStructuredPostContext } from "./post-context";
 import { applyDeepOutputReview, applyReadingBriefOutputReview } from "./model-output-review";
 import { jsonRequestHeaders } from "./request-auth";
+import {
+  duplicatesReadingBriefVerification,
+  isNaturalReadingBriefFollowUpQuestion,
+  isReadingBriefFollowUpKind,
+} from "./reading-question-policy";
 
 export type { DeepClassification };
 
@@ -134,7 +139,7 @@ export const READING_BRIEF_SYSTEM_PROMPT = `你是 Facebook 貼文的「閱讀�
 {
   "bg": [{"t":"≤12字背景","why":"≤28字原因","q":"≤36字問題"}],
   "claims": [{"c":"≤36字主張","why":"≤28字重要性","need":"≤24字證據","q":"≤36字問題"}],
-  "qs": [{"q":"≤36字問題","kind":"understand|context|counter|verify|image|source"}],
+  "qs": [{"q":"≤36字自然問句？","kind":"understand|context|counter|image"}],
   "checks": [{"label":"≤10字項目","q":"≤36字問題","why":"≤28字原因"}],
   "note": "≤36字提醒"
 }
@@ -145,13 +150,18 @@ export const READING_BRIEF_SYSTEM_PROMPT = `你是 Facebook 貼文的「閱讀�
 - ${TEMPORAL_CONTEXT_GUIDANCE}
 - bg 最多 2 筆，claims/qs/checks 各最多 3 筆；沒有有用項目就回空陣列
 - bg.t 必須是名詞短語，不要以「的」「之」結尾；bg.why 必須是完整短句
-- 這不是事實查核結果；只提出閱讀者下一步該理解或查核什麼
+- 這不是事實查核結果；claims.q 與 checks.q 提出下一步查核，qs 只提出下一步理解方向
 - 只有高事實風險、公共議題、數字主張或明確來源疑慮才把內容放進 claims/checks
 - 若 riskProfile.lookupWorthy=false，claims/checks 必須回空陣列；qs 預設回空陣列。只有技術工具、原始碼、官方文件、安裝/API/論文/benchmark、法規/證照/資格這類可直接行動的問題，才可輸出最多 1 筆 understand/context
 - 生活、旅遊、鳥照、寵物、賽事紀錄、官方社群分享、個人心得、一般活動紀錄等低風險內容，優先輸出 1 筆 bg 或 note；不要硬列查核主張或延伸問題
-- 商業、公共議題、高事實風險、AI 圖文疑慮或低品質訊號明確時，才輸出可查核主張、來源問題或下一步查核
+- 商業、公共議題、高事實風險、AI 圖文疑慮或低品質訊號明確時，才輸出可查核主張或下一步查核
 - 不要發明外部事實、來源、網址、人物背景或動機
-- qs/checks 的 q 會直接交給搜尋引擎；不得只寫「這篇貼文」「此內容」「它」等代稱，必須補入可搜尋的具體名詞、人物、機構、事件或關鍵詞
+- claims.q 與 checks.q 是查核問題；不得只寫「這篇貼文」「此內容」「它」等代稱，必須包含具體名詞、人物、機構或事件
+- qs 只放理解、背景、反方觀點或影像理解問題；不得使用 verify/source，不得詢問真假、來源、證據或查證方式，也不得重述 claims 或 checks
+- 每個 qs.q 都必須是台灣繁體中文的自然問句並以「？」結尾；不得寫成搜尋關鍵字、關鍵詞清單或操作指令
+- 「某事是否真的發生？」「實際賽況／比分／賽果／數字／日期為何？」「某人是否已宣布或確定參加？」都是查核問題，必須放進 claims.q 或 checks.q，不得放進 qs
+- qs 不得預設貼文中尚未確認的信件、聲明、公告、報告、影片或錄音確實存在；「某公開信／聲明內容為何？」也屬於查核側
+- qs 正確範例：「兩位球員的合作歷程如何發展？」「這項獎項如何評選？」「這個制度有哪些不同觀點？」
 - 若是轉貼，分開看分享者評論與被分享內容
 - 若圖片只是截圖、Logo、圖表或裝飾，不要過度解讀
 - zhtw 只提供「用語慣例」線索；只有在有助閱讀、搜尋關鍵字或查核時才使用
@@ -165,7 +175,7 @@ export const READING_BRIEF_SYSTEM_PROMPT_EN = `You are a Reading Brief planner f
 {
   "bg": [{"t":"background <=12 English words","why":"reason <=28 English words","q":"question <=36 English words"}],
   "claims": [{"c":"claim <=36 English words","why":"importance <=28 English words","need":"evidence needed <=24 English words","q":"question <=36 English words"}],
-  "qs": [{"q":"question <=36 English words","kind":"understand|context|counter|verify|image|source"}],
+  "qs": [{"q":"natural question <=36 English words?","kind":"understand|context|counter|image"}],
   "checks": [{"label":"item <=10 English words","q":"question <=36 English words","why":"reason <=28 English words"}],
   "note": "reminder <=36 English words"
 }
@@ -175,13 +185,18 @@ Rules:
 - ${TEMPORAL_CONTEXT_GUIDANCE_EN}
 - bg has at most 2 items; claims/qs/checks each have at most 3 items. Return empty arrays when there are no useful items.
 - bg.t must be a noun phrase; bg.why must be a complete short sentence.
-- This is not a fact-check result. It only proposes what the reader should understand or verify next.
+- This is not a fact-check result. claims.q and checks.q propose verification tasks; qs only proposes what the reader should understand next.
 - Put content into claims/checks only for high factual risk, public issues, numeric claims, or clear source concerns.
 - If riskProfile.lookupWorthy=false, claims/checks must be empty and qs should be empty by default. Only output at most 1 understand/context question for directly actionable topics such as technical tools, source code, official documents, installation/API/papers/benchmarks, laws, licenses, or qualifications.
 - For low-risk life, travel, bird photos, pets, sports records, official social sharing, personal reflections, or general activity records, prefer 1 bg item or note; do not force checkable claims or follow-up questions.
-- Output checkable claims, source questions, or next checks only when commercial, public-issue, high-factual-risk, AI image/text concern, or low-quality signals are clear.
+- Output checkable claims or next checks only when commercial, public-issue, high-factual-risk, AI image/text concern, or low-quality signals are clear.
 - Do not invent external facts, sources, URLs, biographies, or motives.
-- qs/checks.q may be sent directly to a search/chat engine. Do not write only "this post", "this content", or "it"; include searchable names, people, organizations, events, or keywords.
+- claims.q and checks.q are verification questions. Do not write only "this post", "this content", or "it"; include concrete names, people, organizations, or events.
+- qs is only for understanding, context, counter-perspectives, or image interpretation. Never use verify/source, ask whether a claim is true, request sources/evidence, or ask how to verify it. qs must not duplicate claims or checks.
+- Every qs.q must be one natural English question ending in ?. It must not be a keyword list, search query, or instruction.
+- “Did this really happen?”, “What was the actual score/number/date?”, and “Has this person announced or confirmed participation?” are verification tasks. Put them in claims.q or checks.q, never qs.
+- qs must not presuppose that an unverified letter, statement, announcement, report, video, or recording exists. “What did the claimed letter/statement say?” belongs on the verification side too.
+- Good qs examples: “How did the two players' collaboration develop?”, “How is this award selected?”, and “What competing perspectives shape this policy?”
 - If this is a repost, separate the sharer's comment from the shared content.
 - If images are screenshots, logos, charts, or decorations, do not over-interpret them.
 - Do not output extra fields.
@@ -585,16 +600,6 @@ export function normalizeReadingBrief(raw: any, model: string, outputLang?: Lang
     const q = clampText(x.q, 80);
     return q ? { c, why, need, q } : { c, why, need };
   });
-  brief.qs = normalizeBriefArray(raw?.qs, 3, (item) => {
-    if (!item || typeof item !== "object") return undefined;
-    const x = item as Record<string, unknown>;
-    const q = clampText(x.q, 80);
-    const kind = typeof x.kind === "string" ? x.kind : "";
-    if (!q || !["understand", "context", "counter", "verify", "image", "source"].includes(kind)) {
-      return undefined;
-    }
-    return { q, kind: kind as ReadingBriefQuestionKind };
-  });
   brief.checks = normalizeBriefArray(raw?.checks, 3, (item) => {
     if (!item || typeof item !== "object") return undefined;
     const x = item as Record<string, unknown>;
@@ -603,6 +608,20 @@ export function normalizeReadingBrief(raw: any, model: string, outputLang?: Lang
     const why = clampText(x.why, 60);
     if (!label || !q || !why) return undefined;
     return { label, q, why };
+  });
+  const verificationTexts = [
+    ...(brief.claims ?? []).flatMap((item) => [item.c, item.need, item.q]),
+    ...(brief.checks ?? []).flatMap((item) => [item.label, item.q, item.why]),
+  ];
+  brief.qs = normalizeBriefArray(raw?.qs, 3, (item) => {
+    if (!item || typeof item !== "object") return undefined;
+    const x = item as Record<string, unknown>;
+    const q = clampText(x.q, 80);
+    const kind = typeof x.kind === "string" ? x.kind : "";
+    if (!q || !isReadingBriefFollowUpKind(kind)) return undefined;
+    if (!isNaturalReadingBriefFollowUpQuestion(q, lang)) return undefined;
+    if (duplicatesReadingBriefVerification(q, verificationTexts)) return undefined;
+    return { q, kind: kind as ReadingBriefQuestionKind };
   });
   const note = clampText(raw?.note, 60);
   if (note) brief.note = note;

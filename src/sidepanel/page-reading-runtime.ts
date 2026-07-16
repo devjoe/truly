@@ -2055,10 +2055,9 @@ export function createSidepanelPageReadingRuntime({
         <div class="page-reader-loading-context" aria-disabled="true">
           <span>${escapeHtml(tr("sidepanel.page.details"))}</span>
         </div>
-        <section class="page-reader-analysis is-running page-reader-loading-analysis" aria-live="polite" aria-busy="true">
+        <section class="page-reader-analysis is-running page-reader-loading-analysis" aria-hidden="true">
           <div class="page-reader-analysis-header">
             <h3>${escapeHtml(tr("sidepanel.page.analysis.title"))}</h3>
-            <div class="reading-brief-loading page-reader-analysis-loading">${escapeHtml(tr("sidepanel.page.analysis.running"))}</div>
           </div>
           <div class="page-reader-loading-reserve" aria-hidden="true">
             <span></span>

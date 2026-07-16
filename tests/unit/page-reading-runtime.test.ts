@@ -110,7 +110,10 @@ describe("sidepanel page reading runtime", () => {
       expect(loadingCard?.textContent).not.toContain("讀取此頁");
       expect(loadingCard?.querySelector(".page-reader-loading-context")?.getAttribute("aria-disabled")).toBe("true");
       expect(loadingCard?.querySelector(".page-reader-loading-analysis h3")?.textContent).toBe("閱讀脈絡");
-      expect(loadingCard?.querySelector(".page-reader-analysis-loading")?.textContent).toBe("整理中…");
+      expect(loadingCard?.querySelector(".page-reader-loading-analysis")?.getAttribute("aria-hidden")).toBe("true");
+      expect(loadingCard?.querySelector(".page-reader-analysis-loading")).toBeNull();
+      expect(loadingCard?.textContent).not.toContain("整理中…");
+      expect(loadingCard?.querySelectorAll('[role="status"]')).toHaveLength(1);
       expect(loadingCard?.querySelectorAll(".page-reader-loading-reserve span")).toHaveLength(2);
 
       nowMs = 3_500;

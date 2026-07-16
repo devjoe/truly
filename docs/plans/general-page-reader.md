@@ -774,6 +774,39 @@ next candidate gate closed; no fresh holdout should be created yet.
 - Real-content paired audit artifacts remain private under `tmp/`; only
   anonymized aggregate findings may be copied into tracked documentation.
 
+### 2026-07-16 Reading Brief and Loading Follow-up
+
+- The initial Page/Web loading card now exposes exactly one polite live status.
+  Its visual skeleton is hidden from assistive technology, so the user no
+  longer hears both the page-read status and a nested analysis status while the
+  first request is still running.
+- Facebook Reading Brief `qs` is now reserved for understanding, context,
+  counter-perspectives, and image interpretation. The prompt schema no longer
+  offers `verify` or `source`; normalization rejects verification-shaped,
+  search-shaped, wrong-locale, non-question, and claim-duplicating rows. The
+  same policy is applied when rendering older session events so legacy output
+  cannot reappear under the `延伸問題` heading.
+- The General Page Reader CDP audit now observes and captures the initial
+  loading skeleton, analysis-running state, background claim preparation, and
+  ready state. Delayed local mock responses keep those transitions observable
+  without relying on a live provider, and the audit fails on duplicate live
+  loading statuses or a manual investigation-start control returning.
+- A private 90-event Facebook runtime audit and a 30-row serial replay against
+  `qwen3.6-35b` completed with 30/30 parse success and no model request errors.
+  Raw post text, per-row output, and screenshots remain gitignored under
+  `tmp/`. Manual review found one remaining semantic blind spot: a
+  source-seeking question phrased as `counter` passed the current policy. A
+  separate 430 px loading-stage capture observed a compact loading row for at
+  least nine seconds before the full Reading Brief arrived, leaving a large
+  loading-to-ready height change. Both are explicitly deferred to the next
+  stabilization slice rather than described as resolved here.
+- The next slice must validate three separate question representations:
+  model-authored `qs.q`, the concise displayed/copied question, and the
+  context-enriched Google AI Mode payload. Deictic wording is not itself a
+  rejection reason when the final action payload is self-contained; the actual
+  fail-closed boundary is verification/source intent appearing in `qs` instead
+  of claims or checks.
+
 ## Verification Gates
 
 Each implementation slice should pass:
