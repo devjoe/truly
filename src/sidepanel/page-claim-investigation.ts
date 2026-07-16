@@ -5,7 +5,6 @@ import type {
 } from "../lib/general-page-analysis";
 import {
   resolveSourceQuote,
-  sourceQuoteMatchesGroundingText,
 } from "../lib/general-page-investigation-adapter";
 import { cleanSearchContextText } from "./format";
 
@@ -36,6 +35,33 @@ export interface PageClaimInvestigationTask {
   aiModePrompt: string;
   sourceUrl?: string;
 }
+
+export interface PageClaimInvestigationPreparationInput {
+  analysisKey: string;
+  scope: "page" | "focus";
+  claimIndex: number;
+  claim: GeneralPageBriefClaim;
+  /** Exact effective Page or Focus text supplied to the model. */
+  groundingText?: string;
+  source?: PageClaimInvestigationSource;
+}
+
+export type PageClaimInvestigationCanonicalization =
+  | "infer_typed_attribution"
+  | "project_exact_atomic_span";
+
+export type PageClaimInvestigationPreparation =
+  | {
+      decision: "prepared";
+      claim: GeneralPageBriefClaim;
+      task: PageClaimInvestigationTask;
+      canonicalizations: PageClaimInvestigationCanonicalization[];
+    }
+  | {
+      decision: "rejected";
+      reason: PageClaimInvestigationIneligibilityReason;
+      canonicalizations: PageClaimInvestigationCanonicalization[];
+    };
 
 export type PageClaimInvestigationIneligibilityReason =
   | "missing_policy"
@@ -89,7 +115,7 @@ const ATTRIBUTION_RELATION_RE = /(?:數據顯示|表示|指出|指稱|宣稱|估
 const LOW_CONSEQUENCE_AVAILABILITY_RE = /(?:現已|目前)?(?:上市|開賣|販售|供應|有貨|可(?:供)?購買)|\b(?:now\s+)?(?:available|in stock|for sale)\b/iu;
 const GENERIC_CONTROVERSY_RE = /(?:引發|掀起|造成|受到).{0,12}(?:爭議|熱議|討論|批評)|\b(?:sparked|caused|drew|generated)\s+(?:online\s+)?(?:controversy|debate|discussion|criticism)\b/iu;
 const NAVIGATION_SECTION_LABEL_RE = /^(?:related(?:\s+(?:stories|articles|news|links))?|read\s+more|recommended|more\s+(?:news|stories|articles)|see\s+also|相關(?:文章|新聞|報導|連結)|延伸閱讀|推薦閱讀|更多(?:新聞|報導|文章|內容))[：:]?$/iu;
-const COMPARATIVE_ASSERTION_RE = /\b(?:better|worse|higher|lower|faster|slower|cheaper|costlier|more\s+(?:effective|accurate|popular|expensive)|less\s+(?:effective|accurate|popular|expensive)|outperform(?:s|ed)?|best|worst|largest|smallest|highest|lowest)\b|(?:優於|劣於|勝過|不如|表現更好|較(?:高|低|快|慢|便宜|昂貴|準確|有效)|最(?:高|低|快|慢|便宜|昂貴|準確|有效)|排名第一)/iu;
+const COMPARATIVE_ASSERTION_RE = /\b(?:better|worse|higher|lower|faster|slower|cheaper|costlier|more\s+(?:effective|accurate|popular|expensive)|less\s+(?:effective|accurate|popular|expensive)|outperform(?:s|ed)?|overtak(?:e|es|ing)|overtook|overtaken|best|worst|largest|smallest|highest|lowest)\b|\bsurpass(?:es|ed|ing)?\s+(?!\d)\p{L}[\p{L}\p{N}._'-]*(?:\s+[\p{L}\p{N}._'-]+){0,4}|\b(?:take|takes|took|taken|taking)\s+the\s+lead\s+over\b|\blead(?:s|ing)?\b(?=.{0,40}\b(?:by|in|with)\b.{0,60}\b(?:benchmark|score|rate|accuracy|latency|price|cost|revenue|sales|market\s+share|users?|cases?|points?|percent(?:age)?)\b)|(?:優於|劣於|勝過|不如|表現更好|較(?:高|低|快|慢|便宜|昂貴|準確|有效)|最(?:高|低|快|慢|便宜|昂貴|準確|有效)|排名第一)|(?:超越|趕超|反超)(?!\s*\d)/iu;
 const COMPARISON_TIME_RE = /\b(?:19|20)\d{2}\b|\b(?:january|february|march|april|may|june|july|august|september|october|november|december|quarter|year)\b|(?:民國\s*\d{2,3}\s*年|\d{2,3}\s*年度|\d{1,2}\s*月|季度)/iu;
 const COMPARISON_MARKET_OR_REGION_RE = /\b(?:market|region|worldwide|global|national|nationwide|local)\b|(?:市場|地區|區域|全球|全國|台灣|臺灣|美國|中國|日本|歐盟)/iu;
 const COMPARISON_METRIC_RE = /\b(?:benchmark|score|rate|accuracy|latency|price|cost|revenue|sales|market\s+share|users?|cases?|points?|percent(?:age)?|seconds?|minutes?|hours?)\b|(?:基準測試|分數|得分|比率|準確率|延遲|價格|成本|營收|銷量|市占率|市場占有率|占有率|使用者|用戶|人數|件數|百分比|百分點|秒|分鐘|小時|指標)/iu;
@@ -108,6 +134,40 @@ const ATTRIBUTION_MODALITY_RE = {
   forecast: /(?:預計|預測|forecast|projected?)/iu,
   analysis: /(?:分析|研判|analysis|analys(?:is|ed)|assessed?)/iu,
 } satisfies Record<GeneralPageClaimAttribution["modality"], RegExp>;
+
+const DETERMINISTIC_ATTRIBUTION_RELATIONS: Array<{
+  relation: RegExp;
+  modality: GeneralPageClaimAttribution["modality"];
+}> = [
+  { relation: /數據顯示/giu, modality: "report" },
+  { relation: /\baccording to\b/giu, modality: "report" },
+  { relation: /\bestimated?\b/giu, modality: "estimate" },
+  { relation: /估計/giu, modality: "estimate" },
+  { relation: /\breported\b/giu, modality: "report" },
+  { relation: /報導/giu, modality: "report" },
+  { relation: /\bforecast\b/giu, modality: "forecast" },
+  { relation: /預測/giu, modality: "forecast" },
+  { relation: /\banalys(?:is|ed)\b/giu, modality: "analysis" },
+  { relation: /(?:分析|研判)/giu, modality: "analysis" },
+  { relation: /\balleged\b/giu, modality: "allegation" },
+  { relation: /指稱/giu, modality: "allegation" },
+  { relation: /\b(?:said|stated)\b/giu, modality: "statement" },
+  { relation: /(?:表示|指出)/giu, modality: "statement" },
+];
+
+const GENERIC_ATTRIBUTION_SOURCE_RE = /^(?:(?:the|an?)\s+)?(?:government|officials?|authorities|experts?|researchers?|agency|company|source|report|study|he|she|they|it|政府|官員|當局|專家|研究人員|機構|公司|消息人士|報告|研究|他|她|他們|它)$/iu;
+const PROJECTION_CRITICAL_TEXT_RE = /\d|\b(?:not|no|never|without|unless|if|provided|subject\s+to)\b|(?:未(?:曾|能|有|獲|完成|通過|達成|公布|確認|批准|同意|發現|提供|支持)|不(?:會|能|是|曾|再|予|允許|承認|支持|符合)|無法|沒有|並非|若|如果|除非|只要|條件)/iu;
+const NON_RELATIONAL_PREDICATE_RE = /^(?:於|在|自|從|截至|between|during|on|at|in|from|as\s+of)(?:\s|\d|年|月|日|時|點|分|至|-|–|—|:|：|\/)*$/iu;
+const UNSAFE_ATOMIC_GAP_RE = /\b(?:not|no|never|may|might|could|would|should|reportedly|allegedly|apparently|purportedly)\b|(?:不|未(?!來)|無|沒|若|如果|假如|倘若|除非|可能|或許|也許|據稱|傳聞|疑似|聲稱|宣稱|預計|預測|估計|推測|研判|尚未|應該|應當|可以|可望|將|會|能|恐怕|恐將|初步|暫定|修正|更正|未經|僅|只|部分|約)/iu;
+const SENTENCE_BOUNDARY_IN_GAP_RE = /[。！？!?]|\.(?=\s|$)/u;
+const SAFE_AUXILIARY_FILLER_RE = /\b(?:has|have|had)\b/iu;
+// A publisher often inserts a short, factual publication-time bridge between
+// an institution and a report relation. This list stays deliberately closed:
+// it must not absorb modality, negation, or an additional proposition.
+const SAFE_ATTRIBUTION_BRIDGE_RE = /^(?:(?:今天|今日|昨日|昨天|本日|當日|日前|近日|近期|本週|本月|今年|最新)?(?:所)?(?:公布|發布)(?:的|之))$/u;
+const SAFE_SOURCE_QUOTE_PREFIX_RE = /^(?:今年)$/u;
+const SAFE_ACCORDING_TO_SUFFIX_RE = /^[,，]\s*and\s+the\s+(?:(?:\d+(?:st|nd|rd|th))|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)[-\s](?:driest|wettest|warmest|coldest)\s+since\s+(?:(?:nationwide|national|official)\s+)?(?:(?:rainfall|weather|temperature|climate)\s+)?records\s+began(?:\s+in\s+(?:19|20)\d{2})?[,，]\s*$/iu;
+const UNSAFE_ATTRIBUTION_SUFFIX_RE = /\b(?:but|however|although|though|yet|whereas|except|deny|denied|dispute|disputed|retract|retracted|withdraw|withdrawn|correct|corrected|clarify|clarified|false|incorrect|contradict|contradicted|questioned)\b|(?:但是|但|然而|儘管|否認|質疑|撤回|撤銷|更正|修正|澄清|錯誤|不實|相反|矛盾)/iu;
 
 type LegalStatus = "arrest" | "charge" | "bail" | "conviction" | "sentence" | "investigation";
 
@@ -153,17 +213,8 @@ function containsAtomicPart(text: string, part: string): boolean {
   return normalizedPart.length >= 2 && normalizedMatchText(text).includes(normalizedPart);
 }
 
-function hasSharedGroundingAnchor(claimText: string, sourceQuote: string): boolean {
-  const quote = normalizedMatchText(sourceQuote);
-  const anchors = claimText.match(/\d+(?:[.,]\d+)*|[A-Za-z][A-Za-z0-9._-]{3,}|[\p{Script=Han}]{2,}/gu) ?? [];
-  return anchors.some((anchor) => {
-    const normalized = normalizedMatchText(anchor);
-    return normalized.length >= 2 && quote.includes(normalized);
-  });
-}
-
 function sourceQuoteIsNavigationFragment(claim: GeneralPageBriefClaim, groundingText: string): boolean {
-  const quote = resolveSourceQuote(claim.sourceQuote, groundingText, claim.c);
+  const quote = resolveSourceQuote(claim.sourceQuote, groundingText);
   if (!quote) return false;
   const positions: number[] = [];
   for (let cursor = groundingText.indexOf(quote); cursor >= 0; cursor = groundingText.indexOf(quote, cursor + quote.length)) {
@@ -263,6 +314,374 @@ function orderedAtomicSpan(claimText: string, atom: GeneralPageAtomicProposition
   const objectStart = claimText.indexOf(atom.o, predicateStart + atom.p.length);
   if (objectStart < predicateStart + atom.p.length) return undefined;
   return claimText.slice(subjectStart, objectStart + atom.o.length).trim();
+}
+
+function allExactOccurrences(text: string, part: string): number[] {
+  const positions: number[] = [];
+  if (!part) return positions;
+  for (let cursor = text.indexOf(part); cursor >= 0; cursor = text.indexOf(part, cursor + 1)) {
+    positions.push(cursor);
+    if (positions.length > 64) return [];
+  }
+  return positions;
+}
+
+interface ExactAtomicAlignment {
+  start: number;
+  predicateStart: number;
+  objectStart: number;
+  end: number;
+  span: string;
+  gaps: readonly [string, string];
+}
+
+function exactAtomicAlignments(
+  text: string,
+  atom: GeneralPageAtomicProposition,
+): ExactAtomicAlignment[] {
+  const subjectPositions = allExactOccurrences(text, atom.s);
+  const predicatePositions = allExactOccurrences(text, atom.p);
+  const objectPositions = allExactOccurrences(text, atom.o);
+  const candidates: ExactAtomicAlignment[] = [];
+  for (const start of subjectPositions) {
+    for (const predicateStart of predicatePositions) {
+      if (predicateStart < start + atom.s.length) continue;
+      for (const objectStart of objectPositions) {
+        if (objectStart < predicateStart + atom.p.length) continue;
+        const end = objectStart + atom.o.length;
+        candidates.push({
+          start,
+          predicateStart,
+          objectStart,
+          end,
+          span: text.slice(start, end).trim(),
+          gaps: [
+            text.slice(start + atom.s.length, predicateStart),
+            text.slice(predicateStart + atom.p.length, objectStart),
+          ],
+        });
+        if (candidates.length > 128) return [];
+      }
+    }
+  }
+  return candidates.filter((candidate, index) => candidates.findIndex((other) =>
+    other.start === candidate.start &&
+    other.predicateStart === candidate.predicateStart &&
+    other.objectStart === candidate.objectStart &&
+    other.end === candidate.end) === index);
+}
+
+function exactAtomicCoordinates(
+  claimText: string,
+  atom: GeneralPageAtomicProposition,
+): ExactAtomicAlignment | undefined {
+  const candidates = exactAtomicAlignments(claimText, atom);
+  return candidates.length === 1 ? candidates[0] : undefined;
+}
+
+function normalizedAtomicGap(value: string): string {
+  return value.normalize("NFKC").replace(/\s+/gu, " ").trim();
+}
+
+function atomicGapIsUnsafe(value: string): boolean {
+  return SENTENCE_BOUNDARY_IN_GAP_RE.test(value) || UNSAFE_ATOMIC_GAP_RE.test(value);
+}
+
+function atomicGapsSafelyAlign(
+  claimGap: string,
+  evidenceGap: string,
+  allowTrailingAuxiliary: boolean,
+): boolean {
+  if (atomicGapIsUnsafe(claimGap) || atomicGapIsUnsafe(evidenceGap)) return false;
+  const claim = normalizedAtomicGap(claimGap);
+  const evidence = normalizedAtomicGap(evidenceGap);
+  if (claim === evidence) return true;
+  if (!allowTrailingAuxiliary) return false;
+  const withoutTrailingAuxiliary = (value: string) => normalizedAtomicGap(value)
+    .replace(/(?:^|\s)(?:has|have|had)$/iu, "")
+    .trim();
+  return withoutTrailingAuxiliary(claimGap) === withoutTrailingAuxiliary(evidenceGap) &&
+    (claimGap.search(SAFE_AUXILIARY_FILLER_RE) >= 0 || evidenceGap.search(SAFE_AUXILIARY_FILLER_RE) >= 0);
+}
+
+interface ExactAtomicGroundingWitness {
+  evidenceText: string;
+  alignments: ExactAtomicAlignment[];
+}
+
+function resolveExactAtomicGroundingWitness(
+  claim: GeneralPageBriefClaim,
+  groundingText: string,
+): ExactAtomicGroundingWitness | undefined {
+  const atom = claim.atom;
+  if (!atom) return undefined;
+  const claimAlignment = exactAtomicCoordinates(claim.c, atom);
+  if (!claimAlignment || claimAlignment.gaps.some(atomicGapIsUnsafe)) return undefined;
+  const evidenceText = claim.sourceQuote
+    ? resolveSourceQuote(claim.sourceQuote, groundingText)
+    : groundingText;
+  if (!evidenceText) return undefined;
+  const alignments = exactAtomicAlignments(evidenceText, atom).filter((alignment) =>
+    atomicGapsSafelyAlign(claimAlignment.gaps[0], alignment.gaps[0], true) &&
+    atomicGapsSafelyAlign(claimAlignment.gaps[1], alignment.gaps[1], false));
+  const gapSignatures = new Set(alignments.map((alignment) => JSON.stringify(
+    alignment.gaps.map(normalizedAtomicGap),
+  )));
+  // Repeated DOM copies with the same gaps are equivalent evidence. Distinct
+  // gap signatures could encode different modality or scope and stay closed.
+  return gapSignatures.size === 1 ? { evidenceText, alignments } : undefined;
+}
+
+function exactAtomicGroundingWitness(
+  claim: GeneralPageBriefClaim,
+  groundingText: string,
+): string | undefined {
+  return resolveExactAtomicGroundingWitness(claim, groundingText)?.evidenceText;
+}
+
+function trimmedOuterRegion(value: string): string {
+  return value.replace(/^[\s，,；;:：。.!?「『“‘"']+|[\s，,；;:：。.!?」』”’"']+$/gu, "").trim();
+}
+
+function attributionUsesAtomicAlignment(
+  claimText: string,
+  evidenceText: string,
+  alignments: ExactAtomicAlignment[],
+  atom: GeneralPageAtomicProposition,
+  attribution: GeneralPageClaimAttribution,
+  claimParts: Array<{ key: "source" | "relation" | "s" | "p" | "o"; start: number; end: number }>,
+  options?: {
+    allowReportBridge?: boolean;
+    sourceQuote?: string;
+    failOnCompetingFrame?: boolean;
+  },
+): boolean {
+  const signatures = new Set<string>();
+  let sawCompetingFrame = false;
+  const claimOrder = claimParts.map((part) => part.key).join(":");
+  for (const alignment of alignments) {
+    for (const sourceStart of allExactOccurrences(evidenceText, attribution.source)) {
+      for (const relationStart of allExactOccurrences(evidenceText, attribution.relation)) {
+        const sourceEnd = sourceStart + attribution.source.length;
+        const relationEnd = relationStart + attribution.relation.length;
+        const parts = [
+          { key: "source" as const, start: sourceStart, end: sourceEnd },
+          { key: "relation" as const, start: relationStart, end: relationEnd },
+          { key: "s" as const, start: alignment.start, end: alignment.start + atom.s.length },
+          { key: "p" as const, start: alignment.predicateStart, end: alignment.predicateStart + atom.p.length },
+          { key: "o" as const, start: alignment.objectStart, end: alignment.end },
+        ].sort((left, right) => left.start - right.start);
+        if (parts.map((part) => part.key).join(":") !== claimOrder) continue;
+        if (parts.some((part, index) => index > 0 && part.start < parts[index - 1].end)) continue;
+        const start = parts[0].start;
+        const end = parts[parts.length - 1].end;
+        if (end - start > 320 || SENTENCE_BOUNDARY_IN_GAP_RE.test(evidenceText.slice(start, end))) continue;
+        const gaps = parts.slice(1).map((part, index) => ({
+          previous: parts[index],
+          next: part,
+          claim: claimParts[index + 1].start >= claimParts[index].end
+            ? claimText.slice(claimParts[index].end, claimParts[index + 1].start)
+            : "",
+          evidence: evidenceText.slice(parts[index].end, part.start),
+        }));
+        const quoteOccurrence = options?.sourceQuote
+          ? allExactOccurrences(evidenceText, options.sourceQuote).find((position) =>
+            alignment.start >= position && alignment.end <= position + options.sourceQuote!.length)
+          : undefined;
+        const gapsAlign = gaps.every((gap) => {
+          if (gap.previous.key === "s" && gap.next.key === "p") {
+            return atomicGapsSafelyAlign(gap.claim, gap.evidence, true);
+          }
+          if (gap.previous.key === "p" && gap.next.key === "o") {
+            return atomicGapsSafelyAlign(gap.claim, gap.evidence, false);
+          }
+          if (atomicGapIsUnsafe(gap.claim) || atomicGapIsUnsafe(gap.evidence)) return false;
+          if (normalizedAtomicGap(gap.claim) === normalizedAtomicGap(gap.evidence)) return true;
+          if (options?.allowReportBridge &&
+            attribution.relation === "數據顯示" && attribution.modality === "report" &&
+            gap.previous.key === "source" && gap.next.key === "relation" &&
+            normalizedAtomicGap(gap.claim) === "" &&
+            SAFE_ATTRIBUTION_BRIDGE_RE.test(normalizedAtomicGap(gap.evidence))) {
+            return true;
+          }
+          if (options?.allowReportBridge && quoteOccurrence !== undefined &&
+            gap.previous.key === "relation" && gap.next.key === "s" &&
+            trimmedOuterRegion(gap.claim) === "") {
+            const quotePrefix = trimmedOuterRegion(
+              evidenceText.slice(quoteOccurrence, alignment.start),
+            );
+            return SAFE_SOURCE_QUOTE_PREFIX_RE.test(quotePrefix) &&
+              trimmedOuterRegion(gap.evidence) === quotePrefix;
+          }
+          // A suffix "according to SOURCE" may scope an additional coordinated
+          // fact in the exact quote. Keep a closed coordination grammar and
+          // reject contrast, correction, retraction, or another reporting frame.
+          return gap.previous.key === "o" && gap.next.key === "relation" &&
+            /^according to$/iu.test(attribution.relation) &&
+            SAFE_ACCORDING_TO_SUFFIX_RE.test(gap.evidence) &&
+            !UNSAFE_ATTRIBUTION_SUFFIX_RE.test(gap.evidence) &&
+            !ATTRIBUTION_RELATION_RE.test(trimmedOuterRegion(gap.evidence));
+        });
+        if (!gapsAlign) {
+          if (options?.failOnCompetingFrame) sawCompetingFrame = true;
+          continue;
+        }
+        signatures.add(JSON.stringify(parts.map((part, index) => [
+          part.key,
+          index === 0 ? "" : normalizedAtomicGap(evidenceText.slice(parts[index - 1].end, part.start)),
+        ])));
+      }
+    }
+  }
+  return signatures.size === 1 && !sawCompetingFrame;
+}
+
+function inferUniqueGroundedAttribution(
+  claim: GeneralPageBriefClaim,
+  groundingText: string,
+): GeneralPageClaimAttribution | undefined {
+  const atom = claim.atom;
+  if (!atom) return undefined;
+  const coordinates = exactAtomicCoordinates(claim.c, atom);
+  if (!coordinates) return undefined;
+  const regions = [
+    { text: claim.c.slice(0, coordinates.start), offset: 0 },
+    { text: claim.c.slice(coordinates.end), offset: coordinates.end },
+  ];
+  const candidates: Array<{
+    attribution: GeneralPageClaimAttribution;
+    sourceStart: number;
+    relationStart: number;
+  }> = [];
+
+  for (const region of regions) {
+    const clean = trimmedOuterRegion(region.text);
+    if (!clean) continue;
+    const cleanOffset = region.text.indexOf(clean);
+    for (const mapping of DETERMINISTIC_ATTRIBUTION_RELATIONS) {
+      mapping.relation.lastIndex = 0;
+      for (let match = mapping.relation.exec(clean); match; match = mapping.relation.exec(clean)) {
+        const relation = match[0];
+        const before = trimmedOuterRegion(clean.slice(0, match.index));
+        const after = trimmedOuterRegion(clean.slice(match.index + relation.length));
+        const source = /^according to$/iu.test(relation)
+          ? (!before && after ? after : undefined)
+          : before && !after
+          ? before
+          : !before && after
+          ? after
+          : undefined;
+        if (!source || source.length > 100 || normalizedMatchText(source).length < 2 ||
+          GENERIC_ATTRIBUTION_SOURCE_RE.test(source) || hasInvestigationArtifact(source) ||
+          /[，,；;。.!?]/u.test(source) || ATTRIBUTION_RELATION_RE.test(source)) continue;
+        const relationStart = region.offset + cleanOffset + match.index;
+        const sourceStartInClean = clean.indexOf(source);
+        if (sourceStartInClean < 0) continue;
+        candidates.push({
+          attribution: { source, relation, modality: mapping.modality },
+          sourceStart: region.offset + cleanOffset + sourceStartInClean,
+          relationStart,
+        });
+      }
+    }
+  }
+
+  const unique = candidates.filter((candidate, index) => candidates.findIndex((other) =>
+    other.sourceStart === candidate.sourceStart &&
+    other.relationStart === candidate.relationStart &&
+    other.attribution.modality === candidate.attribution.modality) === index);
+  if (unique.length !== 1) return undefined;
+  const candidate = unique[0];
+  const claimParts = [
+    { key: "source" as const, start: candidate.sourceStart, end: candidate.sourceStart + candidate.attribution.source.length },
+    { key: "relation" as const, start: candidate.relationStart, end: candidate.relationStart + candidate.attribution.relation.length },
+    { key: "s" as const, start: coordinates.start, end: coordinates.start + atom.s.length },
+    { key: "p" as const, start: coordinates.predicateStart, end: coordinates.predicateStart + atom.p.length },
+    { key: "o" as const, start: coordinates.objectStart, end: coordinates.end },
+  ].sort((left, right) => left.start - right.start);
+  const primaryWitness = resolveExactAtomicGroundingWitness(claim, groundingText);
+  if (primaryWitness && attributionUsesAtomicAlignment(
+    claim.c,
+    primaryWitness.evidenceText,
+    primaryWitness.alignments,
+    atom,
+    candidate.attribution,
+    claimParts,
+  )) return candidate.attribution;
+
+  const exactQuote = claim.sourceQuote
+    ? resolveSourceQuote(claim.sourceQuote, groundingText)
+    : undefined;
+  if (!exactQuote || containsAtomicPart(exactQuote, candidate.attribution.source) ||
+    containsAtomicPart(exactQuote, candidate.attribution.relation) ||
+    candidate.attribution.relation !== "數據顯示" || candidate.attribution.modality !== "report") {
+    return undefined;
+  }
+  const sourceRelationGap = claim.c.slice(
+    candidate.sourceStart + candidate.attribution.source.length,
+    candidate.relationStart,
+  );
+  if (normalizedAtomicGap(sourceRelationGap) !== "") return undefined;
+  const fullWitness = resolveExactAtomicGroundingWitness({ ...claim, sourceQuote: undefined }, groundingText);
+  return fullWitness && attributionUsesAtomicAlignment(
+    claim.c,
+    fullWitness.evidenceText,
+    fullWitness.alignments,
+    atom,
+    candidate.attribution,
+    claimParts,
+    {
+      allowReportBridge: true,
+      sourceQuote: exactQuote,
+      failOnCompetingFrame: true,
+    },
+  ) ? candidate.attribution : undefined;
+}
+
+function typedAttributionHasGroundedWitness(
+  claim: GeneralPageBriefClaim,
+  groundingText: string,
+): boolean {
+  const attribution = claim.attribution;
+  if (!attribution) return false;
+  const grounded = inferUniqueGroundedAttribution(
+    { ...claim, attribution: undefined },
+    groundingText,
+  );
+  return Boolean(grounded) && grounded!.modality === attribution.modality &&
+    normalizedMatchText(grounded!.source) === normalizedMatchText(attribution.source) &&
+    normalizedMatchText(grounded!.relation) === normalizedMatchText(attribution.relation);
+}
+
+function projectExactAtomicClaim(
+  claim: GeneralPageBriefClaim,
+  groundingText: string,
+): GeneralPageBriefClaim | undefined {
+  const atom = claim.atom;
+  if (!atom || claim.attribution || outerAttribution(claim.c, atom) || NON_RELATIONAL_PREDICATE_RE.test(atom.p.trim())) {
+    return undefined;
+  }
+  const coordinates = exactAtomicCoordinates(claim.c, atom);
+  if (!coordinates || !hasOneProposition(coordinates.span)) return undefined;
+  const prefix = claim.c.slice(0, coordinates.start);
+  const suffix = claim.c.slice(coordinates.end);
+  if (!/^[\s「『“‘"']*$/u.test(prefix)) return undefined;
+  const suffixWithoutTerminal = suffix.replace(/[。！？.!?][」』”’"']?\s*$/u, "").trim();
+  if (!suffixWithoutTerminal || !/^(?:[，,；;:]|(?:and|while|as)\b|並且|並|且|以及|同時)/iu.test(suffixWithoutTerminal)) {
+    return undefined;
+  }
+  const removedText = `${prefix} ${suffixWithoutTerminal}`;
+  if (PROJECTION_CRITICAL_TEXT_RE.test(removedText) || ATTRIBUTION_RELATION_RE.test(removedText) ||
+    legalStatuses(removedText).size > 0) return undefined;
+  const originalStatuses = legalStatuses(claim.c);
+  const projectedStatuses = legalStatuses(coordinates.span);
+  if (originalStatuses.size !== projectedStatuses.size ||
+    [...originalStatuses].some((status) => !projectedStatuses.has(status))) return undefined;
+  if (!groundingText.includes(coordinates.span)) return undefined;
+  if (claim.sourceQuote && !exactAtomicGroundingWitness(claim, groundingText)) return undefined;
+  const punctuation = claim.c.trim().match(/[。！？.!?][」』”’"']?$/u)?.[0] ??
+    (/\p{Script=Han}/u.test(coordinates.span) ? "。" : ".");
+  return { ...claim, c: `${coordinates.span}${punctuation}` };
 }
 
 function outerAttribution(
@@ -384,16 +803,15 @@ export function pageClaimInvestigationEligibility(
   const inspected = inspectAtomicProposition(claim);
   const atom = inspected.atom;
   if (!atom) return { ok: false, reason: inspected.reason ?? "invalid_structure" };
-  if (groundingText && [atom.s, atom.p, atom.o].some((part) => !containsAtomicPart(groundingText, part))) {
-    if (!claim.sourceQuote || hasInvestigationArtifact(claim.sourceQuote) ||
-      !sourceQuoteMatchesGroundingText(claim.sourceQuote, groundingText) ||
-      !hasSharedGroundingAnchor(claim.c, claim.sourceQuote)) {
-      return { ok: false, reason: "ungrounded_atom" };
-    }
+  if (groundingText && (!exactAtomicGroundingWitness(claim, groundingText) ||
+    (claim.sourceQuote ? hasInvestigationArtifact(claim.sourceQuote) : false))) {
+    return { ok: false, reason: "ungrounded_atom" };
   }
   const inferredAttribution = outerAttribution(claim.c, atom);
   if (inferredAttribution && !claim.attribution) return { ok: false, reason: "missing_attribution" };
-  if (inferredAttribution && claim.attribution && !validTypedAttribution(claim.c, atom, claim.attribution)) {
+  if (claim.attribution && (!inferredAttribution ||
+    !validTypedAttribution(claim.c, atom, claim.attribution) ||
+    (groundingText && !typedAttributionHasGroundedWitness(claim, groundingText)))) {
     return { ok: false, reason: "invalid_attribution" };
   }
   return { ok: true };
@@ -487,31 +905,23 @@ export function buildGoogleAiModePrompt(intent: ClaimVerificationIntent): string
   ].filter(Boolean).join(" ").slice(0, 960);
 }
 
-export function buildPageClaimInvestigationTask(input: {
-  analysisKey: string;
-  scope: "page" | "focus";
-  claimIndex: number;
-  claim: GeneralPageBriefClaim;
-  /** Exact effective Page or Focus text supplied to the model. */
-  groundingText?: string;
-  source?: PageClaimInvestigationSource;
-}): PageClaimInvestigationTask | undefined {
-  const claim = cleanInvestigationText(input.claim.c, 160);
-  const why = cleanInvestigationText(input.claim.why, 120);
-  const evidenceNeed = cleanInvestigationText(input.claim.need, 100);
-  if (!input.groundingText?.trim()) return undefined;
-  const eligibility = pageClaimInvestigationEligibility(input.claim, input.groundingText);
-  if (!eligibility.ok) return undefined;
-  const atom = usableAtomicProposition(input.claim);
+function buildPreparedPageClaimInvestigationTask(
+  input: PageClaimInvestigationPreparationInput,
+  preparedClaim: GeneralPageBriefClaim,
+): PageClaimInvestigationTask | undefined {
+  const claim = cleanInvestigationText(preparedClaim.c, 160);
+  const why = cleanInvestigationText(preparedClaim.why, 120);
+  const evidenceNeed = cleanInvestigationText(preparedClaim.need, 100);
+  const atom = usableAtomicProposition(preparedClaim);
   if (!atom) return undefined;
-  const inferredAttribution = outerAttribution(input.claim.c, atom);
+  const inferredAttribution = outerAttribution(preparedClaim.c, atom);
   const question = usableClaimQuestion(
-    input.claim.q,
+    preparedClaim.q,
     atom,
     claim,
-    inferredAttribution ? input.claim.attribution : undefined,
+    inferredAttribution ? preparedClaim.attribution : undefined,
   ) ??
-    deterministicClaimQuestion(input.claim);
+    deterministicClaimQuestion(preparedClaim);
   if (!input.analysisKey || !claim || !evidenceNeed || !question) return undefined;
   const sourceContext = {
     ...(cleanInvestigationText(input.source?.title, 100) ? { title: cleanInvestigationText(input.source?.title, 100) } : {}),
@@ -533,8 +943,53 @@ export function buildPageClaimInvestigationTask(input: {
     scope: input.scope,
     claimIndex: input.claimIndex,
     intent,
-    googleKeywords: buildGoogleSearchKeywords(intent, input.claim),
+    googleKeywords: buildGoogleSearchKeywords(intent, preparedClaim),
     aiModePrompt: buildGoogleAiModePrompt(intent),
     ...(cleanSourceMetadataUrl(input.source?.url) ? { sourceUrl: cleanSourceMetadataUrl(input.source?.url) } : {}),
   };
+}
+
+export function preparePageClaimInvestigation(
+  input: PageClaimInvestigationPreparationInput,
+): PageClaimInvestigationPreparation {
+  const canonicalizations: PageClaimInvestigationCanonicalization[] = [];
+  if (!input.groundingText?.trim()) {
+    return { decision: "rejected", reason: "invalid_structure", canonicalizations };
+  }
+
+  let claim: GeneralPageBriefClaim = input.claim;
+  let eligibility = pageClaimInvestigationEligibility(claim, input.groundingText);
+  if (!eligibility.ok && (eligibility.reason === "missing_attribution" || eligibility.reason === "invalid_attribution")) {
+    const attribution = inferUniqueGroundedAttribution(claim, input.groundingText);
+    if (attribution) {
+      claim = { ...claim, attribution };
+      canonicalizations.push("infer_typed_attribution");
+      eligibility = pageClaimInvestigationEligibility(claim, input.groundingText);
+    }
+  }
+
+  if (!eligibility.ok && eligibility.reason === "compound_claim") {
+    const projected = projectExactAtomicClaim(claim, input.groundingText);
+    if (projected) {
+      claim = projected;
+      canonicalizations.push("project_exact_atomic_span");
+      eligibility = pageClaimInvestigationEligibility(claim, input.groundingText);
+    }
+  }
+
+  if (!eligibility.ok) {
+    return { decision: "rejected", reason: eligibility.reason, canonicalizations };
+  }
+  const task = buildPreparedPageClaimInvestigationTask(input, claim);
+  if (!task) return { decision: "rejected", reason: "invalid_question", canonicalizations };
+  return { decision: "prepared", claim, task, canonicalizations };
+}
+
+export function buildPageClaimInvestigationTask(
+  input: PageClaimInvestigationPreparationInput,
+): PageClaimInvestigationTask | undefined {
+  if (!input.groundingText?.trim()) return undefined;
+  const eligibility = pageClaimInvestigationEligibility(input.claim, input.groundingText);
+  if (!eligibility.ok) return undefined;
+  return buildPreparedPageClaimInvestigationTask(input, input.claim);
 }

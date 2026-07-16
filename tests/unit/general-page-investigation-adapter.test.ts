@@ -123,7 +123,7 @@ describe("General Page investigation adapter", () => {
     expect(parsed.value?.decision === "prepared" ? parsed.value.claim.attribution : undefined).toBeUndefined();
   });
 
-  it("normalizes root attribution and resolves one truly contiguous source quote", () => {
+  it("normalizes root attribution but resolves only an exact contiguous source quote", () => {
     const claimText = "美國國防部長赫格塞斯宣布將為30歲以上的美國軍人提供睪固酮篩檢與治療計畫。";
     const first = "The Pentagon will offer testosterone treatment for US soldiers";
     const second = "Troops 30 years old and over would have their testosterone levels tested annually";
@@ -155,12 +155,23 @@ describe("General Page investigation adapter", () => {
       parsed.value?.decision === "prepared" ? parsed.value.claim.sourceQuote : undefined,
       `${first}, in a programme announced by Pete Hegseth. ${second}, while younger soldiers could opt in.`,
       claimText,
-    )).toBe(second);
+    )).toBeUndefined();
     expect(resolveSourceQuote(
-      first,
+      `${second}, while younger soldiers could opt in.`,
       `${first}, in a programme announced by Pete Hegseth. ${second}, while younger soldiers could opt in.`,
       claimText,
     )).toBe(`${second}, while younger soldiers could opt in.`);
+    expect(resolveSourceQuote(
+      first,
+      `${first}. Duplicate: ${first}.`,
+      claimText,
+    )).toBe(first);
+    expect(resolveSourceQuote("aaaaaaaa", "aaaaaaaaa", claimText)).toBeUndefined();
+    expect(resolveSourceQuote(
+      first,
+      `${second}, while younger soldiers could opt in.`,
+      claimText,
+    )).toBeUndefined();
   });
 
   it("accepts abstention but rejects an incomplete prepared claim", () => {

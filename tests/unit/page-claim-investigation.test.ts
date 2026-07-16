@@ -6,6 +6,7 @@ import {
   deterministicClaimQuestion,
   geminiEvidenceSearchUrl,
   pageClaimInvestigationEligibility,
+  preparePageClaimInvestigation,
   standardEvidenceSearchUrl,
   usableClaimQuestion,
 } from "@src/sidepanel/page-claim-investigation";
@@ -62,9 +63,9 @@ describe("page claim investigation contract", () => {
     expect(googleKeywords).not.toContain("Did");
   });
 
-  it("ignores metadata-only attribution when the claim has no outer source frame", () => {
+  it("rejects metadata-only attribution when the claim has no outer source frame", () => {
     const claimText = "美國國防部長赫格塞斯宣布將為30歲以上的美國軍人提供睪固酮篩檢與治療計畫。";
-    const sourceQuote = "Troops 30 years old and over would have their testosterone levels tested annually, while younger soldiers could opt in to the test, Hegseth said.";
+    const sourceQuote = claimText;
     const task = buildPageClaimInvestigationTask({
       analysisKey: "analysis:ft-runtime",
       scope: "page",
@@ -83,7 +84,7 @@ describe("page claim investigation contract", () => {
         attribution: { source: "ft.com", relation: "report", modality: "report" },
         sourceQuote,
       },
-      groundingText: `The programme was announced by Pete Hegseth. ${sourceQuote}`,
+      groundingText: sourceQuote,
       source: {
         title: "US troops to get testosterone treatment to make them strong",
         sourceName: "ft.com",
@@ -91,9 +92,7 @@ describe("page claim investigation contract", () => {
       },
     });
 
-    expect(task).toBeDefined();
-    expect(task?.intent.question).toContain("美國國防部長赫格塞斯");
-    expect(task?.intent.question).not.toContain("ft.com");
+    expect(task).toBeUndefined();
   });
 
   it("prefers a grounded model question and adds bounded source context", () => {
@@ -248,6 +247,401 @@ describe("page claim investigation contract", () => {
     });
   });
 
+  it("prepares a claim by inferring one exact grounded typed attribution", () => {
+    const claim = {
+      c: "烏克蘭政府估計，俄羅斯飛彈有九成裝著日本製零件。",
+      why: "涉及武器供應鏈與出口管制。",
+      need: "烏克蘭政府原始估計與零件調查資料。",
+      q: "俄羅斯飛彈是否有九成裝著日本製零件？",
+      atom: { s: "俄羅斯飛彈", p: "有九成裝著", o: "日本製零件" },
+      policy: { claimKind: "estimate" as const, consequence: "public_interest" as const },
+    };
+
+    const preparation = preparePageClaimInvestigation({
+      analysisKey: "analysis:inferred-attribution",
+      scope: "page",
+      claimIndex: 0,
+      claim,
+      groundingText: claim.c,
+    });
+
+    expect(preparation).toMatchObject({
+      decision: "prepared",
+      canonicalizations: ["infer_typed_attribution"],
+      claim: {
+        attribution: { source: "烏克蘭政府", relation: "估計", modality: "estimate" },
+      },
+      task: {
+        intent: {
+          question: "「烏克蘭政府估計，俄羅斯飛彈有九成裝著日本製零件」是否有外部證據支持？",
+        },
+      },
+    });
+    expect(pageClaimInvestigationEligibility(claim, claim.c)).toEqual({
+      ok: false,
+      reason: "missing_attribution",
+    });
+  });
+
+  it("projects one exact atomic span without treating 未來 as negation", () => {
+    const claim = {
+      c: "丹拿將關閉工廠，並在未來退出市場。",
+      why: "影響員工與消費者權益。",
+      need: "丹拿公司公告或公司登記文件。",
+      q: "丹拿是否將關閉工廠並在未來退出市場？",
+      atom: { s: "丹拿", p: "將關閉", o: "工廠" },
+      policy: { claimKind: "forecast" as const, consequence: "public_interest" as const },
+      sourceQuote: "丹拿將關閉工廠，並在未來退出市場。",
+    };
+
+    expect(preparePageClaimInvestigation({
+      analysisKey: "analysis:atomic-projection",
+      scope: "page",
+      claimIndex: 0,
+      claim,
+      groundingText: `${claim.sourceQuote}\n${claim.sourceQuote}`,
+    })).toMatchObject({
+      decision: "prepared",
+      canonicalizations: ["project_exact_atomic_span"],
+      claim: { c: "丹拿將關閉工廠。" },
+      task: {
+        intent: { question: "「丹拿將關閉工廠」是否有外部證據支持？" },
+      },
+    });
+  });
+
+  it("rejects a compound projection that would remove negation, a date, or a legal stage", () => {
+    const base = {
+      why: "影響公共安全。",
+      need: "主管機關公告與正式紀錄。",
+      q: "甲公司是否下架產品？",
+      atom: { s: "甲公司", p: "下架", o: "產品" },
+      policy: { claimKind: "fact" as const, consequence: "safety" as const },
+    };
+    const cases = [
+      "甲公司下架產品，並未完成安全審查。",
+      "甲公司下架產品，並於2026年公布調查結果。",
+      "甲公司下架產品，並遭法院判刑。",
+    ];
+
+    for (const c of cases) {
+      expect(preparePageClaimInvestigation({
+        analysisKey: `analysis:unsafe-projection:${c}`,
+        scope: "page",
+        claimIndex: 0,
+        claim: { ...base, c, sourceQuote: c },
+        groundingText: c,
+      })).toMatchObject({ decision: "rejected", reason: "compound_claim" });
+    }
+  });
+
+  it("grounds atom parts in one exact source quote even when filler differs from claim.c", () => {
+    const sourceQuote = "India has recorded its driest June in 12 years.";
+    const claim = {
+      c: "India recorded its driest June in 12 years.",
+      why: "The rainfall record affects agricultural planning.",
+      need: "Official rainfall records and measurement methodology.",
+      q: "Did India record its driest June in 12 years?",
+      atom: { s: "India", p: "recorded", o: "its driest June in 12 years" },
+      policy: { claimKind: "report" as const, consequence: "public_interest" as const },
+      sourceQuote,
+    };
+
+    expect(pageClaimInvestigationEligibility(claim, sourceQuote)).toEqual({ ok: true });
+    expect(pageClaimInvestigationEligibility(
+      { ...claim, sourceQuote: "India had its driest June in 12 years." },
+      "India had its driest June in 12 years.",
+    )).toEqual({ ok: false, reason: "ungrounded_atom" });
+  });
+
+  it("rejects unsafe modal, hedge, negation, Chinese modal, and cross-sentence atom gaps", () => {
+    const english = {
+      c: "India recorded its driest June in 12 years.",
+      why: "The rainfall record affects agricultural planning.",
+      need: "Official rainfall records and measurement methodology.",
+      q: "Did India record its driest June in 12 years?",
+      atom: { s: "India", p: "recorded", o: "its driest June in 12 years" },
+      policy: { claimKind: "report" as const, consequence: "public_interest" as const },
+    };
+    for (const sourceQuote of [
+      "India has not recorded its driest June in 12 years.",
+      "India may have recorded its driest June in 12 years.",
+      "India reportedly recorded its driest June in 12 years.",
+      "India recorded has its driest June in 12 years.",
+      "India recorded may its driest June in 12 years.",
+      "India. recorded its driest June in 12 years.",
+    ]) {
+      expect(pageClaimInvestigationEligibility({ ...english, sourceQuote }, sourceQuote)).toEqual({
+        ok: false,
+        reason: "ungrounded_atom",
+      });
+    }
+
+    const chinese = {
+      c: "印度可能創下十二年來最乾旱的六月。",
+      why: "降雨紀錄影響農業規劃。",
+      need: "官方降雨紀錄與測量方法。",
+      q: "印度是否創下十二年來最乾旱的六月？",
+      atom: { s: "印度", p: "創下", o: "十二年來最乾旱的六月" },
+      policy: { claimKind: "report" as const, consequence: "public_interest" as const },
+      sourceQuote: "印度可能創下十二年來最乾旱的六月。",
+    };
+    expect(pageClaimInvestigationEligibility(chinese, chinese.sourceQuote)).toEqual({
+      ok: false,
+      reason: "ungrounded_atom",
+    });
+  });
+
+  it("accepts repeated full-text witnesses only when they share one safe gap signature", () => {
+    const claim = {
+      c: "India recorded its driest June in 12 years.",
+      why: "The rainfall record affects agricultural planning.",
+      need: "Official rainfall records and measurement methodology.",
+      q: "Did India record its driest June in 12 years?",
+      atom: { s: "India", p: "recorded", o: "its driest June in 12 years" },
+      policy: { claimKind: "report" as const, consequence: "public_interest" as const },
+    };
+    expect(pageClaimInvestigationEligibility(
+      claim,
+      "India has recorded its driest June in 12 years. India has recorded its driest June in 12 years.",
+    )).toEqual({ ok: true });
+    expect(pageClaimInvestigationEligibility(
+      claim,
+      "India has recorded its driest June in 12 years. India had recorded its driest June in 12 years.",
+    )).toEqual({ ok: false, reason: "ungrounded_atom" });
+  });
+
+  it("canonicalizes one grounded suffix according-to frame to report", () => {
+    const c = "India recorded its driest June in 12 years, according to the India Meteorological Department.";
+    const sourceQuote = "India has recorded its driest June in 12 years, and the fifth-driest since records began, according to the India Meteorological Department.";
+    const groundingText = `India rainfall archive and India agriculture update. ${sourceQuote} India monsoon outlook.`;
+    const preparation = preparePageClaimInvestigation({
+      analysisKey: "analysis:suffix-attribution",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c,
+        why: "The rainfall record affects agricultural planning.",
+        need: "India Meteorological Department rainfall records.",
+        q: "Did India record its driest June in 12 years?",
+        atom: { s: "India", p: "recorded", o: "its driest June in 12 years" },
+        attribution: {
+          source: "the India Meteorological Department",
+          relation: "according to",
+          modality: "statement",
+        },
+        policy: { claimKind: "report", consequence: "public_interest" },
+        sourceQuote,
+      },
+      groundingText,
+    });
+
+    expect(preparation).toMatchObject({
+      decision: "prepared",
+      canonicalizations: ["infer_typed_attribution"],
+      claim: {
+        attribution: {
+          source: "the India Meteorological Department",
+          relation: "according to",
+          modality: "report",
+        },
+      },
+    });
+  });
+
+  it("rejects an according-to suffix that crosses a retraction or competing report", () => {
+    const c = "India recorded its driest June in 12 years, according to the India Meteorological Department.";
+    for (const unsafeClause of [
+      "but the record was later retracted",
+      "and the fifth-driest since records began but officials disputed the record",
+      "and another agency reported a different result",
+      "and experts rejected the record",
+      "and analysts called the record unsupported",
+    ]) {
+      const sourceQuote = `India has recorded its driest June in 12 years, ${unsafeClause}, according to the India Meteorological Department.`;
+      expect(preparePageClaimInvestigation({
+        analysisKey: `analysis:unsafe-suffix:${unsafeClause}`,
+        scope: "page",
+        claimIndex: 0,
+        claim: {
+          c,
+          why: "The rainfall record affects agricultural planning.",
+          need: "India Meteorological Department rainfall records.",
+          q: "Did India record its driest June in 12 years?",
+          atom: { s: "India", p: "recorded", o: "its driest June in 12 years" },
+          attribution: {
+            source: "the India Meteorological Department",
+            relation: "according to",
+            modality: "statement",
+          },
+          policy: { claimKind: "report", consequence: "public_interest" },
+          sourceQuote,
+        },
+        groundingText: sourceQuote,
+      })).toMatchObject({ decision: "rejected" });
+    }
+  });
+
+  it("does not infer attribution across an added hedge in the exact quote", () => {
+    const c = "Example Agency said, the recall affected 232 products.";
+    const sourceQuote = "Example Agency allegedly said, the recall affected 232 products.";
+    expect(preparePageClaimInvestigation({
+      analysisKey: "analysis:hedged-attribution",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c,
+        why: "The recall affects public safety.",
+        need: "Example Agency's original recall notice.",
+        q: "Did Example Agency say the recall affected 232 products?",
+        atom: { s: "the recall", p: "affected", o: "232 products" },
+        policy: { claimKind: "report", consequence: "safety" },
+        sourceQuote,
+      },
+      groundingText: sourceQuote,
+    })).toMatchObject({
+      decision: "rejected",
+      reason: "missing_attribution",
+      canonicalizations: [],
+    });
+  });
+
+  it("rejects a typed outer attribution invented around a grounded inner atom", () => {
+    const sourceQuote = "the recall affected 232 products.";
+    expect(pageClaimInvestigationEligibility({
+      c: "Example Agency said the recall affected 232 products.",
+      why: "The recall affects public safety.",
+      need: "Example Agency's original recall notice.",
+      q: "Did Example Agency say the recall affected 232 products?",
+      atom: { s: "the recall", p: "affected", o: "232 products" },
+      attribution: { source: "Example Agency", relation: "said", modality: "statement" },
+      policy: { claimKind: "report", consequence: "safety" },
+      sourceQuote,
+    }, sourceQuote)).toEqual({
+      ok: false,
+      reason: "invalid_attribution",
+    });
+  });
+
+  it("replaces a model-expanded relation with one exact grounded data-report frame", () => {
+    const c = "中指研究院數據顯示，中國百城房價下跌0.42%。";
+    const sourceQuote = "今年中國百城房價下跌0.42%。";
+    expect(preparePageClaimInvestigation({
+      analysisKey: "analysis:data-report-attribution",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c,
+        why: "房價變動影響民眾資產判斷。",
+        need: "中指研究院原始房價資料集。",
+        q: "中國百城房價是否下跌0.42%？",
+        atom: { s: "中國百城房價", p: "下跌", o: "0.42%" },
+        attribution: { source: "中指研究院", relation: "發布數據顯示", modality: "report" },
+        policy: { claimKind: "report", consequence: "money" },
+        sourceQuote,
+      },
+      groundingText: `中指研究院今天公布的數據顯示，${sourceQuote}`,
+    })).toMatchObject({
+      decision: "prepared",
+      canonicalizations: ["infer_typed_attribution"],
+      claim: {
+        attribution: { source: "中指研究院", relation: "數據顯示", modality: "report" },
+      },
+    });
+  });
+
+  it("does not infer attribution through an unlisted or hedged source bridge", () => {
+    const c = "中指研究院數據顯示，中國百城房價下跌0.42%。";
+    const sourceQuote = "今年中國百城房價下跌0.42%。";
+    const base = {
+      c,
+      why: "房價變動影響民眾資產判斷。",
+      need: "中指研究院原始房價資料集。",
+      q: "中國百城房價是否下跌0.42%？",
+      atom: { s: "中國百城房價", p: "下跌", o: "0.42%" },
+      policy: { claimKind: "report" as const, consequence: "money" as const },
+      sourceQuote,
+    };
+
+    for (const bridge of ["可能公布的", "據稱公布的", "未公布的", "否認後公布的"]) {
+      expect(preparePageClaimInvestigation({
+        analysisKey: `analysis:unsafe-bridge:${bridge}`,
+        scope: "page",
+        claimIndex: 0,
+        claim: base,
+        groundingText: `中指研究院${bridge}數據顯示，${sourceQuote}`,
+      })).toMatchObject({
+        decision: "rejected",
+        reason: "missing_attribution",
+      });
+    }
+  });
+
+  it("accepts only the closed publication bridge variants for data-report attribution", () => {
+    const c = "中指研究院數據顯示，中國百城房價下跌0.42%。";
+    const sourceQuote = "今年中國百城房價下跌0.42%。";
+    const claim = {
+      c,
+      why: "房價變動影響民眾資產判斷。",
+      need: "中指研究院原始房價資料集。",
+      q: "中國百城房價是否下跌0.42%？",
+      atom: { s: "中國百城房價", p: "下跌", o: "0.42%" },
+      policy: { claimKind: "report" as const, consequence: "money" as const },
+      sourceQuote,
+    };
+    expect(preparePageClaimInvestigation({
+      analysisKey: "analysis:published-bridge",
+      scope: "page",
+      claimIndex: 0,
+      claim,
+      groundingText: `中指研究院今日所發布的數據顯示，${sourceQuote}`,
+    })).toMatchObject({ decision: "prepared" });
+    expect(preparePageClaimInvestigation({
+      analysisKey: "analysis:partial-data-bridge",
+      scope: "page",
+      claimIndex: 0,
+      claim,
+      groundingText: `中指研究院今天公布的部分數據顯示，${sourceQuote}`,
+    })).toMatchObject({ decision: "rejected" });
+  });
+
+  it("does not infer ambiguous, generic, or ungrounded attribution frames", () => {
+    const cases = [
+      {
+        c: "Agency A said Agency B reported, the recall affected 232 products.",
+        atom: { s: "the recall", p: "affected", o: "232 products" },
+        groundingText: "Agency A said Agency B reported, the recall affected 232 products.",
+      },
+      {
+        c: "政府估計，俄羅斯飛彈有九成裝著日本製零件。",
+        atom: { s: "俄羅斯飛彈", p: "有九成裝著", o: "日本製零件" },
+        groundingText: "政府估計，俄羅斯飛彈有九成裝著日本製零件。",
+      },
+      {
+        c: "烏克蘭政府估計，俄羅斯飛彈有九成裝著日本製零件。",
+        atom: { s: "俄羅斯飛彈", p: "有九成裝著", o: "日本製零件" },
+        groundingText: "俄羅斯飛彈有九成裝著日本製零件。",
+      },
+    ];
+
+    for (const [index, candidate] of cases.entries()) {
+      expect(preparePageClaimInvestigation({
+        analysisKey: `analysis:unsafe-attribution:${index}`,
+        scope: "page",
+        claimIndex: 0,
+        claim: {
+          c: candidate.c,
+          why: "The claim affects public-interest decisions.",
+          need: "The named institution's original report.",
+          q: "Is this claim supported?",
+          atom: candidate.atom,
+          policy: { claimKind: "report", consequence: "public_interest" },
+        },
+        groundingText: candidate.groundingText,
+      })).toMatchObject({ decision: "rejected" });
+    }
+  });
+
   it("accepts English according-to framing where the relation precedes the source", () => {
     const claim = {
       c: "According to Example Agency, the recall affected 232 products.",
@@ -384,6 +778,33 @@ describe("page claim investigation contract", () => {
     })).toBeUndefined();
   });
 
+  it("keeps an identical source quote when at least one duplicate is body content", () => {
+    const quote = "Example Agency announced a public safety recall.";
+    const claim = {
+      c: quote,
+      why: "The recall could affect public safety.",
+      need: "The agency recall notice and affected-product list.",
+      q: "Did Example Agency announce a public safety recall?",
+      atom: { s: "Example Agency", p: "announced", o: "a public safety recall" },
+      policy: { claimKind: "fact" as const, consequence: "safety" as const },
+      sourceQuote: quote,
+    };
+    const groundingText = [
+      "Article body",
+      quote,
+      "Related stories",
+      quote,
+    ].join("\n");
+
+    expect(pageClaimInvestigationEligibility(claim, groundingText)).toEqual({ ok: true });
+    expect(pageClaimInvestigationEligibility(claim, [
+      "Related stories",
+      quote,
+      "More news",
+      quote,
+    ].join("\n"))).toEqual({ ok: false, reason: "navigation_fragment" });
+  });
+
   it("fails closed when the only source quote is an incomplete fragment at the extraction boundary", () => {
     const tailFragment = "Example Agency announced a public safety recall affecting several";
     const claim = {
@@ -448,6 +869,28 @@ describe("page claim investigation contract", () => {
       ok: false,
       reason: "underspecified_comparison",
     });
+
+    const missingTimeAndMetric = {
+      ...claim,
+      c: "Huawei overtook Nvidia in its home market.",
+      q: "Did Huawei overtake Nvidia in its home market?",
+      atom: { s: "Huawei", p: "overtook", o: "Nvidia" },
+    };
+    expect(pageClaimInvestigationEligibility(missingTimeAndMetric, missingTimeAndMetric.c)).toEqual({
+      ok: false,
+      reason: "underspecified_comparison",
+    });
+
+    const chineseMissingTimeAndMetric = {
+      ...claim,
+      c: "華為在中國市場超越輝達。",
+      q: "華為是否在中國市場超越輝達？",
+      atom: { s: "華為", p: "超越", o: "輝達" },
+    };
+    expect(pageClaimInvestigationEligibility(chineseMissingTimeAndMetric, chineseMissingTimeAndMetric.c)).toEqual({
+      ok: false,
+      reason: "underspecified_comparison",
+    });
   });
 
   it("keeps a bounded comparison when the source names its time, market, and metric", () => {
@@ -471,6 +914,36 @@ describe("page claim investigation contract", () => {
       policy: { claimKind: "fact" as const, consequence: "money" as const },
     };
     expect(pageClaimInvestigationEligibility(marketShareClaim, marketShareClaim.c)).toEqual({ ok: true });
+
+    const overtakingClaim = {
+      c: "In the 2026 China smartphone market, Huawei overtook Rival in market share.",
+      why: "The measured comparison could affect a purchase decision.",
+      need: "The 2026 China smartphone market-share dataset and methodology.",
+      q: "In the 2026 China smartphone market, did Huawei overtake Rival in market share?",
+      atom: { s: "Huawei", p: "overtook", o: "Rival" },
+      policy: { claimKind: "fact" as const, consequence: "money" as const },
+    };
+    expect(pageClaimInvestigationEligibility(overtakingClaim, overtakingClaim.c)).toEqual({ ok: true });
+
+    const thresholdClaim = {
+      c: "Example Service surpassed 10 million users in 2026.",
+      why: "The adoption figure affects public-interest planning.",
+      need: "The service's 2026 audited user-count report.",
+      q: "Did Example Service surpass 10 million users in 2026?",
+      atom: { s: "Example Service", p: "surpassed", o: "10 million users" },
+      policy: { claimKind: "report" as const, consequence: "public_interest" as const },
+    };
+    expect(pageClaimInvestigationEligibility(thresholdClaim, thresholdClaim.c)).toEqual({ ok: true });
+
+    const chineseThresholdClaim = {
+      c: "範例服務用戶數在2026年超越1000萬。",
+      why: "採用規模影響公共利益判斷。",
+      need: "範例服務2026年經審計的用戶數報告。",
+      q: "範例服務用戶數是否在2026年超越1000萬？",
+      atom: { s: "範例服務用戶數", p: "超越", o: "1000萬" },
+      policy: { claimKind: "report" as const, consequence: "public_interest" as const },
+    };
+    expect(pageClaimInvestigationEligibility(chineseThresholdClaim, chineseThresholdClaim.c)).toEqual({ ok: true });
   });
 
   it("requires an evidence family instead of a generic request for evidence", () => {

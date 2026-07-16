@@ -61,38 +61,28 @@ function compactText(value: unknown, limit: number): string | undefined {
   return text ? text.slice(0, limit) : undefined;
 }
 
-function normalizedGroundingSpan(value: string): string {
-  return value.normalize("NFKC").toLocaleLowerCase("en").replace(/[\p{P}\p{S}\s]+/gu, "");
-}
-
 export function resolveSourceQuote(
   quote: string | undefined,
   groundingText: string,
-  claimText?: string,
+  _claimText?: string,
 ): string | undefined {
-  if (!quote) return undefined;
-  const grounding = normalizedGroundingSpan(groundingText);
-  const quoteCandidates = [...new Set([
-    quote,
-    ...quote.split(/\s*(?:\.{3,}|…+)\s*/u),
-  ].map((part) => part.replace(/^[\s,;:–—-]+|[\s,;:–—-]+$/gu, "").trim()).filter(Boolean))];
-  const anchors = claimText?.match(/\d+(?:[.,]\d+)*|[A-Za-z][A-Za-z0-9._-]{3,}|[\p{Script=Han}]{2,}/gu) ?? [];
-  const sourceSentenceCandidates = anchors.length > 0
-    ? groundingText.split(/(?<=[.!?。！？])\s+/u).map((part) => part.trim()).filter(Boolean)
-    : [];
-  return [
-    ...quoteCandidates.map((candidate) => ({ candidate, fromQuote: true })),
-    ...sourceSentenceCandidates.map((candidate) => ({ candidate, fromQuote: false })),
-  ]
-    .map(({ candidate, fromQuote }) => {
-      const normalized = normalizedGroundingSpan(candidate);
-      const anchorScore = anchors.filter((anchor) => normalized.includes(normalizedGroundingSpan(anchor))).length;
-      return { candidate, normalized, anchorScore, fromQuote };
-    })
-    .filter(({ normalized }) => normalized.length >= 16 && grounding.includes(normalized))
-    .sort((left, right) => right.anchorScore - left.anchorScore ||
-      Number(right.fromQuote) - Number(left.fromQuote) ||
-      right.normalized.length - left.normalized.length)[0]?.candidate;
+  const exact = quote?.trim();
+  if (!exact || Array.from(exact).length < 8) return undefined;
+  const positions: number[] = [];
+  for (let cursor = groundingText.indexOf(exact); cursor >= 0; cursor = groundingText.indexOf(exact, cursor + 1)) {
+    positions.push(cursor);
+    if (positions.length > 64) return undefined;
+  }
+  const first = positions[0];
+  if (first === undefined) return undefined;
+  // Parser output commonly contains the same DOM text twice. Identical,
+  // disjoint copies carry the same evidence, while overlapping matches are
+  // characteristic of low-information repeated text (for example aaaaaaaa in
+  // aaaaaaaaa) and remain ambiguous.
+  if (positions.some((position, index) => index > 0 && position < positions[index - 1] + exact.length)) {
+    return undefined;
+  }
+  return groundingText.slice(first, first + exact.length);
 }
 
 export function sourceQuoteMatchesGroundingText(quote: string | undefined, groundingText: string): boolean {

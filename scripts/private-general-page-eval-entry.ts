@@ -10,8 +10,7 @@ import {
 } from "../src/lib/tier-b-client";
 import type { ReadingSurface } from "../src/lib/reading-surface-types";
 import {
-  buildPageClaimInvestigationTask,
-  pageClaimInvestigationEligibility,
+  preparePageClaimInvestigation,
   usableClaimQuestion,
 } from "../src/sidepanel/page-claim-investigation";
 import {
@@ -131,9 +130,7 @@ async function evaluateRow(row: InputRow) {
     if (!response.ok || !response.brief) return { schemaVersion: 1, sampleId: row.sampleId, surface: row.surface, sourceSha256: row.sourceSha256, ok: false, latencyMs: Date.now() - started, error: response.error ?? "model_error", attempts: response.attempts, raw: response.raw };
     const brief = response.brief;
     const claim = brief.claims?.[0];
-    const eligibility = claim ? pageClaimInvestigationEligibility(claim, row.text) : undefined;
-    const modelQuestion = claim ? usableClaimQuestion(claim.q, claim.atom, claim.c, claim.attribution) : undefined;
-    const task = claim ? buildPageClaimInvestigationTask({
+    const preparation = claim ? preparePageClaimInvestigation({
       analysisKey: row.sampleId,
       scope: "page",
       claimIndex: 0,
@@ -141,6 +138,15 @@ async function evaluateRow(row: InputRow) {
       groundingText: row.text,
       source: row.sourceContext,
     }) : undefined;
+    const task = preparation?.decision === "prepared" ? preparation.task : undefined;
+    const modelQuestion = preparation?.decision === "prepared"
+      ? usableClaimQuestion(
+          preparation.claim.q,
+          preparation.claim.atom,
+          preparation.claim.c,
+          preparation.claim.attribution,
+        )
+      : undefined;
     return {
       schemaVersion: 1,
       sampleId: row.sampleId,
@@ -153,7 +159,7 @@ async function evaluateRow(row: InputRow) {
       brief,
       investigation: {
         eligible: Boolean(task),
-        eligibilityReason: eligibility && !eligibility.ok ? eligibility.reason : undefined,
+        eligibilityReason: preparation?.decision === "rejected" ? preparation.reason : undefined,
         questionSource: task ? (modelQuestion ? "model" : "deterministic_fallback") : "none",
         question: task?.intent.question,
         googleKeywords: task?.googleKeywords,

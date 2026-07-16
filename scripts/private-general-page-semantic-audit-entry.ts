@@ -17,9 +17,8 @@ import {
 import type { ReadingSurface } from "../src/lib/reading-surface-types";
 import type { Lang } from "../src/lib/types";
 import {
-  buildPageClaimInvestigationTask,
   isRepairablePageClaimIneligibilityReason,
-  pageClaimInvestigationEligibility,
+  preparePageClaimInvestigation,
 } from "../src/sidepanel/page-claim-investigation";
 import {
   assertPrivateSemanticAuditFetchTarget,
@@ -289,16 +288,15 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
   let repairPrompt: ReturnType<typeof bodyPromptHashes> | undefined;
   const firstPreparedClaim = adapter.ok && adapter.value?.decision === "prepared" ? adapter.value.claim : undefined;
   if (firstPreparedClaim) {
-    const firstEligibility = pageClaimInvestigationEligibility(firstPreparedClaim, row.text);
-    const firstTask = firstEligibility.ok ? buildPageClaimInvestigationTask({
+    const firstPreparation = preparePageClaimInvestigation({
       analysisKey: row.sampleId,
       scope: "page",
       claimIndex: 0,
       claim: firstPreparedClaim,
       groundingText: row.text,
       source: row.sourceContext,
-    }) : undefined;
-    const firstReason = firstEligibility.ok ? (firstTask ? undefined : "invalid_question") : firstEligibility.reason;
+    });
+    const firstReason = firstPreparation.decision === "rejected" ? firstPreparation.reason : undefined;
     if (repairMode === "semantic_once" && firstReason && isRepairablePageClaimIneligibilityReason(firstReason)) {
       repairReason = firstReason;
       const repairRequest: TierBGeneralPageInvestigationAdapterRequest = {
@@ -340,8 +338,8 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
   }
 
   const preparedClaim = adapter.value.decision === "prepared" ? adapter.value.claim : undefined;
-  const investigationTask = preparedClaim
-    ? buildPageClaimInvestigationTask({
+  const preparation = preparedClaim
+    ? preparePageClaimInvestigation({
         analysisKey: row.sampleId,
         scope: "page",
         claimIndex: 0,
@@ -350,12 +348,8 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
         source: row.sourceContext,
       })
     : undefined;
-  const finalEligibility = preparedClaim && !investigationTask
-    ? pageClaimInvestigationEligibility(preparedClaim, row.text)
-    : undefined;
-  const localGuardReason = finalEligibility
-    ? (finalEligibility.ok ? "invalid_question" : finalEligibility.reason)
-    : undefined;
+  const investigationTask = preparation?.decision === "prepared" ? preparation.task : undefined;
+  const localGuardReason = preparation?.decision === "rejected" ? preparation.reason : undefined;
   return {
     ...base,
     ok: true,
@@ -382,6 +376,13 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
       attempts: adapterAttempts,
       ...(repairReason ? { repairReason, repairPrompt } : {}),
     },
+    preparation: preparation
+      ? {
+          decision: preparation.decision,
+          canonicalizations: preparation.canonicalizations,
+          ...(preparation.decision === "rejected" ? { reason: preparation.reason } : {}),
+        }
+      : null,
     investigationTask: investigationTask ?? null,
     ...(localGuardReason ? { localGuardReason } : {}),
     questionActions,

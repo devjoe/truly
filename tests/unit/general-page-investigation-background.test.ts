@@ -174,6 +174,51 @@ describe("background General Page investigation preparation", () => {
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ status: "unavailable" }));
   });
 
+  it("sends the canonical prepared claim instead of the raw adapter candidate", async () => {
+    const attributedText = "烏克蘭政府估計，俄羅斯飛彈有九成裝著日本製零件。";
+    const attributedRequest = {
+      ...request,
+      context: { ...request.context, mainText: attributedText },
+    };
+    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const sendMessage = vi.fn();
+    const callAdapter = vi.fn(async () => ({
+      ok: true,
+      value: {
+        schemaVersion: 1,
+        decision: "prepared",
+        reason: "actionable",
+        claim: {
+          c: attributedText,
+          why: "涉及武器供應鏈與出口管制。",
+          need: "烏克蘭政府原始估計與零件調查資料。",
+          q: "俄羅斯飛彈是否有九成裝著日本製零件？",
+          atom: { s: "俄羅斯飛彈", p: "有九成裝著", o: "日本製零件" },
+          policy: { claimKind: "estimate", consequence: "public_interest" },
+        },
+      },
+    }));
+
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request: attributedRequest,
+      brief,
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      resourceKey: "gx10|fixture-model",
+      callAdapter,
+      sendMessage,
+    });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled());
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      status: "prepared",
+      preparedClaim: expect.objectContaining({
+        attribution: { source: "烏克蘭政府", relation: "估計", modality: "estimate" },
+      }),
+    }));
+  });
+
   it("does not schedule overview or claim-free reading results", () => {
     const scheduler = { enqueue: vi.fn() };
     expect(scheduleGeneralPageInvestigationPreparation({

@@ -826,6 +826,22 @@ next candidate gate closed; no fresh holdout should be created yet.
   under-specified comparisons, and generic evidence requirements. Regular
   Google search receives bounded claim/evidence anchors, while page metadata
   and URL remain AI-Mode-only context.
+- The final old-development candidate adds a deterministic preparation stage,
+  but it remains a development contract rather than a release claim. It may
+  only infer a uniquely grounded typed attribution or project an already
+  ordered atom to its exact single-proposition source span. It cannot rewrite
+  lexical content, resolve pronouns, join spans across a sentence, or bypass
+  exact-quote, bounded-gap, navigation, legal-stage, or comparison guards.
+- A model- and network-free replay of the 13 saved v4 Adapter candidates
+  prepared four and rejected nine; the previously ready but underspecified
+  market comparison is among the rejects. This count is a deterministic
+  regression expectation, not a coverage result or shipping gate.
+- Once this implementation is frozen, only one old-30 v5 gx10 parity run is
+  permitted. The old slice must not be used for any later prompt, guard,
+  regex, or threshold tuning. Release eligibility instead depends on a
+  preregistered blind audit of fresh 15 Facebook and 15 news rows; raw rows and
+  per-sample output remain private, and a failed fresh audit is frozen rather
+  than tuned against.
 
 ## Verification Gates
 

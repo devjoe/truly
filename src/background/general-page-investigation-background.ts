@@ -14,7 +14,7 @@ import {
   ModelWorkSupersededError,
 } from "./model-work-scheduler";
 import {
-  buildPageClaimInvestigationTask,
+  preparePageClaimInvestigation,
 } from "../sidepanel/page-claim-investigation";
 
 export interface ScheduleGeneralPageInvestigationPreparationOptions {
@@ -93,14 +93,15 @@ export function scheduleGeneralPageInvestigationPreparation(
 
   void work.then((result) => {
     const candidate = result.ok && result.value?.decision === "prepared" ? result.value.claim : undefined;
-    const preparedClaim = candidate && buildPageClaimInvestigationTask({
+    const preparation = candidate ? preparePageClaimInvestigation({
       analysisKey: request.analysisKey,
       scope: request.scope,
       claimIndex: 0,
       claim: candidate,
       groundingText: request.context.mainText,
       source,
-    }) ? candidate : undefined;
+    }) : undefined;
+    const preparedClaim = preparation?.decision === "prepared" ? preparation.claim : undefined;
     sendSafely(options.sendMessage, {
       type: "GENERAL_PAGE_INVESTIGATION_RESULT",
       tabId: request.tabId,

@@ -1095,6 +1095,50 @@ not authorize the Agent action or establish release-level coverage. The
 updated old-development replay is the final tuning check before opening a
 preregistered fresh cohort; fresh rows cannot be used for further tuning.
 
+#### Final old-development preparation candidate (2026-07-16)
+
+The final candidate for the already-observed 30-row development slice adds a
+local deterministic preparation step between Adapter parsing and the unchanged
+eligibility guard. This is a development candidate, not a claim that the
+runtime investigation action is release-ready. Preparation may perform only
+two named operations:
+
+- `infer_typed_attribution` may fill or replace attribution only when one
+  unambiguous outer source-and-relation frame is copied from the claim and is
+  also grounded in the same bounded source passage. The relation must map to
+  exactly one allowed modality; page metadata and inferred speakers are never
+  accepted as attribution.
+- `project_exact_atomic_span` may remove later clauses only when the existing
+  ordered subject, predicate, and object form one exact source-grounded span.
+  It may add terminal punctuation, but may not rewrite words, resolve a
+  pronoun, cross a sentence boundary, or discard attribution, negation,
+  conditions, dates, quantities, or legal stage.
+
+Preparation does not weaken the hard gates. Exact source-quote resolution,
+bounded atom gaps, navigation-tail rejection, and comparison completeness are
+checked before an action is exposed, and the canonical claim must pass the
+full guard again. In particular, comparative verbs such as `overtake` remain
+ineligible without an explicit time, market or region, and metric. If the
+model-authored question is unusable after safe preparation, the existing
+quoted deterministic question may be used only after the claim itself passes;
+it cannot recover an otherwise ineligible claim.
+
+A network-free deterministic replay of the 13 Adapter candidates saved by v4
+prepared four and rejected nine. It also rejected the prior sole ready action
+because that market-leadership comparison was underspecified. This replay made
+no model request, opened no search, and changed no source data. Its purpose is
+to freeze the intended preparation behavior and regression expectations, not
+to estimate release coverage.
+
+After the implementation and tests are frozen, the old 30-row slice may be
+used for one final v5 parity run against the approved gx10 model endpoint. That
+single run is confirmation only: its output must be archived as-is and must
+not drive another prompt, regex, guard, or threshold adjustment. The old slice
+is then retired from candidate development. The next product gate is a
+preregistered blind audit over fresh 15 Facebook plus 15 news rows, with the
+existing private raw-data and anonymized-aggregate boundary. A failure on that
+fresh cohort freezes the failure; it does not authorize tuning on those rows.
+
 ### C. Sufficiency and UX audit
 
 Using the collected development evidence, test whether the system correctly
