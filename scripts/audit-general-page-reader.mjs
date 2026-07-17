@@ -9,6 +9,7 @@ import {
   isFacebookPageTarget,
   reloadStaleExtensionWithFacebookRecovery,
 } from "./lib/general-page-audit-runtime-reload.mjs";
+import { resolveClaimPreparationEvidence } from "./lib/general-page-audit-claim-transition.mjs";
 import { connectCdp as connectCdpClient } from "./lib/cdp-client.mjs";
 import {
   assertWebFocusContinuity,
@@ -1267,6 +1268,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       const norm = (value) => (value || "").replace(/\\s+/g, " ").trim();
       const capture = () => {
         const pane = document.querySelector("#page-pane");
+        const claimRow = pane?.querySelector(".page-claim-row");
         const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.() || null;
         const entry = {
           elapsedMs: Math.round(performance.now() - startedAt),
@@ -1292,6 +1294,10 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           readActionAriaDisabled: pane?.querySelector("#pageReadCurrent")?.getAttribute("aria-disabled") || "",
           exportActionCount: pane?.querySelectorAll(".page-reader-external-tools .page-reader-card-action").length || 0,
           supplementalDetailsOpen: pane?.querySelector(".page-reader-supplemental-details")?.hasAttribute("open") ?? null,
+          claimPreparingPresent: Boolean(claimRow?.querySelector(".page-claim-preparing")),
+          claimPreparingText: norm(claimRow?.querySelector(".page-claim-preparing")?.textContent),
+          claimOriginalVisible: Boolean(claimRow?.querySelector(":scope > .page-claim-copy")),
+          claimReadyCardVisible: Boolean(claimRow?.querySelector(".page-claim-investigation")),
           runtimeState,
         };
         const signature = JSON.stringify({ ...entry, elapsedMs: 0 });
@@ -1546,6 +1552,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       const timeline = globalThis.__trulyPagePaneTimeline;
       return timeline?.stop?.() || timeline?.entries || [];
     })()`);
+    claimInvestigation.preparing = resolveClaimPreparationEvidence(preparingState, initialLoadTimeline);
     writeFileSync(resolve(OUT_DIR, "page-initial-load-timeline.json"), JSON.stringify(initialLoadTimeline, null, 2));
     const responsive = await auditResponsivePageWebLayout(side, "page-responsive-430.png");
     const pageContext = await side.evaluateJson(`(() => {
@@ -1876,6 +1883,9 @@ async function observeClaimInvestigation(side, preparingState = null) {
   return {
     ...state,
     preparing: preparingState,
+    preparingScreenshot: preparingState?.observed
+      ? relative(ROOT, resolve(OUT_DIR, "page-claim-investigation-preparing.png"))
+      : null,
     openedTargetOnPrepare: afterTargets.length !== beforeTargets.length,
     screenshot: relative(ROOT, resolve(OUT_DIR, "page-claim-investigation.png")),
   };
@@ -3740,7 +3750,9 @@ function writeSummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "page-analysis-running.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-ready-and-stale.png"))}`,
     result.success.pageBrief?.screenshot ? `- ${result.success.pageBrief.screenshot}` : null,
-    `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation-preparing.png"))}`,
+    result.success?.claimInvestigation?.preparingScreenshot
+      ? `- ${result.success.claimInvestigation.preparingScreenshot}`
+      : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation.png"))}`,
     result.success.responsive?.screenshot ? `- ${result.success.responsive.screenshot}` : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-context-expanded.png"))}`,
@@ -3840,7 +3852,9 @@ function writeUiOnlySummary(result, errors) {
     `- ${relative(ROOT, resolve(OUT_DIR, "page-loading-initial.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-analysis-running.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-analysis-ready.png"))}`,
-    `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation-preparing.png"))}`,
+    result.success?.claimInvestigation?.preparingScreenshot
+      ? `- ${result.success.claimInvestigation.preparingScreenshot}`
+      : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-responsive-430.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,

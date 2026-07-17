@@ -716,8 +716,9 @@ next candidate gate closed; no fresh holdout should be created yet.
 
 - Status: the session-only prepared-action vertical slice and its fail-closed
   contract are implemented on the feature branch. Candidates v1 and v2 did not
-  clear their private holdout gates and the v3 development probe did not clear
-  the coverage/runtime-stability boundary, so this remains unreleased.
+  clear their private holdout gates, the v3 development probe did not clear the
+  coverage/runtime-stability boundary, and the fresh v4 forward-development
+  audit materialized no eligible actions. This remains unreleased.
 - A grounded `claims.q` is preferred; a bounded natural-question fallback from
   `claim.c + claim.need` is used only when the model question is missing or
   locally rejected. URLs, domains, search-engine instructions, vague references,
@@ -755,8 +756,9 @@ next candidate gate closed; no fresh holdout should be created yet.
 ### Phase 5: Runtime and UX Gate
 
 - Status: implementation and live UX verification completed; product-quality
-  holdout gates failed for candidates v1 and v2, while v3 remains a
-  development-only probe, so the investigation action remains unreleased.
+  holdout gates failed for candidates v1 and v2, v3 remains a development-only
+  probe, and the fresh v4 forward-development gate failed. The investigation
+  action remains unreleased.
 - Focused unit coverage validates scheduler priority/fairness, adapter parsing
   and grounding, query sanitization, deterministic fallback, fail-closed
   eligibility, Page/Focus race isolation, and the automatic
@@ -855,15 +857,48 @@ next candidate gate closed; no fresh holdout should be created yet.
   `json_object` path remains at 480 tokens. Neither path performs automatic JSON
   repair. Protocol errors distinguish truncation, invalid JSON, invalid schema,
   and source-quote grounding failure in addition to transport failures.
-- Before another private cohort can be opened, the protocol-only candidate
-  must complete a fixed 30-case synthetic-only smoke test with 30/30 protocol
-  success. The smoke binds runtime and audit to the same schema digest, requires
-  a clean worktree, refuses output overwrite, calls one declared endpoint, keeps
-  raw payloads untracked, and opens zero public searches or external actions.
-  It has not yet run. Passing it would establish transport/schema stability
-  only, not semantic coverage or release eligibility. The next semantic gate
-  remains a separately preregistered, one-shot blind v2 audit over fresh 15
-  Facebook and 15 news rows.
+- The protocol-only candidate subsequently completed its fixed 30-case
+  synthetic smoke with 30/30 protocol success. Runtime and audit were bound to
+  the same schema digest; the run used a clean worktree, refused overwrite,
+  called one declared endpoint, kept raw payloads untracked, and opened zero
+  public searches or external actions. This established transport/schema
+  stability only and allowed a new semantic audit to proceed.
+
+### 2026-07-17 Fresh Semantic Action Audit
+
+- The v4 ceremony collected 122 technically eligible private rows from 14
+  sources, formed a source-diverse 60-row blind review pool, and froze a 30-row
+  cohort with 15 Facebook and 15 news rows. Independent source review and third
+  adjudication happened before candidate output; raw content and per-row labels
+  remain gitignored in the private evaluation repository.
+- The one-shot `qwen3.6-35b` run completed 30/30 readings. Nineteen rows
+  requested the Investigation Adapter, 18 cleared its protocol boundary, one
+  failed, one valid response abstained, and the local guard rejected 17. No
+  investigation action became eligible; no public search or external action was
+  opened.
+- The adjudicated C3 gate failed: positive task materialization was 0/18 and
+  0/9 per surface, while negative false actions were 0/12 and unsafe/leaky
+  outputs were zero. Four follow-up rows leaked verification or sourcing intent.
+  Portable copy and AI Mode questions were self-contained for 18/23 and 21/23
+  rows respectively. Zero eligible actions caused the action-quality gates to
+  fail closed rather than report vacuous precision.
+- Two audit-harness contract mismatches were fixed with regression tests: the
+  production-optional `agentTask.context` is accepted, and run prompt-language
+  hashes are checked against languages in the immutable exported input. These
+  fixes made no model request and did not change the frozen input, output, or
+  candidate behavior.
+- The final no-focus CDP gate passed on dev build
+  `1784273697679-6735eba-dirty`, with Web/Focus continuity, 430 px layout, and
+  all observed Side Panel focus states intact. A preceding run exposed an audit
+  polling race when the preparing state completed before the 1.4-second poll.
+  The audit now accepts MutationObserver timeline evidence only when preparing
+  is present, the original claim remains visible, and the ready card is absent.
+  A red-green regression and a real CDP rerun both passed; no product transition
+  or timing was weakened.
+- This v4 cohort is frozen failed development evidence and cannot be used for
+  tuning. `releaseAuthority` remains false. Any successor must be separately
+  versioned and developed on synthetic fixtures or a newly preregistered slice
+  before another one-shot semantic audit is allowed.
 
 ## Verification Gates
 

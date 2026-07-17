@@ -1152,17 +1152,65 @@ automatic JSON repair. Diagnostics distinguish truncated output, invalid JSON,
 invalid schema, and source-quote grounding failure from network, timeout, and
 HTTP failures.
 
-Runtime and the future fresh-audit runner must bind to the same schema digest.
-Before preregistration can reopen, a fixed 30-case synthetic-only protocol smoke
-must achieve 30/30 success from a clean worktree. It refuses output overwrite,
-uses one explicitly declared endpoint, stores no raw payload in tracked files,
-and permits zero public search requests or opened actions. This smoke has not
-yet run. A pass would establish constrained-response stability only; it is not
-semantic-coverage or release evidence. The semantic product gate remains a new,
-preregistered, one-shot blind v2 audit over fresh 15 Facebook plus 15 news rows,
-with raw inputs and per-sample outputs kept private and only anonymized aggregate
-results eligible for public documentation. A failure on that cohort is frozen
-rather than tuned against.
+Runtime and the fresh-audit runner now bind to the same schema digest. The fixed
+30-case synthetic-only protocol smoke completed 30/30 successfully from a clean
+worktree. It refused output overwrite, used one explicitly declared endpoint,
+kept raw payloads untracked, and issued zero public searches or opened actions.
+That pass established constrained-response stability only; it did not establish
+semantic coverage or release eligibility. It allowed one new preregistered,
+one-shot blind audit over fresh 15 Facebook plus 15 news rows to proceed, with
+raw inputs and per-sample outputs kept private and only anonymized aggregate
+results eligible for public documentation.
+
+#### Fresh Semantic Action Forward Audit v4 (2026-07-17)
+
+The v4 acquisition ceremony was preregistered before source review or model
+output. Fourteen private sources contributed 122 technically eligible rows. A
+deterministic, source-diverse allocator formed a fixed 60-row source-only review
+pool and then selected 30 rows: 18 source-reviewed likely positives and 12
+negative controls, split evenly across Facebook and news. Two independent
+source reviewers and a third adjudicator resolved 37 source-label disagreements
+before the selected cohort and irreversible attempt lock were frozen. Raw URLs,
+source text, labels, and row identities remain under gitignored private storage.
+
+The declared `qwen3.6-35b` run was executed exactly once with constrained
+`json_schema`, no repair, an 1800-token Adapter budget, and no public search or
+opened action. All 30 reading calls succeeded. Eleven rows emitted no claim and
+19 requested the Adapter. Eighteen Adapter responses cleared the protocol
+boundary; one request failed, one valid response abstained, and the local guard
+rejected the other 17. No investigation action became eligible.
+
+Two independent output reviewers and a third adjudicator reviewed all 30 rows.
+They disagreed on 20 fields across 16 rows; every disagreement was resolved
+against the frozen packet. The adjudicated diagnostics counted 19 grounded
+claims, seven atomic claims, 14 checkworthy claims, and 15 exact source quotes.
+Twenty-six rows kept follow-up questions within the understanding boundary,
+while four leaked verification or sourcing intent. Of 23 rows with portable
+question actions, 18 had a self-contained copy action and 21 had a
+self-contained AI Mode action. No unsafe or private-data leak was found.
+
+The C3 development gate therefore failed. Positive task materialization was
+0/18 overall and 0/9 on each surface; negative false actions remained 0/12.
+Because there were zero eligible actions, grounding, check-worthiness, Google
+keyword usefulness, AI Mode prompt usefulness, and distinct-role rates had no
+valid denominator and failed closed rather than passing vacuously. Adapter
+protocol success was 18/19 (94.74%), but portable-question and follow-up-boundary
+gates also failed. `releaseAuthority` remains false.
+
+Two deterministic audit-harness mismatches were corrected before reporting:
+the private validator now accepts the production contract's optional
+`agentTask.context`, and prompt-language binding derives required languages from
+the immutable exported input while allowing only exact frozen-language hashes.
+Regression tests failed before each fix and passed afterward. Neither fix made
+a model request, changed the frozen input or result files, or altered candidate
+behavior.
+
+This candidate and cohort are now frozen as failed development evidence. They
+must not be rerun or used to tune prompts, schemas, guards, regular expressions,
+or thresholds. The next candidate must use synthetic fixtures or a separately
+preregistered development slice to improve guard-compatible atomic task
+materialization and portable follow-up questions before any new one-shot audit
+or holdout is opened.
 
 ### C. Sufficiency and UX audit
 

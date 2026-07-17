@@ -1,6 +1,56 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { resolveClaimPreparationEvidence } from "../../scripts/lib/general-page-audit-claim-transition.mjs";
 import { reloadStaleExtensionWithFacebookRecovery } from "../../scripts/lib/general-page-audit-runtime-reload.mjs";
+
+describe("General Page audit claim preparation transition", () => {
+  it("accepts a safely observed live preparing state", () => {
+    expect(resolveClaimPreparationEvidence({
+      observed: true,
+      text: "Preparing",
+      originalClaimVisible: true,
+      readyCardVisible: false,
+    }, [])).toEqual({
+      observed: true,
+      text: "Preparing",
+      originalClaimVisible: true,
+      readyCardVisible: false,
+      source: "live",
+    });
+  });
+
+  it("recovers a safe fast transition from the mutation timeline", () => {
+    expect(resolveClaimPreparationEvidence({
+      observed: false,
+      text: "",
+      originalClaimVisible: false,
+      readyCardVisible: true,
+    }, [{
+      claimPreparingPresent: true,
+      claimPreparingText: "Preparing",
+      claimOriginalVisible: true,
+      claimReadyCardVisible: false,
+    }])).toEqual({
+      observed: true,
+      text: "Preparing",
+      originalClaimVisible: true,
+      readyCardVisible: false,
+      source: "timeline",
+    });
+  });
+
+  it("rejects timeline evidence that overlaps the ready card", () => {
+    expect(resolveClaimPreparationEvidence({ observed: false }, [{
+      claimPreparingPresent: true,
+      claimPreparingText: "Preparing",
+      claimOriginalVisible: true,
+      claimReadyCardVisible: true,
+    }])).toMatchObject({
+      observed: false,
+      source: "none",
+    });
+  });
+});
 
 describe("General Page audit runtime reload", () => {
   it("does not reload an extension that already matches the expected build", async () => {
