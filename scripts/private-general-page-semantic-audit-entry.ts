@@ -1,26 +1,22 @@
-import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { execFileSync } from "node:child_process";
 
-import { buildGeneralPageInvestigationAdapterSystemPrompt } from "../src/lib/general-page-investigation-adapter";
+import { buildGeneralPageInvestigationAdapterBatchSystemPrompt } from "../src/lib/general-page-investigation-adapter";
 import { buildGeneralPageModelContext } from "../src/lib/general-page-model-context";
 import {
   buildTierBGeneralPageBriefChatBody,
-  buildTierBGeneralPageInvestigationAdapterChatBody,
+  buildTierBGeneralPageInvestigationAdapterBatchChatBody,
   callTierBGeneralPageBrief,
-  callTierBGeneralPageInvestigationAdapter,
+  callTierBGeneralPageInvestigationAdapterBatch,
   type TierBChatBody,
-  type TierBGeneralPageInvestigationAdapterRequest,
+  type TierBGeneralPageInvestigationAdapterBatchRequest,
 } from "../src/lib/tier-b-client";
 import type { ReadingSurface } from "../src/lib/reading-surface-types";
 import type { Lang } from "../src/lib/types";
 import {
-  isRepairablePageClaimIneligibilityReason,
-  preparePageClaimInvestigation,
-} from "../src/sidepanel/page-claim-investigation";
-import {
+  assertPrivateSemanticAuditCandidateSnapshot,
   assertPrivateSemanticAuditFetchTarget,
   hashPrivateSemanticAuditCoreFiles,
   installPrivateSemanticAuditNetworkGuard,
@@ -37,7 +33,10 @@ import {
   parsePrivateEvalJsonl,
   privateEvalInputErrors,
 } from "./lib/private-general-page-eval.mjs";
-import { buildPrivateSemanticAuditQuestionActions } from "./private-general-page-semantic-audit-projection";
+import {
+  buildPrivateSemanticAuditQuestionActions,
+  projectPrivateSemanticAuditAdapterBatch,
+} from "./private-general-page-semantic-audit-projection";
 
 interface InputRow {
   sampleId: string;
@@ -130,6 +129,8 @@ const model = compactIdentifier("--model", required("--model"));
 const split = required("--split");
 const runId = compactIdentifier("--run-id", required("--run-id"));
 const datasetVersion = compactIdentifier("--dataset-version", required("--dataset-version"));
+const expectedCandidateCommit = required("--expected-candidate-commit");
+const expectedTrackedDiffSha256 = required("--expected-tracked-diff-sha256");
 const declaredCategories = required("--data-categories");
 const expectedCount = Number(required("--sample-count"));
 const concurrency = Math.max(1, Math.min(4, Number(option("--concurrency", "2")) || 2));
@@ -138,17 +139,18 @@ const repairMode = privateSemanticAuditRepairMode(process.argv);
 const adapterResponseFormat = privateSemanticAuditAdapterResponseFormat(process.argv);
 const adapterModelMetadata = privateSemanticAuditAdapterModelMetadata(adapterResponseFormat);
 const adapterMaxTokens = adapterModelMetadata.adapterMaxTokens;
-const adapterProtocolBody = buildTierBGeneralPageInvestigationAdapterChatBody({
+const adapterProtocolBody = buildTierBGeneralPageInvestigationAdapterBatchChatBody({
   endpoint,
   model,
   structuredOutputMode: adapterResponseFormat,
-  candidateClaim: {
+  candidateClaims: [{
     c: "Protocol schema hash fixture.",
     why: "Protocol metadata only.",
-    need: "Protocol metadata only.",
+    need: "Protocol contract fixture document.",
     q: "What is the protocol schema hash fixture?",
-  },
+  }],
   groundingText: "Protocol schema hash fixture.",
+  sourceLang: "en",
   outputLang: "en",
 });
 const adapterManifestMetadata = privateSemanticAuditAdapterManifestMetadata(
@@ -168,13 +170,43 @@ const inputSha256 = sha256Text(inputFile);
 const rows = parsePrivateEvalJsonl(inputFile) as InputRow[];
 const inputErrors = privateEvalInputErrors(rows, expectedCount, declaredCategories);
 if (inputErrors.length > 0) throw new Error(inputErrors.join("; "));
-
+const contextErrors = rows.flatMap((row, index) => {
+  const context = buildGeneralPageModelContext(surfaceFor(row));
+  return context.modelEligible ? [] : [`line ${index + 1}: ${context.ineligibilityReason || "model_ineligible"}`];
+});
+if (contextErrors.length > 0) throw new Error(contextErrors.join("; "));
 const repoRoot = gitOutput(process.cwd(), ["rev-parse", "--show-toplevel"]).trim();
 const candidateCommit = gitOutput(repoRoot, ["rev-parse", "HEAD"]).trim();
 const worktreeStatus = gitOutput(repoRoot, ["status", "--porcelain=v1", "--untracked-files=all"]);
 const trackedDiff = gitOutput(repoRoot, ["diff", "--binary", "HEAD"]);
+const candidateSnapshot = assertPrivateSemanticAuditCandidateSnapshot({
+  actualCommit: candidateCommit,
+  actualTrackedDiff: trackedDiff,
+  expectedCommit: expectedCandidateCommit,
+  expectedTrackedDiffSha256,
+});
+if (process.argv.includes("--preflight-only")) {
+  console.log(JSON.stringify({
+    result: "preflight_pass",
+    samples: rows.length,
+    candidateSnapshot,
+    modelRequests: 0,
+    publicSearchRequests: 0,
+  }, null, 2));
+  process.exit(0);
+}
 const core = hashPrivateSemanticAuditCoreFiles(repoRoot);
 const languages = [...new Set(rows.map((row) => outputLanguageForPrivateEval(row.language) as Lang))].sort();
+const firstReadingRow = rows[0];
+if (!firstReadingRow) throw new Error("Private semantic audit requires at least one input row");
+const readingMaxTokens = buildTierBGeneralPageBriefChatBody({
+  endpoint,
+  model,
+  context: buildGeneralPageModelContext(surfaceFor(firstReadingRow)),
+  allowedUse: "page_full_text",
+  outputLang: outputLanguageForPrivateEval(firstReadingRow.language) as Lang,
+  contract: "standard",
+}).max_tokens;
 const readingSystemSha256ByLanguage = Object.fromEntries(languages.map((language) => {
   const row = rows.find((candidate) => outputLanguageForPrivateEval(candidate.language) === language);
   if (!row) throw new Error(`Missing prompt row for ${language}`);
@@ -190,7 +222,7 @@ const readingSystemSha256ByLanguage = Object.fromEntries(languages.map((language
 }));
 const adapterSystemSha256ByLanguage = Object.fromEntries(languages.map((language) => [
   language,
-  sha256Text(buildGeneralPageInvestigationAdapterSystemPrompt(language)),
+  sha256Text(buildGeneralPageInvestigationAdapterBatchSystemPrompt(language, language)),
 ]));
 const combinedPromptSha256 = sha256Text(JSON.stringify({
   readingSystemSha256ByLanguage,
@@ -271,8 +303,8 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
       url: row.sourceContext?.url,
     },
   });
-  const claim = brief.claims?.[0];
-  if (!claim) {
+  const candidateClaims = brief.claims?.slice(0, 3) ?? [];
+  if (!candidateClaims.length) {
     return {
       ...base,
       ok: true,
@@ -288,51 +320,27 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
       },
       adapter: { status: "not_requested", reason: "no_claim" },
       investigationTask: null,
+      investigationTasks: [],
       questionActions,
     };
   }
 
-  const adapterOutputLang = sourceLanguage(row.text, outputLang);
-  const adapterRequest: TierBGeneralPageInvestigationAdapterRequest = {
+  const adapterSourceLang = sourceLanguage(row.text, outputLang);
+  const adapterRequest: TierBGeneralPageInvestigationAdapterBatchRequest = {
     endpoint,
     model,
     structuredOutputMode: adapterResponseFormat,
     apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
     timeoutMs,
-    candidateClaim: claim,
+    candidateClaims,
     groundingText: row.text,
     source: row.sourceContext,
-    outputLang: adapterOutputLang,
+    sourceLang: adapterSourceLang,
+    outputLang,
   };
-  const adapterPrompt = bodyPromptHashes(buildTierBGeneralPageInvestigationAdapterChatBody(adapterRequest));
+  const adapterPrompt = bodyPromptHashes(buildTierBGeneralPageInvestigationAdapterBatchChatBody(adapterRequest));
   const adapterStarted = Date.now();
-  let adapter = await callTierBGeneralPageInvestigationAdapter(adapterRequest);
-  let adapterAttempts: 1 | 2 = 1;
-  let repairReason: TierBGeneralPageInvestigationAdapterRequest["repairReason"];
-  let repairPrompt: ReturnType<typeof bodyPromptHashes> | undefined;
-  const firstPreparedClaim = adapter.ok && adapter.value?.decision === "prepared" ? adapter.value.claim : undefined;
-  if (firstPreparedClaim) {
-    const firstPreparation = preparePageClaimInvestigation({
-      analysisKey: row.sampleId,
-      scope: "page",
-      claimIndex: 0,
-      claim: firstPreparedClaim,
-      groundingText: row.text,
-      source: row.sourceContext,
-    });
-    const firstReason = firstPreparation.decision === "rejected" ? firstPreparation.reason : undefined;
-    if (repairMode === "semantic_once" && firstReason && isRepairablePageClaimIneligibilityReason(firstReason)) {
-      repairReason = firstReason;
-      const repairRequest: TierBGeneralPageInvestigationAdapterRequest = {
-        ...adapterRequest,
-        candidateClaim: firstPreparedClaim,
-        repairReason,
-      };
-      repairPrompt = bodyPromptHashes(buildTierBGeneralPageInvestigationAdapterChatBody(repairRequest));
-      adapter = await callTierBGeneralPageInvestigationAdapter(repairRequest);
-      adapterAttempts = 2;
-    }
-  }
+  const adapter = await callTierBGeneralPageInvestigationAdapterBatch(adapterRequest);
   if (!adapter.ok || !adapter.value) {
     return {
       ...base,
@@ -353,35 +361,24 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
         error: adapter.error || "model_error",
         rawAvailable: false,
         prompt: adapterPrompt,
-        attempts: adapterAttempts,
-        ...(repairReason ? { repairReason, repairPrompt } : {}),
+        attempts: 1,
       },
       investigationTask: null,
+      investigationTasks: [],
       questionActions,
     };
   }
 
-  const preparedClaim = adapter.value.decision === "prepared" ? adapter.value.claim : undefined;
-  const preparation = preparedClaim
-    ? preparePageClaimInvestigation({
-        analysisKey: row.sampleId,
-        scope: "page",
-        claimIndex: 0,
-        claim: preparedClaim,
-        groundingText: row.text,
-        source: row.sourceContext,
-      })
-    : undefined;
-  const investigationTask = preparation?.decision === "prepared" ? preparation.task : undefined;
-  const localGuardReason = preparation?.decision === "rejected" ? preparation.reason : undefined;
+  const projection = projectPrivateSemanticAuditAdapterBatch({
+    batch: adapter.value,
+    analysisKey: row.sampleId,
+    groundingText: row.text,
+    source: row.sourceContext,
+  });
   return {
     ...base,
     ok: true,
-    pipelineStatus: adapter.value.decision === "abstain"
-      ? "adapter_abstained"
-      : investigationTask
-      ? "action_ready"
-      : "local_guard_rejected",
+    pipelineStatus: projection.pipelineStatus,
     reading: {
       ok: true,
       latencyMs: adapterStarted - readingStarted,
@@ -392,23 +389,19 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
       prompt: readingPrompt,
     },
     adapter: {
-      status: adapter.value.decision,
+      status: "batch_completed",
       latencyMs: Date.now() - adapterStarted,
       value: adapter.value,
       rawAvailable: false,
       prompt: adapterPrompt,
-      attempts: adapterAttempts,
-      ...(repairReason ? { repairReason, repairPrompt } : {}),
+      attempts: 1,
     },
-    preparation: preparation
-      ? {
-          decision: preparation.decision,
-          canonicalizations: preparation.canonicalizations,
-          ...(preparation.decision === "rejected" ? { reason: preparation.reason } : {}),
-        }
-      : null,
-    investigationTask: investigationTask ?? null,
-    ...(localGuardReason ? { localGuardReason } : {}),
+    preparations: projection.preparations,
+    investigationTask: projection.investigationTasks[0] ?? null,
+    investigationTasks: projection.investigationTasks,
+    ...(projection.localGuardReasons.length > 0
+      ? { localGuardReasons: projection.localGuardReasons }
+      : {}),
     questionActions,
   };
 }
@@ -450,6 +443,7 @@ const manifest = {
   split,
   candidate: {
     commit: candidateCommit,
+    snapshotVerified: true,
     coreSha256: core.coreSha256,
     coreFileSha256: core.fileSha256,
     worktreeDirty: worktreeStatus.length > 0,
@@ -467,7 +461,7 @@ const manifest = {
     endpoint,
     name: model,
     temperature: 0,
-    readingMaxTokens: 720,
+    readingMaxTokens,
     ...adapterModelMetadata,
     timeoutMs,
     concurrency,

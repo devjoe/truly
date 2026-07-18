@@ -16,12 +16,25 @@ export function sha256Text(value) {
   return crypto.createHash("sha256").update(String(value)).digest("hex");
 }
 
+export function assertPrivateSemanticAuditCandidateSnapshot(input) {
+  if (!/^[a-f0-9]{40}$/.test(input.expectedCommit || "") ||
+      !/^[a-f0-9]{64}$/.test(input.expectedTrackedDiffSha256 || "")) {
+    throw new Error("invalid preregistered candidate snapshot");
+  }
+  if (input.actualCommit !== input.expectedCommit) {
+    throw new Error("candidate commit does not match preregistration");
+  }
+  const trackedDiffSha256 = sha256Text(input.actualTrackedDiff);
+  if (trackedDiffSha256 !== input.expectedTrackedDiffSha256) {
+    throw new Error("candidate tracked diff does not match preregistration");
+  }
+  return { commit: input.actualCommit, trackedDiffSha256 };
+}
+
 export function privateSemanticAuditRepairMode(argv) {
   const index = argv.indexOf("--repair-mode");
   const value = index >= 0 ? argv[index + 1] : "none";
-  if (value !== "none" && value !== "semantic_once") {
-    throw new Error("--repair-mode must be none or semantic_once");
-  }
+  if (value !== "none") throw new Error("--repair-mode must be none for runtime-parity batch audit");
   return value;
 }
 
@@ -36,9 +49,9 @@ export function privateSemanticAuditAdapterResponseFormat(argv) {
 
 export function privateSemanticAuditAdapterModelMetadata(responseFormat) {
   if (responseFormat === "json_schema") {
-    return { responseFormat: "json_schema", adapterMaxTokens: 1_800 };
+    return { responseFormat: "json_schema", adapterMaxTokens: 3_200 };
   }
-  if (responseFormat === "json_object") return { adapterMaxTokens: 480 };
+  if (responseFormat === "json_object") return { adapterMaxTokens: 1_200 };
   throw new Error("adapter response format must be json_object or json_schema");
 }
 

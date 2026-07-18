@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { GeneralPageBrief } from "@src/lib/general-page-analysis";
 import {
   assertPrivateSemanticAuditFetchTarget,
+  assertPrivateSemanticAuditCandidateSnapshot,
   installPrivateSemanticAuditNetworkGuard,
   privateSemanticAuditAdapterManifestMetadata,
   privateSemanticAuditAdapterModelMetadata,
@@ -10,20 +11,24 @@ import {
   privateSemanticAuditRepairMode,
   semanticAuditCompletionsUrl,
 } from "../../scripts/lib/private-general-page-semantic-audit.mjs";
-import { buildPrivateSemanticAuditQuestionActions } from "../../scripts/private-general-page-semantic-audit-projection";
+import {
+  buildPrivateSemanticAuditQuestionActions,
+  projectPrivateSemanticAuditAdapterBatch,
+} from "../../scripts/private-general-page-semantic-audit-projection";
 
 describe("private General Page semantic audit boundary", () => {
-  it("defaults to runtime-parity no-repair and requires an explicit evaluation-only mode", () => {
+  it("allows only runtime-parity no-repair mode", () => {
     expect(privateSemanticAuditRepairMode([])).toBe("none");
-    expect(privateSemanticAuditRepairMode(["--repair-mode", "semantic_once"])).toBe("semantic_once");
+    expect(() => privateSemanticAuditRepairMode(["--repair-mode", "semantic_once"]))
+      .toThrow(/must be none for runtime-parity batch audit/);
     expect(() => privateSemanticAuditRepairMode(["--repair-mode", "automatic"]))
-      .toThrow(/--repair-mode must be none or semantic_once/);
+      .toThrow(/must be none for runtime-parity batch audit/);
   });
 
-  it("keeps the historical adapter format by default and requires an explicit schema candidate", () => {
+  it("records batch Adapter budgets and requires an explicit schema candidate", () => {
     expect(privateSemanticAuditAdapterResponseFormat([])).toBe("json_object");
     expect(privateSemanticAuditAdapterModelMetadata("json_object")).toEqual({
-      adapterMaxTokens: 480,
+      adapterMaxTokens: 1_200,
     });
     expect(privateSemanticAuditAdapterResponseFormat([
       "--adapter-response-format",
@@ -31,7 +36,7 @@ describe("private General Page semantic audit boundary", () => {
     ])).toBe("json_schema");
     expect(privateSemanticAuditAdapterModelMetadata("json_schema")).toEqual({
       responseFormat: "json_schema",
-      adapterMaxTokens: 1_800,
+      adapterMaxTokens: 3_200,
     });
     expect(privateSemanticAuditAdapterManifestMetadata("json_object", { type: "json_object" }))
       .toEqual({});
@@ -69,6 +74,24 @@ describe("private General Page semantic audit boundary", () => {
     expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
+  it("fails closed when the raw candidate snapshot differs from preregistration", () => {
+    const commit = "d0cac04bec9d3794126885ec4782d437533db104";
+    const diff = "diff --git a/a.ts b/a.ts\n+const value = 1;\n";
+    const diffSha256 = "d2d751cf5e7f13134f9d967a97ddc4104cc392ac078580ffcd66d76a928a2ef4";
+    expect(assertPrivateSemanticAuditCandidateSnapshot({
+      actualCommit: commit,
+      actualTrackedDiff: diff,
+      expectedCommit: commit,
+      expectedTrackedDiffSha256: diffSha256,
+    })).toEqual({ commit, trackedDiffSha256: diffSha256 });
+    expect(() => assertPrivateSemanticAuditCandidateSnapshot({
+      actualCommit: commit,
+      actualTrackedDiff: `${diff}changed`,
+      expectedCommit: commit,
+      expectedTrackedDiffSha256: diffSha256,
+    })).toThrow(/tracked diff does not match preregistration/);
+  });
+
   it("records separate display, copy, Google, AI Mode, and agent projections without opening them", () => {
     const brief: GeneralPageBrief = {
       schemaVersion: 1,
@@ -104,5 +127,40 @@ describe("private General Page semantic audit boundary", () => {
     expect(action.googleQuery).not.toBe(action.copyText);
     expect(action.aiModePrompt).toContain("https://www.ft.com/content/example");
     expect(action.aiModePrompt).not.toBe(action.googleQuery);
+  });
+
+  it("projects every Adapter batch item independently and keeps all prepared tasks", () => {
+    const groundingText = "食藥署表示，中聯油品下架29項產品。國防部宣布新增30億元預算。";
+    const preparedClaim = (c: string, s: string, p: string, o: string) => ({
+      schemaVersion: 1 as const,
+      decision: "prepared" as const,
+      reason: "actionable" as const,
+      claim: {
+        c,
+        why: "涉及公共利益。",
+        need: "主管機關正式公告。",
+        q: `${s}是否${p}${o}？`,
+        displayQ: `${s}是否${p}${o}？`,
+        atom: { s, p, o },
+        policy: { claimKind: "fact" as const, consequence: "public_interest" as const },
+        sourceQuote: c,
+      },
+    });
+    const projected = projectPrivateSemanticAuditAdapterBatch({
+      batch: {
+        schemaVersion: 1,
+        results: [
+          { claimIndex: 0, value: preparedClaim("食藥署表示，中聯油品下架29項產品。", "中聯油品", "下架", "29項產品") },
+          { claimIndex: 1, value: { schemaVersion: 1, decision: "abstain", reason: "unsupported_claim" } },
+          { claimIndex: 2, value: preparedClaim("國防部宣布新增30億元預算。", "國防部", "宣布新增", "30億元預算") },
+        ],
+      },
+      analysisKey: "audit-row",
+      groundingText,
+    });
+
+    expect(projected.pipelineStatus).toBe("action_ready");
+    expect(projected.preparations.map((item) => item.claimIndex)).toEqual([0, 1, 2]);
+    expect(projected.investigationTasks.map((task) => task.claimIndex)).toEqual([0, 2]);
   });
 });

@@ -74,6 +74,36 @@ prints aggregate status only. Original text and per-sample
 model output must remain in the private control plane (or under this repo's
 gitignored `tmp/` for local-only debugging).
 
+For the product-semantic audit, use `eval:gpr:semantic-audit:private`. It uses
+the runtime batch Investigation Adapter for up to three claims and requires a
+zero-network preflight before the one-shot model run. The caller must also pass
+the exact preregistered candidate snapshot:
+
+```bash
+npm run eval:gpr:semantic-audit:private -- \
+  --input /absolute/private/input.jsonl \
+  --output /absolute/private/results.jsonl \
+  --meta-output /absolute/private/run-manifest.json \
+  --endpoint https://approved-model-endpoint.example/v1 \
+  --model approved-model \
+  --split dev \
+  --dataset-version preregistered-dataset \
+  --run-id preregistered-run \
+  --sample-count 30 \
+  --data-categories facebook-original,news-original \
+  --adapter-response-format json_schema \
+  --repair-mode none \
+  --expected-candidate-commit 0123456789abcdef0123456789abcdef01234567 \
+  --expected-tracked-diff-sha256 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
+  --confirm-private-data-send \
+  --preflight-only
+```
+
+Generate the tracked-diff hash from raw `git diff --binary HEAD` bytes in the
+private control plane. Do not hash pretty-printed, summarized, or terminal-
+wrapped diff output. Remove only `--preflight-only` for the frozen one-shot run;
+the runner fails closed if the commit or raw diff hash has changed.
+
 Candidate v1's one-time 20-sample holdout passed grounding but failed the
 predeclared atomic-claim, aligned-query, useful-action, and automated
 unsafe-action gates. See the Phase 3.5b section of
