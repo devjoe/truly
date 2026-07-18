@@ -723,26 +723,35 @@ next candidate gate closed; no fresh holdout should be created yet.
   `claim.c + claim.need` is used only when the model question is missing or
   locally rejected. URLs, domains, search-engine instructions, vague references,
   and likely compound claims fail closed instead of bypassing the guard.
-- When a completed Page or Focus reading contains a candidate claim, the
-  service worker schedules one lower-priority `derived` adapter request. The
-  claim stays visible with a compact preparing status, then changes directly to
-  the prepared question and actions. Abstention, malformed output, a stale
-  analysis key, or an unavailable side panel quietly falls back to the original
-  claim. This preparation is ephemeral and never creates durable history.
+- A completed Page or Focus reading may return up to three ranked candidate
+  claims. The service worker schedules one lower-priority `derived` Adapter
+  batch, not one request per claim. Each indexed candidate settles independently
+  to prepared, ineligible, or unavailable, so one rejected candidate cannot
+  hide another valid future-Agent task. Adapter state is intentionally silent in
+  the current reading UI: it neither adds a loading indicator nor rerenders a
+  claim row. Every claim immediately uses the same compact bulleted renderer,
+  with a localized question and its two reading-handoff actions on a separate
+  line. Abstention, malformed Adapter output, a stale analysis key, or an
+  unavailable Adapter therefore cannot make equivalent questions lose their
+  visible actions. Preparation remains ephemeral and never creates durable
+  history.
 - Model work shares one resource-aware scheduler: explicit user work is
   `user_blocking`, current reading is `foreground`, prepared actions are
   `derived`, and speculative work is `prefetch`. Each model resource executes
   one request at a time; deduplication, supersession, and a bounded foreground
   burst keep Page preparation from starving Feed work without increasing the
   number of model calls.
-- A prepared intent exposes three explicit actions: standard Google Search,
-  Google AI Mode, and copy. Standard Search receives concise source-language
-  claim and attribution anchors only; the localized evidence need and page
-  publication timestamp do not leak into the query unless the date is part of
-  the exact claim. AI Mode receives UI-language instructions and display
-  question together with the exact source-language claim, evidence need, and
-  optional current HTTP(S) URL metadata. Copy uses the localized display
-  question. The URL is never treated as evidence or copied into model output.
+- Every Reading Brief claim exposes two compact actions: Google AI Mode
+  (`問 Gemini`) and icon-only copy. AI Mode receives UI-language instructions
+  and the display question together with the Reading Brief claim, rationale,
+  evidence need, and optional current HTTP(S) URL metadata. Copy uses the
+  localized display question. Evidence need is progressive disclosure with the
+  same `i` behavior on every row: hover and keyboard focus reveal it visually,
+  while click/touch toggles an accessible expanded state and closes any other
+  open row. The icon does not also open the generic singleton tooltip.
+  Standard Google Search is intentionally absent from this product surface;
+  its keyword helper remains an internal evaluation primitive. The URL is never
+  treated as evidence or copied into model output.
   The former original-source action is intentionally absent because it
   duplicated the page the user is already on.
 - The adapter requires an exact `sourceQuote` grounding span, preserves source
@@ -753,6 +762,26 @@ next candidate gate closed; no fresh holdout should be created yet.
   optional-attribution drift, then applies the existing deterministic
   eligibility guard. Page navigation, reread, a new analysis key, and a new
   Focus target clear stale task state; Page and Focus keep separate slots.
+  Strict Adapter output is reserved for the future Truly Agent boundary;
+  source-language claim, atom, quote, and canonical question do not gate or
+  replace the current Gemini/copy handoff UI.
+- The Adapter owns the complete prepared-claim semantics: `c`, `why`, `need`,
+  `q`, `displayQ`, `atom`, `policy`, and `sourceQuote`. The background runtime
+  may associate the indexed result with a Page or Focus session, but must not
+  restore Reading Brief fields over the rebuilt result. The prompt treats a
+  signed first-person article as sufficient evidence that its author expressed
+  an opinion, so those candidates abstain; an explicitly attributed external
+  proposition inside the same article may still be rebuilt into one checkable
+  atom. `need` names a concise evidence family instead of asking a second
+  verification question. A narrow local guard rejects only clearly procedural
+  evidence text such as `需查核是否...` / `verify whether...`; it does not try
+  to reproduce this semantic judgment in regexes.
+- Reading-context `bg` items keep one visual grammar at every cardinality: one
+  item is still rendered as a real unordered-list item instead of changing to
+  an indented paragraph. The bilingual model prompt requires one background
+  concept per item and permits author identity only when it materially changes
+  interpretation; author identity must not be merged with another person,
+  concept, or event merely to fill the two-item budget.
 - The future Truly Agent uses a separate non-runtime semantic Case draft. The
   model selects document families, source roles, authority hints, and numbered
   question coverage; local code owns IDs, question linkage, verification
@@ -766,17 +795,51 @@ next candidate gate closed; no fresh holdout should be created yet.
   holdout gates failed for candidates v1 and v2, v3 remains a development-only
   probe, and the fresh v4 forward-development gate failed. The investigation
   action remains unreleased.
-- Focused unit coverage validates scheduler priority/fairness, adapter parsing
+- Focused unit coverage validates scheduler priority/fairness, single-call
+  three-candidate batch parsing and index continuity, adapter grounding
   and grounding, query sanitization, deterministic fallback, fail-closed
-  eligibility, Page/Focus race isolation, and the automatic
-  preparing-to-ready/fallback transitions. The 180 ms height/fade transition is
-  skipped for reduced motion and never delays the underlying session update.
+  eligibility, Page/Focus race isolation, and the separation between silent
+  background Adapter state and stable reading-handoff rows.
+- Side Panel bootstrap waits for stored or auto language settings before the
+  Page runtime can issue its first analysis request. Presentation applies the
+  same UI-language guard again, so a stale or malformed `displayQ` cannot put a
+  source-language verification question into an otherwise localized panel.
+- Preparing, ready, ineligible, and unavailable Adapter outcomes share one
+  stable compact bullet renderer: localized question, progressive evidence
+  disclosure, Copy, and Gemini. The strict Adapter remains fail-closed for the
+  future Truly Agent, but its result never creates a false visual distinction
+  between otherwise equivalent user-facing questions.
 - A 2026-07-16 no-focus CDP check used dev build
   `1784200373031-0ae1017-dirty` on a real Financial Times page. It observed an
   automatic `preparing -> ready` transition with no manual click, no redundant
-  label, and Google Search / Gemini / Copy actions at 430 px. A separate live
-  run exercised `preparing -> fallback`, confirming that unavailable model
-  output clears the loading state and restores the original claim.
+  label, and the then-current Google Search / Gemini / Copy actions at 430 px.
+  The later compact action refinement is covered by a deterministic three-row
+  audit and exposes Gemini / Copy only. The deterministic CDP state matrix also
+  covers two-ready/one-fallback and all-fallback outcomes at 430 px; both keep
+  the same localized bullet grammar and the same reading-handoff actions while
+  keeping unavailable future-Agent tasks private and inert.
+- A 2026-07-18 final no-focus CDP check used dev build
+  `1784391028750-5fa9f41-dirty`. It verified three immediate Gemini/copy rows
+  during background preparation, mixed Adapter outcomes, and all-fallback
+  Adapter outcomes. It also forced `:hover` through the CDP CSS domain rather
+  than dispatching user input: each of the three `i` controls revealed only its
+  own evidence need directly between the question and action row, showed no
+  duplicate singleton tooltip, and left all four Web/Focus continuity
+  observations with `document.hasFocus() === false`. The collapsed
+  question-to-action gap measured 2 px for all three rows. A deliberately long
+  question plus long evidence fixture wrapped without clipping; expanded
+  question-to-evidence and evidence-to-action gaps both measured 2 px. The
+  progressive disclosure shows the evidence requirement directly without a
+  redundant `需要：` / `Needed:` prefix. Shared Feed/Web/Focus follow-up rows
+  now keep their question above the right-aligned actions at both 360 px and
+  430 px. Their action row is visually raised 4 px toward the question; the
+  control boxes overlap only 2 px of the question line box without touching
+  text, clipping, or causing horizontal overflow.
+- A later 2026-07-18 no-focus CDP pass used dev build
+  `1784398754095-5fa9f41-dirty` and confirmed that a single `bg` item has a
+  visible bullet at both 360 px and 430 px. Web/Focus continuity, typography,
+  and all four `document.hasFocus()` observations remained unchanged; the
+  audit stayed fully no-focus.
 - Review screenshots remain local-only:
   `/private/tmp/truly-auto-investigation-preparing-430-2026-07-16.png` and
   `/private/tmp/truly-auto-investigation-ready-430-2026-07-16.png`.

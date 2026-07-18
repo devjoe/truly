@@ -7,14 +7,14 @@ describe("General Page audit claim preparation transition", () => {
   it("accepts a safely observed live preparing state", () => {
     expect(resolveClaimPreparationEvidence({
       observed: true,
-      text: "Preparing",
-      originalClaimVisible: true,
-      readyCardVisible: false,
+      text: "",
+      compactRowVisible: true,
+      actionReadyVisible: true,
     }, [])).toEqual({
       observed: true,
-      text: "Preparing",
-      originalClaimVisible: true,
-      readyCardVisible: false,
+      text: "",
+      compactRowVisible: true,
+      actionReadyVisible: true,
       source: "live",
     });
   });
@@ -23,28 +23,28 @@ describe("General Page audit claim preparation transition", () => {
     expect(resolveClaimPreparationEvidence({
       observed: false,
       text: "",
-      originalClaimVisible: false,
-      readyCardVisible: true,
+      compactRowVisible: false,
+      actionReadyVisible: true,
     }, [{
       claimPreparingPresent: true,
-      claimPreparingText: "Preparing",
-      claimOriginalVisible: true,
-      claimReadyCardVisible: false,
+      claimPreparingText: "",
+      claimCompactRowVisible: true,
+      claimActionReadyVisible: true,
     }])).toEqual({
       observed: true,
-      text: "Preparing",
-      originalClaimVisible: true,
-      readyCardVisible: false,
+      text: "",
+      compactRowVisible: true,
+      actionReadyVisible: true,
       source: "timeline",
     });
   });
 
-  it("rejects timeline evidence that overlaps the ready card", () => {
+  it("rejects timeline evidence without usable claim actions", () => {
     expect(resolveClaimPreparationEvidence({ observed: false }, [{
       claimPreparingPresent: true,
       claimPreparingText: "Preparing",
-      claimOriginalVisible: true,
-      claimReadyCardVisible: true,
+      claimCompactRowVisible: true,
+      claimActionReadyVisible: false,
     }])).toMatchObject({
       observed: false,
       source: "none",

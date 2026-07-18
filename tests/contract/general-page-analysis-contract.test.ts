@@ -114,7 +114,9 @@ describe("General Page analysis contract", () => {
       ],
       claims: [
         { c: "Claim 1", why: "Important.", need: "Evidence.", q: "What primary evidence supports Claim 1?" },
-        { c: "Claim 2", why: "Should be dropped.", need: "Evidence.", q: "What primary evidence supports Claim 2?" },
+        { c: "Claim 2", why: "Important.", need: "Evidence.", q: "What primary evidence supports Claim 2?" },
+        { c: "Claim 3", why: "Important.", need: "Evidence.", q: "What primary evidence supports Claim 3?" },
+        { c: "Claim 4", why: "Should be dropped.", need: "Evidence.", q: "What primary evidence supports Claim 4?" },
       ],
       qs: [
         { q: "What background would help?", kind: "context" },
@@ -128,7 +130,7 @@ describe("General Page analysis contract", () => {
     });
     expect(brief?.summary.split(/\s+/)).toHaveLength(32);
     expect(brief?.bg).toHaveLength(2);
-    expect(brief?.claims).toHaveLength(1);
+    expect(brief?.claims).toHaveLength(3);
     expect(brief?.qs).toHaveLength(1);
     expect(brief?.note?.length).toBeLessThanOrEqual(200);
   });
@@ -263,7 +265,7 @@ describe("General Page analysis contract", () => {
       outputLang: "en",
     });
     expect(typeof withoutShot.messages[1]?.content).toBe("string");
-    expect(withoutShot.max_tokens).toBe(720);
+    expect(withoutShot.max_tokens).toBe(1_100);
     const englishPrompt = String(withoutShot.messages[0]?.content);
     expect(englishPrompt).toContain("schemaVersion and summary are always required");
     expect(englishPrompt).toContain("never arrays of strings");
@@ -281,7 +283,11 @@ describe("General Page analysis contract", () => {
     expect(englishPrompt).toContain("arrested, charged, denied bail, convicted, and sentenced");
     expect(englishPrompt).toContain("routine product features");
     expect(englishPrompt).toContain("indexes, feeds, or mixed headlines");
-    expect(englishPrompt).toContain("claims <=1 item");
+    expect(englishPrompt).toContain("current page itself already answers whether its author expressed that view");
+    expect(englishPrompt).toContain("Each bg item must contain exactly one background concept");
+    expect(englishPrompt).toContain("Include author identity only when it materially changes how the page should be interpreted");
+    expect(englishPrompt).toContain("claims <=3 items");
+    expect(englishPrompt).toContain("omit weak or duplicate candidates");
     expect(englishPrompt).toContain("understand|context|counter|image");
     expect(englishPrompt).not.toContain("Quick mode");
     expect(englishPrompt).not.toContain("Full mode");
@@ -309,7 +315,11 @@ describe("General Page analysis contract", () => {
     expect(zhPrompt).toContain("被捕、被控、不得交保、被判有罪與被判刑");
     expect(zhPrompt).toContain("一般折扣／折扣碼／課程數量");
     expect(zhPrompt).toContain("索引、feed 或混合標題");
-    expect(zhPrompt).toContain("claims 最多 1 項");
+    expect(zhPrompt).toContain("目前頁面本身已直接回答作者是否表達該觀點");
+    expect(zhPrompt).toContain("每個 bg 項目只能包含一個背景概念");
+    expect(zhPrompt).toContain("只有作者身分會實質影響文章解讀時才可納入");
+    expect(zhPrompt).toContain("claims 最多 3 項");
+    expect(zhPrompt).toContain("不要為了湊數");
     expect(zhPrompt).toContain("不得使用 verify/source");
     expect(zhPrompt).not.toContain("快速模式");
     expect(zhPrompt).not.toContain("完整模式");
@@ -353,7 +363,7 @@ describe("General Page analysis contract", () => {
       screenshotDataUrl: "data:image/jpeg;base64,c3ludGhldGljLXNjcmVlbnNob3Q=",
     });
     const content = withShot.messages[1]?.content;
-    expect(withShot.max_tokens).toBe(720);
+    expect(withShot.max_tokens).toBe(1_100);
     expect(withShot.messages[0]?.content).toBe(withoutShot.messages[0]?.content);
     expect(Array.isArray(content)).toBe(true);
     if (Array.isArray(content)) {

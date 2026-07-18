@@ -3,6 +3,7 @@ import type {
   GeneralPageClaimAttribution,
   GeneralPageBriefClaim,
 } from "../lib/general-page-analysis";
+import type { Lang } from "../lib/types";
 import {
   resolveSourceQuote,
 } from "../lib/general-page-investigation-adapter";
@@ -10,6 +11,7 @@ import { cleanSearchContextText } from "./format";
 
 export interface PageClaimInvestigationSource {
   title?: string;
+  authorName?: string;
   sourceName?: string;
   publishedAt?: string;
   url?: string;
@@ -49,6 +51,13 @@ export interface PageClaimInvestigationPreparationInput {
   source?: PageClaimInvestigationSource;
 }
 
+export interface PageClaimDisplayQuestionInput {
+  outputLang?: Lang;
+  candidateQuestion?: string;
+  preparedQuestion?: string;
+  claimIndex?: number;
+}
+
 export type PageClaimInvestigationCanonicalization =
   | "infer_typed_attribution"
   | "project_exact_atomic_span";
@@ -77,6 +86,7 @@ export type PageClaimInvestigationIneligibilityReason =
   | "navigation_fragment"
   | "underspecified_comparison"
   | "generic_evidence_need"
+  | "invalid_evidence_need"
   | "atom_span_mismatch"
   | "compound_claim"
   | "vague_atom"
@@ -125,11 +135,38 @@ const COMPARISON_TIME_RE = /\b(?:19|20)\d{2}\b|\b(?:january|february|march|april
 const COMPARISON_MARKET_OR_REGION_RE = /\b(?:market|region|worldwide|global|national|nationwide|local)\b|(?:市場|地區|區域|全球|全國|台灣|臺灣|美國|中國|日本|歐盟)/iu;
 const COMPARISON_METRIC_RE = /\b(?:benchmark|score|rate|accuracy|latency|price|cost|revenue|sales|market\s+share|users?|cases?|points?|percent(?:age)?|seconds?|minutes?|hours?)\b|(?:基準測試|分數|得分|比率|準確率|延遲|價格|成本|營收|銷量|市占率|市場占有率|占有率|使用者|用戶|人數|件數|百分比|百分點|秒|分鐘|小時|指標)/iu;
 const GENERIC_EVIDENCE_NEED_RE = /^(?:(?:(?:an?|the)\s+)?(?:(?:external|supporting|reliable|authoritative|official|independent|additional|more)\s+)*(?:evidence|proof|sources?|data|information)|(?:(?:外部|支持|可靠|權威|官方|獨立|更多|相關)\s*)*(?:證據|證明|資料|來源|資訊))$/iu;
+const PROCEDURAL_EVIDENCE_NEED_RE = /[？?]|(?:需(?:要)?|請)(?:查核|查證|確認|驗證)|(?:是否|有沒有)|(?:以|來)(?:確認|查證|驗證)|\b(?:verify|check|confirm|determine)\s+(?:whether|if)\b/iu;
 const SEARCH_STOP_WORDS = new Set([
   "a", "an", "and", "are", "as", "at", "be", "been", "being", "by", "did", "do", "does", "for",
   "from", "has", "have", "had", "in", "is", "it", "of", "on", "or", "that", "the", "this", "to",
   "was", "were", "will", "with",
 ]);
+
+function matchesClaimDisplayLanguage(value: string | undefined, outputLang?: Lang): boolean {
+  const text = value?.trim() ?? "";
+  const latinCount = (text.match(/[A-Za-z]/g) ?? []).length;
+  const hanCount = (text.match(/\p{Script=Han}/gu) ?? []).length;
+  const counted = latinCount + hanCount;
+  if ((outputLang === "en" ? "en" : "zh-TW") === "en") {
+    return latinCount >= 4 && counted > 0 && latinCount / counted >= 0.65;
+  }
+  return hanCount >= 2 && counted > 0 && hanCount / counted >= 0.2;
+}
+
+export function pageClaimDisplayQuestion({
+  outputLang,
+  candidateQuestion,
+  preparedQuestion,
+  claimIndex = 0,
+}: PageClaimDisplayQuestionInput): string {
+  const requested = outputLang === "en" ? "en" : "zh-TW";
+  for (const candidate of [candidateQuestion, preparedQuestion]) {
+    if (matchesClaimDisplayLanguage(candidate, requested)) return candidate!.trim();
+  }
+  return requested === "en"
+    ? `Is claim ${claimIndex + 1} supported by external evidence?`
+    : `第 ${claimIndex + 1} 項主張是否有外部證據支持？`;
+}
 
 const ATTRIBUTION_MODALITY_RE = {
   statement: /(?:表示|指出|聲稱|announced by|announced|said|stated|claimed)/iu,
@@ -255,6 +292,10 @@ function isUnderspecifiedComparison(claim: GeneralPageBriefClaim): boolean {
 
 function hasGenericEvidenceNeed(value: string): boolean {
   return GENERIC_EVIDENCE_NEED_RE.test(value.replace(/[。！？.!?]+$/u, "").trim());
+}
+
+function hasProceduralEvidenceNeed(value: string): boolean {
+  return PROCEDURAL_EVIDENCE_NEED_RE.test(value.trim());
 }
 
 function searchKeywordSegment(value: string | undefined, limit: number): string {
@@ -873,6 +914,7 @@ export function pageClaimInvestigationEligibility(
   if (claim.policy.consequence === "none") return { ok: false, reason: "non_consequential" };
   if (claim.policy.claimKind === "opinion") return { ok: false, reason: "unsupported_claim_kind" };
   if (hasGenericEvidenceNeed(claim.need)) return { ok: false, reason: "generic_evidence_need" };
+  if (hasProceduralEvidenceNeed(claim.need)) return { ok: false, reason: "invalid_evidence_need" };
   if (LOW_CONSEQUENCE_AVAILABILITY_RE.test(claim.c)) {
     return { ok: false, reason: "low_consequence_availability" };
   }
@@ -962,6 +1004,7 @@ export function buildGoogleSearchKeywords(
 export function buildGoogleAiModePrompt(intent: ClaimVerificationIntent): string {
   const sourceContext = [
     cleanInvestigationText(intent.sourceContext?.title, 100),
+    cleanInvestigationText(intent.sourceContext?.authorName, 60),
     cleanInvestigationText(intent.sourceContext?.sourceName, 60),
     cleanInvestigationText(intent.sourceContext?.publishedAt, 32),
   ].filter(Boolean).join(" · ");
@@ -1011,6 +1054,7 @@ function buildPreparedPageClaimInvestigationTask(
   const displayQuestion = usableDisplayQuestion(preparedClaim.displayQ, preparedClaim) ?? question;
   const sourceContext = {
     ...(cleanInvestigationText(input.source?.title, 100) ? { title: cleanInvestigationText(input.source?.title, 100) } : {}),
+    ...(cleanInvestigationText(input.source?.authorName, 60) ? { authorName: cleanInvestigationText(input.source?.authorName, 60) } : {}),
     ...(cleanInvestigationText(input.source?.sourceName, 60) ? { sourceName: cleanInvestigationText(input.source?.sourceName, 60) } : {}),
     ...(cleanInvestigationText(input.source?.publishedAt, 32) ? { publishedAt: cleanInvestigationText(input.source?.publishedAt, 32) } : {}),
     ...(cleanSourceMetadataUrl(input.source?.url) ? { url: cleanSourceMetadataUrl(input.source?.url) } : {}),

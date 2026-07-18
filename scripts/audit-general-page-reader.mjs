@@ -329,13 +329,14 @@ async function startMockOpenAiEndpoint() {
     const hasImageUrl = JSON.stringify(userContent).includes('"image_url"');
     const kind = /parser recovery classifier/i.test(systemText)
       ? "parser-advisor"
-      : /prepare one candidate fact-check action/i.test(systemText)
+      : /prepare (?:one|a bounded batch of) candidate fact-check action/i.test(systemText)
       ? "investigation-adapter"
       : hasImageUrl
       ? "screenshot-brief"
       : /dominant color/i.test(systemText)
       ? "vision-probe"
       : "brief";
+    const wantsZhtw = /Taiwan Traditional Chinese|台灣慣用繁體中文/u.test(systemText);
     requests.push({
       kind,
       url: req.url,
@@ -376,20 +377,43 @@ async function startMockOpenAiEndpoint() {
     } else if (kind === "investigation-adapter") {
       // Keep the derived preparation visible long enough for the UI audit to
       // prove the intermediate state instead of racing directly to ready.
-      await new Promise((resolveDelay) => setTimeout(resolveDelay, 350));
-      content = JSON.stringify({
-        schemaVersion: 1,
-        decision: "prepared",
-        reason: "actionable",
-        claim: {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 3000));
+      const cluesLine = userText.split("\n").find((line) => line.startsWith('[{"claimIndex"'));
+      const clues = cluesLine ? JSON.parse(cluesLine) : [];
+      const groundedClaims = [
+        {
           c: "The analyzed content is synthetic.",
-          why: "The UI check must not depend on live page content.",
-          need: "Confirm the expected scope.",
           q: "Is the analyzed content synthetic?",
           atom: { s: "The analyzed content", p: "is", o: "synthetic" },
-          policy: { claimKind: "fact", consequence: "public_interest" },
-          sourceQuote: "The analyzed content is synthetic.",
         },
+        {
+          c: "The fixture uses no real website content.",
+          q: "Does the fixture use no real website content?",
+          atom: { s: "The fixture", p: "uses", o: "no real website content" },
+        },
+        {
+          c: "The audit runs against a local test page.",
+          q: "Does the audit run against a local test page?",
+          atom: { s: "The audit", p: "runs against", o: "a local test page" },
+        },
+      ];
+      content = JSON.stringify({
+        schemaVersion: 1,
+        results: clues.map(({ claimIndex, candidateClaim }) => {
+          const grounded = groundedClaims[claimIndex];
+          return {
+            claimIndex,
+            decision: "prepared",
+            reason: "actionable",
+            claim: {
+              ...candidateClaim,
+              ...(grounded && userText.includes(grounded.c) ? grounded : {}),
+              displayQ: candidateClaim.q,
+              attribution: null,
+              sourceQuote: grounded && userText.includes(grounded.c) ? grounded.c : candidateClaim.c,
+            },
+          };
+        }),
       });
     } else {
       // Keep the ordinary reading-analysis state observable as a distinct UX
@@ -400,19 +424,38 @@ async function startMockOpenAiEndpoint() {
         : /targetKind:\s*current-region/i.test(userText)
         ? "current-region"
         : "page";
-      const summary = targetKind === "selection"
+      const summary = wantsZhtw
+        ? targetKind === "selection"
+          ? "合成選取內容總覽。"
+          : targetKind === "current-region"
+          ? "合成段落總覽。"
+          : "合成整頁總覽。"
+        : targetKind === "selection"
         ? "Deterministic selected-content overview."
         : targetKind === "current-region"
         ? "Deterministic paragraph overview."
         : "Deterministic whole-page overview.";
       content = JSON.stringify({
         schemaVersion: 1,
-        summary: hasImageUrl ? "Screenshot-grounded synthetic summary." : summary,
+        summary: hasImageUrl
+          ? wantsZhtw ? "以截圖為依據的合成摘要。" : "Screenshot-grounded synthetic summary."
+          : summary,
         bg: hasImageUrl
-          ? [{ t: "Visual context", why: "The confirmed screenshot was included." }]
-          : [{ t: "Synthetic scope", why: "This deterministic response verifies the UI state." }],
+          ? [wantsZhtw
+              ? { t: "視覺脈絡", why: "已納入使用者確認的截圖。" }
+              : { t: "Visual context", why: "The confirmed screenshot was included." }]
+          : [wantsZhtw
+              ? { t: "合成範圍", why: "這個固定回應用於驗證介面狀態。" }
+              : { t: "Synthetic scope", why: "This deterministic response verifies the UI state." }],
         claims: hasImageUrl
-          ? [{
+          ? [wantsZhtw ? {
+              c: "此頁面需要視覺資訊作為依據。",
+              why: "文字擷取內容不足。",
+              need: "使用者確認的頁面截圖。",
+              q: "此頁面是否需要視覺資訊作為依據？",
+              atom: { s: "此頁面", p: "需要", o: "視覺資訊" },
+              policy: { claimKind: "fact", consequence: "public_interest" },
+            } : {
               c: "The page needs visual grounding.",
               why: "The text extraction was too sparse.",
               need: "Use the confirmed screenshot.",
@@ -420,7 +463,66 @@ async function startMockOpenAiEndpoint() {
               atom: { s: "The page", p: "needs", o: "visual grounding" },
               policy: { claimKind: "fact", consequence: "public_interest" },
             }]
-          : [{
+          : /The analyzed content is synthetic[\s\S]*The fixture uses no real website content[\s\S]*The audit runs against a local test page/i.test(userText)
+          ? wantsZhtw ? [
+              {
+                c: "分析內容為合成資料。",
+                why: "介面驗收不應依賴真實網站內容。",
+                need: "比對合成頁面的測試規格、建置來源與驗收紀錄，確認內容範圍符合預期且可重現。",
+                q: "分析內容是否完全由可重現的合成資料構成，而未混入任何真實網站內容？",
+                atom: { s: "分析內容", p: "為", o: "合成資料" },
+                policy: { claimKind: "fact", consequence: "public_interest" },
+              },
+              {
+                c: "測試頁面未使用真實網站內容。",
+                why: "驗收必須維持合成資料邊界。",
+                need: "檢查本機測試頁面原始碼。",
+                q: "測試頁面是否未使用真實網站內容？",
+                atom: { s: "測試頁面", p: "未使用", o: "真實網站內容" },
+                policy: { claimKind: "fact", consequence: "public_interest" },
+              },
+              {
+                c: "驗收使用本機測試頁面。",
+                why: "執行期證據必須可重現。",
+                need: "檢查驗收目標設定。",
+                q: "驗收是否使用本機測試頁面？",
+                atom: { s: "驗收", p: "使用", o: "本機測試頁面" },
+                policy: { claimKind: "fact", consequence: "public_interest" },
+              },
+            ] : [
+              {
+                c: "The analyzed content is synthetic.",
+                why: "The UI check must not depend on live page content.",
+                need: "Compare the fixture specification, build source, and audit record to confirm the expected reproducible scope.",
+                q: "Is the analyzed content made entirely from reproducible synthetic data without any real website content?",
+                atom: { s: "The analyzed content", p: "is", o: "synthetic" },
+                policy: { claimKind: "fact", consequence: "public_interest" },
+              },
+              {
+                c: "The fixture uses no real website content.",
+                why: "The audit must stay synthetic.",
+                need: "Inspect the local fixture source.",
+                q: "Does the fixture use no real website content?",
+                atom: { s: "The fixture", p: "uses", o: "no real website content" },
+                policy: { claimKind: "fact", consequence: "public_interest" },
+              },
+              {
+                c: "The audit runs against a local test page.",
+                why: "The runtime proof must be reproducible.",
+                need: "Inspect the audit target configuration.",
+                q: "Does the audit run against a local test page?",
+                atom: { s: "The audit", p: "runs against", o: "a local test page" },
+                policy: { claimKind: "fact", consequence: "public_interest" },
+              },
+            ]
+          : [wantsZhtw ? {
+              c: "分析內容為合成資料。",
+              why: "介面驗收不應依賴真實網站內容。",
+              need: "確認預期的測試範圍。",
+              q: "分析內容是否為合成資料？",
+              atom: { s: "分析內容", p: "為", o: "合成資料" },
+              policy: { claimKind: "fact", consequence: "public_interest" },
+            } : {
               c: "The analyzed content is synthetic.",
               why: "The UI check must not depend on live page content.",
               need: "Confirm the expected scope.",
@@ -428,7 +530,12 @@ async function startMockOpenAiEndpoint() {
               atom: { s: "The analyzed content", p: "is", o: "synthetic" },
               policy: { claimKind: "fact", consequence: "public_interest" },
             }],
-        qs: [{ q: hasImageUrl ? "What does the visible card show?" : "Which analysis scope is active?", kind: "understand" }],
+        qs: [{
+          q: wantsZhtw
+            ? hasImageUrl ? "畫面中的卡片顯示什麼？" : "目前這個合成頁面使用的是整頁、選取內容，還是目前段落的哪一個分析範圍？"
+            : hasImageUrl ? "What does the visible card show?" : "Does this synthetic page currently use the whole page, selected content, or the current paragraph as its analysis scope?",
+          kind: "understand",
+        }],
       });
     }
     res.writeHead(200, { "content-type": "application/json" });
@@ -484,7 +591,7 @@ async function startSyntheticServer() {
     }
     res.end(syntheticHtml(
       "Synthetic General Page Reader Article",
-      "This is a synthetic article for the General Page Reader CDP acceptance test. The analyzed content is synthetic.",
+      "This is a synthetic article for the General Page Reader CDP acceptance test. The analyzed content is synthetic. The fixture uses no real website content. The audit runs against a local test page.",
     ));
   });
 
@@ -1294,10 +1401,12 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           readActionAriaDisabled: pane?.querySelector("#pageReadCurrent")?.getAttribute("aria-disabled") || "",
           exportActionCount: pane?.querySelectorAll(".page-reader-external-tools .page-reader-card-action").length || 0,
           supplementalDetailsOpen: pane?.querySelector(".page-reader-supplemental-details")?.hasAttribute("open") ?? null,
-          claimPreparingPresent: Boolean(claimRow?.querySelector(".page-claim-preparing")),
-          claimPreparingText: norm(claimRow?.querySelector(".page-claim-preparing")?.textContent),
-          claimOriginalVisible: Boolean(claimRow?.querySelector(":scope > .page-claim-copy")),
-          claimReadyCardVisible: Boolean(claimRow?.querySelector(".page-claim-investigation")),
+          claimPreparingPresent: (runtimeState?.displayedSession?.investigationPreparingCount ?? 0) > 0,
+          claimPreparingText: (runtimeState?.displayedSession?.investigationPreparingCount ?? 0) > 0
+            ? "background Adapter preparation"
+            : "",
+          claimCompactRowVisible: Boolean(claimRow?.querySelector(".page-claim-investigation")),
+          claimActionReadyVisible: Boolean(claimRow?.querySelector(".page-claim-investigation-actions")),
           runtimeState,
         };
         const signature = JSON.stringify({ ...entry, elapsedMs: 0 });
@@ -1521,40 +1630,50 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       };
     })()`);
 
-    const pageBrief = await observePageBrief(side, "page-analysis-ready.png");
     await waitFor(
       side,
-      `Boolean(document.querySelector('#page-pane .page-claim-preparing'))`,
+      `(globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession?.investigationPreparingCount ?? 0) > 0`,
       1400,
       "background claim investigation preparing state",
     ).catch(() => {});
     const preparingState = await side.evaluateJson(`(() => {
       const row = document.querySelector('#page-pane .page-claim-row');
-      const preparing = row?.querySelector('.page-claim-preparing');
+      const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession;
+      const preparingCount = runtimeState?.investigationPreparingCount ?? 0;
       return {
-        observed: Boolean(preparing),
-        text: preparing?.textContent?.trim() || '',
-        originalClaimVisible: Boolean(row?.querySelector(':scope > .page-claim-copy')),
-        readyCardVisible: Boolean(row?.querySelector('.page-claim-investigation')),
+        observed: preparingCount > 0,
+        text: preparingCount > 0 ? 'background Adapter preparation' : '',
+        preparingCount,
+        headingLoadingCount: document.querySelectorAll('#page-pane .page-claim-section-loading').length,
+        perRowLoadingTextPresent: [...document.querySelectorAll('#page-pane .page-claim-row')]
+          .some((item) => /正在準備查核問題|Preparing a verification question/.test(item.textContent || '')),
+        compactRowVisible: Boolean(row?.querySelector('.page-claim-investigation')),
+        actionReadyVisible: Boolean(row?.querySelector('.page-claim-investigation-actions')),
       };
     })()`);
     if (preparingState?.observed) {
+      await side.setViewport(430, 900);
       await side.screenshot(resolve(OUT_DIR, "page-claim-investigation-preparing.png")).catch(() => {});
     }
+    const pageBrief = await observePageBrief(side, "page-analysis-ready.png");
     await waitFor(
       side,
-      `Boolean(document.querySelector('#page-pane .page-claim-investigation'))`,
+      `globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession?.investigationReadyCount === 3 &&
+        document.querySelectorAll('#page-pane .page-claim-row .page-claim-investigation-actions').length === 3`,
       5000,
-      "background claim investigation preparation",
+      "background three-claim investigation preparation",
     );
     const claimInvestigation = await observeClaimInvestigation(side, preparingState);
     const initialLoadTimeline = await side.evaluateJson(`(() => {
       const timeline = globalThis.__trulyPagePaneTimeline;
       return timeline?.stop?.() || timeline?.entries || [];
     })()`);
+    claimInvestigation.preparingUi = preparingState;
     claimInvestigation.preparing = resolveClaimPreparationEvidence(preparingState, initialLoadTimeline);
     writeFileSync(resolve(OUT_DIR, "page-initial-load-timeline.json"), JSON.stringify(initialLoadTimeline, null, 2));
-    const responsive = await auditResponsivePageWebLayout(side, "page-responsive-430.png");
+    const responsive360 = await auditResponsivePageWebLayout(side, "page-responsive-360.png", 360);
+    const responsive = await auditResponsivePageWebLayout(side, "page-responsive-430.png", 430);
+    claimInvestigation.fallbackStates = await auditClaimFallbackStates(side);
     const pageContext = await side.evaluateJson(`(() => {
       const details = document.querySelector('#page-pane .page-reader-context-details');
       if (!details) return { present: false };
@@ -1753,6 +1872,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       ready,
       pageBrief,
       claimInvestigation,
+      responsive360,
       responsive,
       pageContext,
       copy,
@@ -1857,8 +1977,10 @@ async function observePageBrief(side, readyScreenshotName) {
 async function observeClaimInvestigation(side, preparingState = null) {
   const beforeTargets = await fetch(`${CDP_BASE}/json`).then((response) => response.json()).catch(() => []);
   const state = await side.evaluateJson(`(() => {
-    const card = document.querySelector('#page-pane .page-claim-investigation');
+    const cards = [...document.querySelectorAll('#page-pane .page-claim-investigation')];
+    const card = cards[0];
     const row = card?.closest('.page-claim-row');
+    const list = row?.closest('ul');
     if (!card) return { available: false, ready: false };
     const links = [...(card?.querySelectorAll('a') || [])].map((link) => ({
       label: link.textContent?.trim() || '',
@@ -1871,8 +1993,39 @@ async function observeClaimInvestigation(side, preparingState = null) {
       ready: true,
       taskId: card?.getAttribute('data-task-id') || '',
       question: card?.querySelector('.page-claim-investigation-question')?.textContent?.trim() || '',
+      rowCount: cards.length,
+      bulletList: Boolean(list) && getComputedStyle(list).listStyleType === 'disc' &&
+        cards.every((item) => getComputedStyle(item.closest('.page-claim-row')).display === 'list-item'),
+      localizedQuestions: cards.every((item) => /[\u3400-\u9fff]/u.test(
+        item.querySelector('.page-claim-investigation-question')?.textContent || '')),
+      actionsBelowQuestion: cards.every((item) => {
+        const questionRect = item.querySelector('.page-claim-investigation-question')?.getBoundingClientRect();
+        const actionRect = item.querySelector('.page-claim-investigation-actions')?.getBoundingClientRect();
+        return Boolean(questionRect && actionRect && actionRect.top >= questionRect.bottom - 1);
+      }),
+      compactActionGaps: cards.map((item) => {
+        const questionRect = item.querySelector('.page-claim-investigation-question')?.getBoundingClientRect();
+        const actionRect = item.querySelector('.page-claim-investigation-actions')?.getBoundingClientRect();
+        return questionRect && actionRect ? Math.round((actionRect.top - questionRect.bottom) * 10) / 10 : null;
+      }),
+      compactActionProximity: cards.every((item) => {
+        const questionRect = item.querySelector('.page-claim-investigation-question')?.getBoundingClientRect();
+        const actionRect = item.querySelector('.page-claim-investigation-actions')?.getBoundingClientRect();
+        if (!questionRect || !actionRect) return false;
+        const gap = actionRect.top - questionRect.bottom;
+        return gap >= -3 && gap <= 6;
+      }),
       links,
       copyPresent: Boolean(card?.querySelector('.page-claim-copy-question')),
+      evidenceTogglePresent: Boolean(card?.querySelector('.page-claim-evidence-toggle')),
+      evidenceNeedHidden: card?.querySelector('.page-claim-investigation-need')?.getAttribute('aria-hidden') === 'true',
+      evidenceNeedPrefixAbsent: cards.every((item) =>
+        !/^(?:需要|Needed)\s*[：:]/i.test(item.querySelector('.page-claim-investigation-need')?.textContent?.trim() || '')),
+      compactRows: cards.every((item) =>
+        item.querySelectorAll('a').length === 1 &&
+        /問 Gemini|Ask Gemini/.test(item.querySelector('a')?.textContent || '') &&
+        Boolean(item.querySelector('.page-claim-copy-question')) &&
+        Boolean(item.querySelector('.page-claim-evidence-toggle'))),
       manualStartPresent: Boolean(document.querySelector('#page-pane .page-claim-start')),
       originalClaimVisible: Boolean(row?.querySelector(':scope > .page-claim-copy')),
       redundantLabelPresent: Boolean(card?.querySelector('.page-claim-investigation-label, .page-claim-investigation-header')),
@@ -1880,6 +2033,26 @@ async function observeClaimInvestigation(side, preparingState = null) {
   })()`);
   const afterTargets = await fetch(`${CDP_BASE}/json`).then((response) => response.json()).catch(() => []);
   await side.screenshot(resolve(OUT_DIR, "page-claim-investigation.png")).catch(() => {});
+  const evidenceDisclosure = await side.evaluateJson(`(async () => {
+    const button = document.querySelector('#page-pane .page-claim-evidence-toggle');
+    if (!button) return { available: false };
+    button.click();
+    await new Promise((resolve) => setTimeout(resolve, 180));
+    const row = button.closest('.page-claim-investigation');
+    const need = row?.querySelector('.page-claim-investigation-need');
+    return {
+      available: true,
+      expanded: button.getAttribute('aria-expanded') === 'true',
+      hidden: need?.getAttribute('aria-hidden') === 'true',
+      text: need?.textContent?.trim() || '',
+    };
+  })()`);
+  if (evidenceDisclosure?.expanded) {
+    await side.setViewport(430, 900);
+    await side.screenshot(resolve(OUT_DIR, "page-claim-evidence-open-430.png")).catch(() => {});
+    await side.evaluate(`document.querySelector('#page-pane .page-claim-evidence-toggle')?.click()`);
+  }
+  const evidenceHover = await auditClaimEvidenceHoverStates(side);
   return {
     ...state,
     preparing: preparingState,
@@ -1887,12 +2060,182 @@ async function observeClaimInvestigation(side, preparingState = null) {
       ? relative(ROOT, resolve(OUT_DIR, "page-claim-investigation-preparing.png"))
       : null,
     openedTargetOnPrepare: afterTargets.length !== beforeTargets.length,
+    evidenceDisclosure,
+    evidenceScreenshot: evidenceDisclosure?.expanded
+      ? relative(ROOT, resolve(OUT_DIR, "page-claim-evidence-open-430.png"))
+      : null,
+    evidenceHover,
     screenshot: relative(ROOT, resolve(OUT_DIR, "page-claim-investigation.png")),
   };
 }
 
-async function auditResponsivePageWebLayout(side, screenshotName) {
-  const width = 430;
+async function auditClaimEvidenceHoverStates(side) {
+  const count = await side.evaluateJson(`document.querySelectorAll('#page-pane .page-claim-evidence-toggle').length`);
+  if (count !== 3) return { available: false, count };
+  const states = [];
+  await side.setViewport(430, 900);
+  await side.evaluate(`(() => {
+    document.scrollingElement?.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    document.querySelector('#page-pane')?.scrollTo?.({ top: 0, left: 0, behavior: 'instant' });
+  })()`);
+  await side.send("DOM.enable");
+  await side.send("CSS.enable");
+  const { root } = await side.send("DOM.getDocument", { depth: -1, pierce: true });
+  const { nodeIds } = await side.send("DOM.querySelectorAll", {
+    nodeId: root.nodeId,
+    selector: "#page-pane .page-claim-evidence-toggle",
+  });
+  if (nodeIds.length !== count) return { available: false, count, cdpNodeCount: nodeIds.length };
+  let previousNodeId = null;
+  for (let index = 0; index < count; index += 1) {
+    const nodeId = nodeIds[index];
+    if (previousNodeId) {
+      await side.send("CSS.forcePseudoState", { nodeId: previousNodeId, forcedPseudoClasses: [] });
+    }
+    await side.send("CSS.forcePseudoState", { nodeId, forcedPseudoClasses: ["hover"] });
+    previousNodeId = nodeId;
+    // Force style resolution once so the transition starts before the timed
+    // observation. CSS.forcePseudoState alone does not require an immediate
+    // rendering update in a background target.
+    await side.evaluate(`[...document.querySelectorAll('#page-pane .page-claim-investigation-need')]
+      .map((need) => [getComputedStyle(need).visibility, getComputedStyle(need).opacity])`);
+    await sleep(260);
+    const state = await side.evaluateJson(`(() => {
+      const rows = [...document.querySelectorAll('#page-pane .page-claim-investigation')];
+      const visible = rows.map((row) => {
+        const need = row.querySelector('.page-claim-investigation-need');
+        if (!need) return false;
+        const style = getComputedStyle(need);
+        return style.visibility === 'visible' && Number(style.opacity) > 0.5 && need.getBoundingClientRect().height > 0;
+      });
+      const toggles = rows.map((row) => row.querySelector('.page-claim-evidence-toggle'));
+      const needTexts = rows.map((row) =>
+        row.querySelector('.page-claim-investigation-need')?.textContent?.trim() || '');
+      const needClipped = rows.map((row, rowIndex) => {
+        const need = row.querySelector('.page-claim-investigation-need');
+        return visible[rowIndex] && need ? need.scrollHeight > need.clientHeight + 1 : false;
+      });
+      const geometry = rows.map((row) => {
+        const question = row.querySelector('.page-claim-investigation-question')?.getBoundingClientRect();
+        const need = row.querySelector('.page-claim-investigation-need')?.getBoundingClientRect();
+        const actions = row.querySelector('.page-claim-investigation-actions')?.getBoundingClientRect();
+        if (!question || !need || !actions) return null;
+        return {
+          questionNeedGap: Math.round((need.top - question.bottom) * 10) / 10,
+          needActionGap: Math.round((actions.top - need.bottom) * 10) / 10,
+          ordered: need.top >= question.bottom - 1 && actions.top >= need.bottom - 3,
+        };
+      });
+      return {
+        hoveredIndex: ${index},
+        visible,
+        needTexts,
+        needClipped,
+        geometry,
+        expanded: toggles.map((toggle) => toggle?.getAttribute('aria-expanded')),
+        ariaHidden: rows.map((row) => row.querySelector('.page-claim-investigation-need')?.getAttribute('aria-hidden')),
+        singletonTooltipVisible: document.querySelector('#truly-tooltip')?.classList.contains('visible') ?? false,
+      };
+    })()`);
+    states.push({
+      ...state,
+      onlyHoveredNeedVisible: state?.visible?.filter(Boolean).length === 1 && state.visible[index] === true,
+      hoveredNeedFits: state?.needClipped?.[index] === false,
+      prefixAbsent: !/^(?:需要|Needed)\s*[：:]/i.test(state?.needTexts?.[index] || ''),
+      adjacentAndOrdered: Boolean(
+        state?.geometry?.[index]?.ordered &&
+        state.geometry[index].questionNeedGap >= 1 &&
+        state.geometry[index].questionNeedGap <= 3 &&
+        state.geometry[index].needActionGap <= 4
+      ),
+      screenshot: relative(ROOT, resolve(OUT_DIR, `page-claim-evidence-hover-${index + 1}-430.png`)),
+    });
+    await side.screenshot(resolve(OUT_DIR, `page-claim-evidence-hover-${index + 1}-430.png`)).catch(() => {});
+  }
+  if (previousNodeId) {
+    await side.send("CSS.forcePseudoState", { nodeId: previousNodeId, forcedPseudoClasses: [] });
+  }
+  await side.clearViewport();
+  return {
+    available: true,
+    count,
+    states,
+    consistent: states.length === count && states.every((state) =>
+      state.onlyHoveredNeedVisible === true &&
+      state.hoveredNeedFits === true &&
+      state.prefixAbsent === true &&
+      state.adjacentAndOrdered === true &&
+      state.expanded.every((value) => value === "false") &&
+      state.ariaHidden.every((value) => value === "true") &&
+      state.singletonTooltipVisible === false),
+  };
+}
+
+async function auditClaimFallbackStates(side) {
+  const envelope = await side.evaluateJson(`(() => {
+    const state = globalThis.__trulyPageReadingRuntime?.auditState?.() || {};
+    return {
+      available: Boolean(state.displayedSession?.analysisKey && typeof state.displayTabId === 'number'),
+      analysisKey: state.displayedSession?.analysisKey || '',
+      tabId: state.displayTabId ?? null,
+    };
+  })()`);
+  if (!envelope?.available) return { available: false };
+
+  const applyStatuses = async (statuses) => {
+    await side.evaluate(`(() => {
+      const runtime = globalThis.__trulyPageReadingRuntime;
+      const statuses = ${JSON.stringify(statuses)};
+      statuses.forEach((status, claimIndex) => runtime?.handleGeneralPageInvestigationResult?.({
+        type: 'GENERAL_PAGE_INVESTIGATION_RESULT',
+        tabId: ${JSON.stringify(envelope.tabId)},
+        analysisKey: ${JSON.stringify(envelope.analysisKey)},
+        scope: 'page',
+        claimIndex,
+        status,
+      }));
+    })()`);
+    await new Promise((resolve) => setTimeout(resolve, 240));
+  };
+  const observe = () => side.evaluateJson(`(() => {
+    const rows = [...document.querySelectorAll('#page-pane .page-claim-row')];
+    const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || {};
+    const questions = rows.map((row) => row.querySelector('.page-claim-investigation-question')?.textContent?.trim() || '');
+    return {
+      rowCount: rows.length,
+      compactRowCount: rows.filter((row) => row.querySelector('.page-claim-investigation')).length,
+      readyCount: rows.filter((row) => row.classList.contains('is-ready')).length,
+      actionCount: rows.filter((row) => row.querySelector('.page-claim-investigation-actions')).length,
+      adapterReadyCount: runtimeState.investigationReadyCount ?? 0,
+      adapterIneligibleCount: runtimeState.investigationIneligibleCount ?? 0,
+      adapterUnavailableCount: runtimeState.investigationUnavailableCount ?? 0,
+      evidenceToggleCount: rows.filter((row) => row.querySelector('.page-claim-evidence-toggle')).length,
+      localizedQuestions: questions.every((question) => /[\u3400-\u9fff]/u.test(question)),
+      inlineEvidenceNeedPresent: rows.some((row) => /（需要證據：|\\(Evidence needed:/.test(row.textContent || '')),
+      legacyClaimCopyPresent: rows.some((row) => row.querySelector(':scope > .page-claim-copy')),
+      questions,
+    };
+  })()`);
+
+  await applyStatuses(["prepared", "prepared", "ineligible"]);
+  const mixed = await observe();
+  await side.setViewport(430, 900);
+  await side.screenshot(resolve(OUT_DIR, "page-claim-mixed-430.png")).catch(() => {});
+
+  await applyStatuses(["unavailable", "ineligible", "unavailable"]);
+  const allFallback = await observe();
+  await side.screenshot(resolve(OUT_DIR, "page-claim-all-fallback-430.png")).catch(() => {});
+
+  return {
+    available: true,
+    mixed,
+    allFallback,
+    mixedScreenshot: relative(ROOT, resolve(OUT_DIR, "page-claim-mixed-430.png")),
+    allFallbackScreenshot: relative(ROOT, resolve(OUT_DIR, "page-claim-all-fallback-430.png")),
+  };
+}
+
+async function auditResponsivePageWebLayout(side, screenshotName, width = 430) {
   const height = 900;
   try {
     await side.setViewport(width, height);
@@ -1961,6 +2304,34 @@ async function auditResponsivePageWebLayout(side, screenshotName) {
           };
         })
         .filter((item) => item.rect.width > 0 && item.rect.height > 0 && (item.rect.left < -1 || item.rect.right > window.innerWidth + 1));
+      const followupQuestionRows = Array.from(document.querySelectorAll("#page-pane .reading-brief-question-row"))
+        .map((row) => {
+          const question = row.querySelector(".reading-brief-question-text");
+          const actions = row.querySelector(".reading-brief-question-actions");
+          const rowRect = row.getBoundingClientRect();
+          const questionRect = question?.getBoundingClientRect();
+          const actionRect = actions?.getBoundingClientRect();
+          const columns = getComputedStyle(row).gridTemplateColumns;
+          return {
+            text: norm(question?.textContent).slice(0, 160),
+            columns,
+            columnCount: columns.trim().split(/\\s+/).filter(Boolean).length,
+            questionActionGap: questionRect && actionRect
+              ? Math.round((actionRect.top - questionRect.bottom) * 10) / 10
+              : null,
+            actionsBelowQuestion: Boolean(questionRect && actionRect && actionRect.top >= questionRect.bottom - 2),
+            actionsRightAligned: Boolean(actionRect && Math.abs(actionRect.right - rowRect.right) <= 1),
+          };
+        })
+        .filter((item) => item.text);
+      const questionActionsStacked = followupQuestionRows.length > 0 &&
+        followupQuestionRows.every((item) =>
+          item.columnCount === 1 &&
+          item.actionsBelowQuestion &&
+          item.actionsRightAligned &&
+          typeof item.questionActionGap === "number" &&
+          item.questionActionGap >= -2 &&
+          item.questionActionGap <= 1);
       return {
         viewport: { width: window.innerWidth, height: window.innerHeight },
         documentWidth: root.scrollWidth,
@@ -1969,6 +2340,8 @@ async function auditResponsivePageWebLayout(side, screenshotName) {
         unnamedInteractive,
         undersizedControls,
         visibleCardsOutsideViewport,
+        followupQuestionRows,
+        questionActionsStacked,
         pageText: norm(document.querySelector("#page-pane")?.innerText || "").slice(0, 2000),
       };
     })()`);
@@ -2630,20 +3003,25 @@ function assertAudit(result) {
   if ((result.success.ready.sourceLinks?.length ?? 0) > 6) {
     errors.push("successful read exposes more than six source links");
   }
-  if (result.success.responsive?.horizontalOverflow) {
-    errors.push(`Web 430px layout has horizontal overflow: documentWidth=${result.success.responsive.documentWidth}`);
-  }
-  if ((result.success.responsive?.interactiveOverflows?.length ?? 0) > 0) {
-    errors.push(`Web 430px layout clips interactive elements: ${result.success.responsive.interactiveOverflows.map((item) => item.text || item.id || item.className || item.tag).join(", ")}`);
-  }
-  if ((result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) > 0) {
-    errors.push(`Web 430px layout renders cards outside viewport: ${result.success.responsive.visibleCardsOutsideViewport.map((item) => item.className || item.tag).join(", ")}`);
-  }
-  if ((result.success.responsive?.unnamedInteractive?.length ?? 0) > 0) {
-    errors.push(`Web interactive elements are missing accessible names: ${result.success.responsive.unnamedInteractive.map((item) => item.id || item.className || item.tag).join(", ")}`);
-  }
-  if ((result.success.responsive?.undersizedControls?.length ?? 0) > 0) {
-    errors.push(`Web primary controls are too small at 430px: ${result.success.responsive.undersizedControls.map((item) => item.text || item.accessibleName || item.id || item.className || item.tag).join(", ")}`);
+  for (const [width, responsive] of [[360, result.success.responsive360], [430, result.success.responsive]]) {
+    if (responsive?.horizontalOverflow) {
+      errors.push(`Web ${width}px layout has horizontal overflow: documentWidth=${responsive.documentWidth}`);
+    }
+    if ((responsive?.interactiveOverflows?.length ?? 0) > 0) {
+      errors.push(`Web ${width}px layout clips interactive elements: ${responsive.interactiveOverflows.map((item) => item.text || item.id || item.className || item.tag).join(", ")}`);
+    }
+    if ((responsive?.visibleCardsOutsideViewport?.length ?? 0) > 0) {
+      errors.push(`Web ${width}px layout renders cards outside viewport: ${responsive.visibleCardsOutsideViewport.map((item) => item.className || item.tag).join(", ")}`);
+    }
+    if ((responsive?.unnamedInteractive?.length ?? 0) > 0) {
+      errors.push(`Web ${width}px interactive elements are missing accessible names: ${responsive.unnamedInteractive.map((item) => item.id || item.className || item.tag).join(", ")}`);
+    }
+    if ((responsive?.undersizedControls?.length ?? 0) > 0) {
+      errors.push(`Web primary controls are too small at ${width}px: ${responsive.undersizedControls.map((item) => item.text || item.accessibleName || item.id || item.className || item.tag).join(", ")}`);
+    }
+    if (responsive?.questionActionsStacked !== true) {
+      errors.push(`Web ${width}px follow-up actions are not consistently stacked below their questions`);
+    }
   }
   if (
     !result.success.copy.hasTitle ||
@@ -2988,7 +3366,9 @@ function designRestraint(result) {
     (result.success.ready.pageAnalysis?.questionListTag === "UL" &&
       result.success.ready.pageAnalysis?.questionRowTag === "LI" &&
       result.success.ready.pageAnalysis?.questionRowDisplay === "grid" &&
-      result.success.ready.pageAnalysis?.questionActionJustifySelf === "end");
+      result.success.ready.pageAnalysis?.questionActionJustifySelf === "end" &&
+      result.success.responsive360?.questionActionsStacked === true &&
+      result.success.responsive?.questionActionsStacked === true);
   const cleanReadyRawExcerptContextualized = result.success.pageBrief?.status !== "ready" ||
     (result.success.pageBrief?.rawExcerptVisible === true &&
       result.success.pageBrief?.rawExcerptDirectVisible === false &&
@@ -3027,11 +3407,13 @@ function designRestraint(result) {
       result.teaser.ready.modelContext?.diagnosticsOpen === false &&
       result.teaser.ready.advisor?.diagnosticsOpen === false
     ));
-  const responsiveClean = result.success.responsive?.horizontalOverflow === false &&
-    (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
-    (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0;
-  const interactionAccessible = (result.success.responsive?.unnamedInteractive?.length ?? 0) === 0 &&
-    (result.success.responsive?.undersizedControls?.length ?? 0) === 0;
+  const responsiveClean = [result.success.responsive360, result.success.responsive].every((responsive) =>
+    responsive?.horizontalOverflow === false &&
+    (responsive?.interactiveOverflows?.length ?? 0) === 0 &&
+    (responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0);
+  const interactionAccessible = [result.success.responsive360, result.success.responsive].every((responsive) =>
+    (responsive?.unnamedInteractive?.length ?? 0) === 0 &&
+    (responsive?.undersizedControls?.length ?? 0) === 0);
   return {
     pass: readyDiagnosticsCollapsed && cleanBriefDebugHidden && readyPageStatusConsolidated && readyBriefStatusQuiet && compactBriefSectionLayout && sharedQuestionActionLayout && cleanReadyRawExcerptContextualized && cleanReadyBriefHeaderAligned && secondaryActionsInFooter && sourceContextAndExternalToolsSeparated && sharedReadingSkeleton && pageContextExpandedHealthy && primaryActionsScopedToCard && sourceLinksCapped && nonCleanTechnicalCollapsed && responsiveClean && interactionAccessible,
     readyDiagnosticsCollapsed,
@@ -3161,25 +3543,19 @@ function claimActionPayloadContract(result) {
   const standard = links.find((link) => /Google 搜尋|Search Google/.test(link.label || ""));
   const aiMode = links.find((link) => /問 Gemini|Ask Gemini/.test(link.label || ""));
   try {
-    const standardUrl = standard ? new URL(standard.href) : null;
     const aiModeUrl = aiMode ? new URL(aiMode.href) : null;
-    const standardQuery = standardUrl?.searchParams.get("q") || "";
     const aiModePrompt = aiModeUrl?.searchParams.get("q") || "";
     return {
       pass: Boolean(
-        standardUrl && aiModeUrl &&
-        /google\.com$/u.test(standardUrl.hostname) &&
+        !standard && aiModeUrl &&
         /google\.com$/u.test(aiModeUrl.hostname) &&
-        standardUrl.searchParams.get("udm") !== "50" &&
         aiModeUrl.searchParams.get("udm") === "50" &&
-        standardQuery && aiModePrompt && standardQuery !== aiModePrompt &&
-        !/Please verify this claim|請協助查核以下說法/u.test(standardQuery) &&
-        !/https?:\/\//u.test(standardQuery) &&
+        aiModePrompt &&
         /Evidence needed|需要的證據/u.test(aiModePrompt) &&
         /Source URL \(metadata\)|來源網址（metadata）/u.test(aiModePrompt) &&
         /127\.0\.0\.1/u.test(aiModePrompt)
       ),
-      standardQueryLength: standardQuery.length,
+      standardQueryLength: 0,
       aiModePromptLength: aiModePrompt.length,
     };
   } catch {
@@ -3317,18 +3693,32 @@ function qaMatrixRows(result) {
     ],
     [
       "Claim investigation prepare",
-      result.success.claimInvestigation?.available === true &&
+        result.success.claimInvestigation?.available === true &&
         result.success.claimInvestigation?.ready === true &&
         result.success.claimInvestigation?.preparing?.observed === true &&
-        result.success.claimInvestigation?.preparing?.originalClaimVisible === true &&
-        result.success.claimInvestigation?.preparing?.readyCardVisible === false &&
+        result.success.claimInvestigation?.preparing?.compactRowVisible === true &&
+        result.success.claimInvestigation?.preparing?.actionReadyVisible === true &&
+        result.success.claimInvestigation?.preparingUi?.headingLoadingCount === 0 &&
+        result.success.claimInvestigation?.preparingUi?.perRowLoadingTextPresent === false &&
         Boolean(result.success.claimInvestigation?.question) &&
         result.success.claimInvestigation?.copyPresent === true &&
+        result.success.claimInvestigation?.evidenceTogglePresent === true &&
+        result.success.claimInvestigation?.evidenceNeedHidden === true &&
+        result.success.claimInvestigation?.evidenceNeedPrefixAbsent === true &&
+        result.success.claimInvestigation?.evidenceDisclosure?.expanded === true &&
+        result.success.claimInvestigation?.evidenceDisclosure?.hidden === false &&
+        result.success.claimInvestigation?.evidenceHover?.consistent === true &&
+        result.success.claimInvestigation?.compactRows === true &&
+        result.success.claimInvestigation?.rowCount === 3 &&
+        result.success.claimInvestigation?.bulletList === true &&
+        result.success.claimInvestigation?.localizedQuestions === true &&
+        result.success.claimInvestigation?.actionsBelowQuestion === true &&
+        result.success.claimInvestigation?.compactActionProximity === true &&
         result.success.claimInvestigation?.manualStartPresent === false &&
         result.success.claimInvestigation?.originalClaimVisible === false &&
         result.success.claimInvestigation?.redundantLabelPresent === false &&
         result.success.claimInvestigation?.openedTargetOnPrepare === false &&
-        (result.success.claimInvestigation?.links?.length ?? 0) >= 2 &&
+        (result.success.claimInvestigation?.links?.length ?? 0) === 1 &&
         result.success.claimInvestigation.links.every((link) => link.target === "_blank" && /noopener/.test(link.rel)),
       "available=" + Boolean(result.success.claimInvestigation?.available) +
         "; preparing=" + Boolean(result.success.claimInvestigation?.preparing?.observed) +
@@ -3337,19 +3727,47 @@ function qaMatrixRows(result) {
         "; links=" + (result.success.claimInvestigation?.links?.length ?? 0),
     ],
     [
-      "Claim action payload split",
+      "Claim fallback presentation",
+      result.success.claimInvestigation?.fallbackStates?.available === true &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.rowCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.compactRowCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.readyCount === 0 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.adapterReadyCount === 2 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.adapterIneligibleCount === 1 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.actionCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.evidenceToggleCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.localizedQuestions === true &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.inlineEvidenceNeedPresent === false &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.legacyClaimCopyPresent === false &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.rowCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.compactRowCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.readyCount === 0 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.adapterReadyCount === 0 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.adapterIneligibleCount === 1 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.adapterUnavailableCount === 2 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.actionCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.evidenceToggleCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.localizedQuestions === true &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.inlineEvidenceNeedPresent === false &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.legacyClaimCopyPresent === false,
+      "mixedActions=" + (result.success.claimInvestigation?.fallbackStates?.mixed?.actionCount ?? "missing") +
+        "; allFallbackActions=" + (result.success.claimInvestigation?.fallbackStates?.allFallback?.actionCount ?? "missing"),
+    ],
+    [
+      "Claim Gemini payload",
       claimActions.pass,
-      "googleKeywords=" + claimActions.standardQueryLength +
+      "standardSearchAbsent=" + (claimActions.standardQueryLength === 0) +
         "; aiModePrompt=" + claimActions.aiModePromptLength,
     ],
     [
       "Responsive Web layout",
-      result.success.responsive?.horizontalOverflow === false &&
-        (result.success.responsive?.interactiveOverflows?.length ?? 0) === 0 &&
-        (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0,
-      "430px horizontalOverflow=" + result.success.responsive?.horizontalOverflow +
-        "; clippedInteractive=" + (result.success.responsive?.interactiveOverflows?.length ?? 0) +
-        "; offscreenCards=" + (result.success.responsive?.visibleCardsOutsideViewport?.length ?? 0),
+      [result.success.responsive360, result.success.responsive].every((responsive) =>
+        responsive?.horizontalOverflow === false &&
+        (responsive?.interactiveOverflows?.length ?? 0) === 0 &&
+        (responsive?.visibleCardsOutsideViewport?.length ?? 0) === 0 &&
+        responsive?.questionActionsStacked === true),
+      "360/430px horizontalOverflow=" + result.success.responsive360?.horizontalOverflow + "/" + result.success.responsive?.horizontalOverflow +
+        "; stackedQuestions=" + result.success.responsive360?.questionActionsStacked + "/" + result.success.responsive?.questionActionsStacked,
     ],
     [
       "Web design restraint",
@@ -3715,7 +4133,8 @@ function writeSummary(result, errors) {
     `- Page brief observation: ${result.success.pageBrief?.status || "(missing)"}`,
     `- Page brief model context status: ${result.success.pageBrief?.modelContextStatus || (result.success.pageBrief?.pipelineHidden ? "hidden" : "(missing)")}`,
     `- Page brief standard contract: questionCount=${result.success.pageBrief?.standardContract?.questionCount ?? "missing"}; compactListItems=${result.success.pageBrief?.standardContract?.multiItemListCount ?? "missing"}`,
-    `- Responsive Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
+    `- Responsive Web 360px: horizontalOverflow=${result.success.responsive360?.horizontalOverflow}; stackedQuestions=${result.success.responsive360?.questionActionsStacked}; clippedInteractive=${result.success.responsive360?.interactiveOverflows?.length ?? "(missing)"}`,
+    `- Responsive Web 430px: horizontalOverflow=${result.success.responsive?.horizontalOverflow}; stackedQuestions=${result.success.responsive?.questionActionsStacked}; clippedInteractive=${result.success.responsive?.interactiveOverflows?.length ?? "(missing)"}; offscreenCards=${result.success.responsive?.visibleCardsOutsideViewport?.length ?? "(missing)"}`,
     `- Web design restraint: readyCollapsed=${restraint.readyDiagnosticsCollapsed}; cleanBriefDebugHidden=${restraint.cleanBriefDebugHidden}; pageStatusConsolidated=${restraint.readyPageStatusConsolidated}; readyBriefStatusQuiet=${restraint.readyBriefStatusQuiet}; compactBriefSectionLayout=${restraint.compactBriefSectionLayout}; sharedQuestionActionLayout=${restraint.sharedQuestionActionLayout}; cleanReadyRawExcerptContextualized=${restraint.cleanReadyRawExcerptContextualized}; cleanReadyBriefHeaderAligned=${restraint.cleanReadyBriefHeaderAligned}; secondaryActionsInFooter=${restraint.secondaryActionsInFooter}; sourceContextAndExternalToolsSeparated=${restraint.sourceContextAndExternalToolsSeparated}; sharedReadingSkeleton=${restraint.sharedReadingSkeleton}; pageContextExpandedHealthy=${restraint.pageContextExpandedHealthy}; primaryActionsScopedToCard=${restraint.primaryActionsScopedToCard}; sourceLinksCapped=${restraint.sourceLinksCapped}; nonCleanTechnicalCollapsed=${restraint.nonCleanTechnicalCollapsed}; responsiveClean=${restraint.responsiveClean}; interactionAccessible=${restraint.interactionAccessible}`,
     `- Page context expanded: present=${result.success.pageContext?.present}; open=${result.success.pageContext?.open}; preview=${result.success.pageContext?.hasPreview}; links=${result.success.pageContext?.sourceLinkCount ?? "(missing)"}; technicalCollapsed=${result.success.pageContext?.technicalDetailsCollapsed}`,
     `- Web interaction accessibility: unnamed=${result.success.responsive?.unnamedInteractive?.length ?? "(missing)"}; undersizedControls=${result.success.responsive?.undersizedControls?.length ?? "(missing)"}`,
@@ -3754,6 +4173,12 @@ function writeSummary(result, errors) {
       ? `- ${result.success.claimInvestigation.preparingScreenshot}`
       : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation.png"))}`,
+    result.success?.claimInvestigation?.evidenceScreenshot
+      ? `- ${result.success.claimInvestigation.evidenceScreenshot}`
+      : null,
+    ...(result.success?.claimInvestigation?.evidenceHover?.states ?? [])
+      .map((state) => `- ${state.screenshot}`),
+    result.success.responsive360?.screenshot ? `- ${result.success.responsive360.screenshot}` : null,
     result.success.responsive?.screenshot ? `- ${result.success.responsive.screenshot}` : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-context-expanded.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-web-history-hidden.png"))}`,
@@ -3786,27 +4211,71 @@ function assertUiOnlyAudit(result) {
   const success = result.success;
 
   if (success?.pageBrief?.status !== "ready") errors.push("Web analysis did not reach the ready state");
-  if (success?.responsive?.horizontalOverflow) errors.push("430px Web layout has horizontal overflow");
-  if ((success?.responsive?.interactiveOverflows?.length ?? 0) > 0) errors.push("430px Web layout clips interactive controls");
+  for (const [width, responsive] of [[360, success?.responsive360], [430, success?.responsive]]) {
+    if (responsive?.horizontalOverflow) errors.push(`${width}px Web layout has horizontal overflow`);
+    if ((responsive?.interactiveOverflows?.length ?? 0) > 0) errors.push(`${width}px Web layout clips interactive controls`);
+    if (responsive?.questionActionsStacked !== true) errors.push(`${width}px follow-up actions are not stacked below their questions`);
+  }
   if ((success?.responsive?.unnamedInteractive?.length ?? 0) > 0) errors.push("Web layout contains unnamed interactive controls");
   if (
     success?.claimInvestigation?.available !== true ||
     success?.claimInvestigation?.ready !== true ||
     success?.claimInvestigation?.preparing?.observed !== true ||
-    success?.claimInvestigation?.preparing?.originalClaimVisible !== true ||
-    success?.claimInvestigation?.preparing?.readyCardVisible !== false ||
+    success?.claimInvestigation?.preparing?.compactRowVisible !== true ||
+    success?.claimInvestigation?.preparing?.actionReadyVisible !== true ||
+    success?.claimInvestigation?.preparingUi?.headingLoadingCount !== 0 ||
+    success?.claimInvestigation?.preparingUi?.perRowLoadingTextPresent !== false ||
     !success?.claimInvestigation?.question ||
     success?.claimInvestigation?.copyPresent !== true ||
+    success?.claimInvestigation?.evidenceTogglePresent !== true ||
+    success?.claimInvestigation?.evidenceNeedHidden !== true ||
+    success?.claimInvestigation?.evidenceNeedPrefixAbsent !== true ||
+    success?.claimInvestigation?.evidenceDisclosure?.expanded !== true ||
+    success?.claimInvestigation?.evidenceDisclosure?.hidden !== false ||
+    success?.claimInvestigation?.evidenceHover?.consistent !== true ||
+    success?.claimInvestigation?.compactRows !== true ||
+    success?.claimInvestigation?.rowCount !== 3 ||
+    success?.claimInvestigation?.bulletList !== true ||
+    success?.claimInvestigation?.localizedQuestions !== true ||
+    success?.claimInvestigation?.actionsBelowQuestion !== true ||
+    success?.claimInvestigation?.compactActionProximity !== true ||
     success?.claimInvestigation?.manualStartPresent !== false ||
     success?.claimInvestigation?.originalClaimVisible !== false ||
     success?.claimInvestigation?.redundantLabelPresent !== false ||
     success?.claimInvestigation?.openedTargetOnPrepare !== false ||
-    (success?.claimInvestigation?.links?.length ?? 0) < 2
+    (success?.claimInvestigation?.links?.length ?? 0) !== 1
   ) {
     errors.push("Claim investigation synthetic action was not available and safely prepared");
   }
+  const fallbackStates = success?.claimInvestigation?.fallbackStates;
+  if (
+    fallbackStates?.available !== true ||
+    fallbackStates?.mixed?.rowCount !== 3 ||
+    fallbackStates?.mixed?.compactRowCount !== 3 ||
+    fallbackStates?.mixed?.readyCount !== 0 ||
+    fallbackStates?.mixed?.adapterReadyCount !== 2 ||
+    fallbackStates?.mixed?.adapterIneligibleCount !== 1 ||
+    fallbackStates?.mixed?.actionCount !== 3 ||
+    fallbackStates?.mixed?.evidenceToggleCount !== 3 ||
+    fallbackStates?.mixed?.localizedQuestions !== true ||
+    fallbackStates?.mixed?.inlineEvidenceNeedPresent !== false ||
+    fallbackStates?.mixed?.legacyClaimCopyPresent !== false ||
+    fallbackStates?.allFallback?.rowCount !== 3 ||
+    fallbackStates?.allFallback?.compactRowCount !== 3 ||
+    fallbackStates?.allFallback?.readyCount !== 0 ||
+    fallbackStates?.allFallback?.adapterReadyCount !== 0 ||
+    fallbackStates?.allFallback?.adapterIneligibleCount !== 1 ||
+    fallbackStates?.allFallback?.adapterUnavailableCount !== 2 ||
+    fallbackStates?.allFallback?.actionCount !== 3 ||
+    fallbackStates?.allFallback?.evidenceToggleCount !== 3 ||
+    fallbackStates?.allFallback?.localizedQuestions !== true ||
+    fallbackStates?.allFallback?.inlineEvidenceNeedPresent !== false ||
+    fallbackStates?.allFallback?.legacyClaimCopyPresent !== false
+  ) {
+    errors.push("Claim investigation mixed/all-fallback presentation was not compact and fail-closed");
+  }
   if (!claimActionPayloadContract(result).pass) {
-    errors.push("Google Search keywords and AI Mode prompt were not safely separated");
+    errors.push("Gemini AI Mode prompt did not preserve its safe metadata boundary");
   }
   errors.push(...assertWebFocusContinuity(success ?? {}));
   return errors;
@@ -3856,6 +4325,12 @@ function writeUiOnlySummary(result, errors) {
       ? `- ${result.success.claimInvestigation.preparingScreenshot}`
       : null,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-claim-investigation.png"))}`,
+    result.success?.claimInvestigation?.evidenceScreenshot
+      ? `- ${result.success.claimInvestigation.evidenceScreenshot}`
+      : null,
+    ...(result.success?.claimInvestigation?.evidenceHover?.states ?? [])
+      .map((state) => `- ${state.screenshot}`),
+    `- ${relative(ROOT, resolve(OUT_DIR, "page-responsive-360.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-responsive-430.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-selection-target.png"))}`,
     `- ${relative(ROOT, resolve(OUT_DIR, "page-web-restored-after-focus.png"))}`,

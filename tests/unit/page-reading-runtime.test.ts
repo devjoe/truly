@@ -1291,41 +1291,42 @@ describe("sidepanel page reading runtime", () => {
     const askLink = pagePaneEl.querySelector<HTMLAnchorElement>(".page-reader-analysis-questions .reading-brief-google-link");
     expect(askLink?.href).toContain("google.com/search");
     expect(pagePaneEl.querySelector(".page-reader-analysis-header span")).toBeNull();
-    expect(pagePaneEl.querySelectorAll(".page-reader-analysis-section.is-single")).toHaveLength(2);
+    const backgroundSection = pagePaneEl.querySelector(".page-reader-analysis-summary + .page-reader-analysis-section");
+    expect(backgroundSection?.classList.contains("is-single")).toBe(false);
+    expect(backgroundSection?.querySelector("p")).toBeNull();
+    expect(backgroundSection?.querySelectorAll("ul > li")).toHaveLength(1);
+    expect(backgroundSection?.querySelector("li")?.textContent).toBe("Context: The page is a synthetic runtime article.");
+    expect(pagePaneEl.querySelectorAll(".page-reader-analysis-section.is-single")).toHaveLength(1);
     expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
     const expandedClaimRow = pagePaneEl.querySelector(".page-claim-row");
     const investigationCard = pagePaneEl.querySelector(".page-claim-investigation");
-    expect(expandedClaimRow?.classList.contains("is-ready")).toBe(true);
+    expect(expandedClaimRow?.classList.contains("is-ready")).toBe(false);
     expect(expandedClaimRow?.querySelector(":scope > .page-claim-copy")).toBeNull();
     expect(expandedClaimRow?.children).toHaveLength(1);
     expect(investigationCard?.textContent).toContain("Runtime fixture 是否報導一項合成主張？");
     expect(investigationCard?.querySelector(".page-claim-investigation-header")).toBeNull();
     const actionLinks = [...pagePaneEl.querySelectorAll<HTMLAnchorElement>(".page-claim-investigation-actions a")];
-    const evidenceLink = actionLinks[0];
-    const aiModeLink = actionLinks[1];
-    expect(evidenceLink?.textContent).toBe("Google 搜尋");
-    expect(evidenceLink?.href).toContain("google.com/search");
-    expect(evidenceLink?.href).not.toContain("udm=50");
+    const aiModeLink = actionLinks[0];
+    expect(aiModeLink?.textContent).toBe("問 Gemini");
     expect(aiModeLink?.href).toContain("udm=50");
-    expect(new URL(evidenceLink!.href).searchParams.get("q")).not.toBe(new URL(aiModeLink!.href).searchParams.get("q"));
     expect(new URL(aiModeLink!.href).searchParams.get("q")).toContain("請查核以下主張，並以繁體中文回答");
     expect(new URL(aiModeLink!.href).searchParams.get("q")).toContain("原文主張：\"Runtime fixture reports one synthetic claim.\"");
-    expect(actionLinks).toHaveLength(2);
+    expect(actionLinks).toHaveLength(1);
     expect(pagePaneEl.textContent).not.toContain("原始來源");
     expect(pagePaneEl.querySelector(".page-claim-investigation-actions a[href='https://example.test/article']")).toBeNull();
-    for (const action of pagePaneEl.querySelectorAll(".page-claim-investigation-actions .page-claim-action")) {
-      expect(action.classList.contains("btn-investigation-secondary")).toBe(true);
-      expect(action.classList.contains("page-reader-card-action")).toBe(true);
-      expect(action.querySelector("svg")).not.toBeNull();
-      expect(action.querySelector(".btn-investigation-text")).not.toBeNull();
-    }
+    expect(pagePaneEl.querySelector(".page-claim-investigation-actions .reading-brief-copy-btn svg")).not.toBeNull();
+    expect(pagePaneEl.querySelector(".page-claim-investigation-actions .reading-brief-google-link")).toBe(aiModeLink);
+    const evidenceNeed = pagePaneEl.querySelector(".page-claim-investigation-need");
+    expect(evidenceNeed?.getAttribute("aria-hidden")).toBe("true");
+    expect(pagePaneEl.querySelector(".page-claim-evidence-toggle")?.getAttribute("aria-expanded")).toBe("false");
     const copyQuestion = pagePaneEl.querySelector<HTMLButtonElement>(".page-claim-copy-question");
-    expect(copyQuestion?.textContent).toBe("複製");
+    expect(copyQuestion?.textContent).toBe("");
     expect(copyQuestion?.getAttribute("aria-label")).toBe("複製查核問題");
     copyQuestion?.click();
     await flushMicrotasks();
     expect(copiedTexts.at(-1)).toBe("Runtime fixture 是否報導一項合成主張？");
-    expect(copyQuestion?.textContent).toBe("已複製");
+    expect(copyQuestion?.textContent).toBe("");
+    expect(copyQuestion?.getAttribute("aria-label")).toBe("已複製");
     expect(copyQuestion?.querySelector("svg")).not.toBeNull();
     const questionList = pagePaneEl.querySelector(".page-reader-analysis-questions .reading-brief-question-list");
     expect(questionList?.tagName).toBe("UL");
@@ -1924,7 +1925,7 @@ describe("sidepanel page reading runtime", () => {
         "GENERAL_PAGE_ANALYSIS_REQUEST",
       ]);
       expect(pagePaneEl.textContent).toContain("Auto-read model summary.");
-      expect(pagePaneEl.textContent).toContain("Auto-read claim");
+      expect(pagePaneEl.textContent).toContain("第 1 項主張是否有外部證據支持？");
     } finally {
       vi.useRealTimers();
     }
@@ -3471,14 +3472,13 @@ describe("sidepanel page reading runtime", () => {
     await flushMicrotasks();
     expect(analysisKey).not.toBe("");
     expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
-    const preparing = pagePaneEl.querySelector(".page-claim-preparing");
-    expect(preparing?.textContent).toBe("正在準備查核問題…");
-    expect(preparing?.getAttribute("role")).toBe("status");
-    expect(preparing?.getAttribute("aria-live")).toBe("polite");
-    expect(pagePaneEl.querySelector(".page-claim-copy")?.textContent)
-      .toContain("Runtime fixture reports one synthetic claim");
-    expect(animateInvestigationState).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(animateInvestigationState.mock.calls[0]?.[0])).toContain("height");
+    expect(pagePaneEl.querySelector(".page-claim-section-loading")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-claim-preparing")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-claim-copy")).toBeNull();
+    expect(pagePaneEl.querySelector(".page-claim-investigation")?.textContent)
+      .toContain("第 1 項主張是否有外部證據支持？");
+    expect(pagePaneEl.querySelectorAll(".page-claim-investigation-actions")).toHaveLength(1);
+    expect(animateInvestigationState).not.toHaveBeenCalled();
 
     runtime.handleGeneralPageInvestigationResult({
       type: "GENERAL_PAGE_INVESTIGATION_RESULT",
@@ -3498,7 +3498,7 @@ describe("sidepanel page reading runtime", () => {
       },
     });
     expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
-    expect(animateInvestigationState).toHaveBeenCalledTimes(1);
+    expect(animateInvestigationState).not.toHaveBeenCalled();
 
     runtime.handleGeneralPageInvestigationResult({
       type: "GENERAL_PAGE_INVESTIGATION_RESULT",
@@ -3522,17 +3522,19 @@ describe("sidepanel page reading runtime", () => {
     const readyCard = pagePaneEl.querySelector(".page-claim-investigation");
     expect(readyCard).not.toBeNull();
     expect(readyCard?.textContent).not.toContain("查核問題");
-    expect(readyCard?.textContent).toContain("Runtime fixture 是否報導一項合成主張？");
-    expect(animateInvestigationState).toHaveBeenCalledTimes(2);
+    expect(readyCard?.textContent).toContain("第 1 項主張是否有外部證據支持？");
+    expect(animateInvestigationState).not.toHaveBeenCalled();
     const links = [...pagePaneEl.querySelectorAll<HTMLAnchorElement>(".page-claim-investigation-actions a")];
-    const normalQuery = new URL(links[0]!.href).searchParams.get("q") ?? "";
-    const aiModeQuery = new URL(links[1]!.href).searchParams.get("q") ?? "";
-    expect(normalQuery).not.toContain("example.test/article");
-    expect(normalQuery).toContain("Runtime fixture reports one synthetic claim");
-    expect(normalQuery).not.toContain("An authoritative record");
+    expect(links).toHaveLength(1);
+    const aiModeQuery = new URL(links[0]!.href).searchParams.get("q") ?? "";
     expect(aiModeQuery).toContain("https://example.test/article");
     expect(aiModeQuery).toContain("請查核以下主張，並以繁體中文回答");
     expect(aiModeQuery).toContain("原文主張：\"Runtime fixture reports one synthetic claim.\"");
+    const needToggle = pagePaneEl.querySelector<HTMLButtonElement>(".page-claim-evidence-toggle");
+    needToggle?.click();
+    expect(needToggle?.getAttribute("aria-expanded")).toBe("true");
+    expect(readyCard?.classList.contains("is-evidence-open")).toBe(true);
+    expect(readyCard?.querySelector(".page-claim-investigation-need")?.getAttribute("aria-hidden")).toBe("false");
 
     prefersReducedMotion.mockReturnValue({ matches: true } as MediaQueryList);
     for (const status of ["ineligible", "unavailable"] as const) {
@@ -3544,14 +3546,18 @@ describe("sidepanel page reading runtime", () => {
         claimIndex: 0,
         status,
       });
-      expect(pagePaneEl.querySelector(".page-claim-investigation")).toBeNull();
-      expect(pagePaneEl.querySelector(".page-claim-preparing")).toBeNull();
+      const fallbackRow = pagePaneEl.querySelector(".page-claim-investigation");
+      expect(fallbackRow).not.toBeNull();
+      expect(fallbackRow?.textContent).toContain("第 1 項主張是否有外部證據支持？");
+      expect(fallbackRow?.querySelector(".page-claim-evidence-toggle")).not.toBeNull();
+      expect(fallbackRow?.querySelector(".page-claim-investigation-actions")).not.toBeNull();
+      expect(pagePaneEl.querySelector(".page-claim-section-loading")).toBeNull();
       expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
-      expect(pagePaneEl.querySelector(".page-claim-copy")?.textContent)
-        .toContain("Runtime fixture reports one synthetic claim");
+      expect(pagePaneEl.querySelector(".page-claim-copy")).toBeNull();
+      expect(fallbackRow?.textContent).not.toContain("需要證據");
       expect(pagePaneEl.textContent).not.toContain("暫時無法準備");
     }
-    expect(animateInvestigationState).toHaveBeenCalledTimes(2);
+    expect(animateInvestigationState).not.toHaveBeenCalled();
   });
 
   it("keeps a prepared action that arrives before the main analysis settles", async () => {
@@ -3633,6 +3639,117 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
     expect(pagePaneEl.querySelector(".page-claim-copy")).toBeNull();
     expect(pagePaneEl.querySelector(".page-claim-investigation")?.textContent)
-      .toContain("Runtime fixture reports one synthetic claim");
+      .toContain("第 1 項主張是否有外部證據支持？");
+  });
+
+  it("keeps Gemini, copy, and evidence disclosure consistent across Adapter outcomes", async () => {
+    const pagePaneEl = setupDom();
+    let analysisKey = "";
+    const sendMessage = vi.fn(async (message: TrulyMessage) => {
+      if (message.type === "PAGE_READING_REQUEST") {
+        return { type: "PAGE_READING_RESULT", tabId: 42, surface: surface() } satisfies TrulyMessage;
+      }
+      if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+        analysisKey = message.analysisKey;
+        return {
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: 42,
+          ok: true,
+          investigationPending: true,
+          brief: {
+            schemaVersion: 1,
+            summary: "三項合成主張。",
+            claims: [0, 1, 2].map((index) => ({
+              c: `Synthetic claim ${index + 1}.`,
+              why: `第 ${index + 1} 項影響公共判斷。`,
+              need: `第 ${index + 1} 項權威資料。`,
+              q: `第 ${index + 1} 項主張是否有外部證據支持？`,
+            })),
+            model: "brief-model",
+          },
+        } satisfies TrulyMessage;
+      }
+      throw new Error(`unexpected message ${(message as { type: string }).type}`);
+    });
+    const runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage },
+      tabs: {
+        query: vi.fn(async () => [{ id: 42, url: "https://example.test/article", title: "Runtime Fixture" }]),
+      },
+      activateTab: vi.fn(),
+      getLang: () => "zh-TW",
+      getSettings: () => ({
+        ...DEFAULT_SETTINGS,
+        deepClassifyEnabled: true,
+        tierBProvider: "openai-compatible",
+        tierBEndpoint: "http://127.0.0.1:4999/v1/chat/completions",
+        tierBModel: "brief-model",
+      }),
+      now: () => 1_000,
+      hasHostPermission: vi.fn(async () => true),
+    });
+
+    await runtime.requestReadCurrentPage("sidepanel");
+    await flushMicrotasks();
+    expect(analysisKey).not.toBe("");
+
+    runtime.handleGeneralPageInvestigationResult({
+      type: "GENERAL_PAGE_INVESTIGATION_RESULT",
+      tabId: 42,
+      analysisKey,
+      scope: "page",
+      claimIndex: 0,
+      status: "prepared",
+      preparedClaim: {
+        c: "Runtime fixture reports one synthetic claim.",
+        why: "It matters.",
+        need: "An authoritative record.",
+        q: "Does Runtime fixture report one synthetic claim?",
+        displayQ: "Does Runtime fixture report one synthetic claim?",
+        atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
+        policy: { claimKind: "fact", consequence: "public_interest" },
+      },
+    });
+    for (const claimIndex of [1, 2]) {
+      runtime.handleGeneralPageInvestigationResult({
+        type: "GENERAL_PAGE_INVESTIGATION_RESULT",
+        tabId: 42,
+        analysisKey,
+        scope: "page",
+        claimIndex,
+        status: claimIndex === 1 ? "ineligible" : "unavailable",
+      });
+    }
+
+    const rows = [...pagePaneEl.querySelectorAll<HTMLElement>(".page-claim-row")];
+    expect(rows).toHaveLength(3);
+    expect(rows.every((row) => row.querySelector(".page-claim-investigation"))).toBe(true);
+    expect(rows[0]?.textContent).toContain("第 1 項主張是否有外部證據支持？");
+    expect(rows[0]?.textContent).not.toContain("Is synthetic claim 1 supported");
+    expect(rows.every((row) => row.querySelector(".page-claim-investigation-actions"))).toBe(true);
+    for (const row of rows) {
+      const investigation = row.querySelector(".page-claim-investigation");
+      expect(investigation?.children[0]?.classList.contains("page-claim-investigation-main")).toBe(true);
+      expect(investigation?.children[1]?.classList.contains("page-claim-investigation-need")).toBe(true);
+      expect(investigation?.children[2]?.classList.contains("page-claim-investigation-actions")).toBe(true);
+    }
+    expect(pagePaneEl.querySelectorAll(".page-claim-copy-question")).toHaveLength(3);
+    expect(pagePaneEl.querySelectorAll(".reading-brief-google-link")).toHaveLength(3);
+    const toggles = [...pagePaneEl.querySelectorAll<HTMLButtonElement>(".page-claim-evidence-toggle")];
+    expect(toggles).toHaveLength(3);
+    for (const [index, toggle] of toggles.entries()) {
+      toggle.click();
+      const needs = [...pagePaneEl.querySelectorAll<HTMLElement>(".page-claim-investigation-need")];
+      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+      expect(needs[index]?.getAttribute("aria-hidden")).toBe("false");
+      expect(needs[index]?.textContent).toContain(`第 ${index + 1} 項權威資料`);
+      expect(needs[index]?.textContent).not.toMatch(/^需要[：:]/);
+      expect(toggles.filter((_, otherIndex) => otherIndex !== index)
+        .every((other) => other.getAttribute("aria-expanded") === "false")).toBe(true);
+      expect(needs.filter((_, otherIndex) => otherIndex !== index)
+        .every((other) => other.getAttribute("aria-hidden") === "true")).toBe(true);
+    }
+    expect(pagePaneEl.textContent).not.toContain("（需要證據：");
   });
 });

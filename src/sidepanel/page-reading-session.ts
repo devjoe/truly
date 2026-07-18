@@ -37,12 +37,29 @@ export interface PageReadingAnalysisSession {
   updatedAt: number;
 }
 
-export interface PageClaimInvestigationSession {
-  analysisKey: string;
+export interface PageClaimInvestigationItemSession {
   claimIndex: number;
   /** Missing only for older synthetic fixtures that predate background preparation. */
   status?: "preparing" | "ready" | "ineligible" | "unavailable";
   preparedClaim?: import("../lib/general-page-analysis").GeneralPageBriefClaim;
+}
+
+export interface PageClaimInvestigationSession extends Partial<PageClaimInvestigationItemSession> {
+  analysisKey: string;
+  /** Current bounded batch. Legacy singular fields above remain readable for old ephemeral fixtures. */
+  items?: PageClaimInvestigationItemSession[];
+}
+
+export function investigationItemForClaim(
+  session: PageClaimInvestigationSession | undefined,
+  claimIndex: number,
+): PageClaimInvestigationItemSession | undefined {
+  if (!session) return undefined;
+  const item = session.items?.find((candidate) => candidate.claimIndex === claimIndex);
+  if (item) return item;
+  return session.claimIndex === claimIndex
+    ? { claimIndex, status: session.status, preparedClaim: session.preparedClaim }
+    : undefined;
 }
 
 export interface PageReadingScopeState {

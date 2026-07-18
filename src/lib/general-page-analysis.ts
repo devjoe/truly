@@ -171,7 +171,7 @@ export function normalizeGeneralPageBrief(
     outputLang,
   };
   const bg = normalizeArray(record.bg, 2, normalizeBackground);
-  const claims = normalizeArray(record.claims, 1, normalizeClaim);
+  const claims = normalizeArray(record.claims, 3, normalizeClaim);
   const verificationTexts = claims.flatMap((claim) => [claim.c, claim.need, claim.q]);
   const questionLang = outputLang === "en" ? "en" : "zh-TW";
   const qs = normalizeArray(record.qs, 4, normalizeQuestion)

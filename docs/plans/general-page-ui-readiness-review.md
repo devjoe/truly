@@ -296,6 +296,25 @@ section at 162 px throughout loading, rendered a complete ready first frame,
 and kept `scrollTop` at zero. Screenshots and measurements remain private under
 `tmp/`.
 
+### Shared question action layout checkpoint (2026-07-18)
+
+Feed, Web, and Focus follow-up questions now use one stable vertical grammar at
+every side-panel width: the question occupies its own row and Copy / Ask Gemini
+sit on a compact right-aligned action row beneath it. The former 380 px
+breakpoint no longer changes the component into a two-column layout, so action
+placement does not depend on question length or panel width.
+
+Web verification items use the same action-row direction while retaining their
+distinct progressive evidence disclosure. The information control is
+positioned independently from the question line height; single- and multi-line
+questions therefore open the evidence panel with the same 2 px spacing above
+and below it. A deterministic no-focus CDP gate covers long questions and long
+evidence at 360 px and 430 px, with no clipping or horizontal overflow. The
+right-aligned action row is visually raised 4 px toward the question while an
+open evidence panel restores the ordinary 2 px separation. The verified
+development build was `1784391028750-5fa9f41-dirty`; screenshots remain private
+under `tmp/general-page-ui-check-2026-07-18T16-10-47-785Z`.
+
 ## Evidence Gates
 
 The current CDP audit includes Page/Web design restraint and interaction
@@ -305,8 +324,10 @@ accessibility rows. It verifies:
 - ready-path analysis readiness is compact;
 - source links are capped;
 - caution diagnostics expand;
-- the 430px Page/Web layout has no horizontal overflow, clipped interactive
-  elements, or offscreen cards;
+- the 360px and 430px Page/Web layouts have no horizontal overflow, clipped
+  interactive elements, or offscreen cards;
+- shared follow-up questions keep their actions below the question at both
+  audited widths;
 - visible controls have accessible names and no undersized primary buttons or
   tabs.
 - repeated Web reads keep internal session state without rendering a visible

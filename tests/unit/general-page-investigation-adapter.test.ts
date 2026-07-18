@@ -1,12 +1,17 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  GENERAL_PAGE_INVESTIGATION_ADAPTER_BATCH_RESPONSE_SCHEMA,
   GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA,
+  buildGeneralPageInvestigationAdapterBatchPrompt,
+  buildGeneralPageInvestigationAdapterBatchSystemPrompt,
   buildGeneralPageInvestigationAdapterPrompt,
+  parseGeneralPageInvestigationAdapterBatchContent,
   parseGeneralPageInvestigationAdapterContent,
   resolveSourceQuote,
 } from "@src/lib/general-page-investigation-adapter";
 import {
+  buildTierBGeneralPageInvestigationAdapterBatchChatBody,
   buildTierBGeneralPageInvestigationAdapterChatBody,
   callTierBGeneralPageInvestigationAdapter,
 } from "@src/lib/tier-b-client";
@@ -21,6 +26,7 @@ const input = {
   groundingText: "食藥署今日表示，中聯油品下架29項產品。完整清單另見公告。",
   source: {
     title: "問題油品流向公告",
+    authorName: "食藥署新聞稿小組",
     sourceName: "食藥署",
     publishedAt: "2026-07-16",
     url: "https://www.fda.gov.tw/example?id=29",
@@ -29,6 +35,93 @@ const input = {
 };
 
 describe("General Page investigation adapter", () => {
+  it("treats first-party opinion and evidence-family semantics as Adapter-owned", () => {
+    const prompt = buildGeneralPageInvestigationAdapterBatchPrompt({
+      ...input,
+      candidateClaims: [input.candidateClaim],
+    });
+    const system = buildGeneralPageInvestigationAdapterBatchSystemPrompt("zh-TW", "zh-TW");
+
+    expect(prompt).toContain('"authorName":"食藥署新聞稿小組"');
+    expect(system).toContain("current page is already the direct primary source");
+    expect(system).toContain("Source-sufficiency gate runs before atomic repair");
+    expect(system).toContain("authorName=AUTHOR");
+    expect(system).toContain("output decision=abstain");
+    expect(system).toContain("PERSON_B proposed CONCEPT");
+    expect(system).toContain("rebuild the external atom");
+    expect(system).toContain("are investigation semantics, not decorative UI copy");
+    expect(system).toContain("as a concise noun phrase");
+  });
+
+  it("uses one strict indexed batch contract for up to three independent candidates", () => {
+    const candidateClaims = [input.candidateClaim, input.candidateClaim, input.candidateClaim];
+    const prompt = buildGeneralPageInvestigationAdapterBatchPrompt({ ...input, candidateClaims });
+    const body = buildTierBGeneralPageInvestigationAdapterBatchChatBody({
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_schema",
+      sourceLang: "zh-TW",
+      ...input,
+      candidateClaims,
+    });
+
+    expect(prompt.indexOf("## Ranked untrusted candidate clues")).toBeLessThan(
+      prompt.indexOf("## Exact grounding text — sole copying boundary"),
+    );
+    expect(body.response_format).toEqual({
+      type: "json_schema",
+      json_schema: {
+        name: "truly_general_page_investigation_adapter_batch_v1",
+        strict: true,
+        schema: GENERAL_PAGE_INVESTIGATION_ADAPTER_BATCH_RESPONSE_SCHEMA,
+      },
+    });
+    expect(body.max_tokens).toBe(3_200);
+    expect(body.messages[0]?.content).toContain("no missing, duplicate, or additional indices");
+    expect(body.messages[0]?.content).toContain("Never combine facts");
+
+    const claim = {
+      c: "中聯油品下架29項產品。",
+      why: "涉及食品安全。",
+      need: "食藥署公告與產品清單。",
+      q: "中聯油品是否下架29項產品？",
+      displayQ: "中聯油品是否下架29項產品？",
+      atom: { s: "中聯油品", p: "下架", o: "29項產品" },
+      attribution: null,
+      policy: { claimKind: "fact", consequence: "safety" },
+      sourceQuote: "中聯油品下架29項產品。",
+    };
+    const parsed = parseGeneralPageInvestigationAdapterBatchContent(JSON.stringify({
+      schemaVersion: 1,
+      results: [
+        { claimIndex: 0, decision: "prepared", reason: "actionable", claim },
+        { claimIndex: 1, decision: "abstain", reason: "unsupported_claim", claim: null },
+        { claimIndex: 2, decision: "abstain", reason: "non_consequential", claim: null },
+      ],
+    }), { expectedCount: 3, canonicalWire: true });
+    expect(parsed.ok).toBe(true);
+    expect(parsed.value?.results.map((item) => item.value?.decision)).toEqual([
+      "prepared", "abstain", "abstain",
+    ]);
+    const partiallyInvalid = parseGeneralPageInvestigationAdapterBatchContent(JSON.stringify({
+      schemaVersion: 1,
+      results: [
+        { claimIndex: 0, decision: "prepared", reason: "actionable", claim },
+        { claimIndex: 1, decision: "prepared", reason: "actionable", claim: { broken: true } },
+      ],
+    }), { expectedCount: 2, canonicalWire: true });
+    expect(partiallyInvalid.ok).toBe(true);
+    expect(partiallyInvalid.value?.results[0]?.value?.decision).toBe("prepared");
+    expect(partiallyInvalid.value?.results[1]).toMatchObject({ value: null, error: "invalid_schema" });
+    expect(parseGeneralPageInvestigationAdapterBatchContent(JSON.stringify({
+      schemaVersion: 1,
+      results: [
+        { claimIndex: 0, decision: "abstain", reason: "unsupported_claim", claim: null },
+        { claimIndex: 0, decision: "abstain", reason: "unsupported_claim", claim: null },
+      ],
+    }), { expectedCount: 2, canonicalWire: true }).ok).toBe(false);
+  });
+
   it("treats the source URL as metadata and page text as the grounding boundary", () => {
     const prompt = buildGeneralPageInvestigationAdapterPrompt(input);
 

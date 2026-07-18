@@ -1056,63 +1056,109 @@
       line-height: 1.5;
     }
     .page-claim-section > ul {
-      padding-left: 0;
-      list-style: none;
+      padding-left: 20px;
+      list-style: disc;
     }
     .page-claim-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr);
-      gap: 3px;
-      align-items: start;
+      display: list-item;
+      margin: 1px 0 3px;
+      padding-left: 2px;
+    }
+    .page-claim-row::marker {
+      color: var(--truly-sidepanel-muted-text);
     }
     .page-claim-copy {
       min-width: 0;
     }
-    .page-claim-preparing {
-      margin: 2px 0 0 16px;
-      font-size: var(--truly-type-caption);
-    }
-    .page-claim-action {
-      min-height: 30px;
-      padding: 4px 7px;
-      border: 0;
-      border-radius: 6px;
-      background: transparent;
-      color: var(--truly-sidepanel-link);
-      font: inherit;
-      font-size: var(--truly-type-caption);
-      font-weight: 700;
-      line-height: 1.35;
-      text-decoration: none;
-      cursor: pointer;
-    }
-    .page-claim-action {
-      white-space: nowrap;
-    }
-    .page-claim-action:hover {
-      background: color-mix(in srgb, var(--truly-sidepanel-link) 10%, transparent);
-    }
     .page-claim-investigation {
       display: grid;
-      gap: 5px;
-      margin: 3px 0 2px 16px;
-      padding: 9px 10px;
-      border-left: 2px solid color-mix(in srgb, var(--truly-sidepanel-link) 42%, var(--truly-sidepanel-soft-border));
-      background: color-mix(in srgb, var(--truly-sidepanel-soft-border) 22%, transparent);
+      grid-template-columns: minmax(0, 1fr);
+      gap: 2px;
+      align-items: start;
+      position: relative;
+      margin: 0;
+      padding: 0;
+    }
+    .page-claim-investigation-main {
+      position: relative;
+      display: block;
+      min-width: 0;
     }
     .page-claim-investigation .page-claim-investigation-question {
+      padding-right: 31px;
       color: var(--truly-sidepanel-text);
     }
+    .page-claim-evidence-toggle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 27px;
+      min-width: 27px;
+      height: 27px;
+      padding: 6px;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--truly-sidepanel-muted-text);
+      cursor: help;
+      opacity: 0.72;
+    }
+    .page-claim-evidence-toggle:hover,
+    .page-claim-evidence-toggle:focus-visible,
+    .page-claim-evidence-toggle[aria-expanded="true"] {
+      background: color-mix(in srgb, var(--truly-sidepanel-link) 10%, transparent);
+      color: var(--truly-sidepanel-link);
+      opacity: 1;
+    }
+    .page-claim-evidence-toggle svg {
+      display: block;
+      width: 15px;
+      height: 15px;
+    }
     .page-claim-investigation .page-claim-investigation-need {
+      margin: 0;
+      max-height: 0;
+      padding: 0 8px;
+      overflow: hidden;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--truly-sidepanel-soft-border) 18%, transparent);
       color: var(--truly-sidepanel-muted-text);
       font-size: var(--truly-type-caption);
+      line-height: 1.4;
+      opacity: 0;
+      visibility: hidden;
+      transform: translateY(-3px);
+      transition: max-height 160ms ease-out, padding 160ms ease-out, opacity 140ms ease-out,
+        transform 140ms ease-out, visibility 0s linear 160ms, border-color 140ms ease-out;
+    }
+    .page-claim-investigation:has(.page-claim-evidence-toggle:hover) .page-claim-investigation-need,
+    .page-claim-investigation:has(.page-claim-evidence-toggle:focus-visible) .page-claim-investigation-need,
+    .page-claim-investigation.is-evidence-open .page-claim-investigation-need {
+      opacity: 1;
+      visibility: visible;
+      max-height: 72px;
+      padding: 6px 8px;
+      border-color: var(--truly-sidepanel-soft-border);
+      transform: translateY(0);
+      transition-delay: 0s;
     }
     .page-claim-investigation-actions {
       display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      justify-content: flex-start;
-      margin-top: 4px;
+      gap: 2px;
+      justify-content: flex-end;
+      margin: 0;
+    }
+    .page-claim-investigation:has(.page-claim-evidence-toggle:hover) .page-claim-investigation-actions,
+    .page-claim-investigation:has(.page-claim-evidence-toggle:focus-visible) .page-claim-investigation-actions,
+    .page-claim-investigation.is-evidence-open .page-claim-investigation-actions {
+      margin-top: 0;
+    }
+    .page-claim-investigation-actions .reading-brief-copy-btn,
+    .page-claim-investigation-actions .reading-brief-google-link {
+      min-width: 27px;
+      min-height: 27px;
+      padding: 0 5px;
     }
     .page-reader-analysis .reading-brief-question-block {
       margin-top: 9px;
@@ -1150,13 +1196,6 @@
       to { opacity: 1; }
     }
     @media (max-width: 380px) {
-      .reading-brief-question-list .reading-brief-question-row {
-        grid-template-columns: minmax(0, 1fr);
-        gap: 2px;
-      }
-      .reading-brief-question-list .reading-brief-question-actions {
-        justify-self: end;
-      }
       .page-reader-analysis-closing .page-reader-analysis-note {
         max-width: 100%;
       }
@@ -1164,6 +1203,9 @@
     @media (prefers-reduced-motion: reduce) {
       .page-reader-analysis.is-ready {
         animation: none;
+      }
+      .page-claim-investigation .page-claim-investigation-need {
+        transition: none;
       }
     }
     .page-reader-analysis-retry {
@@ -1889,9 +1931,9 @@
     }
     .reading-brief-question-row {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr);
       align-items: flex-start;
-      gap: 8px;
+      gap: 2px;
       color: var(--truly-sidepanel-text);
       font-size: var(--truly-type-body);
       line-height: 1.5;
@@ -1905,6 +1947,7 @@
       align-items: center;
       justify-self: end;
       gap: 5px;
+      margin-top: -4px;
       flex: 0 0 auto;
       white-space: nowrap;
     }

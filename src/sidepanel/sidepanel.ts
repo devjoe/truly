@@ -230,6 +230,6 @@ const activateTab = initializeSidepanelBootstrap({
     onActivate(tab);
   }),
   initializeStorageState: storageRuntime.initializeStorageState,
+  onStorageReady: pageReadingRuntime.install,
 });
 tabActivationRuntime.setActivateTab(activateTab);
-pageReadingRuntime.install();

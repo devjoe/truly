@@ -6,6 +6,7 @@ import {
   buildPageClaimInvestigationTask,
   deterministicClaimQuestion,
   geminiEvidenceSearchUrl,
+  pageClaimDisplayQuestion,
   pageClaimInvestigationEligibility,
   preparePageClaimInvestigation,
   standardEvidenceSearchUrl,
@@ -13,6 +14,25 @@ import {
 } from "@src/sidepanel/page-claim-investigation";
 
 describe("page claim investigation contract", () => {
+  it("keeps display questions in the requested UI language", () => {
+    expect(pageClaimDisplayQuestion({
+      outputLang: "zh-TW",
+      candidateQuestion: "第 1 項政策是否有官方資料支持？",
+      preparedQuestion: "Is the first policy supported by official records?",
+    })).toBe("第 1 項政策是否有官方資料支持？");
+    expect(pageClaimDisplayQuestion({
+      outputLang: "zh-TW",
+      candidateQuestion: "Is the first policy supported by official records?",
+      preparedQuestion: "Is it supported?",
+      claimIndex: 1,
+    })).toBe("第 2 項主張是否有外部證據支持？");
+    expect(pageClaimDisplayQuestion({
+      outputLang: "en",
+      candidateQuestion: "第一項政策是否有官方資料支持？",
+      preparedQuestion: "Is the first policy supported by official records?",
+    })).toBe("Is the first policy supported by official records?");
+  });
+
   it("keeps URL out of Google keywords but includes it as AI Mode metadata", () => {
     const claimText = "食藥署表示，中聯油品下架29項產品。";
     const task = buildPageClaimInvestigationTask({
@@ -1060,6 +1080,22 @@ describe("page claim investigation contract", () => {
     expect(pageClaimInvestigationEligibility(claim, claim.c)).toEqual({
       ok: false,
       reason: "generic_evidence_need",
+    });
+  });
+
+  it("rejects a second verification question disguised as an evidence need", () => {
+    const claim = {
+      c: "唐鳳認為人應被允許活得超出機器評量範圍。",
+      why: "這是公共利益觀點。",
+      need: "需查核唐鳳是否在其他場合重申此觀點，以確認其一致性。",
+      q: "唐鳳是否認為人應被允許活得超出機器評量範圍？",
+      atom: { s: "唐鳳", p: "認為", o: "人應被允許活得超出機器評量範圍" },
+      policy: { claimKind: "expert_analysis" as const, consequence: "public_interest" as const },
+    };
+
+    expect(pageClaimInvestigationEligibility(claim, claim.c)).toEqual({
+      ok: false,
+      reason: "invalid_evidence_need",
     });
   });
 

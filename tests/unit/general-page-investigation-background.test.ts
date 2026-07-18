@@ -19,6 +19,7 @@ const request: GeneralPageAnalysisRequestMsg = {
     url: "https://example.test/article",
     domain: "example.test",
     sourceName: "Fixture News",
+    authorName: "Fixture Author",
     publishedAt: "2026-07-16",
     mainText: "Runtime fixture reports one synthetic claim.",
     links: [],
@@ -43,7 +44,7 @@ const brief = {
 };
 
 describe("background General Page investigation preparation", () => {
-  it("schedules one derived, supersedable adapter job and preserves URL as metadata", async () => {
+  it("schedules one derived job and keeps Adapter-owned investigation semantics", async () => {
     let captured: any;
     const scheduler = {
       enqueue: vi.fn(async (job: any) => {
@@ -52,26 +53,41 @@ describe("background General Page investigation preparation", () => {
       }),
     };
     const sendMessage = vi.fn();
+    const localizedBrief = {
+      ...brief,
+      claims: [{
+        ...brief.claims[0],
+        q: "Runtime fixture 是否報導一項合成主張？",
+      }],
+    };
     const callAdapter = vi.fn(async (input: any) => ({
       ok: true,
       value: {
         schemaVersion: 1,
-        decision: "prepared",
-        reason: "actionable",
-        claim: {
-          ...brief.claims[0],
-          why: "Source-language adapter explanation.",
-          need: "Source-language adapter evidence need.",
-          atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
-          policy: { claimKind: "fact", consequence: "public_interest" },
-        },
+        results: [{
+          claimIndex: 0,
+          value: {
+            schemaVersion: 1,
+            decision: "prepared",
+            reason: "actionable",
+            claim: {
+              ...brief.claims[0],
+              q: "Does Runtime fixture report one synthetic claim?",
+              displayQ: "這項合成主張是否由 Runtime fixture 報導？",
+              why: "Adapter 整理的重要性。",
+              need: "Runtime fixture 的原始發布紀錄。",
+              atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
+              policy: { claimKind: "fact", consequence: "public_interest" },
+            },
+          },
+        }],
       },
     }));
 
     expect(scheduleGeneralPageInvestigationPreparation({
       scheduler: scheduler as never,
-      request,
-      brief,
+      request: { ...request, outputLang: "zh-TW" },
+      brief: localizedBrief,
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
       structuredOutputMode: "json_schema",
@@ -95,8 +111,9 @@ describe("background General Page investigation preparation", () => {
       analysisKey: "page:key",
       status: "prepared",
       preparedClaim: expect.objectContaining({
-        why: "It matters.",
-        need: "An authoritative record.",
+        why: "Adapter 整理的重要性。",
+        need: "Runtime fixture 的原始發布紀錄。",
+        displayQ: "這項合成主張是否由 Runtime fixture 報導？",
       }),
     }));
   });
@@ -108,7 +125,13 @@ describe("background General Page investigation preparation", () => {
     const sendMessage = vi.fn();
     const callAdapter = vi.fn(async () => ({
       ok: true,
-      value: { schemaVersion: 1, decision: "abstain", reason: "unsupported_claim" },
+      value: {
+        schemaVersion: 1,
+        results: [{
+          claimIndex: 0,
+          value: { schemaVersion: 1, decision: "abstain", reason: "unsupported_claim" },
+        }],
+      },
     }));
     const englishRequest: GeneralPageAnalysisRequestMsg = {
       ...request,
@@ -138,6 +161,57 @@ describe("background General Page investigation preparation", () => {
     }));
   });
 
+  it("does not mistake a localized proper noun for the requested interface language", async () => {
+    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const sendMessage = vi.fn();
+    const callAdapter = vi.fn(async () => ({
+      ok: true,
+      value: {
+        schemaVersion: 1,
+        results: [{
+          claimIndex: 0,
+          value: {
+            schemaVersion: 1,
+            decision: "prepared",
+            reason: "actionable",
+            claim: {
+              ...brief.claims[0],
+              displayQ: "Does FT report this synthetic claim?",
+              atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
+              policy: { claimKind: "fact", consequence: "public_interest" },
+            },
+          },
+        }],
+      },
+    }));
+
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request: { ...request, outputLang: "en" },
+      brief: {
+        ...brief,
+        claims: [{
+          ...brief.claims[0],
+          q: "FT 是否報導這項合成主張？",
+        }],
+      },
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_object",
+      resourceKey: "gx10|fixture-model",
+      callAdapter,
+      sendMessage,
+    });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalled());
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      status: "prepared",
+      preparedClaim: expect.objectContaining({
+        displayQ: "Does FT report this synthetic claim?",
+      }),
+    }));
+  });
+
   it("fails closed after the first rejected adapter result instead of repairing in runtime", async () => {
     const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
     const sendMessage = vi.fn();
@@ -146,26 +220,32 @@ describe("background General Page investigation preparation", () => {
         ok: true,
         value: {
           schemaVersion: 1,
-          decision: "prepared",
-          reason: "actionable",
-          claim: {
-            ...brief.claims[0],
-            atom: { s: "Runtime fixture", p: "reported", o: "one synthetic claim" },
-            policy: { claimKind: "fact", consequence: "public_interest" },
-          },
+          results: [{ claimIndex: 0, value: {
+            schemaVersion: 1,
+            decision: "prepared",
+            reason: "actionable",
+            claim: {
+              ...brief.claims[0],
+              atom: { s: "Runtime fixture", p: "reported", o: "one synthetic claim" },
+              policy: { claimKind: "fact", consequence: "public_interest" },
+            },
+          } }],
         },
       })
       .mockResolvedValueOnce({
         ok: true,
         value: {
           schemaVersion: 1,
-          decision: "prepared",
-          reason: "actionable",
-          claim: {
-            ...brief.claims[0],
-            atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
-            policy: { claimKind: "fact", consequence: "public_interest" },
-          },
+          results: [{ claimIndex: 0, value: {
+            schemaVersion: 1,
+            decision: "prepared",
+            reason: "actionable",
+            claim: {
+              ...brief.claims[0],
+              atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
+              policy: { claimKind: "fact", consequence: "public_interest" },
+            },
+          } }],
         },
       });
 
@@ -199,16 +279,19 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       value: {
         schemaVersion: 1,
-        decision: "prepared",
-        reason: "actionable",
-        claim: {
-          c: attributedText,
-          why: "涉及武器供應鏈與出口管制。",
-          need: "烏克蘭政府原始估計與零件調查資料。",
-          q: "俄羅斯飛彈是否有九成裝著日本製零件？",
-          atom: { s: "俄羅斯飛彈", p: "有九成裝著", o: "日本製零件" },
-          policy: { claimKind: "estimate", consequence: "public_interest" },
-        },
+        results: [{ claimIndex: 0, value: {
+          schemaVersion: 1,
+          decision: "prepared",
+          reason: "actionable",
+          claim: {
+            c: attributedText,
+            why: "涉及武器供應鏈與出口管制。",
+            need: "烏克蘭政府原始估計與零件調查資料。",
+            q: "俄羅斯飛彈是否有九成裝著日本製零件？",
+            atom: { s: "俄羅斯飛彈", p: "有九成裝著", o: "日本製零件" },
+            policy: { claimKind: "estimate", consequence: "public_interest" },
+          },
+        } }],
       },
     }));
 
@@ -231,6 +314,55 @@ describe("background General Page investigation preparation", () => {
         attribution: { source: "烏克蘭政府", relation: "估計", modality: "estimate" },
       }),
     }));
+  });
+
+  it("prepares up to three candidates in one derived adapter job and settles each independently", async () => {
+    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const sendMessage = vi.fn();
+    const claims = [0, 1, 2].map((index) => ({
+      c: `Fixture claim ${index}.`,
+      why: `Reason ${index}.`,
+      need: `Evidence family ${index}.`,
+      q: `Is fixture claim ${index} correct?`,
+    }));
+    const callAdapter = vi.fn(async () => ({
+      ok: true,
+      value: {
+        schemaVersion: 1 as const,
+        results: claims.map((_, claimIndex) => claimIndex === 1
+          ? { claimIndex, value: null, error: "invalid_schema" as const }
+          : {
+              claimIndex,
+              value: {
+                schemaVersion: 1 as const,
+                decision: "abstain" as const,
+                reason: "unsupported_claim" as const,
+              },
+            }),
+      },
+    }));
+
+    expect(scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request,
+      brief: { ...brief, claims },
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_schema",
+      resourceKey: "gx10|fixture-model",
+      callAdapter,
+      sendMessage,
+    })).toBe(true);
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(3));
+
+    expect(scheduler.enqueue).toHaveBeenCalledTimes(1);
+    expect(callAdapter).toHaveBeenCalledTimes(1);
+    expect(callAdapter).toHaveBeenCalledWith(expect.objectContaining({ candidateClaims: claims }));
+    expect(sendMessage.mock.calls.map(([message]) => [message.claimIndex, message.status])).toEqual([
+      [0, "ineligible"],
+      [1, "unavailable"],
+      [2, "ineligible"],
+    ]);
   });
 
   it("does not schedule overview or claim-free reading results", () => {

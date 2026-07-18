@@ -1054,6 +1054,51 @@ The private Case-plan runner is prepared for this v3 contract, but no closed
 development pool or holdout was reopened and no Agent runtime action is
 authorized by this implementation.
 
+#### Compact multi-candidate preparation (2026-07-18)
+
+General Page reading may now nominate up to three ranked claim candidates, but
+runtime preparation remains one low-priority derived Adapter request. The batch
+wire contract requires one ordered result per candidate index; missing,
+duplicate, extra, or malformed results fail closed. Each candidate then passes
+the unchanged local eligibility guard independently, yielding zero to three
+prepared actions without multiplying Queue work.
+
+The product row is intentionally narrower than the earlier three-action split.
+It is rendered as a normal bullet, shows the localized verification question,
+then places an icon-only copy action and `問 Gemini` on a separate action line.
+While the bounded batch is running, one group-level indicator beside the
+section heading replaces repeated per-item loading messages. Standard Google
+Search is no longer rendered because AI Mode is the
+supported conversational handoff; source-language keyword generation remains
+available only to internal evaluation and future Agent discovery work. The
+localized evidence family is hidden by default and disclosed through an
+accessible info affordance on hover, keyboard focus, or touch. Whole-result
+copy and Markdown download remain responsibilities of External Tool
+Integration and are not duplicated per claim.
+
+#### Prepared-field ownership and source sufficiency (2026-07-19)
+
+The Investigation Adapter now owns every field of an accepted prepared claim;
+the service worker no longer replaces its rebuilt rationale, evidence family,
+or localized display question with the earlier Reading Brief candidate. This
+keeps the Adapter a semantic boundary instead of a translation-only pass.
+
+Source sufficiency remains prompt-first. A signed first-person opinion page is
+already the primary source for whether its author expressed that opinion, so
+the Adapter should abstain rather than manufacture a request to check whether
+the author repeated it elsewhere. An external proposition attributed to a
+third party on that page remains eligible and should be rebuilt to that single
+external atom. Evidence need is a named source family, not a second question or
+an instruction to verify. Local code adds only a small fail-closed format guard
+for unmistakably procedural evidence text.
+
+A no-focus replay against one current public opinion article exercised three
+candidates: two author-view candidates abstained, while one third-party concept
+was retained and rebuilt with an original-speech/article/official-publication
+evidence family. This was a semantic preparation check only; it performed no
+public search, evidence retrieval, or verdict generation, and retained no page
+content in the public repository.
+
 #### Product semantic-action development baseline (2026-07-16)
 
 The product-equivalent private runner now evaluates the Standard Reading Brief,

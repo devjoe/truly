@@ -72,10 +72,11 @@ import {
 } from "./reading-brief-text";
 import { createReadingBriefQuestionList } from "./reading-brief-renderer";
 import {
-  buildPageClaimInvestigationTask,
+  buildGoogleAiModePrompt,
   geminiEvidenceSearchUrl,
-  standardEvidenceSearchUrl,
-  type PageClaimInvestigationTask,
+  pageClaimDisplayQuestion,
+  type ClaimVerificationIntent,
+  type PageClaimInvestigationSource,
 } from "./page-claim-investigation";
 import {
   formatCompactPageReadingExport,
@@ -106,7 +107,6 @@ import {
   type PageReadingAdvisorStatus,
   type PageReadingAnalysisSession,
   type PageReadingAnalysisStatus,
-  type PageClaimInvestigationSession,
   type PageReadingScopeKind,
   type PageReadingScopeState,
   type PageReadingScreenshotSession,
@@ -932,8 +932,6 @@ function advisorHtml(
 const COPY_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="11" height="11" rx="2"></rect><rect x="9" y="9" width="11" height="11" rx="2"></rect></svg>`;
 const DOWNLOAD_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12"></path><path d="M8 11l4 4 4-4"></path><path d="M5 21h14"></path></svg>`;
 const INFO_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5"></path><path d="M12 8h.01"></path></svg>`;
-const SEARCH_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M20 20l-4-4"></path></svg>`;
-const MESSAGE_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path><path d="M9 9h6"></path><path d="M9 13h4"></path></svg>`;
 
 function analysisHtml(
   analysis: PageReadingAnalysisSession | undefined,
@@ -942,9 +940,7 @@ function analysisHtml(
   pageTitle?: string,
   omitBriefNote = false,
   titleOverride?: string,
-  investigation?: PageClaimInvestigationSession,
-  scope: PageReadingScopeKind = "page",
-  source?: { groundingText?: string; title?: string; sourceName?: string; publishedAt?: string; url?: string },
+  source?: PageClaimInvestigationSource,
 ): string {
   if (!analysis || analysis.status === "idle") return "";
   const overview = analysis.allowedUse === "page_overview_only";
@@ -971,10 +967,6 @@ function analysisHtml(
     `
     : analysis.brief
     ? briefHtml(analysis.brief, analysis.allowedUse, tr, lang, pageTitle, omitBriefNote, {
-        analysisKey: analysis.key ?? "",
-        scope,
-        investigation,
-        groundingText: source?.groundingText ?? "",
         source,
       })
     : "";
@@ -997,11 +989,7 @@ function briefHtml(
   pageTitle?: string,
   omitNote = false,
   investigationContext?: {
-    analysisKey: string;
-    scope: PageReadingScopeKind;
-    investigation?: PageClaimInvestigationSession;
-    groundingText: string;
-    source?: { title?: string; sourceName?: string; publishedAt?: string; url?: string };
+    source?: PageClaimInvestigationSource;
   },
 ): string {
   const modelLabel = modelDisplayIdentity(brief.model).label || brief.model;
@@ -1021,7 +1009,7 @@ function briefHtml(
   return `
     <p class="page-reader-analysis-summary">${escapeHtml(brief.summary)}</p>
     ${briefSectionHtml("", brief.bg?.map((item) => `${item.t}: ${item.why}${item.q ? ` ${item.q}` : ""}`) ?? [])}
-    ${overview ? "" : briefClaimsHtml(brief.claims ?? [], investigationContext, tr)}
+    ${overview ? "" : briefClaimsHtml(brief.claims ?? [], investigationContext, tr, lang)}
     ${briefQuestionsHtml(brief.qs ?? [], {
       title: investigationContext?.source?.title || pageTitle,
       summary: brief.summary,
@@ -1038,36 +1026,13 @@ function briefClaimsHtml(
   claims: NonNullable<GeneralPageBrief["claims"]>,
   context: Parameters<typeof briefHtml>[6],
   tr: (key: string, params?: Record<string, string | number>) => string,
+  lang: Lang,
 ): string {
   if (!claims?.length) return "";
-  const rows = claims.map((claim, claimIndex) => {
-    const preparation = context?.investigation;
-    const matchingPreparation = preparation && preparation.analysisKey === context?.analysisKey &&
-      preparation.claimIndex === claimIndex
-      ? preparation
-      : undefined;
-    const preparing = matchingPreparation?.status === "preparing";
-    const taskClaim = !matchingPreparation?.status
-      ? claim
-      : matchingPreparation.status === "ready"
-      ? matchingPreparation.preparedClaim
-      : undefined;
-    const task = context && taskClaim && buildPageClaimInvestigationTask({
-      analysisKey: context.analysisKey,
-      scope: context.scope,
-      claimIndex,
-      claim: taskClaim,
-      groundingText: context.groundingText,
-      source: context.source,
-    });
-    return `
-      <li class="page-claim-row${task ? " is-ready" : preparing ? " is-preparing" : ""}" data-claim-index="${claimIndex}">
-        ${task
-          ? claimInvestigationHtml(task, tr)
-          : `<div class="page-claim-copy">${escapeHtml(tr("sidepanel.dynamic.readingBrief.needEvidence", { claim: claim.c, need: claim.need }))}</div>
-             ${preparing ? `<div class="page-claim-preparing reading-brief-loading" role="status" aria-live="polite">${escapeHtml(tr("sidepanel.page.investigation.preparing"))}</div>` : ""}`}
-      </li>`;
-  }).join("");
+  const rows = claims.map((claim, claimIndex) => `
+      <li class="page-claim-row" data-claim-index="${claimIndex}">
+        ${claimInvestigationHtml({ claim, claimIndex, source: context?.source, tr, lang })}
+      </li>`).join("");
   return `
     <div class="page-reader-analysis-section page-claim-section">
       <h4>${escapeHtml(tr("sidepanel.dynamic.readingBrief.verify"))}</h4>
@@ -1075,88 +1040,55 @@ function briefClaimsHtml(
     </div>`;
 }
 
-function claimInvestigationHtml(
-  task: PageClaimInvestigationTask,
+function claimInvestigationHtml({
+  claim,
+  claimIndex,
+  source,
+  tr,
+  lang,
+}: {
+  claim: NonNullable<GeneralPageBrief["claims"]>[number];
+  claimIndex: number;
+  source?: PageClaimInvestigationSource;
   tr: (key: string, params?: Record<string, string | number>) => string,
-): string {
-  const searchLabel = tr("sidepanel.page.investigation.search");
+  lang: Lang;
+}): string {
   const geminiLabel = tr("sidepanel.dynamic.readingBrief.askGemini");
-  const copyLabel = tr("sidepanel.page.investigation.copy");
   const copyAriaLabel = tr("sidepanel.page.investigation.copyAria");
+  const evidenceLabel = tr("sidepanel.page.investigation.showNeed");
+  const needId = `page-claim-need-${claimIndex}`;
+  const displayQuestion = pageClaimDisplayQuestion({
+    outputLang: lang,
+    candidateQuestion: claim.displayQ ?? claim.q,
+    preparedQuestion: claim.q,
+    claimIndex,
+  });
+  const localizedIntent: ClaimVerificationIntent = {
+    exactClaim: claim.c,
+    why: claim.why,
+    evidenceNeed: claim.need,
+    question: claim.q || displayQuestion,
+    displayQuestion,
+    ...(source ? { sourceContext: source } : {}),
+  };
   return `
-    <section class="page-claim-investigation" data-task-id="${escapeHtml(task.id)}">
-      <p class="page-claim-investigation-question">${escapeHtml(task.intent.displayQuestion)}</p>
-      <p class="page-claim-investigation-need">${escapeHtml(tr("sidepanel.page.investigation.need", { need: task.intent.evidenceNeed }))}</p>
-      <div class="page-claim-investigation-actions">
-        <a class="btn-investigation-secondary page-reader-card-action page-claim-action" href="${escapeHtml(standardEvidenceSearchUrl(task.googleKeywords))}" target="_blank" rel="noopener noreferrer">${SEARCH_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(searchLabel)}</span></a>
-        <a class="btn-investigation-secondary page-reader-card-action page-claim-action" href="${escapeHtml(geminiEvidenceSearchUrl(task.aiModePrompt))}" target="_blank" rel="noopener noreferrer">${MESSAGE_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(geminiLabel)}</span></a>
-        <button class="btn-investigation-secondary page-reader-card-action page-claim-action page-claim-copy-question" type="button" data-question="${escapeHtml(task.intent.displayQuestion)}" aria-label="${escapeHtml(copyAriaLabel)}" data-tooltip="${escapeHtml(copyAriaLabel)}">${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(copyLabel)}</span></button>
+    <section class="page-claim-investigation">
+      <div class="page-claim-investigation-main">
+        <p class="page-claim-investigation-question">${escapeHtml(displayQuestion)}</p>
+        <button class="page-claim-evidence-toggle" type="button" aria-expanded="false" aria-controls="${needId}" aria-label="${escapeHtml(evidenceLabel)}">${INFO_ICON_SVG}</button>
+      </div>
+      <p id="${needId}" class="page-claim-investigation-need" role="tooltip" aria-hidden="true">${escapeHtml(claim.need)}</p>
+      <div class="reading-brief-question-actions page-claim-investigation-actions">
+        <button class="reading-brief-copy-btn page-claim-copy-question" type="button" data-question="${escapeHtml(displayQuestion)}" aria-label="${escapeHtml(copyAriaLabel)}" data-tooltip="${escapeHtml(copyAriaLabel)}">${COPY_ICON_SVG}</button>
+        <a class="reading-brief-google-link" href="${escapeHtml(geminiEvidenceSearchUrl(buildGoogleAiModePrompt(localizedIntent)))}" target="_blank" rel="noopener noreferrer">${escapeHtml(geminiLabel)}</a>
       </div>
     </section>`;
 }
 
 function setPageClaimCopyButtonLabel(button: HTMLButtonElement, label: string): void {
-  button.innerHTML = `${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(label)}</span>`;
-}
-
-const CLAIM_ROW_STATE_CHANGE_MS = 180;
-
-type ClaimRowPresentation = "fallback" | "preparing" | "ready";
-
-interface ClaimRowSnapshot {
-  height: number;
-  presentation: ClaimRowPresentation;
-}
-
-function claimRowPresentation(row: HTMLElement): ClaimRowPresentation {
-  if (row.classList.contains("is-ready")) return "ready";
-  if (row.classList.contains("is-preparing")) return "preparing";
-  return "fallback";
-}
-
-function claimRowSnapshot(root: ParentNode): ClaimRowSnapshot | undefined {
-  const row = root.querySelector<HTMLElement>(".page-claim-row");
-  if (!row) return undefined;
-  return {
-    height: row.getBoundingClientRect().height,
-    presentation: claimRowPresentation(row),
-  };
-}
-
-function canAnimateClaimRow(row: HTMLElement): boolean {
-  const view = row.ownerDocument.defaultView;
-  const reduceMotion = view?.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-  return !reduceMotion && typeof row.animate === "function";
-}
-
-function animateClaimRowStateChange(root: ParentNode, previous: ClaimRowSnapshot | undefined): void {
-  if (!previous) return;
-  const row = root.querySelector<HTMLElement>(".page-claim-row");
-  if (!row || claimRowPresentation(row) === previous.presentation) return;
-  if (!canAnimateClaimRow(row)) return;
-  const nextHeight = row.getBoundingClientRect().height;
-  const offset = row.classList.contains("is-ready") ? 4 : -3;
-  row.style.overflow = "hidden";
-  const animation = row.animate([
-    {
-      height: `${Math.max(0, previous.height)}px`,
-      opacity: 0.28,
-      transform: `translateY(${offset}px)`,
-    },
-    {
-      height: `${Math.max(0, nextHeight)}px`,
-      opacity: 1,
-      transform: "translateY(0)",
-    },
-  ], {
-    duration: CLAIM_ROW_STATE_CHANGE_MS,
-    easing: "cubic-bezier(0.16, 1, 0.3, 1)",
-    fill: "both",
-  });
-  void animation.finished.then(
-    () => row.style.removeProperty("overflow"),
-    () => row.style.removeProperty("overflow"),
-  );
+  button.innerHTML = COPY_ICON_SVG;
+  button.setAttribute("aria-label", label);
+  button.dataset.tooltip = label;
 }
 
 /**
@@ -1187,14 +1119,6 @@ function briefQuestionsHtml(
 function briefSectionHtml(title: string, items: string[]): string {
   if (items.length === 0) return "";
   const heading = title ? `<h4>${escapeHtml(title)}</h4>` : "";
-  if (items.length === 1) {
-    return `
-      <div class="page-reader-analysis-section is-single">
-        ${heading}
-        <p>${escapeHtml(items[0])}</p>
-      </div>
-    `;
-  }
   return `
     <div class="page-reader-analysis-section">
       ${heading}
@@ -1752,11 +1676,7 @@ export function createSidepanelPageReadingRuntime({
       viewSession?.surface?.title || viewSession?.title,
       omitBriefNote,
       focusAnalysisTitle,
-      viewSession?.investigation,
-      activeWorkspace,
       {
-        groundingText: viewSession?.advisor?.effectiveModelContext?.mainText ??
-          (activeWorkspace === "focus" ? viewSession?.target?.text : modelContext?.mainText) ?? "",
         title: viewSession?.surface?.title || viewSession?.title,
         sourceName: viewSession?.surface?.sourceName,
         publishedAt: viewSession?.surface?.publishedAt,
@@ -1968,6 +1888,28 @@ export function createSidepanelPageReadingRuntime({
         } catch {
           setPageClaimCopyButtonLabel(copyButton, tr("sidepanel.page.copy.failed"));
         }
+      });
+    }
+    for (const evidenceToggle of pagePaneEl.querySelectorAll<HTMLButtonElement>(".page-claim-evidence-toggle")) {
+      evidenceToggle.addEventListener("click", (event) => {
+        event.stopPropagation();
+        const row = evidenceToggle.closest<HTMLElement>(".page-claim-investigation");
+        if (!row) return;
+        const open = evidenceToggle.getAttribute("aria-expanded") !== "true";
+        for (const other of pagePaneEl.querySelectorAll<HTMLButtonElement>(".page-claim-evidence-toggle")) {
+          const otherRow = other.closest<HTMLElement>(".page-claim-investigation");
+          const otherNeed = otherRow?.querySelector<HTMLElement>(".page-claim-investigation-need");
+          other.setAttribute("aria-expanded", "false");
+          otherRow?.classList.remove("is-evidence-open");
+          otherNeed?.setAttribute("aria-hidden", "true");
+        }
+        const need = row.querySelector<HTMLElement>(".page-claim-investigation-need");
+        evidenceToggle.setAttribute("aria-expanded", String(open));
+        evidenceToggle.setAttribute("aria-label", tr(open
+          ? "sidepanel.page.investigation.hideNeed"
+          : "sidepanel.page.investigation.showNeed"));
+        row.classList.toggle("is-evidence-open", open);
+        need?.setAttribute("aria-hidden", String(!open));
       });
     }
     pagePaneEl.querySelector<HTMLButtonElement>("#pageScreenshotCapture")?.addEventListener("click", () => {
@@ -2366,20 +2308,15 @@ export function createSidepanelPageReadingRuntime({
     const currentScope = scopeStateForSession(session, scope);
     if (currentScope.analysis?.key !== analysisKey) return;
     if (currentScope.investigation?.analysisKey === analysisKey) return;
-    const shouldRender = (tabId === activeTabId || tabId === displayTabId) && pageWorkspace === scope;
-    const previousRow = shouldRender ? claimRowSnapshot(pagePaneEl) : undefined;
+    const claims = currentScope.analysis?.brief?.claims?.slice(0, 3) ?? [];
+    if (!claims.length) return;
     sessions.set(tabId, replaceScopeState(session, scope, {
       ...currentScope,
       investigation: {
         analysisKey,
-        claimIndex: 0,
-        status: "preparing",
+        items: claims.map((_, claimIndex) => ({ claimIndex, status: "preparing" as const })),
       },
     }));
-    if (shouldRender) {
-      render();
-      animateClaimRowStateChange(pagePaneEl, previousRow);
-    }
   }
 
   function handleGeneralPageInvestigationResult(message: GeneralPageInvestigationResultMsg): void {
@@ -2389,22 +2326,34 @@ export function createSidepanelPageReadingRuntime({
     if (currentScope.analysis?.key !== message.analysisKey ||
       (currentScope.analysis.status !== "running" && currentScope.analysis.status !== "ready")) return;
     if (message.status === "prepared" && !message.preparedClaim) return;
-    const shouldRender = (message.tabId === activeTabId || message.tabId === displayTabId) &&
-      pageWorkspace === message.scope;
-    const previousRow = shouldRender ? claimRowSnapshot(pagePaneEl) : undefined;
+    const previousInvestigation = currentScope.investigation?.analysisKey === message.analysisKey
+      ? currentScope.investigation
+      : { analysisKey: message.analysisKey, items: [] };
+    const previousItems = previousInvestigation.items ?? (
+      typeof previousInvestigation.claimIndex === "number"
+        ? [{
+            claimIndex: previousInvestigation.claimIndex,
+            status: previousInvestigation.status,
+            preparedClaim: previousInvestigation.preparedClaim,
+          }]
+        : []
+    );
+    const nextItem = {
+      claimIndex: message.claimIndex,
+      status: message.status === "prepared" ? "ready" as const : message.status,
+      ...(message.preparedClaim ? { preparedClaim: message.preparedClaim } : {}),
+    };
+    const nextItems = previousItems
+      .filter((item) => item.claimIndex !== message.claimIndex)
+      .concat(nextItem)
+      .sort((a, b) => a.claimIndex - b.claimIndex);
     sessions.set(message.tabId, replaceScopeState(session, message.scope, {
       ...currentScope,
       investigation: {
         analysisKey: message.analysisKey,
-        claimIndex: message.claimIndex,
-        status: message.status === "prepared" ? "ready" : message.status,
-        ...(message.preparedClaim ? { preparedClaim: message.preparedClaim } : {}),
+        items: nextItems,
       },
     }));
-    if (shouldRender) {
-      render();
-      animateClaimRowStateChange(pagePaneEl, previousRow);
-    }
   }
 
 
@@ -3066,6 +3015,14 @@ export function createSidepanelPageReadingRuntime({
       const scopedSession = session ? materializeScopeSession(session, pageWorkspace) : undefined;
       const pageScope = session ? pageScopeForSession(session) : undefined;
       const focusScope = session ? focusScopeForSession(session) : undefined;
+      const investigationItems = scopedSession?.investigation?.items ?? (
+        typeof scopedSession?.investigation?.claimIndex === "number"
+          ? [{
+              claimIndex: scopedSession.investigation.claimIndex,
+              status: scopedSession.investigation.status,
+            }]
+          : []
+      );
       return {
         activeTabId,
         displayTabId,
@@ -3079,6 +3036,11 @@ export function createSidepanelPageReadingRuntime({
               advisorStatus: scopedSession.advisor?.status,
               advisorDecision: scopedSession.advisor?.advice?.decision ?? "none",
               analysisStatus: scopedSession.analysis?.status,
+              analysisKey: scopedSession.analysis?.key,
+              investigationPreparingCount: investigationItems.filter((item) => item.status === "preparing").length,
+              investigationReadyCount: investigationItems.filter((item) => item.status === "ready").length,
+              investigationIneligibleCount: investigationItems.filter((item) => item.status === "ineligible").length,
+              investigationUnavailableCount: investigationItems.filter((item) => item.status === "unavailable").length,
               autoReadPending: scopedSession.autoReadPending,
               targetKind: scopedSession.surface ? modelContextForSession({ ...scopedSession, surface: scopedSession.surface }).targetKind : undefined,
               allowedUse: scopedSession.advisor?.effectiveModelContext?.allowedUse,

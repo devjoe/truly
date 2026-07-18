@@ -2,13 +2,13 @@ function normalizeState(state = {}) {
   return {
     observed: state.observed === true,
     text: typeof state.text === "string" ? state.text : "",
-    originalClaimVisible: state.originalClaimVisible === true,
-    readyCardVisible: state.readyCardVisible === true,
+    compactRowVisible: state.compactRowVisible === true,
+    actionReadyVisible: state.actionReadyVisible === true,
   };
 }
 
 function isSafePreparingState(state) {
-  return state.observed && state.originalClaimVisible && !state.readyCardVisible;
+  return state.observed && state.compactRowVisible && state.actionReadyVisible;
 }
 
 export function resolveClaimPreparationEvidence(liveState, timelineEntries = []) {
@@ -17,14 +17,14 @@ export function resolveClaimPreparationEvidence(liveState, timelineEntries = [])
 
   const timelineEntry = timelineEntries.find((entry) =>
     entry?.claimPreparingPresent === true &&
-    entry?.claimOriginalVisible === true &&
-    entry?.claimReadyCardVisible === false);
+    entry?.claimCompactRowVisible === true &&
+    entry?.claimActionReadyVisible === true);
   if (timelineEntry) {
     return {
       observed: true,
       text: typeof timelineEntry.claimPreparingText === "string" ? timelineEntry.claimPreparingText : "",
-      originalClaimVisible: true,
-      readyCardVisible: false,
+      compactRowVisible: true,
+      actionReadyVisible: true,
       source: "timeline",
     };
   }
