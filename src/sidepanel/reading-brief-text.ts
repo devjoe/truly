@@ -120,6 +120,9 @@ function questionNeedsSourceContext(modelText: string, displayText: string): boo
   if (/(?:這篇|此|該|本)(?:貼文|文章|內容)|(?:這|此|該)則(?:貼文|內容)?|\b(?:this|the)\s+(?:post|article|content)\b/iu.test(modelText)) {
     return true;
   }
+  if (/(?:這|此|該|本|上述|前述)(?:場|次|項|份|段|則|個)?(?:演說|演講|發言|談話|訪問|記者會|事件|政策|判決|研究|報告|公告|聲明|影片|圖片|表格|數據)|\b(?:this|that|the|above|aforementioned)\s+(?:speech|remarks?|interview|event|policy|ruling|study|report|announcement|statement|video|image|table|data)\b/iu.test(modelText)) {
+    return true;
+  }
   return /^(?:有哪些不同觀點|有何不同觀點|背景是什麼|脈絡是什麼|為什麼重要|這代表什麼|what are the different views|what is the background|why does it matter|what does this mean)[？?]?$/iu
     .test(displayText.trim());
 }

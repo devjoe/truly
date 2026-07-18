@@ -60,6 +60,8 @@ describe("background General Page investigation preparation", () => {
         reason: "actionable",
         claim: {
           ...brief.claims[0],
+          why: "Source-language adapter explanation.",
+          need: "Source-language adapter evidence need.",
           atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
           policy: { claimKind: "fact", consequence: "public_interest" },
         },
@@ -92,10 +94,14 @@ describe("background General Page investigation preparation", () => {
       type: "GENERAL_PAGE_INVESTIGATION_RESULT",
       analysisKey: "page:key",
       status: "prepared",
+      preparedClaim: expect.objectContaining({
+        why: "It matters.",
+        need: "An authoritative record.",
+      }),
     }));
   });
 
-  it("uses the source-text language for an English-page verification task", async () => {
+  it("uses the requested UI language for an English-page verification task", async () => {
     const scheduler = {
       enqueue: vi.fn(async (job: any) => job.run()),
     };
@@ -126,7 +132,10 @@ describe("background General Page investigation preparation", () => {
     })).toBe(true);
     await vi.waitFor(() => expect(callAdapter).toHaveBeenCalled());
 
-    expect(callAdapter).toHaveBeenCalledWith(expect.objectContaining({ outputLang: "en" }));
+    expect(callAdapter).toHaveBeenCalledWith(expect.objectContaining({
+      sourceLang: "en",
+      outputLang: "zh-TW",
+    }));
   });
 
   it("fails closed after the first rejected adapter result instead of repairing in runtime", async () => {

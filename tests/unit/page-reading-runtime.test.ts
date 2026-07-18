@@ -1218,6 +1218,7 @@ describe("sidepanel page reading runtime", () => {
               why: "It is central to the sample.",
               need: "Check the source.",
               q: "Is it true that Runtime fixture reports one synthetic claim?",
+              displayQ: "Runtime fixture 是否報導一項合成主張？",
               atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
               policy: { claimKind: "fact", consequence: "public_interest" },
             }],
@@ -1269,7 +1270,7 @@ describe("sidepanel page reading runtime", () => {
     }));
     expect(pagePaneEl.textContent).toContain("閱讀脈絡");
     expect(pagePaneEl.textContent).toContain("Synthetic model summary for the current page.");
-    expect(pagePaneEl.textContent).toContain("Runtime fixture reports one synthetic claim");
+    expect(pagePaneEl.textContent).toContain("Runtime fixture 是否報導一項合成主張？");
     // Standard briefs use one quiet footer for both model transparency and the
     // preview disclaimer instead of competing left/right notes.
     expect(pagePaneEl.textContent).toContain("brief-model 協助整理");
@@ -1297,7 +1298,7 @@ describe("sidepanel page reading runtime", () => {
     expect(expandedClaimRow?.classList.contains("is-ready")).toBe(true);
     expect(expandedClaimRow?.querySelector(":scope > .page-claim-copy")).toBeNull();
     expect(expandedClaimRow?.children).toHaveLength(1);
-    expect(investigationCard?.textContent).toContain("Is it true that Runtime fixture reports one synthetic claim");
+    expect(investigationCard?.textContent).toContain("Runtime fixture 是否報導一項合成主張？");
     expect(investigationCard?.querySelector(".page-claim-investigation-header")).toBeNull();
     const actionLinks = [...pagePaneEl.querySelectorAll<HTMLAnchorElement>(".page-claim-investigation-actions a")];
     const evidenceLink = actionLinks[0];
@@ -1307,7 +1308,8 @@ describe("sidepanel page reading runtime", () => {
     expect(evidenceLink?.href).not.toContain("udm=50");
     expect(aiModeLink?.href).toContain("udm=50");
     expect(new URL(evidenceLink!.href).searchParams.get("q")).not.toBe(new URL(aiModeLink!.href).searchParams.get("q"));
-    expect(new URL(aiModeLink!.href).searchParams.get("q")).toContain("Evidence needed");
+    expect(new URL(aiModeLink!.href).searchParams.get("q")).toContain("請查核以下主張，並以繁體中文回答");
+    expect(new URL(aiModeLink!.href).searchParams.get("q")).toContain("原文主張：\"Runtime fixture reports one synthetic claim.\"");
     expect(actionLinks).toHaveLength(2);
     expect(pagePaneEl.textContent).not.toContain("原始來源");
     expect(pagePaneEl.querySelector(".page-claim-investigation-actions a[href='https://example.test/article']")).toBeNull();
@@ -1322,7 +1324,7 @@ describe("sidepanel page reading runtime", () => {
     expect(copyQuestion?.getAttribute("aria-label")).toBe("複製查核問題");
     copyQuestion?.click();
     await flushMicrotasks();
-    expect(copiedTexts.at(-1)).toBe("Is it true that Runtime fixture reports one synthetic claim");
+    expect(copiedTexts.at(-1)).toBe("Runtime fixture 是否報導一項合成主張？");
     expect(copyQuestion?.textContent).toBe("已複製");
     expect(copyQuestion?.querySelector("svg")).not.toBeNull();
     const questionList = pagePaneEl.querySelector(".page-reader-analysis-questions .reading-brief-question-list");
@@ -3490,6 +3492,7 @@ describe("sidepanel page reading runtime", () => {
         why: "It matters.",
         need: "An authoritative record.",
         q: "Does Runtime fixture report one synthetic claim?",
+        displayQ: "Runtime fixture 是否報導一項合成主張？",
         atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
         policy: { claimKind: "fact", consequence: "public_interest" },
       },
@@ -3509,6 +3512,7 @@ describe("sidepanel page reading runtime", () => {
         why: "It matters.",
         need: "An authoritative record.",
         q: "Does Runtime fixture report one synthetic claim?",
+        displayQ: "Runtime fixture 是否報導一項合成主張？",
         atom: { s: "Runtime fixture", p: "reports", o: "one synthetic claim" },
         policy: { claimKind: "fact", consequence: "public_interest" },
       },
@@ -3518,13 +3522,17 @@ describe("sidepanel page reading runtime", () => {
     const readyCard = pagePaneEl.querySelector(".page-claim-investigation");
     expect(readyCard).not.toBeNull();
     expect(readyCard?.textContent).not.toContain("查核問題");
-    expect(readyCard?.textContent).toContain("Runtime fixture reports one synthetic claim");
+    expect(readyCard?.textContent).toContain("Runtime fixture 是否報導一項合成主張？");
     expect(animateInvestigationState).toHaveBeenCalledTimes(2);
     const links = [...pagePaneEl.querySelectorAll<HTMLAnchorElement>(".page-claim-investigation-actions a")];
     const normalQuery = new URL(links[0]!.href).searchParams.get("q") ?? "";
     const aiModeQuery = new URL(links[1]!.href).searchParams.get("q") ?? "";
     expect(normalQuery).not.toContain("example.test/article");
+    expect(normalQuery).toContain("Runtime fixture reports one synthetic claim");
+    expect(normalQuery).not.toContain("An authoritative record");
     expect(aiModeQuery).toContain("https://example.test/article");
+    expect(aiModeQuery).toContain("請查核以下主張，並以繁體中文回答");
+    expect(aiModeQuery).toContain("原文主張：\"Runtime fixture reports one synthetic claim.\"");
 
     prefersReducedMotion.mockReturnValue({ matches: true } as MediaQueryList);
     for (const status of ["ineligible", "unavailable"] as const) {

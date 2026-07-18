@@ -1085,12 +1085,12 @@ function claimInvestigationHtml(
   const copyAriaLabel = tr("sidepanel.page.investigation.copyAria");
   return `
     <section class="page-claim-investigation" data-task-id="${escapeHtml(task.id)}">
-      <p class="page-claim-investigation-question">${escapeHtml(task.intent.question)}</p>
+      <p class="page-claim-investigation-question">${escapeHtml(task.intent.displayQuestion)}</p>
       <p class="page-claim-investigation-need">${escapeHtml(tr("sidepanel.page.investigation.need", { need: task.intent.evidenceNeed }))}</p>
       <div class="page-claim-investigation-actions">
         <a class="btn-investigation-secondary page-reader-card-action page-claim-action" href="${escapeHtml(standardEvidenceSearchUrl(task.googleKeywords))}" target="_blank" rel="noopener noreferrer">${SEARCH_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(searchLabel)}</span></a>
         <a class="btn-investigation-secondary page-reader-card-action page-claim-action" href="${escapeHtml(geminiEvidenceSearchUrl(task.aiModePrompt))}" target="_blank" rel="noopener noreferrer">${MESSAGE_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(geminiLabel)}</span></a>
-        <button class="btn-investigation-secondary page-reader-card-action page-claim-action page-claim-copy-question" type="button" data-question="${escapeHtml(task.intent.question)}" aria-label="${escapeHtml(copyAriaLabel)}" data-tooltip="${escapeHtml(copyAriaLabel)}">${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(copyLabel)}</span></button>
+        <button class="btn-investigation-secondary page-reader-card-action page-claim-action page-claim-copy-question" type="button" data-question="${escapeHtml(task.intent.displayQuestion)}" aria-label="${escapeHtml(copyAriaLabel)}" data-tooltip="${escapeHtml(copyAriaLabel)}">${COPY_ICON_SVG}<span class="btn-investigation-text">${escapeHtml(copyLabel)}</span></button>
       </div>
     </section>`;
 }

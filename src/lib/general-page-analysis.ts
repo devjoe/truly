@@ -89,6 +89,8 @@ export interface GeneralPageBriefClaim extends ReadingBriefClaim {
   policy?: GeneralPageClaimPolicy;
   /** Session-only source-language span used to ground a localized claim. */
   sourceQuote?: string;
+  /** Session-only localized question used only for the Side Panel display. */
+  displayQ?: string;
 }
 
 export type GeneralPageAnalysisEligibilityReason =

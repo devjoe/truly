@@ -36,6 +36,7 @@ describe("General Page investigation adapter", () => {
     expect(prompt).toContain("URL is metadata only");
     expect(prompt).toContain(input.groundingText);
     expect(prompt).toContain("不得把網址複製到任何輸出欄位");
+    expect(prompt.indexOf("## Untrusted candidate clue")).toBeLessThan(prompt.indexOf("## Exact grounding text — sole copying boundary"));
   });
 
   it("uses the strict fixed-key schema only when the caller declares that capability", () => {
@@ -43,6 +44,7 @@ describe("General Page investigation adapter", () => {
       endpoint: "http://127.0.0.1:8000/v1",
       model: "fixture-model",
       structuredOutputMode: "json_schema",
+      sourceLang: "zh-TW",
       ...input,
     });
 
@@ -57,12 +59,16 @@ describe("General Page investigation adapter", () => {
     expect(body.max_tokens).toBe(1_800);
     expect(body.temperature).toBe(0);
     expect(body.messages).toHaveLength(2);
-    expect(body.messages[0]?.content).toContain("c, q, and atom s, p, and o in the source text language");
-    expect(body.messages[0]?.content).toContain("Only why and need use the requested UI language");
+    expect(body.messages[0]?.content).toContain("Keep c, q, sourceQuote, and atom s, p, and o in Taiwan Traditional Chinese");
+    expect(body.messages[0]?.content).toContain("Exact grounding text is Taiwan Traditional Chinese");
+    expect(body.messages[0]?.content).toContain("why, need, and displayQ use the requested UI language");
     expect(body.messages[0]?.content).toContain("sourceQuote");
     expect(body.messages[0]?.content).toContain("candidate is only a clue");
     expect(body.messages[0]?.content).toContain("exact substrings of c");
+    expect(body.messages[0]?.content).toContain("copy sourceQuote first");
+    expect(body.messages[0]?.content).toContain("exact ordered substrings of both sourceQuote and c");
     expect(body.messages[0]?.content).toContain("low-risk product availability");
+    expect(body.messages[0]?.content).toContain("routine commercial events");
     expect(body.messages[0]?.content).toContain("related or recommended link");
     expect(body.messages[0]?.content).toContain("named evidence family");
     expect(body.messages[0]?.content).toContain("comparative claim");
@@ -80,7 +86,7 @@ describe("General Page investigation adapter", () => {
             { type: "null" },
             {
               additionalProperties: false,
-              required: ["c", "why", "need", "q", "atom", "attribution", "policy", "sourceQuote"],
+              required: ["c", "why", "need", "q", "displayQ", "atom", "attribution", "policy", "sourceQuote"],
             },
           ],
         },
@@ -125,6 +131,7 @@ describe("General Page investigation adapter", () => {
       why: "涉及食品安全。",
       need: "食藥署公告與產品清單。",
       q: "中聯油品是否下架29項產品？",
+      displayQ: "中聯油品是否下架29項產品？",
       atom: { s: "中聯油品", p: "下架", o: "29項產品" },
       attribution: null,
       policy: { claimKind: "fact", consequence: "safety" },
@@ -135,6 +142,7 @@ describe("General Page investigation adapter", () => {
       why: canonicalClaim.why,
       need: canonicalClaim.need,
       q: canonicalClaim.q,
+      displayQ: canonicalClaim.displayQ,
       atom: canonicalClaim.atom,
       policy: canonicalClaim.policy,
       sourceQuote: canonicalClaim.sourceQuote,
@@ -162,6 +170,64 @@ describe("General Page investigation adapter", () => {
       ok: true,
       value: { schemaVersion: 1, decision: "abstain", reason: "unsafe_structure" },
     });
+  });
+
+  it("rejects a localized atom that cannot be witnessed inside the source-language quote", () => {
+    expect(parseGeneralPageInvestigationAdapterContent(JSON.stringify({
+      schemaVersion: 1,
+      decision: "prepared",
+      reason: "actionable",
+      claim: {
+        c: "Example Agency表示，Example Product下架29項產品。",
+        why: "涉及消費安全。",
+        need: "主管機關公告與產品清單。",
+        q: "Example Agency是否表示Example Product下架29項產品？",
+        atom: { s: "Example Product", p: "下架", o: "29項產品" },
+        attribution: { source: "Example Agency", relation: "表示", modality: "statement" },
+        policy: { claimKind: "report", consequence: "safety" },
+        sourceQuote: "Example Agency said Example Product recalled 29 products.",
+      },
+    }))).toMatchObject({ ok: false, value: null, error: "invalid_schema" });
+  });
+
+  it("rejects an incomplete prepared sentence at the adapter boundary", () => {
+    const prefix = "Example Agency announced a public safety measure ";
+    const incomplete = `${prefix}${"a".repeat(199 - Array.from(prefix).length)}`;
+    expect(Array.from(incomplete)).toHaveLength(199);
+
+    expect(parseGeneralPageInvestigationAdapterContent(JSON.stringify({
+      schemaVersion: 1,
+      decision: "prepared",
+      reason: "actionable",
+      claim: {
+        c: incomplete,
+        why: "The announcement affects public safety.",
+        need: "The official agency announcement.",
+        q: "Did Example Agency announce the public safety measure?",
+        atom: { s: "Example Agency", p: "announced", o: "a public safety measure" },
+        attribution: null,
+        policy: { claimKind: "fact", consequence: "safety" },
+        sourceQuote: incomplete,
+      },
+    }))).toMatchObject({ ok: false, value: null, error: "invalid_schema" });
+  });
+
+  it("allows natural question capitalization without weakening the evidence witness", () => {
+    expect(parseGeneralPageInvestigationAdapterContent(JSON.stringify({
+      schemaVersion: 1,
+      decision: "prepared",
+      reason: "actionable",
+      claim: {
+        c: "The analyzed content is synthetic.",
+        why: "The result protects the deterministic UI audit.",
+        need: "The synthetic fixture contract.",
+        q: "Is the analyzed content synthetic?",
+        atom: { s: "The analyzed content", p: "is", o: "synthetic" },
+        attribution: null,
+        policy: { claimKind: "fact", consequence: "public_interest" },
+        sourceQuote: "The analyzed content is synthetic.",
+      },
+    }))).toMatchObject({ ok: true, value: { decision: "prepared" } });
   });
 
   it("normalizes a prepared atomic claim for the existing local guard", () => {
@@ -250,7 +316,7 @@ describe("General Page investigation adapter", () => {
           o: "為30歲以上的美國軍人提供睪固酮篩檢與治療計畫",
         },
         policy: { claimKind: "report", consequence: "health" },
-        sourceQuote: `${first}... ${second}`,
+        sourceQuote: claimText,
       },
       attribution: { source: "ft.com", relation: "report", modality: "report" },
     }));
@@ -419,10 +485,11 @@ describe("General Page investigation adapter", () => {
           why: "涉及食品安全。",
           need: "食藥署公告與產品清單。",
           q: "中聯油品是否下架29項產品？",
+          displayQ: "中聯油品是否下架29項產品？",
           atom: { s: "中聯油品", p: "下架", o: "29項產品" },
           attribution: null,
           policy: { claimKind: "fact", consequence: "safety" },
-          sourceQuote: "這段來源引文不在 grounding text 裡。",
+          sourceQuote: "據其他資料，中聯油品下架29項產品。",
         },
       })));
       await expect(callTierBGeneralPageInvestigationAdapter(request)).resolves.toMatchObject({

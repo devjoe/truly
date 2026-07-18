@@ -813,7 +813,7 @@ export function buildTierBGeneralPageInvestigationAdapterChatBody(
   const body: TierBChatBody = {
     model: req.model,
     messages: [
-      { role: "system", content: buildGeneralPageInvestigationAdapterSystemPrompt(req.outputLang) },
+      { role: "system", content: buildGeneralPageInvestigationAdapterSystemPrompt(req.outputLang, req.sourceLang) },
       { role: "user", content: buildGeneralPageInvestigationAdapterPrompt(req) },
     ],
     temperature: 0,

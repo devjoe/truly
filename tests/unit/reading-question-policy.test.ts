@@ -35,6 +35,8 @@ describe("reading question policy", () => {
     expect(isNaturalReadingBriefFollowUpQuestion("官方資料如何形塑不同政策觀點？", "zh-TW")).toBe(true);
     expect(isNaturalReadingBriefFollowUpQuestion("這項政策的經費來源為何？", "zh-TW")).toBe(true);
     expect(isNaturalReadingBriefFollowUpQuestion("政策爭議的來源為何？", "zh-TW")).toBe(true);
+    expect(isNaturalReadingBriefFollowUpQuestion("某官員在該場演說中具體說了哪些關於市場的言論？", "zh-TW")).toBe(false);
+    expect(isNaturalReadingBriefFollowUpQuestion("該場演說如何反映政策方向？", "zh-TW")).toBe(true);
   });
 
   it("rejects English source requests while keeping source-literacy questions", () => {
@@ -45,5 +47,7 @@ describe("reading question policy", () => {
     expect(isNaturalReadingBriefFollowUpQuestion("Which sources of institutional resistance shaped the reform?", "en")).toBe(true);
     expect(isNaturalReadingBriefFollowUpQuestion("Where does institutional resistance come from?", "en")).toBe(true);
     expect(isNaturalReadingBriefFollowUpQuestion("Where do these policy tensions come from?", "en")).toBe(true);
+    expect(isNaturalReadingBriefFollowUpQuestion("What exactly did the minister say in the speech?", "en")).toBe(false);
+    expect(isNaturalReadingBriefFollowUpQuestion("How did the speech frame the policy trade-off?", "en")).toBe(true);
   });
 });

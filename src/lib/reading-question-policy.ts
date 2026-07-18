@@ -10,7 +10,9 @@ const followUpKinds = new Set(["understand", "context", "counter", "image"]);
 const sourceSeekingQuestionPattern =
   /(?:引用依據|引用根據|佐證)(?:為何|是什麼|有哪些|何在|在哪(?:裡|兒)|從何而來)|(?:資料|數據|資訊|時間線|說法)(?:的)?(?:來源|出處)(?:為何|是什麼|有哪些|何在|在哪(?:裡|兒)|從何而來)|引用(?:了)?(?:哪些|何種|什麼)(?:資料)?來源|(?:資料|數據|資訊|時間線)(?:是)?從何而來|\bis there (?:any )?evidence\b|\bwhere (?:did|does|do|is|are|was|were) (?:(?:the|these|those|this) )?(?:(?:reported|quoted|cited) )?(?:figures?|data|information|numbers?|statistics?|timeline|citations?|evidence|claims?) (?:come|came) from\b|\b(?:citation|citations|evidence) (?:support|supports|for|of)\b|\bsources? (?:support|supports)\b|\bsources? (?:for|of) (?:the )?(?:(?:reported|quoted|cited) )?(?:claim|claims|timeline|figures?|data|information|statement|numbers?|dates?|post|article|report)\b/i;
 const verificationQuestionPattern =
-  /(?:查核|查證|事實核查|真假|真偽|是否屬實|是否(?:真的|確實|曾|已|有|存在|發生|宣布|確定|參加|獲得|拿下|推出|公布|表示|聲稱|符合|相符)|(?:實際|正確|官方)(?:比分|賽果|賽況|賽事結果|結果|數字|日期|名單|進球者|狀態|內容)|(?:公開信|聲明|公告|報告|文件|貼文|影片|錄音)(?:的)?(?:內容|原文)(?:為何|是什麼|有哪些)|證據(?:是|有|在|來自)|來源(?:是|有|在|來自|哪)|\b(?:verify|verification|fact[ -]?check|true or false|is it true)\b|\b(?:did|has)\s+\S+|\b(?:actual|exact) (?:score|result|date|number)\b|\bwhat did (?:the )?(?:letter|statement|announcement|report|document|post|video|recording) say\b)/i;
+  /(?:查核|查證|事實核查|真假|真偽|是否屬實|是否(?:真的|確實|曾|已|有|存在|發生|宣布|確定|參加|獲得|拿下|推出|公布|表示|聲稱|符合|相符)|(?:實際|正確|官方)(?:比分|賽果|賽況|賽事結果|結果|數字|日期|名單|進球者|狀態|內容)|(?:公開信|聲明|公告|報告|文件|貼文|影片|錄音)(?:的)?(?:內容|原文)(?:為何|是什麼|有哪些)|證據(?:是|有|在|來自)|來源(?:是|有|在|來自|哪)|\b(?:verify|verification|fact[ -]?check|true or false|is it true)\b|\b(?:actual|exact) (?:score|result|date|number)\b|\bwhat did (?:the )?(?:letter|statement|announcement|report|document|post|video|recording) say\b)/i;
+const sourceRestatementQuestionPattern =
+  /(?:演說|演講|發言|談話|訪問|記者會)(?:中|裡|內)?[^？?]{0,24}(?:具體|原話|逐字)[^？?]{0,32}(?:說了哪些|說了什麼|表示什麼|提到什麼|言論|內容)|\bwhat (?:exactly )?did [^?]{1,80} say (?:in|during|at) (?:the )?(?:speech|remarks?|interview|press conference)\b/i;
 const searchArtifactPattern =
   /https?:\/\/|(?:^|\s)(?:google|gemini|bing|curl|wget|npm|pnpm|brew|git)\b|\b(?:site|filetype):\S+/i;
 
@@ -30,6 +32,7 @@ export function isNaturalReadingBriefFollowUpQuestion(text: string, lang: Lang):
   if (!question || !/[?？]$/.test(question)) return false;
   if (
     verificationQuestionPattern.test(question) ||
+    sourceRestatementQuestionPattern.test(question) ||
     sourceSeekingQuestionPattern.test(question) ||
     searchArtifactPattern.test(question)
   ) return false;

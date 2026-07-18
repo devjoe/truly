@@ -736,16 +736,23 @@ next candidate gate closed; no fresh holdout should be created yet.
   burst keep Page preparation from starving Feed work without increasing the
   number of model calls.
 - A prepared intent exposes three explicit actions: standard Google Search,
-  Google AI Mode, and copy. Standard Search receives concise claim/source
-  keywords only. AI Mode receives a natural-language evidence request and may
-  receive the current HTTP(S) URL as metadata; the URL is never treated as
-  evidence or copied into model output. The former original-source action is
-  intentionally absent because it duplicated the page the user is already on.
+  Google AI Mode, and copy. Standard Search receives concise source-language
+  claim and attribution anchors only; the localized evidence need and page
+  publication timestamp do not leak into the query unless the date is part of
+  the exact claim. AI Mode receives UI-language instructions and display
+  question together with the exact source-language claim, evidence need, and
+  optional current HTTP(S) URL metadata. Copy uses the localized display
+  question. The URL is never treated as evidence or copied into model output.
+  The former original-source action is intentionally absent because it
+  duplicated the page the user is already on.
 - The adapter requires an exact `sourceQuote` grounding span, preserves source
-  language for the atomic claim/question, tolerates harmless schema-version and
-  optional-attribution drift, and applies the existing deterministic eligibility
-  guard after model output. Page navigation, reread, a new analysis key, and a
-  new Focus target clear stale task state; Page and Focus keep separate slots.
+  language for the atomic claim and canonical `q`, and produces `displayQ`,
+  `why`, and `need` in the requested UI language. The local display guard
+  rejects translated questions that introduce a number or date absent from the
+  exact claim. The parser tolerates harmless schema-version and
+  optional-attribution drift, then applies the existing deterministic
+  eligibility guard. Page navigation, reread, a new analysis key, and a new
+  Focus target clear stale task state; Page and Focus keep separate slots.
 - The future Truly Agent uses a separate non-runtime semantic Case draft. The
   model selects document families, source roles, authority hints, and numbered
   question coverage; local code owns IDs, question linkage, verification
@@ -826,8 +833,9 @@ next candidate gate closed; no fresh holdout should be created yet.
   explicit diagnostic flag and records `repairMode` in run metadata. Local
   action guards also reject incomplete navigation-tail quotes,
   under-specified comparisons, and generic evidence requirements. Regular
-  Google search receives bounded claim/evidence anchors, while page metadata
-  and URL remain AI-Mode-only context.
+  Google search receives bounded source-language claim and attribution anchors,
+  while localized evidence need, page metadata, and URL remain AI-Mode-only
+  context.
 - The final old-development candidate adds a deterministic preparation stage,
   but it remains a development contract rather than a release claim. It may
   only infer a uniquely grounded typed attribution or project an already
@@ -899,6 +907,14 @@ next candidate gate closed; no fresh holdout should be created yet.
   tuning. `releaseAuthority` remains false. Any successor must be separately
   versioned and developed on synthetic fixtures or a newly preregistered slice
   before another one-shot semantic audit is allowed.
+- The first post-v4 successor remains synthetic-only and keeps the one-pass
+  Adapter plus the existing wire shape. It presents the untrusted candidate
+  clue first and ends on the exact-grounding copying boundary, requires one
+  source-language atom to occur in order in the
+  claim, question and exact quote, rejects incomplete prepared text at the
+  Adapter boundary, keeps routine commercial venue events context-only, and
+  adds bounded source context to portable questions that refer to an unnamed
+  event. It opens no action, search, holdout or release authority.
 
 ## Verification Gates
 

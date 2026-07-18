@@ -77,7 +77,8 @@ export function scheduleGeneralPageInvestigationPreparation(
     candidateClaim,
     groundingText: request.context.mainText,
     source,
-    outputLang: investigationSourceLanguage(request.context.mainText, request.outputLang),
+    sourceLang: investigationSourceLanguage(request.context.mainText, request.outputLang),
+    outputLang: request.outputLang,
   };
   const id = `general-page-investigation:${request.tabId}:${request.scope}:${request.analysisKey}:0`;
   const work = options.scheduler.enqueue({
@@ -94,7 +95,15 @@ export function scheduleGeneralPageInvestigationPreparation(
   });
 
   void work.then((result) => {
-    const candidate = result.ok && result.value?.decision === "prepared" ? result.value.claim : undefined;
+    const candidate = result.ok && result.value?.decision === "prepared"
+      ? {
+          ...result.value.claim,
+          // The foreground reading already owns localized explanation copy.
+          // The Adapter owns only the grounded claim/question projection.
+          why: candidateClaim.why,
+          need: candidateClaim.need,
+        }
+      : undefined;
     const preparation = candidate ? preparePageClaimInvestigation({
       analysisKey: request.analysisKey,
       scope: request.scope,

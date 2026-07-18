@@ -164,6 +164,24 @@ describe("reading brief question action payload", () => {
     expect(action.agentTask.context).toContain("合成政策的支持與反對意見");
   });
 
+  it("adds portable source context for a question that refers to an unnamed event", () => {
+    const action = buildReadingBriefQuestionActionPayload({
+      question: "該場演說如何反映政策方向？",
+      kind: "context",
+      source: {
+        title: "Synthetic maternal-care policy speech",
+        summary: "A synthetic summary that must not replace the available title.",
+        url: "https://example.com/speech",
+      },
+    });
+
+    expect(action.copyText).toContain("來源：Synthetic maternal-care policy speech");
+    expect(action.copyText).toContain("問題：該場演說如何反映政策方向？");
+    expect(action.googleQuery).toContain("Synthetic maternal-care policy speech");
+    expect(action.agentTask.context).toContain("Synthetic maternal-care policy speech");
+    expect(action.aiModePrompt).toContain("https://example.com/speech");
+  });
+
   it("does not send local, credentialed, or query metadata URLs to AI Mode", () => {
     for (const url of [
       ["http://", "local", "host/private"].join(""),

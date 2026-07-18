@@ -19,7 +19,10 @@ export interface ClaimVerificationIntent {
   exactClaim: string;
   why: string;
   evidenceNeed: string;
+  /** Canonical source-language question used for source-language workflows. */
   question: string;
+  /** Localized question used for Side Panel display and copy. */
+  displayQuestion: string;
   /** URL is allowed only as source metadata for conversational AI search. */
   sourceContext?: PageClaimInvestigationSource;
 }
@@ -68,6 +71,7 @@ export type PageClaimInvestigationIneligibilityReason =
   | "non_consequential"
   | "unsupported_claim_kind"
   | "low_consequence_availability"
+  | "low_consequence_routine_event"
   | "generic_controversy"
   | "generic_subject"
   | "navigation_fragment"
@@ -111,8 +115,9 @@ const VAGUE_ATOMIC_PART_RE = /^(?:這段內容|此內容|上述內容|這件事|
 const GENERIC_ATOMIC_SUBJECT_RE = /^(?:(?:the|a|an)\s+)?(?:death toll|number|figure|rate|treaty|agreement|report|study|officials?|authorities|government|company|agency|experts?|researchers?)$|^(?:死亡人數|數字|比率|條約|協議|報告|研究|官員|當局|政府|公司|機構|專家|研究人員)$/iu;
 const COMPOUND_CLAIM_RE = /(?:且|並|以及|同時|；|;)|(?:，|,)\s*(?:並|且|也|另|同時)|(?:，|,)\s*[^，,。.!?]{0,28}(?:因此|隨後|未來|已|將|會|成立|出版|推動|聚焦|導致|引發|強調|要求|呼籲|批評|質疑|抗議|指出|買(?:了|下)|購買|禁止|擴大|創下)|\b(?:and|while|as)\s+(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)?(?:is|are|was|were|has|have|had|did|does|will|can|must|take|takes|took)\b|\b(?:signed|announced|released|approved|passed|launched)\b[^.!?]{0,100}\b(?:that|which)\b/iu;
 const SECOND_PROPOSITION_RE = /(?:，|,)\s*(?:(?:he|she|they|it|the|a|an|[A-Z][\p{L}'-]*)\s+)(?:said|says|reported|announced|is|are|was|were|has|have|had|did|does|will|can)\b/iu;
-const ATTRIBUTION_RELATION_RE = /(?:數據顯示|表示|指出|指稱|宣稱|估計|聲稱|報導|according to|said|reported|estimated|alleged|claimed)/iu;
+const ATTRIBUTION_RELATION_RE = /(?:數據顯示|表示|指出|指稱|宣稱|估計|聲稱|報導|according to|announced by|announced|said|reported|estimated|alleged|claimed)/iu;
 const LOW_CONSEQUENCE_AVAILABILITY_RE = /(?:現已|目前)?(?:上市|開賣|販售|供應|有貨|可(?:供)?購買)|\b(?:now\s+)?(?:available|in stock|for sale)\b/iu;
+const LOW_CONSEQUENCE_ROUTINE_EVENT_RE = /(?:\b(?:bar|restaurant|cafe|shop|store|venue|hotel)\b.{0,60}\b(?:(?:\w+-)?anniversary\s+(?:party|event)|grand\s+opening|guest\s+(?:chef|dj)|live\s+performance)\b)|(?:(?:酒吧|餐廳|咖啡廳|門市|商店|飯店).{0,32}(?:週年(?:派對|活動)|開幕(?:派對|活動)|客座(?:料理|主廚|DJ|演出)|現場演出))/iu;
 const GENERIC_CONTROVERSY_RE = /(?:引發|掀起|造成|受到).{0,12}(?:爭議|熱議|討論|批評)|\b(?:sparked|caused|drew|generated)\s+(?:online\s+)?(?:controversy|debate|discussion|criticism)\b/iu;
 const NAVIGATION_SECTION_LABEL_RE = /^(?:related(?:\s+(?:stories|articles|news|links))?|read\s+more|recommended|more\s+(?:news|stories|articles)|see\s+also|相關(?:文章|新聞|報導|連結)|延伸閱讀|推薦閱讀|更多(?:新聞|報導|文章|內容))[：:]?$/iu;
 const COMPARATIVE_ASSERTION_RE = /\b(?:better|worse|higher|lower|faster|slower|cheaper|costlier|more\s+(?:effective|accurate|popular|expensive)|less\s+(?:effective|accurate|popular|expensive)|outperform(?:s|ed)?|overtak(?:e|es|ing)|overtook|overtaken|best|worst|largest|smallest|highest|lowest)\b|\bsurpass(?:es|ed|ing)?\s+(?!\d)\p{L}[\p{L}\p{N}._'-]*(?:\s+[\p{L}\p{N}._'-]+){0,4}|\b(?:take|takes|took|taken|taking)\s+the\s+lead\s+over\b|\blead(?:s|ing)?\b(?=.{0,40}\b(?:by|in|with)\b.{0,60}\b(?:benchmark|score|rate|accuracy|latency|price|cost|revenue|sales|market\s+share|users?|cases?|points?|percent(?:age)?)\b)|(?:優於|劣於|勝過|不如|表現更好|較(?:高|低|快|慢|便宜|昂貴|準確|有效)|最(?:高|低|快|慢|便宜|昂貴|準確|有效)|排名第一)|(?:超越|趕超|反超)(?!\s*\d)/iu;
@@ -127,7 +132,7 @@ const SEARCH_STOP_WORDS = new Set([
 ]);
 
 const ATTRIBUTION_MODALITY_RE = {
-  statement: /(?:表示|指出|聲稱|said|stated|claimed)/iu,
+  statement: /(?:表示|指出|聲稱|announced by|announced|said|stated|claimed)/iu,
   report: /(?:報導|報告|數據顯示|according to|reported)/iu,
   estimate: /(?:估計|estimated?)/iu,
   allegation: /(?:指稱|宣稱|alleged?)/iu,
@@ -151,6 +156,7 @@ const DETERMINISTIC_ATTRIBUTION_RELATIONS: Array<{
   { relation: /(?:分析|研判)/giu, modality: "analysis" },
   { relation: /\balleged\b/giu, modality: "allegation" },
   { relation: /指稱/giu, modality: "allegation" },
+  { relation: /\bannounced by\b/giu, modality: "statement" },
   { relation: /\b(?:said|stated)\b/giu, modality: "statement" },
   { relation: /(?:表示|指出)/giu, modality: "statement" },
 ];
@@ -166,6 +172,7 @@ const SAFE_AUXILIARY_FILLER_RE = /\b(?:has|have|had)\b/iu;
 // it must not absorb modality, negation, or an additional proposition.
 const SAFE_ATTRIBUTION_BRIDGE_RE = /^(?:(?:今天|今日|昨日|昨天|本日|當日|日前|近日|近期|本週|本月|今年|最新)?(?:所)?(?:公布|發布)(?:的|之))$/u;
 const SAFE_SOURCE_QUOTE_PREFIX_RE = /^(?:今年)$/u;
+const SAFE_TRAILING_ATTRIBUTION_PREFIX_RE = /^(?:in\s+(?:a|the)\s+programme)$/iu;
 const SAFE_ACCORDING_TO_SUFFIX_RE = /^[,，]\s*and\s+the\s+(?:(?:\d+(?:st|nd|rd|th))|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth)[-\s](?:driest|wettest|warmest|coldest)\s+since\s+(?:(?:nationwide|national|official)\s+)?(?:(?:rainfall|weather|temperature|climate)\s+)?records\s+began(?:\s+in\s+(?:19|20)\d{2})?[,，]\s*$/iu;
 const UNSAFE_ATTRIBUTION_SUFFIX_RE = /\b(?:but|however|although|though|yet|whereas|except|deny|denied|dispute|disputed|retract|retracted|withdraw|withdrawn|correct|corrected|clarify|clarified|false|incorrect|contradict|contradicted|questioned)\b|(?:但是|但|然而|儘管|否認|質疑|撤回|撤銷|更正|修正|澄清|錯誤|不實|相反|矛盾)/iu;
 
@@ -262,16 +269,33 @@ function searchKeywordSegment(value: string | undefined, limit: number): string 
 }
 
 function boundedKeywordSegment(value: string | undefined, limit: number): string {
-  return Array.from(searchKeywordSegment(value, Math.max(limit * 2, limit)))
-    .slice(0, limit)
-    .join("")
-    .trim();
+  const segment = searchKeywordSegment(value, Math.max(limit * 2, limit));
+  if (Array.from(segment).length <= limit) return segment;
+  const words = segment.split(/\s+/u).filter(Boolean);
+  const bounded: string[] = [];
+  for (const word of words) {
+    const candidate = [...bounded, word].join(" ");
+    if (Array.from(candidate).length > limit) break;
+    bounded.push(word);
+  }
+  // Search terms must never end in a partial word. A single long identifier is
+  // still more useful intact than an arbitrary character prefix.
+  return bounded.join(" ") || words[0] || "";
 }
 
 function claimNumberAndDateAnchors(value: string): string {
   return [...new Set(value.match(
     /\b(?:19|20)\d{2}(?:[-/]\d{1,2}(?:[-/]\d{1,2})?)?\b|\b\d+(?:[.,]\d+)*(?:%|％|萬|億|項|件|人|元|年|月|日|歲|points?|percent(?:age)?)?/giu,
   ) ?? [])].join(" ");
+}
+
+function numericAndDateAnchorSet(value: string): Set<string> {
+  return new Set(
+    claimNumberAndDateAnchors(value)
+      .split(/\s+/u)
+      .map((anchor) => anchor.normalize("NFKC").toLocaleLowerCase("en"))
+      .filter(Boolean),
+  );
 }
 
 function joinKeywordSegments(segments: string[], limit = 240): string {
@@ -570,6 +594,8 @@ function inferUniqueGroundedAttribution(
           ? before
           : !before && after
           ? after
+          : before && after && SAFE_TRAILING_ATTRIBUTION_PREFIX_RE.test(before)
+          ? after
           : undefined;
         if (!source || source.length > 100 || normalizedMatchText(source).length < 2 ||
           GENERIC_ATTRIBUTION_SOURCE_RE.test(source) || hasInvestigationArtifact(source) ||
@@ -644,6 +670,22 @@ function typedAttributionHasGroundedWitness(
 ): boolean {
   const attribution = claim.attribution;
   if (!attribution) return false;
+  if (attribution.modality === "statement" && /^announced by$/iu.test(attribution.relation.trim())) {
+    const atom = claim.atom;
+    const evidenceText = claim.sourceQuote
+      ? resolveSourceQuote(claim.sourceQuote, groundingText)
+      : undefined;
+    const alignment = atom && evidenceText ? exactAtomicCoordinates(evidenceText, atom) : undefined;
+    const relationStart = alignment ? evidenceText!.indexOf(attribution.relation, alignment.end) : -1;
+    const sourceStart = relationStart >= 0
+      ? evidenceText!.indexOf(attribution.source, relationStart + attribution.relation.length)
+      : -1;
+    const frame = sourceStart >= 0 ? evidenceText!.slice(alignment!.end, sourceStart + attribution.source.length) : "";
+    if (alignment && relationStart >= alignment.end && sourceStart >= relationStart + attribution.relation.length &&
+      frame.length <= 180 && !SENTENCE_BOUNDARY_IN_GAP_RE.test(frame) && !UNSAFE_ATTRIBUTION_SUFFIX_RE.test(frame)) {
+      return true;
+    }
+  }
   const grounded = inferUniqueGroundedAttribution(
     { ...claim, attribution: undefined },
     groundingText,
@@ -658,7 +700,7 @@ function projectExactAtomicClaim(
   groundingText: string,
 ): GeneralPageBriefClaim | undefined {
   const atom = claim.atom;
-  if (!atom || claim.attribution || outerAttribution(claim.c, atom) || NON_RELATIONAL_PREDICATE_RE.test(atom.p.trim())) {
+  if (!atom || outerAttribution(claim.c, atom) || NON_RELATIONAL_PREDICATE_RE.test(atom.p.trim())) {
     return undefined;
   }
   const coordinates = exactAtomicCoordinates(claim.c, atom);
@@ -670,7 +712,19 @@ function projectExactAtomicClaim(
   if (!suffixWithoutTerminal || !/^(?:[，,；;:]|(?:and|while|as)\b|並且|並|且|以及|同時)/iu.test(suffixWithoutTerminal)) {
     return undefined;
   }
-  const removedText = `${prefix} ${suffixWithoutTerminal}`;
+  let removedText = `${prefix} ${suffixWithoutTerminal}`;
+  if (claim.attribution) {
+    const relationStart = claim.c.indexOf(claim.attribution.relation, coordinates.end);
+    const sourceStart = claim.c.indexOf(claim.attribution.source, coordinates.end);
+    const detachableTrailingAnnouncement = claim.attribution.modality === "statement" &&
+      /^announced by$/iu.test(claim.attribution.relation.trim()) &&
+      relationStart >= coordinates.end &&
+      sourceStart >= relationStart + claim.attribution.relation.length;
+    if (!detachableTrailingAnnouncement) return undefined;
+    removedText = removedText
+      .replace(claim.attribution.relation, " ")
+      .replace(claim.attribution.source, " ");
+  }
   if (PROJECTION_CRITICAL_TEXT_RE.test(removedText) || ATTRIBUTION_RELATION_RE.test(removedText) ||
     legalStatuses(removedText).size > 0) return undefined;
   const originalStatuses = legalStatuses(claim.c);
@@ -681,7 +735,8 @@ function projectExactAtomicClaim(
   if (claim.sourceQuote && !exactAtomicGroundingWitness(claim, groundingText)) return undefined;
   const punctuation = claim.c.trim().match(/[。！？.!?][」』”’"']?$/u)?.[0] ??
     (/\p{Script=Han}/u.test(coordinates.span) ? "。" : ".");
-  return { ...claim, c: `${coordinates.span}${punctuation}` };
+  const { attribution: _detachedAttribution, ...atomicClaim } = claim;
+  return { ...atomicClaim, c: `${coordinates.span}${punctuation}` };
 }
 
 function outerAttribution(
@@ -781,6 +836,35 @@ export function usableClaimQuestion(
   return question;
 }
 
+function usableDisplayQuestion(
+  value: string | undefined,
+  exactClaim: GeneralPageBriefClaim,
+): string | undefined {
+  if (hasInvestigationArtifact(value)) return undefined;
+  const raw = (value ?? "").trim();
+  if (!/[？?][」』”’\"']?$/.test(raw)) return undefined;
+  if ((raw.match(/[？?]/g) ?? []).length > 1) return undefined;
+  let cleaned = cleanInvestigationText(raw, 219);
+  if (!cleaned || cleaned.length < 5 || VAGUE_ONLY_RE.test(cleaned)) return undefined;
+  // A trailing source frame such as "announced by PERSON" must not turn into
+  // a new action by the atomic subject when localized. Keep this deliberately
+  // narrow: the only supported repair removes the translated announcement verb
+  // immediately after a Chinese yes/no marker.
+  if (exactClaim.attribution?.modality === "statement" &&
+    /^announced by$/iu.test(exactClaim.attribution.relation.trim()) &&
+    !/\bannounce(?:d|s|ing)?\b/iu.test(exactClaim.atom?.p ?? "") &&
+    /\p{Script=Han}/u.test(cleaned)) {
+    cleaned = cleaned
+      .replace(/(是否)(?:已)?(?:宣布|宣告|公告)(?=(?:將|會|要|為|向|提供))/u, "$1")
+      .replace(/[，,]\s*(?:該|此)(?:項)?(?:計劃|計畫|方案|措施).{0,48}(?:宣布|宣告|公告)$/u, "");
+  }
+  const question = `${cleaned}${raw.includes("？") ? "？" : "?"}`;
+  const claimAnchors = numericAndDateAnchorSet(exactClaim.c);
+  const displayAnchors = numericAndDateAnchorSet(question);
+  if ([...displayAnchors].some((anchor) => !claimAnchors.has(anchor))) return undefined;
+  return question;
+}
+
 export function pageClaimInvestigationEligibility(
   claim: GeneralPageBriefClaim,
   groundingText?: string,
@@ -791,6 +875,9 @@ export function pageClaimInvestigationEligibility(
   if (hasGenericEvidenceNeed(claim.need)) return { ok: false, reason: "generic_evidence_need" };
   if (LOW_CONSEQUENCE_AVAILABILITY_RE.test(claim.c)) {
     return { ok: false, reason: "low_consequence_availability" };
+  }
+  if (LOW_CONSEQUENCE_ROUTINE_EVENT_RE.test(claim.c)) {
+    return { ok: false, reason: "low_consequence_routine_event" };
   }
   if (GENERIC_CONTROVERSY_RE.test(claim.c)) return { ok: false, reason: "generic_controversy" };
   if (isUnderspecifiedComparison(claim)) return { ok: false, reason: "underspecified_comparison" };
@@ -859,20 +946,16 @@ export function buildGoogleSearchKeywords(
   if (!claim?.atom) {
     return joinKeywordSegments([
       boundedKeywordSegment(intent.exactClaim, 140),
-      boundedKeywordSegment(intent.evidenceNeed, 70),
-      boundedKeywordSegment(intent.sourceContext?.publishedAt, 24),
     ]);
   }
   return joinKeywordSegments([
     boundedKeywordSegment(claim.attribution
-      ? `${claim.attribution.source} ${claim.attribution.relation}`
+      ? claim.attribution.source
       : undefined, 35),
     boundedKeywordSegment(claim.atom.s, 40),
-    boundedKeywordSegment(claim.atom.p, 25),
-    boundedKeywordSegment(intent.evidenceNeed, 55),
+    boundedKeywordSegment(claim.atom.p, 40),
     boundedKeywordSegment(claim.atom.o, 55),
     boundedKeywordSegment(claimNumberAndDateAnchors(intent.exactClaim), 25),
-    boundedKeywordSegment(intent.sourceContext?.publishedAt, 20),
   ]);
 }
 
@@ -885,10 +968,11 @@ export function buildGoogleAiModePrompt(intent: ClaimVerificationIntent): string
   const terminate = (value: string, punctuation: "." | "。") =>
     /[。！？.!?]$/u.test(value) ? value : `${value}${punctuation}`;
   const sourceUrl = cleanSourceMetadataUrl(intent.sourceContext?.url);
-  if (/\p{Script=Han}/u.test(intent.exactClaim)) {
+  if (/\p{Script=Han}/u.test(intent.displayQuestion)) {
     return [
-      `請協助查核以下說法：「${intent.exactClaim}」`,
-      `查核問題：${intent.question}`,
+      "請查核以下主張，並以繁體中文回答。",
+      `查核問題：${intent.displayQuestion}`,
+      `原文主張：\"${intent.exactClaim}\"`,
       `需要的證據：${terminate(intent.evidenceNeed, "。")}`,
       sourceContext ? `頁面來源脈絡：${terminate(sourceContext, "。")}` : "",
       sourceUrl ? `來源網址（metadata）：${sourceUrl}` : "",
@@ -896,8 +980,9 @@ export function buildGoogleAiModePrompt(intent: ClaimVerificationIntent): string
     ].filter(Boolean).join(" ").slice(0, 960);
   }
   return [
-    `Please verify this claim: “${intent.exactClaim}”`,
-    `Verification question: ${intent.question}`,
+    "Please verify the following claim and answer in English.",
+    `Verification question: ${intent.displayQuestion}`,
+    `Original-language claim: \"${intent.exactClaim}\"`,
     `Evidence needed: ${terminate(intent.evidenceNeed, ".")}`,
     sourceContext ? `Page source context: ${terminate(sourceContext, ".")}` : "",
     sourceUrl ? `Source URL (metadata): ${sourceUrl}` : "",
@@ -923,6 +1008,7 @@ function buildPreparedPageClaimInvestigationTask(
   ) ??
     deterministicClaimQuestion(preparedClaim);
   if (!input.analysisKey || !claim || !evidenceNeed || !question) return undefined;
+  const displayQuestion = usableDisplayQuestion(preparedClaim.displayQ, preparedClaim) ?? question;
   const sourceContext = {
     ...(cleanInvestigationText(input.source?.title, 100) ? { title: cleanInvestigationText(input.source?.title, 100) } : {}),
     ...(cleanInvestigationText(input.source?.sourceName, 60) ? { sourceName: cleanInvestigationText(input.source?.sourceName, 60) } : {}),
@@ -934,6 +1020,7 @@ function buildPreparedPageClaimInvestigationTask(
     why,
     evidenceNeed,
     question,
+    displayQuestion,
     ...(Object.keys(sourceContext).length > 0 ? { sourceContext } : {}),
   };
   return {
@@ -968,7 +1055,7 @@ export function preparePageClaimInvestigation(
     }
   }
 
-  if (!eligibility.ok && eligibility.reason === "compound_claim") {
+  if (!eligibility.ok && (eligibility.reason === "compound_claim" || eligibility.reason === "invalid_attribution")) {
     const projected = projectExactAtomicClaim(claim, input.groundingText);
     if (projected) {
       claim = projected;

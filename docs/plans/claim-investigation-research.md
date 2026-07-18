@@ -1031,11 +1031,16 @@ decision is recorded in
 
 The user-triggered surface now treats three actions as different contracts
 rather than one generic investigation query. Standard Google Search receives a
-short claim-and-source keyword string. Google AI Mode receives a bounded
-natural-language request containing the exact claim, verification question,
-evidence need, source context, and instructions to distinguish evidence from
-uncertainty. `查核選項` only reveals these explicit external actions; it is not
-the name or trigger for the unreleased Truly Agent.
+short source-language claim-and-attribution keyword string. It does not inherit
+the localized evidence need or the page publication timestamp unless a date is
+part of the exact claim. Google AI Mode receives a bounded UI-language request
+containing the localized display question, exact source-language claim,
+localized evidence need, source context, and instructions to distinguish
+evidence from uncertainty. Copy uses the localized display question. This
+keeps discovery language close to the source while keeping the visible and
+conversational workflows readable in the user's interface language.
+`查核選項` only reveals these explicit external actions; it is not the name or
+trigger for the unreleased Truly Agent.
 
 The non-runtime Agent compiler also adds a semantic v3 draft while retaining
 the v2 draft for historical replay. The model no longer emits question IDs,
@@ -1083,8 +1088,9 @@ action derived from a truncated related-link headline at the extraction tail.
 The candidate now rejects labeled navigation sections and incomplete
 tail-boundary fragments, rejects comparisons without a time, market or region,
 and metric, and requires a named evidence family rather than generic
-`evidence`. Regular Google search uses bounded claim/evidence anchors instead
-of copying the whole claim or publisher name. Self-contained follow-up
+`evidence`. Regular Google search uses bounded source-language claim and
+attribution anchors instead of copying the whole claim, localized evidence
+need, publication timestamp, or publisher name. Self-contained follow-up
 questions no longer inherit an unrelated model summary; AI Mode alone may
 receive sanitized page metadata and URL.
 
@@ -1211,6 +1217,32 @@ or thresholds. The next candidate must use synthetic fixtures or a separately
 preregistered development slice to improve guard-compatible atomic task
 materialization and portable follow-up questions before any new one-shot audit
 or holdout is opened.
+
+#### Post-v4 synthetic contract candidate (2026-07-18)
+
+The first successor candidate was developed only through new synthetic
+fixtures; it did not replay, relabel, or copy any v4 row. It keeps the existing
+wire shape and one-pass Adapter. Live mixed-language evidence later showed that
+placing a translated candidate clue after the source encouraged the model to
+copy the clue into source-bound fields. The prompt therefore presents the clue
+first and ends on an explicitly labeled exact-grounding copying boundary. It
+still requires a quote-first projection:
+`sourceQuote`, `atom.s`, `atom.p`, and `atom.o` remain in the source language,
+with the atom copied in order into both the quote and claim. The Adapter parser
+enforces that cross-field alignment and rejects an incomplete claim or
+non-question before the eligibility guard.
+
+The same synthetic boundary keeps routine commercial venue events as reading
+context rather than investigation actions. Follow-up policy rejects requests to
+restate the exact words of a speech or interview while preserving ordinary
+questions about how a speech frames an issue. Portable actions attach bounded
+source context when a question refers to an unnamed event such as “that
+speech”; the visible question remains unchanged.
+
+This is a smaller contract, not a release result. It adds no translation map,
+model stage, persistence, public search, action opening, or verdict. The v4
+cohort remains frozen, and this candidate requires synthetic verification plus
+a separately preregistered development slice before another semantic audit.
 
 ### C. Sufficiency and UX audit
 

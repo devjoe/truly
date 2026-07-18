@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildGoogleAiModePrompt,
   buildGoogleSearchKeywords,
   buildPageClaimInvestigationTask,
   deterministicClaimQuestion,
@@ -40,7 +41,7 @@ describe("page claim investigation contract", () => {
     expect(task?.googleKeywords).not.toContain("食藥署表示 中聯油品下架29項產品");
     expect(task?.googleKeywords).toContain("中聯油品");
     expect(task?.googleKeywords).toContain("29項產品");
-    expect(task?.googleKeywords).toContain("食藥署公告與產品清單");
+    expect(task?.googleKeywords).not.toContain("食藥署公告與產品清單");
     expect(task?.googleKeywords).not.toContain("https://");
     expect(task?.googleKeywords).not.toContain("fda.gov.tw");
     expect(task?.aiModePrompt).toContain("來源網址（metadata）");
@@ -54,13 +55,35 @@ describe("page claim investigation contract", () => {
       why: "The number affects public risk assessment.",
       evidenceNeed: "The agency announcement and affected-product list.",
       question: "Did Example Agency report 232 affected products on July 8?",
+      displayQuestion: "Did Example Agency report 232 affected products on July 8?",
     });
 
     expect(googleKeywords).not.toBe(exactClaim);
     expect(googleKeywords).toContain("Example Agency");
     expect(googleKeywords).toContain("232");
-    expect(googleKeywords).toContain("agency announcement");
+    expect(googleKeywords).not.toContain("agency announcement");
     expect(googleKeywords).not.toContain("Did");
+  });
+
+  it("keeps AI instructions localized while preserving the source-language claim", () => {
+    const prompt = buildGoogleAiModePrompt({
+      exactClaim: "The Pentagon will offer testosterone treatment for US soldiers.",
+      why: "這是具體的軍事健康政策。",
+      evidenceNeed: "美國國防部的正式公告或計畫文件。",
+      question: "Will the Pentagon offer testosterone treatment for US soldiers?",
+      displayQuestion: "美國國防部是否將為美軍提供睪固酮治療？",
+      sourceContext: {
+        title: "US troops to get testosterone treatment to make them strong",
+        sourceName: "ft.com",
+        url: "https://www.ft.com/content/example",
+      },
+    });
+
+    expect(prompt).toContain("請查核以下主張，並以繁體中文回答");
+    expect(prompt).toContain("查核問題：美國國防部是否將為美軍提供睪固酮治療？");
+    expect(prompt).toContain("原文主張：\"The Pentagon will offer testosterone treatment for US soldiers.\"");
+    expect(prompt).toContain("來源網址（metadata）：https://www.ft.com/content/example");
+    expect(prompt).not.toContain("Please verify this claim");
   });
 
   it("rejects metadata-only attribution when the claim has no outer source frame", () => {
@@ -95,6 +118,64 @@ describe("page claim investigation contract", () => {
     expect(task).toBeUndefined();
   });
 
+  it("keeps an exact trailing announcement frame aligned across localized and source actions", () => {
+    const sourceQuote = "The Pentagon will offer testosterone treatment for US soldiers, in a programme announced by defence secretary Pete Hegseth.";
+    const sourceQuestion = "Is “The Pentagon will offer testosterone treatment for US soldiers, in a programme announced by defence secretary Pete Hegseth” supported by external evidence?";
+    const prepared = preparePageClaimInvestigation({
+      analysisKey: "analysis:ft-live-output",
+      scope: "page",
+      claimIndex: 0,
+      claim: {
+        c: sourceQuote,
+        why: "This is a specific policy change involving military health standards.",
+        need: "Official Department of Defense program details or related orders.",
+        q: sourceQuestion,
+        displayQ: "美國國防部是否將為美軍提供睪固酮治療，該計劃由國防部長赫格塞斯宣布？",
+        atom: {
+          s: "The Pentagon",
+          p: "will offer",
+          o: "testosterone treatment for US soldiers",
+        },
+        attribution: {
+          source: "defence secretary Pete Hegseth",
+          relation: "announced by",
+          modality: "statement",
+        },
+        policy: { claimKind: "report", consequence: "health" },
+        sourceQuote,
+      },
+      groundingText: `${sourceQuote} The initiative is the latest step in Hegseth’s campaign.`,
+      source: {
+        title: "US troops to get testosterone treatment to make them strong",
+        sourceName: "ft.com",
+        url: "https://www.ft.com/content/example",
+      },
+    });
+
+    expect(prepared).toMatchObject({
+      decision: "prepared",
+      claim: {
+        c: sourceQuote,
+        atom: {
+          s: "The Pentagon",
+          p: "will offer",
+          o: "testosterone treatment for US soldiers",
+        },
+      },
+      task: {
+        intent: {
+          displayQuestion: "美國國防部是否將為美軍提供睪固酮治療？",
+          question: sourceQuestion.slice(0, -1),
+        },
+        googleKeywords: "defence secretary Pete Hegseth Pentagon offer testosterone treatment US soldiers",
+      },
+      canonicalizations: [],
+    });
+    expect(prepared.decision === "prepared" ? prepared.task.googleKeywords : "").not.toContain("2026-07-15");
+    expect(prepared.decision === "prepared" ? prepared.task.aiModePrompt : "").toContain("請查核以下主張");
+    expect(prepared.decision === "prepared" ? prepared.task.aiModePrompt : "").toContain(sourceQuote);
+  });
+
   it("prefers a grounded model question and adds bounded source context", () => {
     const task = buildPageClaimInvestigationTask({
       analysisKey: "analysis:key",
@@ -127,7 +208,7 @@ describe("page claim investigation contract", () => {
       },
       sourceUrl: "https://example.test/report",
     });
-    expect(task?.googleKeywords).toContain("agency announcement product list");
+    expect(task?.googleKeywords).not.toContain("agency announcement product list");
     expect(task?.googleKeywords).not.toContain("Synthetic public notice");
     expect(task?.googleKeywords).not.toContain("Example News");
     expect(task?.aiModePrompt).toContain("Synthetic public notice");
@@ -193,6 +274,26 @@ describe("page claim investigation contract", () => {
       "unsupported_claim_kind",
       "generic_controversy",
     ]);
+  });
+
+  it("keeps a routine commercial event announcement as reading context only", () => {
+    const claim = {
+      c: "Example Bar will host its fifth-anniversary party on August 12.",
+      why: "It describes a routine promotional event.",
+      need: "The venue event page.",
+      q: "Will Example Bar host its fifth-anniversary party on August 12?",
+      atom: {
+        s: "Example Bar",
+        p: "will host",
+        o: "its fifth-anniversary party on August 12",
+      },
+      policy: { claimKind: "fact" as const, consequence: "public_interest" as const },
+    };
+
+    expect(pageClaimInvestigationEligibility(claim)).toEqual({
+      ok: false,
+      reason: "low_consequence_routine_event",
+    });
   });
 
   it("uses typed attribution to preserve the source in a deterministic fallback", () => {
