@@ -3686,6 +3686,9 @@ describe("sidepanel page reading runtime", () => {
         policy: { claimKind: "fact", consequence: "public_interest" },
       },
     });
+    expect(pagePaneEl.querySelector(".page-claim-section-loading")).not.toBeNull();
+    expect(pagePaneEl.querySelectorAll(".page-claim-row")).toHaveLength(0);
+    expect(pagePaneEl.querySelectorAll(".page-claim-investigation-actions")).toHaveLength(0);
     for (const claimIndex of [1, 2]) {
       runtime.handleGeneralPageInvestigationResult({
         type: "GENERAL_PAGE_INVESTIGATION_RESULT",

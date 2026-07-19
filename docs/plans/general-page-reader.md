@@ -730,11 +730,12 @@ next candidate gate closed; no fresh holdout should be created yet.
   hide another valid future-Agent task. Adapter state reaches the current
   reading UI through one fail-closed projection. While the batch is
   pending, the section heading shows one quiet loading indicator rather than
-  per-row placeholders. Only Adapter-prepared candidates that also pass the
-  existing local guard enter the compact bulleted renderer and Page/Focus
-  exports. Ineligible, unavailable, malformed, stale, or raw reading-model
-  candidates remain invisible. Preparation remains ephemeral and never creates
-  durable history.
+  per-row placeholders. The whole bounded batch stays withheld until every item
+  reaches a terminal state; then only Adapter-prepared candidates that also pass
+  the existing local guard enter the compact bulleted renderer and Page/Focus
+  exports together. Ineligible, unavailable, malformed, stale, or raw
+  reading-model candidates remain invisible. Preparation remains ephemeral and
+  never creates durable history.
 - Model work shares one resource-aware scheduler: explicit user work is
   `user_blocking`, current reading is `foreground`, prepared actions are
   `derived`, and speculative work is `prefetch`. Each model resource executes
@@ -806,9 +807,10 @@ next candidate gate closed; no fresh holdout should be created yet.
   source-language verification question into an otherwise localized panel.
 - Preparing state shows only one quiet section-level indicator. A ready outcome
   enters the stable compact bullet renderer with localized question,
-  progressive evidence disclosure, Copy, and Gemini. Ineligible and unavailable
-  outcomes do not enter the user-facing card or exports. This same projection
-  applies to Page and Focus, so a raw candidate cannot leak through another
+  progressive evidence disclosure, Copy, and Gemini only after the complete
+  batch settles. Ineligible and unavailable outcomes do not enter the
+  user-facing card or exports. This same atomic projection applies to Page and
+  Focus, so a raw or partially settled candidate cannot leak through another
   product surface.
 - A 2026-07-16 no-focus CDP check used dev build
   `1784200373031-0ae1017-dirty` on a real Financial Times page. It observed an
@@ -843,6 +845,16 @@ next candidate gate closed; no fresh holdout should be created yet.
   clipping, Page/Focus continuity stayed intact, and all four recorded Side
   Panel focus observations remained `false`. Screenshots and audit JSON remain
   gitignored under `tmp/general-page-ui-check-2026-07-19T15-30-06-879Z`.
+- A 2026-07-20 atomic-batch follow-up used dev build
+  `1784486510828-a1f9926-dirty`. The no-focus CDP matrix again showed one quiet
+  indicator with zero rows/actions while the batch was pending, two rows only
+  after the mixed batch reached terminal states, and no section after an
+  all-ineligible/unavailable batch. The Page/Focus continuity and 430 px layout
+  gates remained green, with all four Side Panel focus observations `false`.
+  The otherwise transient one-ready/two-preparing state is locked separately by
+  the canonical projection and runtime DOM regressions, which require zero rows
+  and actions until the whole batch settles. Artifacts remain gitignored under
+  `tmp/general-page-ui-check-2026-07-19T18-42-23-451Z`.
 - A later 2026-07-18 no-focus CDP pass used dev build
   `1784398754095-5fa9f41-dirty` and confirmed that a single `bg` item has a
   visible bullet at both 360 px and 430 px. Web/Focus continuity, typography,

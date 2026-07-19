@@ -79,12 +79,14 @@ export function projectApprovedPageClaims(
         }]
       : []
   );
+  const pending = items.some((item) => item.status === "preparing");
+  if (pending) return { items: [], pending: true };
   return {
     items: items
       .filter((item) => item.status === "ready" && Boolean(item.preparedClaim))
       .map((item) => ({ claimIndex: item.claimIndex, claim: item.preparedClaim! }))
       .sort((a, b) => a.claimIndex - b.claimIndex),
-    pending: items.some((item) => item.status === "preparing"),
+    pending: false,
   };
 }
 

@@ -167,7 +167,7 @@ describe("canonical page reading session", () => {
     expect(next.focusScope).toBe(previous.focusScope);
   });
 
-  it("projects only locally accepted Adapter claims and reports remaining work", () => {
+  it("withholds locally accepted Adapter claims until the whole batch settles", () => {
     const preparedClaim = {
       c: "A consequential fixture claim.",
       why: "It affects public judgment.",
@@ -183,10 +183,7 @@ describe("canonical page reading session", () => {
       ],
     }, "page-key");
 
-    expect(projection).toEqual({
-      items: [{ claimIndex: 0, claim: preparedClaim }],
-      pending: true,
-    });
+    expect(projection).toEqual({ items: [], pending: true });
     expect(projectApprovedPageClaims({
       analysisKey: "stale-key",
       items: [{ claimIndex: 0, status: "ready", preparedClaim }],
