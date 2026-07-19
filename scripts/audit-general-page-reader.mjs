@@ -1405,6 +1405,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
           claimPreparingText: (runtimeState?.displayedSession?.investigationPreparingCount ?? 0) > 0
             ? "background Adapter preparation"
             : "",
+          claimHeadingLoadingVisible: Boolean(pane?.querySelector(".page-claim-section-loading")),
           claimCompactRowVisible: Boolean(claimRow?.querySelector(".page-claim-investigation")),
           claimActionReadyVisible: Boolean(claimRow?.querySelector(".page-claim-investigation-actions")),
           runtimeState,
@@ -2205,6 +2206,8 @@ async function auditClaimFallbackStates(side) {
       rowCount: rows.length,
       compactRowCount: rows.filter((row) => row.querySelector('.page-claim-investigation')).length,
       readyCount: rows.filter((row) => row.classList.contains('is-ready')).length,
+      sectionPresent: Boolean(document.querySelector('#page-pane .page-claim-section')),
+      pendingLoadingCount: document.querySelectorAll('#page-pane .page-claim-section-loading').length,
       actionCount: rows.filter((row) => row.querySelector('.page-claim-investigation-actions')).length,
       adapterReadyCount: runtimeState.investigationReadyCount ?? 0,
       adapterIneligibleCount: runtimeState.investigationIneligibleCount ?? 0,
@@ -3696,9 +3699,10 @@ function qaMatrixRows(result) {
         result.success.claimInvestigation?.available === true &&
         result.success.claimInvestigation?.ready === true &&
         result.success.claimInvestigation?.preparing?.observed === true &&
-        result.success.claimInvestigation?.preparing?.compactRowVisible === true &&
-        result.success.claimInvestigation?.preparing?.actionReadyVisible === true &&
-        result.success.claimInvestigation?.preparingUi?.headingLoadingCount === 0 &&
+        result.success.claimInvestigation?.preparing?.headingLoadingVisible === true &&
+        result.success.claimInvestigation?.preparing?.compactRowVisible === false &&
+        result.success.claimInvestigation?.preparing?.actionReadyVisible === false &&
+        result.success.claimInvestigation?.preparingUi?.headingLoadingCount === 1 &&
         result.success.claimInvestigation?.preparingUi?.perRowLoadingTextPresent === false &&
         Boolean(result.success.claimInvestigation?.question) &&
         result.success.claimInvestigation?.copyPresent === true &&
@@ -3729,24 +3733,28 @@ function qaMatrixRows(result) {
     [
       "Claim fallback presentation",
       result.success.claimInvestigation?.fallbackStates?.available === true &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.rowCount === 3 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.compactRowCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.rowCount === 2 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.compactRowCount === 2 &&
         result.success.claimInvestigation?.fallbackStates?.mixed?.readyCount === 0 &&
         result.success.claimInvestigation?.fallbackStates?.mixed?.adapterReadyCount === 2 &&
         result.success.claimInvestigation?.fallbackStates?.mixed?.adapterIneligibleCount === 1 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.actionCount === 3 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.evidenceToggleCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.actionCount === 2 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.evidenceToggleCount === 2 &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.sectionPresent === true &&
+        result.success.claimInvestigation?.fallbackStates?.mixed?.pendingLoadingCount === 0 &&
         result.success.claimInvestigation?.fallbackStates?.mixed?.localizedQuestions === true &&
         result.success.claimInvestigation?.fallbackStates?.mixed?.inlineEvidenceNeedPresent === false &&
         result.success.claimInvestigation?.fallbackStates?.mixed?.legacyClaimCopyPresent === false &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.rowCount === 3 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.compactRowCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.rowCount === 0 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.compactRowCount === 0 &&
         result.success.claimInvestigation?.fallbackStates?.allFallback?.readyCount === 0 &&
         result.success.claimInvestigation?.fallbackStates?.allFallback?.adapterReadyCount === 0 &&
         result.success.claimInvestigation?.fallbackStates?.allFallback?.adapterIneligibleCount === 1 &&
         result.success.claimInvestigation?.fallbackStates?.allFallback?.adapterUnavailableCount === 2 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.actionCount === 3 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.evidenceToggleCount === 3 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.actionCount === 0 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.evidenceToggleCount === 0 &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.sectionPresent === false &&
+        result.success.claimInvestigation?.fallbackStates?.allFallback?.pendingLoadingCount === 0 &&
         result.success.claimInvestigation?.fallbackStates?.allFallback?.localizedQuestions === true &&
         result.success.claimInvestigation?.fallbackStates?.allFallback?.inlineEvidenceNeedPresent === false &&
         result.success.claimInvestigation?.fallbackStates?.allFallback?.legacyClaimCopyPresent === false,
@@ -4221,9 +4229,10 @@ function assertUiOnlyAudit(result) {
     success?.claimInvestigation?.available !== true ||
     success?.claimInvestigation?.ready !== true ||
     success?.claimInvestigation?.preparing?.observed !== true ||
-    success?.claimInvestigation?.preparing?.compactRowVisible !== true ||
-    success?.claimInvestigation?.preparing?.actionReadyVisible !== true ||
-    success?.claimInvestigation?.preparingUi?.headingLoadingCount !== 0 ||
+    success?.claimInvestigation?.preparing?.headingLoadingVisible !== true ||
+    success?.claimInvestigation?.preparing?.compactRowVisible !== false ||
+    success?.claimInvestigation?.preparing?.actionReadyVisible !== false ||
+    success?.claimInvestigation?.preparingUi?.headingLoadingCount !== 1 ||
     success?.claimInvestigation?.preparingUi?.perRowLoadingTextPresent !== false ||
     !success?.claimInvestigation?.question ||
     success?.claimInvestigation?.copyPresent !== true ||
@@ -4250,24 +4259,28 @@ function assertUiOnlyAudit(result) {
   const fallbackStates = success?.claimInvestigation?.fallbackStates;
   if (
     fallbackStates?.available !== true ||
-    fallbackStates?.mixed?.rowCount !== 3 ||
-    fallbackStates?.mixed?.compactRowCount !== 3 ||
+    fallbackStates?.mixed?.rowCount !== 2 ||
+    fallbackStates?.mixed?.compactRowCount !== 2 ||
     fallbackStates?.mixed?.readyCount !== 0 ||
     fallbackStates?.mixed?.adapterReadyCount !== 2 ||
     fallbackStates?.mixed?.adapterIneligibleCount !== 1 ||
-    fallbackStates?.mixed?.actionCount !== 3 ||
-    fallbackStates?.mixed?.evidenceToggleCount !== 3 ||
+    fallbackStates?.mixed?.actionCount !== 2 ||
+    fallbackStates?.mixed?.evidenceToggleCount !== 2 ||
+    fallbackStates?.mixed?.sectionPresent !== true ||
+    fallbackStates?.mixed?.pendingLoadingCount !== 0 ||
     fallbackStates?.mixed?.localizedQuestions !== true ||
     fallbackStates?.mixed?.inlineEvidenceNeedPresent !== false ||
     fallbackStates?.mixed?.legacyClaimCopyPresent !== false ||
-    fallbackStates?.allFallback?.rowCount !== 3 ||
-    fallbackStates?.allFallback?.compactRowCount !== 3 ||
+    fallbackStates?.allFallback?.rowCount !== 0 ||
+    fallbackStates?.allFallback?.compactRowCount !== 0 ||
     fallbackStates?.allFallback?.readyCount !== 0 ||
     fallbackStates?.allFallback?.adapterReadyCount !== 0 ||
     fallbackStates?.allFallback?.adapterIneligibleCount !== 1 ||
     fallbackStates?.allFallback?.adapterUnavailableCount !== 2 ||
-    fallbackStates?.allFallback?.actionCount !== 3 ||
-    fallbackStates?.allFallback?.evidenceToggleCount !== 3 ||
+    fallbackStates?.allFallback?.actionCount !== 0 ||
+    fallbackStates?.allFallback?.evidenceToggleCount !== 0 ||
+    fallbackStates?.allFallback?.sectionPresent !== false ||
+    fallbackStates?.allFallback?.pendingLoadingCount !== 0 ||
     fallbackStates?.allFallback?.localizedQuestions !== true ||
     fallbackStates?.allFallback?.inlineEvidenceNeedPresent !== false ||
     fallbackStates?.allFallback?.legacyClaimCopyPresent !== false

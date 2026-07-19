@@ -8,6 +8,7 @@ import {
   completePageReadingSession,
   failPageReadingSession,
   materializeScopeSession,
+  projectApprovedPageClaims,
   replaceScopeState,
   type PageReadingSession,
 } from "@src/sidepanel/page-reading-session";
@@ -164,5 +165,31 @@ describe("canonical page reading session", () => {
     expect(next.error).toBe("Synthetic failure");
     expect(next.pageScope).toBe(previous.pageScope);
     expect(next.focusScope).toBe(previous.focusScope);
+  });
+
+  it("projects only locally accepted Adapter claims and reports remaining work", () => {
+    const preparedClaim = {
+      c: "A consequential fixture claim.",
+      why: "It affects public judgment.",
+      need: "The responsible agency record.",
+      q: "Is the consequential fixture claim accurate?",
+    };
+    const projection = projectApprovedPageClaims({
+      analysisKey: "page-key",
+      items: [
+        { claimIndex: 0, status: "ready", preparedClaim },
+        { claimIndex: 1, status: "ineligible" },
+        { claimIndex: 2, status: "preparing" },
+      ],
+    }, "page-key");
+
+    expect(projection).toEqual({
+      items: [{ claimIndex: 0, claim: preparedClaim }],
+      pending: true,
+    });
+    expect(projectApprovedPageClaims({
+      analysisKey: "stale-key",
+      items: [{ claimIndex: 0, status: "ready", preparedClaim }],
+    }, "page-key")).toEqual({ items: [], pending: false });
   });
 });

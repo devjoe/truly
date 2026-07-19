@@ -723,25 +723,25 @@ next candidate gate closed; no fresh holdout should be created yet.
   `claim.c + claim.need` is used only when the model question is missing or
   locally rejected. URLs, domains, search-engine instructions, vague references,
   and likely compound claims fail closed instead of bypassing the guard.
-- A completed Page or Focus reading may return up to three ranked candidate
+- A completed Page or Focus reading may return up to three ranked provisional
   claims. The service worker schedules one lower-priority `derived` Adapter
   batch, not one request per claim. Each indexed candidate settles independently
   to prepared, ineligible, or unavailable, so one rejected candidate cannot
-  hide another valid future-Agent task. Adapter state is intentionally silent in
-  the current reading UI: it neither adds a loading indicator nor rerenders a
-  claim row. Every claim immediately uses the same compact bulleted renderer,
-  with a localized question and its two reading-handoff actions on a separate
-  line. Abstention, malformed Adapter output, a stale analysis key, or an
-  unavailable Adapter therefore cannot make equivalent questions lose their
-  visible actions. Preparation remains ephemeral and never creates durable
-  history.
+  hide another valid future-Agent task. Adapter state reaches the current
+  reading UI through one fail-closed projection. While the batch is
+  pending, the section heading shows one quiet loading indicator rather than
+  per-row placeholders. Only Adapter-prepared candidates that also pass the
+  existing local guard enter the compact bulleted renderer and Page/Focus
+  exports. Ineligible, unavailable, malformed, stale, or raw reading-model
+  candidates remain invisible. Preparation remains ephemeral and never creates
+  durable history.
 - Model work shares one resource-aware scheduler: explicit user work is
   `user_blocking`, current reading is `foreground`, prepared actions are
   `derived`, and speculative work is `prefetch`. Each model resource executes
   one request at a time; deduplication, supersession, and a bounded foreground
   burst keep Page preparation from starving Feed work without increasing the
   number of model calls.
-- Every Reading Brief claim exposes two compact actions: Google AI Mode
+- Every approved Reading Brief claim exposes two compact actions: Google AI Mode
   (`問 Gemini`) and icon-only copy. AI Mode receives UI-language instructions
   and the display question together with the Reading Brief claim, rationale,
   evidence need, and optional current HTTP(S) URL metadata. Copy uses the
@@ -798,30 +798,29 @@ next candidate gate closed; no fresh holdout should be created yet.
 - Focused unit coverage validates scheduler priority/fairness, single-call
   three-candidate batch parsing and index continuity, adapter grounding
   and grounding, query sanitization, deterministic fallback, fail-closed
-  eligibility, Page/Focus race isolation, and the separation between silent
-  background Adapter state and stable reading-handoff rows.
+  eligibility, Page/Focus race isolation, and the separation between
+  provisional reading output and approved reading-handoff rows.
 - Side Panel bootstrap waits for stored or auto language settings before the
   Page runtime can issue its first analysis request. Presentation applies the
   same UI-language guard again, so a stale or malformed `displayQ` cannot put a
   source-language verification question into an otherwise localized panel.
-- Preparing, ready, ineligible, and unavailable Adapter outcomes share one
-  stable compact bullet renderer: localized question, progressive evidence
-  disclosure, Copy, and Gemini. The strict Adapter remains fail-closed for the
-  future Truly Agent, but its result never creates a false visual distinction
-  between otherwise equivalent user-facing questions.
+- Preparing state shows only one quiet section-level indicator. A ready outcome
+  enters the stable compact bullet renderer with localized question,
+  progressive evidence disclosure, Copy, and Gemini. Ineligible and unavailable
+  outcomes do not enter the user-facing card or exports. This same projection
+  applies to Page and Focus, so a raw candidate cannot leak through another
+  product surface.
 - A 2026-07-16 no-focus CDP check used dev build
   `1784200373031-0ae1017-dirty` on a real Financial Times page. It observed an
   automatic `preparing -> ready` transition with no manual click, no redundant
   label, and the then-current Google Search / Gemini / Copy actions at 430 px.
   The later compact action refinement is covered by a deterministic three-row
-  audit and exposes Gemini / Copy only. The deterministic CDP state matrix also
-  covers two-ready/one-fallback and all-fallback outcomes at 430 px; both keep
-  the same localized bullet grammar and the same reading-handoff actions while
-  keeping unavailable future-Agent tasks private and inert.
+  audit and exposes Gemini / Copy only. Its then-current fallback presentation
+  was superseded by the approved-only projection described above.
 - A 2026-07-18 final no-focus CDP check used dev build
-  `1784391028750-5fa9f41-dirty`. It verified three immediate Gemini/copy rows
-  during background preparation, mixed Adapter outcomes, and all-fallback
-  Adapter outcomes. It also forced `:hover` through the CDP CSS domain rather
+  `1784391028750-5fa9f41-dirty`. It verified the previous immediate-row behavior,
+  which is retained only as historical evidence and is no longer the product
+  contract. It also forced `:hover` through the CDP CSS domain rather
   than dispatching user input: each of the three `i` controls revealed only its
   own evidence need directly between the question and action row, showed no
   duplicate singleton tooltip, and left all four Web/Focus continuity
@@ -835,6 +834,15 @@ next candidate gate closed; no fresh holdout should be created yet.
   430 px. Their action row is visually raised 4 px toward the question; the
   control boxes overlap only 2 px of the question line box without touching
   text, clipping, or causing horizontal overflow.
+- A 2026-07-19 no-focus CDP check used dev build
+  `1784474958682-4b1be23-dirty` and the approved-only projection. During the
+  derived batch it showed one section-level loading dot, zero provisional rows,
+  and zero premature Gemini/Copy actions. The deterministic mixed state showed
+  only the two prepared rows; the all-ineligible/unavailable state removed the
+  whole section. The 360 px and 430 px captures had no horizontal or interactive
+  clipping, Page/Focus continuity stayed intact, and all four recorded Side
+  Panel focus observations remained `false`. Screenshots and audit JSON remain
+  gitignored under `tmp/general-page-ui-check-2026-07-19T15-30-06-879Z`.
 - A later 2026-07-18 no-focus CDP pass used dev build
   `1784398754095-5fa9f41-dirty` and confirmed that a single `bg` item has a
   visible bullet at both 360 px and 430 px. Web/Focus continuity, typography,

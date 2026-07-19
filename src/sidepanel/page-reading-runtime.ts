@@ -99,6 +99,7 @@ import {
   focusScopeForSession,
   materializeScopeSession,
   pageScopeForSession,
+  projectApprovedPageClaims,
   replaceScopeState,
   scopeStateForSession,
   type MaterializedPageReadingSession,
@@ -407,6 +408,14 @@ function buildExportPacket(
   const surface = session.surface;
   const brief = session.analysis?.status === "ready" ? session.analysis.brief : undefined;
   if (!surface || !brief) return undefined;
+  const approvedClaims = projectApprovedPageClaims(
+    session.investigation,
+    session.analysis?.key,
+  ).items.map((item) => item.claim);
+  const { claims: _provisionalClaims, ...briefWithoutProvisionalClaims } = brief;
+  const approvedBrief: GeneralPageBrief = approvedClaims.length > 0
+    ? { ...briefWithoutProvisionalClaims, claims: approvedClaims }
+    : briefWithoutProvisionalClaims;
   const modelContext = surface ? modelContextForSession({ ...session, surface }) : undefined;
   const excerpt = surface ? visibleExcerpt(surface, modelContext, session.advisor?.effectiveModelContext) : "";
   return {
@@ -419,7 +428,7 @@ function buildExportPacket(
     caution,
     excerpt,
     links: modelContext?.links,
-    brief,
+    brief: approvedBrief,
     allowedUse: session.analysis?.allowedUse,
   };
 }
@@ -935,6 +944,7 @@ const INFO_ICON_SVG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor
 
 function analysisHtml(
   analysis: PageReadingAnalysisSession | undefined,
+  investigation: MaterializedPageReadingSession["investigation"] | undefined,
   tr: (key: string, params?: Record<string, string | number>) => string,
   lang: Lang,
   pageTitle?: string,
@@ -968,6 +978,8 @@ function analysisHtml(
     : analysis.brief
     ? briefHtml(analysis.brief, analysis.allowedUse, tr, lang, pageTitle, omitBriefNote, {
         source,
+        investigation,
+        analysisKey: analysis.key,
       })
     : "";
   return `
@@ -990,6 +1002,8 @@ function briefHtml(
   omitNote = false,
   investigationContext?: {
     source?: PageClaimInvestigationSource;
+    investigation?: MaterializedPageReadingSession["investigation"];
+    analysisKey?: string;
   },
 ): string {
   const modelLabel = modelDisplayIdentity(brief.model).label || brief.model;
@@ -1009,7 +1023,7 @@ function briefHtml(
   return `
     <p class="page-reader-analysis-summary">${escapeHtml(brief.summary)}</p>
     ${briefSectionHtml("", brief.bg?.map((item) => `${item.t}: ${item.why}${item.q ? ` ${item.q}` : ""}`) ?? [])}
-    ${overview ? "" : briefClaimsHtml(brief.claims ?? [], investigationContext, tr, lang)}
+    ${overview ? "" : briefClaimsHtml(investigationContext, tr, lang)}
     ${briefQuestionsHtml(brief.qs ?? [], {
       title: investigationContext?.source?.title || pageTitle,
       summary: brief.summary,
@@ -1023,20 +1037,23 @@ function briefHtml(
 }
 
 function briefClaimsHtml(
-  claims: NonNullable<GeneralPageBrief["claims"]>,
   context: Parameters<typeof briefHtml>[6],
   tr: (key: string, params?: Record<string, string | number>) => string,
   lang: Lang,
 ): string {
-  if (!claims?.length) return "";
-  const rows = claims.map((claim, claimIndex) => `
+  const projection = projectApprovedPageClaims(context?.investigation, context?.analysisKey);
+  if (!projection.pending && projection.items.length === 0) return "";
+  const rows = projection.items.map(({ claim, claimIndex }) => `
       <li class="page-claim-row" data-claim-index="${claimIndex}">
         ${claimInvestigationHtml({ claim, claimIndex, source: context?.source, tr, lang })}
       </li>`).join("");
+  const pending = projection.pending
+    ? `<span class="reading-brief-loading page-claim-section-loading" role="status" aria-label="${escapeHtml(tr("sidepanel.page.investigation.preparing"))}"></span>`
+    : "";
   return `
-    <div class="page-reader-analysis-section page-claim-section">
-      <h4>${escapeHtml(tr("sidepanel.dynamic.readingBrief.verify"))}</h4>
-      <ul>${rows}</ul>
+    <div class="page-reader-analysis-section page-claim-section${projection.pending ? " is-pending" : ""}">
+      <h4>${escapeHtml(tr("sidepanel.dynamic.readingBrief.verify"))}${pending}</h4>
+      ${rows ? `<ul>${rows}</ul>` : ""}
     </div>`;
 }
 
@@ -1671,6 +1688,7 @@ export function createSidepanelPageReadingRuntime({
       : undefined;
     const analysisBlock = analysisHtml(
       displayedAnalysis,
+      viewSession?.investigation,
       tr,
       lang,
       viewSession?.surface?.title || viewSession?.title,
@@ -2307,16 +2325,31 @@ export function createSidepanelPageReadingRuntime({
     if (!session || session.status === "stale") return;
     const currentScope = scopeStateForSession(session, scope);
     if (currentScope.analysis?.key !== analysisKey) return;
-    if (currentScope.investigation?.analysisKey === analysisKey) return;
     const claims = currentScope.analysis?.brief?.claims?.slice(0, 3) ?? [];
     if (!claims.length) return;
+    const previousInvestigation = currentScope.investigation?.analysisKey === analysisKey
+      ? currentScope.investigation
+      : undefined;
+    const previousItems = previousInvestigation?.items ?? (
+      typeof previousInvestigation?.claimIndex === "number"
+        ? [{
+            claimIndex: previousInvestigation.claimIndex,
+            status: previousInvestigation.status,
+            preparedClaim: previousInvestigation.preparedClaim,
+          }]
+        : []
+    );
     sessions.set(tabId, replaceScopeState(session, scope, {
       ...currentScope,
       investigation: {
         analysisKey,
-        items: claims.map((_, claimIndex) => ({ claimIndex, status: "preparing" as const })),
+        items: claims.map((_, claimIndex) => previousItems.find((item) => item.claimIndex === claimIndex) ?? ({
+          claimIndex,
+          status: "preparing" as const,
+        })),
       },
     }));
+    if (tabId === activeTabId || tabId === displayTabId) render();
   }
 
   function handleGeneralPageInvestigationResult(message: GeneralPageInvestigationResultMsg): void {
@@ -2354,6 +2387,7 @@ export function createSidepanelPageReadingRuntime({
         items: nextItems,
       },
     }));
+    if (message.tabId === activeTabId || message.tabId === displayTabId) render();
   }
 
 

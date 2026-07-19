@@ -8,13 +8,15 @@ describe("General Page audit claim preparation transition", () => {
     expect(resolveClaimPreparationEvidence({
       observed: true,
       text: "",
-      compactRowVisible: true,
-      actionReadyVisible: true,
+      headingLoadingVisible: true,
+      compactRowVisible: false,
+      actionReadyVisible: false,
     }, [])).toEqual({
       observed: true,
       text: "",
-      compactRowVisible: true,
-      actionReadyVisible: true,
+      headingLoadingVisible: true,
+      compactRowVisible: false,
+      actionReadyVisible: false,
       source: "live",
     });
   });
@@ -28,23 +30,26 @@ describe("General Page audit claim preparation transition", () => {
     }, [{
       claimPreparingPresent: true,
       claimPreparingText: "",
-      claimCompactRowVisible: true,
-      claimActionReadyVisible: true,
+      claimHeadingLoadingVisible: true,
+      claimCompactRowVisible: false,
+      claimActionReadyVisible: false,
     }])).toEqual({
       observed: true,
       text: "",
-      compactRowVisible: true,
-      actionReadyVisible: true,
+      headingLoadingVisible: true,
+      compactRowVisible: false,
+      actionReadyVisible: false,
       source: "timeline",
     });
   });
 
-  it("rejects timeline evidence without usable claim actions", () => {
+  it("rejects timeline evidence that exposes provisional claim actions", () => {
     expect(resolveClaimPreparationEvidence({ observed: false }, [{
       claimPreparingPresent: true,
       claimPreparingText: "Preparing",
+      claimHeadingLoadingVisible: true,
       claimCompactRowVisible: true,
-      claimActionReadyVisible: false,
+      claimActionReadyVisible: true,
     }])).toMatchObject({
       observed: false,
       source: "none",

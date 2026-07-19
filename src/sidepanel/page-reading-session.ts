@@ -50,6 +50,44 @@ export interface PageClaimInvestigationSession extends Partial<PageClaimInvestig
   items?: PageClaimInvestigationItemSession[];
 }
 
+export interface ApprovedPageClaimProjection {
+  items: Array<{
+    claimIndex: number;
+    claim: import("../lib/general-page-analysis").GeneralPageBriefClaim;
+  }>;
+  pending: boolean;
+}
+
+/**
+ * Reading-model claims are provisional. Only claims that the independent
+ * Investigation Adapter prepared and the local guard accepted may cross into
+ * user-facing Page/Focus UI or exports.
+ */
+export function projectApprovedPageClaims(
+  session: PageClaimInvestigationSession | undefined,
+  analysisKey: string | undefined,
+): ApprovedPageClaimProjection {
+  if (!session || !analysisKey || session.analysisKey !== analysisKey) {
+    return { items: [], pending: false };
+  }
+  const items = session.items ?? (
+    typeof session.claimIndex === "number"
+      ? [{
+          claimIndex: session.claimIndex,
+          status: session.status,
+          preparedClaim: session.preparedClaim,
+        }]
+      : []
+  );
+  return {
+    items: items
+      .filter((item) => item.status === "ready" && Boolean(item.preparedClaim))
+      .map((item) => ({ claimIndex: item.claimIndex, claim: item.preparedClaim! }))
+      .sort((a, b) => a.claimIndex - b.claimIndex),
+    pending: items.some((item) => item.status === "preparing"),
+  };
+}
+
 export function investigationItemForClaim(
   session: PageClaimInvestigationSession | undefined,
   claimIndex: number,
