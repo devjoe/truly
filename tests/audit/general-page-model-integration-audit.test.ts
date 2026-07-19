@@ -158,7 +158,7 @@ describe("General Page model integration audit", () => {
     });
     expect(captured).toHaveLength(2);
     expect(messageContent(captured[1].body, "system")).toContain("repairing a General Page reading response");
-    expect(messageContent(captured[1].body, "system")).toContain("summary <=32 words");
+    expect(messageContent(captured[1].body, "system")).toContain("aim <=24 words");
     expect(captured[1].body.max_tokens).toBe(800);
   });
 

@@ -1050,6 +1050,35 @@ describe("General Page Reader extraction contract", () => {
     }));
   });
 
+  it("removes a more-stories tail nested inside an otherwise valid article", () => {
+    const document = new JSDOM(`
+      <html>
+        <head><title>合成公共服務公告</title></head>
+        <body>
+          <article>
+            <h1>合成公共服務公告</h1>
+            <p>這篇合成新聞說明一項虛構的公共服務演練，內容只用來驗證正文抽取。</p>
+            <p>演練包含通知、現場協調與後續紀錄，正文應完整保留並提供模型閱讀。</p>
+            <p>所有名稱與事件均為測試資料，不代表任何真實機關或活動。</p>
+            <div class="more-stories">
+              <a href="/other-a">另一則新聞標題不應進入本文</a>
+              <a href="/other-b">第二則相關故事也不應進入本文</a>
+            </div>
+          </article>
+        </body>
+      </html>
+    `, { url: "https://news.example.test/articles/public-service" }).window.document;
+
+    const surface = extractGeneralPageSurface({
+      document,
+      url: "https://news.example.test/articles/public-service",
+    });
+
+    expect(surface.mainText).toContain("這篇合成新聞說明一項虛構的公共服務演練");
+    expect(surface.mainText).not.toContain("另一則新聞標題不應進入本文");
+    expect(surface.mainText).not.toContain("第二則相關故事也不應進入本文");
+  });
+
   it("keeps image-rich long article bodies complete when prose is substantial", () => {
     const surface = extractGeneralPageSurface({
       document: jsdomFixtureDocument(

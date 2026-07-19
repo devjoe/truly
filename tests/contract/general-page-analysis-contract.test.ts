@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyGeneralPageBriefPostGuards,
   canOfferGeneralPageScreenshot,
+  GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA,
   generalPageBriefEligibility,
   normalizeGeneralPageBrief,
   parseGeneralPageBriefContent,
@@ -142,6 +143,34 @@ describe("General Page analysis contract", () => {
     }, "mock-model", "zh-TW");
 
     expect(Array.from(brief?.summary ?? "")).toHaveLength(80);
+    expect(brief?.summary.endsWith("…")).toBe(true);
+  });
+
+  it("prefers a complete sentence before the summary cap", () => {
+    const zh = normalizeGeneralPageBrief({
+      schemaVersion: 1,
+      summary: `第一句提供完整而中立的合成摘要。${"第二句持續加入不應顯示的細節".repeat(8)}`,
+    }, "mock-model", "zh-TW");
+    const en = normalizeGeneralPageBrief({
+      schemaVersion: 1,
+      summary: `The first synthetic sentence is complete. ${"The second sentence adds details that should not survive the product boundary ".repeat(8)}`,
+    }, "mock-model", "en");
+
+    expect(zh?.summary).toBe("第一句提供完整而中立的合成摘要。");
+    expect(en?.summary).toBe("The first synthetic sentence is complete.");
+  });
+
+  it("keeps semantic bounds out of the provider wire profile", () => {
+    const serialized = JSON.stringify(GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA);
+
+    expect(serialized).not.toContain("minLength");
+    expect(serialized).not.toContain("maxLength");
+    expect(serialized).not.toContain("maxItems");
+    expect(GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: ["schemaVersion", "summary", "bg", "claims", "qs", "note"],
+    });
   });
 
   it("tolerates a missing claim query but drops verify/source follow-up questions", () => {
@@ -288,6 +317,11 @@ describe("General Page analysis contract", () => {
     expect(englishPrompt).toContain("Each bg item must contain exactly one background concept");
     expect(englishPrompt).toContain("Include author identity only when it materially changes how the page should be interpreted");
     expect(englishPrompt).toContain("claims <=3 items");
+    expect(englishPrompt).toContain("aim for no more than 24 English words");
+    expect(englishPrompt).toContain("Page Text as the primary reading target");
+    expect(englishPrompt).toContain("health efficacy, safety, suitability");
+    expect(englishPrompt).toContain("Never write none");
+    expect(englishPrompt).toContain("must not introduce an unrelated person");
     expect(englishPrompt).toContain("omit weak or duplicate candidates");
     expect(englishPrompt).toContain("understand|context|counter|image");
     expect(englishPrompt).not.toContain("Quick mode");
@@ -321,6 +355,11 @@ describe("General Page analysis contract", () => {
     expect(zhPrompt).toContain("每個 bg 項目只能包含一個背景概念");
     expect(zhPrompt).toContain("只有作者身分會實質影響文章解讀時才可納入");
     expect(zhPrompt).toContain("claims 最多 3 項");
+    expect(zhPrompt).toContain("目標 60 字內且不得超過 80 字");
+    expect(zhPrompt).toContain("Page Text 是主要閱讀對象");
+    expect(zhPrompt).toContain("具體的健康功效、安全性、適用性");
+    expect(zhPrompt).toContain("不得填『無』");
+    expect(zhPrompt).toContain("不得加入無關人物");
     expect(zhPrompt).toContain("不要為了湊數");
     expect(zhPrompt).toContain("不得使用 verify/source");
     expect(zhPrompt).not.toContain("快速模式");

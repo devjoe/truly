@@ -93,52 +93,50 @@ export interface GeneralPageBriefClaim extends ReadingBriefClaim {
   displayQ?: string;
 }
 
-/** Provider-neutral output contract for a General Page reading brief.
+/** Minimal structural wire profile for a General Page reading brief.
  *
- * Providers may express this capability with different wire protocols. The
- * OpenAI-compatible transport maps it to `response_format.json_schema`; other
- * transports must map the same schema explicitly or report that constrained
- * output is unsupported. */
-export const GENERAL_PAGE_BRIEF_RESPONSE_SCHEMA = {
+ * This is not the domain contract. `GeneralPageBrief` plus
+ * `normalizeGeneralPageBrief` remain authoritative for product semantics and
+ * bounds. A transport may send this profile only after the exact endpoint,
+ * model, and schema dialect have been verified. */
+export const GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA = {
   type: "object",
   additionalProperties: false,
   required: ["schemaVersion", "summary", "bg", "claims", "qs", "note"],
   properties: {
     schemaVersion: { type: "integer", const: 1 },
-    summary: { type: "string", minLength: 1, maxLength: 320 },
+    summary: { type: "string" },
     bg: {
       type: "array",
-      maxItems: 2,
       items: {
         type: "object",
         additionalProperties: false,
         required: ["t", "why"],
         properties: {
-          t: { type: "string", minLength: 1, maxLength: 80 },
-          why: { type: "string", minLength: 1, maxLength: 120 },
+          t: { type: "string" },
+          why: { type: "string" },
         },
       },
     },
     claims: {
       type: "array",
-      maxItems: 3,
       items: {
         type: "object",
         additionalProperties: false,
         required: ["c", "why", "need", "q", "atom"],
         properties: {
-          c: { type: "string", minLength: 1, maxLength: 180 },
-          why: { type: "string", minLength: 1, maxLength: 120 },
-          need: { type: "string", minLength: 1, maxLength: 90 },
-          q: { type: "string", minLength: 1, maxLength: 180 },
+          c: { type: "string" },
+          why: { type: "string" },
+          need: { type: "string" },
+          q: { type: "string" },
           atom: {
             type: "object",
             additionalProperties: false,
             required: ["s", "p", "o"],
             properties: {
-              s: { type: "string", minLength: 1, maxLength: 80 },
-              p: { type: "string", minLength: 1, maxLength: 100 },
-              o: { type: "string", minLength: 1, maxLength: 160 },
+              s: { type: "string" },
+              p: { type: "string" },
+              o: { type: "string" },
             },
           },
         },
@@ -146,13 +144,12 @@ export const GENERAL_PAGE_BRIEF_RESPONSE_SCHEMA = {
     },
     qs: {
       type: "array",
-      maxItems: 1,
       items: {
         type: "object",
         additionalProperties: false,
         required: ["q", "kind"],
         properties: {
-          q: { type: "string", minLength: 1, maxLength: 140 },
+          q: { type: "string" },
           kind: { type: "string", enum: ["understand", "context", "counter", "image"] },
         },
       },
@@ -160,7 +157,7 @@ export const GENERAL_PAGE_BRIEF_RESPONSE_SCHEMA = {
     note: {
       anyOf: [
         { type: "null" },
-        { type: "string", maxLength: 200 },
+        { type: "string" },
       ],
     },
   },
@@ -451,9 +448,56 @@ function boundedString(value: unknown, maxLength: number): string | undefined {
 function boundedSummary(value: unknown, outputLang: Lang | undefined): string | undefined {
   const clean = boundedString(value, 900);
   if (!clean) return undefined;
-  if (outputLang === "zh-TW") return Array.from(clean).slice(0, 80).join("").trim();
-  if (outputLang === "en") return clean.split(/\s+/).slice(0, 32).join(" ").trim();
-  return clean.slice(0, 360).trim();
+  if (outputLang === "zh-TW") return boundedZhSummary(clean, 80);
+  if (outputLang === "en") return boundedEnglishSummary(clean, 32);
+  return boundedTextWithHonestEllipsis(clean, 360);
+}
+
+function boundedZhSummary(value: string, maxCharacters: number): string {
+  const characters = Array.from(value);
+  if (characters.length <= maxCharacters) return value;
+  const window = characters.slice(0, maxCharacters).join("");
+  const completeEnd = lastBoundaryEnd(window, /[。！？!?]/gu);
+  if (completeEnd >= 16) return window.slice(0, completeEnd).trim();
+  const clauseEnd = lastBoundaryEnd(window, /[，；、,:;]/gu);
+  const prefix = clauseEnd >= 20
+    ? window.slice(0, clauseEnd - 1)
+    : characters.slice(0, maxCharacters - 1).join("");
+  return `${prefix.trim().replace(/[，；、,:;]+$/u, "")}…`;
+}
+
+function boundedEnglishSummary(value: string, maxWords: number): string {
+  const words = value.split(/\s+/);
+  if (words.length <= maxWords) return value;
+  const window = words.slice(0, maxWords);
+  const completeIndex = findLastWordBoundary(window, /[.!?]["')\]]?$/u);
+  if (completeIndex >= 4) return window.slice(0, completeIndex + 1).join(" ");
+  const clauseIndex = findLastWordBoundary(window, /[,;:]["')\]]?$/u);
+  const prefix = clauseIndex >= 4
+    ? window.slice(0, clauseIndex + 1).join(" ").replace(/[,;:]+$/u, "")
+    : window.join(" ");
+  return `${prefix.trim()}…`;
+}
+
+function boundedTextWithHonestEllipsis(value: string, maxCharacters: number): string {
+  const characters = Array.from(value);
+  if (characters.length <= maxCharacters) return value;
+  return `${characters.slice(0, maxCharacters - 1).join("").trim()}…`;
+}
+
+function lastBoundaryEnd(value: string, pattern: RegExp): number {
+  let end = -1;
+  for (const match of value.matchAll(pattern)) {
+    end = (match.index ?? -1) + match[0].length;
+  }
+  return end;
+}
+
+function findLastWordBoundary(words: string[], pattern: RegExp): number {
+  for (let index = words.length - 1; index >= 0; index -= 1) {
+    if (pattern.test(words[index])) return index;
+  }
+  return -1;
 }
 
 function extractJsonPayload(value: string): string | undefined {
