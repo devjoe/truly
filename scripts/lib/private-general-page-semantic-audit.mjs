@@ -56,10 +56,24 @@ export function privateSemanticAuditReadingResponseFormat(argv) {
   return value;
 }
 
-export function privateSemanticAuditReadingManifestMetadata(responseFormat, wireResponseFormat) {
+export function privateSemanticAuditReadingWireProfile(argv) {
+  const index = argv.indexOf("--reading-wire-profile");
+  const value = index >= 0 ? argv[index + 1] : "structural_v1";
+  if (value !== "structural_v1" && value !== "compact_cardinality_v1") {
+    throw new Error("--reading-wire-profile must be structural_v1 or compact_cardinality_v1");
+  }
+  return value;
+}
+
+export function privateSemanticAuditReadingManifestMetadata(
+  responseFormat,
+  wireResponseFormat,
+  capabilityReceiptMetadata,
+) {
   if (responseFormat === "json_object") {
+    if (capabilityReceiptMetadata) throw new Error("reading capability receipt requires json_schema");
     if (wireResponseFormat?.type !== "json_object") throw new Error("reading response format/body mismatch");
-    return { responseFormat: "json_object" };
+    return { responseFormat: "json_object", wireProfile: "json_object" };
   }
   if (responseFormat !== "json_schema" || wireResponseFormat?.type !== "json_schema" ||
       wireResponseFormat?.json_schema?.strict !== true || !wireResponseFormat?.json_schema?.schema) {
@@ -67,7 +81,9 @@ export function privateSemanticAuditReadingManifestMetadata(responseFormat, wire
   }
   return {
     responseFormat: "json_schema",
+    wireProfile: capabilityReceiptMetadata ? "compact_cardinality_v1" : "structural_v1",
     schemaSha256: sha256Text(JSON.stringify(wireResponseFormat.json_schema.schema)),
+    ...(capabilityReceiptMetadata ? { capabilityReceipt: capabilityReceiptMetadata } : {}),
   };
 }
 

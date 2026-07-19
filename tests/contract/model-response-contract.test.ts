@@ -281,6 +281,71 @@ describe("Tier B General Page brief public contract", () => {
     });
   });
 
+  it("adds only compact array limits when an exact endpoint/model capability receipt is supplied", () => {
+    const endpoint = "http://model-runtime.example/v1";
+    const model = "schema-capable-model";
+    const body = buildTierBGeneralPageBriefChatBody({
+      endpoint,
+      model,
+      context: generalPageContext,
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+      structuredOutputMode: "json_schema",
+      structuredOutputCapabilityReceipt: {
+        schemaVersion: 1,
+        receiptId: "synthetic-compact-cardinality-v1",
+        verifiedAt: "2026-07-19T00:00:00.000Z",
+        evidenceSha256: "a".repeat(64),
+        capability: "general_page_brief_compact_cardinality_v1",
+        endpoint,
+        model,
+        dialect: "openai-compatible-json-schema",
+        supportedKeywords: ["maxItems"],
+      },
+    });
+
+    expect(body.response_format).toMatchObject({
+      type: "json_schema",
+      json_schema: {
+        schema: {
+          properties: {
+            summary: { type: "string" },
+            bg: { type: "array", maxItems: 2 },
+            claims: { type: "array", maxItems: 3 },
+            qs: { type: "array", maxItems: 1 },
+          },
+        },
+      },
+    });
+    const schema = body.response_format?.type === "json_schema"
+      ? body.response_format.json_schema.schema
+      : undefined;
+    expect(JSON.stringify(schema)).not.toContain("maxLength");
+    expect(JSON.stringify(schema)).not.toContain("minLength");
+  });
+
+  it("fails closed when the compact profile receipt does not match the exact endpoint and model", () => {
+    expect(() => buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://model-runtime.example/v1",
+      model: "schema-capable-model",
+      context: generalPageContext,
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+      structuredOutputMode: "json_schema",
+      structuredOutputCapabilityReceipt: {
+        schemaVersion: 1,
+        receiptId: "synthetic-compact-cardinality-v1",
+        verifiedAt: "2026-07-19T00:00:00.000Z",
+        evidenceSha256: "a".repeat(64),
+        capability: "general_page_brief_compact_cardinality_v1",
+        endpoint: "http://different-runtime.example/v1",
+        model: "schema-capable-model",
+        dialect: "openai-compatible-json-schema",
+        supportedKeywords: ["maxItems"],
+      },
+    })).toThrow(/capability_receipt_mismatch/);
+  });
+
   it("uses the overview system variant for page overview only contexts", () => {
     const body = buildTierBGeneralPageBriefChatBody({
       endpoint: "http://localhost:11434",

@@ -163,6 +163,29 @@ export const GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA = {
   },
 } as const;
 
+/** Endpoint-capability profile for transports that have independently proven
+ * support for JSON Schema array cardinality. It deliberately adds only the
+ * compactness constraints needed to keep the response inside the product
+ * budget; string bounds remain a domain-normalization responsibility. */
+export const GENERAL_PAGE_BRIEF_COMPACT_CARDINALITY_WIRE_SCHEMA = {
+  ...GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA,
+  properties: {
+    ...GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA.properties,
+    bg: {
+      ...GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA.properties.bg,
+      maxItems: 2,
+    },
+    claims: {
+      ...GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA.properties.claims,
+      maxItems: 3,
+    },
+    qs: {
+      ...GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA.properties.qs,
+      maxItems: 1,
+    },
+  },
+} as const;
+
 export type GeneralPageAnalysisEligibilityReason =
   | "session_not_ready"
   | "stale_surface"

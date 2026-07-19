@@ -13,6 +13,7 @@ import type {
 import type { GeneralPageModelContext } from "./general-page-model-context";
 import {
   applyGeneralPageBriefPostGuards,
+  GENERAL_PAGE_BRIEF_COMPACT_CARDINALITY_WIRE_SCHEMA,
   GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA,
   parseGeneralPageBriefContent,
   type GeneralPageBrief,
@@ -245,6 +246,10 @@ export function generalPageBriefSystemPrompt(
       overview
         ? "This is page overview only. Describe what kind of page it is, what linked topics or sections appear, and what the reader may inspect next. Return claims as an empty array or omit it. Do not produce article-grade claims."
         : "Return one neutral summary, useful background, up to three supported claims, and at most one follow-up question. Rank claims by consequence and grounding quality; omit weak or duplicate candidates rather than filling a quota.",
+      "For each possible claim, identify the underlying real-world fact that independent evidence could confirm or refute. If the only question is whether this page, its author, or a quoted speaker said something already visible on the page, omit it unless the existence or exact wording of that official statement is itself consequential.",
+      "Apply a source-sufficiency test: if the current authentic page is already the primary evidence needed for the assertion, do not spend a claim slot on it. Prefer facts that require an external authority record, primary dataset, clinical evidence, court record, or another named first-hand record.",
+      "Page observations are not claims: never emit that the page lacks evidence, omits a link, contains a comment or reply, or uses a certain wording. After selecting an underlying health, safety, money, rights, law, or public-interest fact, do not add these page-quality observations as extra claims. Use them only to decide whether the underlying fact needs verification.",
+      "When a news or social page attributes an external fact, select the external fact rather than the reporting act. Example: from ‘A report says Norvale prices fell 18 percent,’ use c=‘Norvale prices fell 18 percent.’ and q=‘Did Norvale prices fall 18 percent?’ Do not ask whether the report said it.",
       "Emit a claim only for a concrete assertion whose verification could materially change judgment about health, safety, money, rights, law, or a public-interest event. Otherwise return claims: [].",
       "Claims MUST be empty for opinions, personal experience, humor, routine activity, engagement/publication metadata, ordinary discounts/coupons/course counts, routine product features, marketing goals, interface locations, AI-writing guesses, indexes, feeds, or mixed headlines. Vulnerable-group health/safety suitability remains consequential.",
       "A concrete health efficacy, safety, suitability, prevention, treatment, or risk-reduction assertion remains claim-eligible even when it appears in marketing or commerce. Do not dismiss it merely because the source promotes a product or service.",
@@ -262,10 +267,10 @@ export function generalPageBriefSystemPrompt(
         "Good attributed atomic example: c=‘Agency A said Company B recalled 29 products.’ atom={s:‘Company B’,p:‘recalled’,o:‘29 products’} attribution={source:‘Agency A’,relation:‘said’,modality:‘statement’} q=‘Did Agency A say Company B recalled 29 products?’ Bad: making Agency A/said the atom, keeping two events in c, paraphrasing atom text, or returning a statement instead of a question in q.",
         "Before emitting claims, silently verify all of these: c has terminal punctuation and one assertion only; s, p, and o are exact ordered non-overlapping substrings of c; p is an action/relation rather than a date or preposition; q ends with ? and contains the exact s, p, and o; any outer source frame has attribution. If any check fails, return claims:[].",
       ] : []),
-      "claim.q must be one natural question about the same atom and copy atom.s, atom.p, and atom.o verbatim. It must not use vague references, URLs, domains, Markdown, search-engine names, commands, keyword lists, or facts absent from the page. Omit the claim if q is unreliable.",
-      "claim.need must name a concrete evidence class and subject, such as an agency record, primary dataset, clinical guideline, court document, or the named person's full statement. Never write none, no evidence needed, or an unspecified source; omit the claim if no useful evidence requirement can be named.",
+      "claim.q must be one natural question about whether the same underlying atom is true and copy atom.s, atom.p, and atom.o verbatim. Do not merely ask whether the page or speaker stated the claim. It must not use vague references, URLs, domains, Markdown, search-engine names, commands, keyword lists, or facts absent from the page. Omit the claim if q is unreliable.",
+      "claim.need must be a complete stand-alone noun phrase of at most 14 English words naming both a concrete primary evidence class and its relevant holder or subject, such as a named agency record, primary dataset, clinical guideline, court document, or the named person's full statement. Never end with a dangling verb such as confirming. Never write none, no evidence needed, an URL, an instruction to provide a link, or an unspecified source. Omit the claim if no useful evidence requirement can be named.",
       "Preserve legal stage exactly: arrested, charged, denied bail, convicted, and sentenced are never interchangeable. claim.q must preserve atom.p's legal wording.",
-      "qs is only for understanding, context, counter-perspectives, or image interpretation; never verify/source and never duplicate the claim. It must stay grounded in the primary Page Text and must not introduce an unrelated person, event, country, conflict, or political frame.",
+      "qs is only for understanding, context, counter-perspectives, or image interpretation; never ask what evidence supports a claim, what the actual number/date/result or current official status is, what official data exists, or duplicate the claim. Those are verification questions and belong in claim.q, not qs. qs must stay grounded in the primary Page Text and must not introduce an unrelated person, event, country, conflict, or political frame.",
       "Do not use markdown. Do not output extra fields.",
     ].join("\n");
   }
@@ -282,6 +287,10 @@ export function generalPageBriefSystemPrompt(
     overview
       ? "這只允許頁面總覽。請描述這是什麼類型的頁面、它連到哪些主題或區塊、讀者下一步可檢視什麼。claims 必須回空陣列或省略，不得產生文章級查核主張。"
       : "回傳一個中立摘要、有用背景、至多三個文本支持的 claim，以及至多一個延伸問題。claims 依後果與 grounding 品質排序；不要為了湊數加入薄弱或重複候選。",
+    "對每個可能的 claim，先找出可由獨立證據證實或推翻的底層現實事實。若問題只是在確認本頁、作者或被引述者是否說過頁面上已看得到的話，應省略；除非該官方發言是否存在或其精確內容本身就具實質後果。",
+    "執行來源充分性測試：若目前這個真實頁面本身就是該陳述所需的第一手證據，不要占用 claim 名額。優先選擇需要外部主管機關紀錄、原始資料集、臨床證據、法院紀錄或其他具名第一手紀錄才能判斷的事實。",
+    "頁面觀察不是 claim：不得把『本頁沒有附證據／連結』、『留言或帳號如何回覆』或『頁面使用某段文字』列為 claim。選出一個健康、安全、金錢、權利、法律或公共利益的底層事實後，不得再把這些頁面品質觀察當成額外 claims；它們只能用來判斷底層事實是否需要查核。",
+    "新聞或社群頁面轉述外部事實時，應選底層事實而非轉述行為。例如從『報導指出諾維爾房價下跌百分之十八』產生 c＝『諾維爾房價下跌百分之十八。』及 q＝『諾維爾房價是否下跌百分之十八？』，不得問報導是否這樣說。",
     "只有查證結果可能實質改變健康、安全、金錢、權利、法律或公共事件判斷的具體陳述才能放入 claims；否則回傳 claims: []。",
     "意見、個人經驗、玩笑、日常活動、互動或發布資訊、一般折扣／折扣碼／課程數量、普通產品功能、行銷目標、介面位置、AI 文風猜測、索引、feed 或混合標題，claims 必須為空。脆弱族群適用性的健康或安全宣稱仍具後果。",
     "具體的健康功效、安全性、適用性、預防、治療或降低風險宣稱，即使出現在行銷或商業內容中仍可成為 claim；不得只因來源在推廣產品或服務就排除。",
@@ -299,10 +308,10 @@ export function generalPageBriefSystemPrompt(
       "正確的歸因原子範例：c＝『甲機關表示，乙公司下架29項產品。』atom＝{s:『乙公司』,p:『下架』,o:『29項產品』}，attribution＝{source:『甲機關』,relation:『表示』,modality:『statement』}，q＝『甲機關是否表示乙公司下架29項產品？』錯誤做法包括把甲機關／表示當成 atom、在 c 保留兩個事件、改寫 atom 文字，或讓 q 成為陳述句。",
       "輸出 claims 前，必須在內部逐項確認：c 有句末標點且只有一個陳述；s、p、o 是 c 中依序出現且不重疊的原文；p 是動作或關係而非日期、期間或介系詞；q 以問號結尾並原樣包含 s、p、o；外層來源框架已寫入 attribution。任一項不成立就回傳 claims:[]。",
     ] : []),
-    "claims.q 必須是查核同一 atom 的一個自然問句，並原樣寫出 atom.s、atom.p、atom.o；不得使用代稱、網址、網域、Markdown、搜尋引擎名稱、操作指令、關鍵字清單或頁面未出現的事實。無法可靠產生 q 就省略 claim。",
-    "claims.need 必須寫出具體的證據類型與對象，例如機關紀錄、原始資料集、臨床指引、法院文件或具名人物的完整發言。不得填『無』、『不需證據』或未指明的『來源』；無法提出有用證據需求就省略 claim。",
+    "claims.q 必須是詢問同一底層 atom 是否為真的自然問句，並原樣寫出 atom.s、atom.p、atom.o；不得只問本頁或某人是否說過該主張，也不得使用代稱、網址、網域、Markdown、搜尋引擎名稱、操作指令、關鍵字清單或頁面未出現的事實。無法可靠產生 q 就省略 claim。",
+    "claims.need 必須是目標 36 字內、可獨立閱讀的完整名詞片語，同時寫出具體的第一手證據類型及其相關持有者或對象，例如具名機關紀錄、原始資料集、臨床指引、法院文件或具名人物的完整發言。不得以『用以確認』等懸空動詞結尾，也不得填『無』、『不需證據』、網址、要求提供連結的指令或未指明的『來源』；無法提出有用證據需求就省略 claim。",
     "法律程序必須保持原詞：被捕、被控、不得交保、被判有罪與被判刑絕對不可互換；claims.q 必須保持 atom.p 的法律狀態。",
-    "qs 只放理解、背景、反方觀點或影像理解問題，不得使用 verify/source，不得重述 claim；必須以主要 Page Text 為依據，不得加入無關人物、事件、國家、衝突或政治框架。",
+    "qs 只放理解、背景、反方觀點或影像理解問題，不得詢問支持主張的證據、實際數字／日期／結果、目前官方狀態、有哪些官方資料或重述 claim。這些都是查核問題，應放入 claims.q 而非 qs；qs 必須以主要 Page Text 為依據，不得加入無關人物、事件、國家、衝突或政治框架。",
     "不要 markdown，不要輸出其他欄位。",
   ].join("\n");
 }
@@ -460,12 +469,28 @@ export interface TierBGeneralPageBriefRequest {
   /** Provider capability, not a provider wire field. This OpenAI-compatible
    *  transport maps it to the appropriate response_format request. */
   structuredOutputMode: "json_schema" | "json_object";
+  /** Optional proof that this exact endpoint/model/dialect accepts the compact
+   *  cardinality schema. Presence opts into that profile; mismatches fail
+   *  closed instead of silently downgrading or resending page content. */
+  structuredOutputCapabilityReceipt?: GeneralPageBriefStructuredOutputCapabilityReceipt;
   /** Opt-in candidate contract used only by private evaluation. */
   contract?: "standard" | "investigation_v3";
   /** Opt-in format repair used only while evaluating an unstable candidate contract. */
   enableFormatRepair?: boolean;
   /** User-confirmed visible-tab screenshot as a data URL (vision providers only). */
   screenshotDataUrl?: string;
+}
+
+export interface GeneralPageBriefStructuredOutputCapabilityReceipt {
+  schemaVersion: 1;
+  receiptId: string;
+  verifiedAt: string;
+  evidenceSha256: string;
+  capability: "general_page_brief_compact_cardinality_v1";
+  endpoint: string;
+  model: string;
+  dialect: "openai-compatible-json-schema";
+  supportedKeywords: readonly ["maxItems"] | readonly string[];
 }
 
 export interface TierBGeneralPageBriefResult {
@@ -556,6 +581,7 @@ export interface TierBChatBody {
           name: string;
           strict: true;
           schema: typeof GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA |
+            typeof GENERAL_PAGE_BRIEF_COMPACT_CARDINALITY_WIRE_SCHEMA |
             typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA |
             typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_BATCH_RESPONSE_SCHEMA;
         };
@@ -837,6 +863,26 @@ export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefReq
   if (req.structuredOutputMode === "json_schema" && req.contract === "investigation_v3") {
     throw new Error("general_page_brief_candidate_contract_has_no_schema");
   }
+  const capabilityReceipt = req.structuredOutputCapabilityReceipt;
+  if (capabilityReceipt && req.structuredOutputMode !== "json_schema") {
+    throw new Error("general_page_brief_capability_receipt_requires_json_schema");
+  }
+  if (capabilityReceipt && (
+    capabilityReceipt.schemaVersion !== 1 ||
+    !/^[a-z0-9][a-z0-9._-]{2,80}$/i.test(capabilityReceipt.receiptId) ||
+    !Number.isFinite(Date.parse(capabilityReceipt.verifiedAt)) ||
+    !/^[a-f0-9]{64}$/.test(capabilityReceipt.evidenceSha256) ||
+    capabilityReceipt.capability !== "general_page_brief_compact_cardinality_v1" ||
+    capabilityReceipt.endpoint.trim() !== req.endpoint.trim() ||
+    capabilityReceipt.model.trim() !== req.model.trim() ||
+    capabilityReceipt.dialect !== "openai-compatible-json-schema" ||
+    !capabilityReceipt.supportedKeywords.includes("maxItems")
+  )) {
+    throw new Error("general_page_brief_capability_receipt_mismatch");
+  }
+  const readingWireSchema = capabilityReceipt
+    ? GENERAL_PAGE_BRIEF_COMPACT_CARDINALITY_WIRE_SCHEMA
+    : GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA;
   const body: TierBChatBody = {
     model: req.model,
     messages: [
@@ -851,7 +897,7 @@ export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefReq
           json_schema: {
             name: "truly_general_page_brief_v1",
             strict: true,
-            schema: GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA,
+            schema: readingWireSchema,
           },
         }
       : { type: "json_object" },

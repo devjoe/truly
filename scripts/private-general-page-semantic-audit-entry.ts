@@ -11,6 +11,7 @@ import {
   callTierBGeneralPageBrief,
   callTierBGeneralPageInvestigationAdapterBatch,
   type TierBChatBody,
+  type GeneralPageBriefStructuredOutputCapabilityReceipt,
   type TierBGeneralPageInvestigationAdapterBatchRequest,
 } from "../src/lib/tier-b-client";
 import type { ReadingSurface } from "../src/lib/reading-surface-types";
@@ -25,6 +26,7 @@ import {
   privateSemanticAuditAdapterResponseFormat,
   privateSemanticAuditReadingManifestMetadata,
   privateSemanticAuditReadingResponseFormat,
+  privateSemanticAuditReadingWireProfile,
   privateSemanticAuditRepairMode,
   semanticAuditCompletionsUrl,
   sha256Text,
@@ -139,6 +141,30 @@ const concurrency = Math.max(1, Math.min(4, Number(option("--concurrency", "2"))
 const timeoutMs = Math.max(1_000, Math.min(120_000, Number(option("--timeout-ms", "45_000")) || 45_000));
 const repairMode = privateSemanticAuditRepairMode(process.argv);
 const readingResponseFormat = privateSemanticAuditReadingResponseFormat(process.argv);
+const readingWireProfile = privateSemanticAuditReadingWireProfile(process.argv);
+const readingCapabilityReceiptPath = option("--reading-capability-receipt");
+if (readingWireProfile === "compact_cardinality_v1" && readingResponseFormat !== "json_schema") {
+  throw new Error("compact_cardinality_v1 requires --reading-response-format json_schema");
+}
+if (readingWireProfile === "compact_cardinality_v1" && !readingCapabilityReceiptPath) {
+  throw new Error("compact_cardinality_v1 requires --reading-capability-receipt");
+}
+if (readingWireProfile === "structural_v1" && readingCapabilityReceiptPath) {
+  throw new Error("reading capability receipt requires compact_cardinality_v1");
+}
+const readingCapabilityReceiptFile = readingCapabilityReceiptPath
+  ? fs.readFileSync(path.resolve(readingCapabilityReceiptPath), "utf8")
+  : undefined;
+const readingCapabilityReceipt = readingCapabilityReceiptFile
+  ? JSON.parse(readingCapabilityReceiptFile) as GeneralPageBriefStructuredOutputCapabilityReceipt
+  : undefined;
+const readingCapabilityReceiptMetadata = readingCapabilityReceiptFile && readingCapabilityReceipt
+  ? {
+      receiptId: readingCapabilityReceipt.receiptId,
+      receiptSha256: sha256Text(readingCapabilityReceiptFile),
+      evidenceSha256: readingCapabilityReceipt.evidenceSha256,
+    }
+  : undefined;
 const adapterResponseFormat = privateSemanticAuditAdapterResponseFormat(process.argv);
 const adapterModelMetadata = privateSemanticAuditAdapterModelMetadata(adapterResponseFormat);
 const adapterMaxTokens = adapterModelMetadata.adapterMaxTokens;
@@ -188,18 +214,6 @@ const candidateSnapshot = assertPrivateSemanticAuditCandidateSnapshot({
   expectedCommit: expectedCandidateCommit,
   expectedTrackedDiffSha256,
 });
-if (process.argv.includes("--preflight-only")) {
-  console.log(JSON.stringify({
-    result: "preflight_pass",
-    samples: rows.length,
-    candidateSnapshot,
-    modelRequests: 0,
-    publicSearchRequests: 0,
-  }, null, 2));
-  process.exit(0);
-}
-const core = hashPrivateSemanticAuditCoreFiles(repoRoot);
-const languages = [...new Set(rows.map((row) => outputLanguageForPrivateEval(row.language) as Lang))].sort();
 const firstReadingRow = rows[0];
 if (!firstReadingRow) throw new Error("Private semantic audit requires at least one input row");
 const firstReadingBody = buildTierBGeneralPageBriefChatBody({
@@ -210,11 +224,27 @@ const firstReadingBody = buildTierBGeneralPageBriefChatBody({
   outputLang: outputLanguageForPrivateEval(firstReadingRow.language) as Lang,
   contract: "standard",
   structuredOutputMode: readingResponseFormat,
+  structuredOutputCapabilityReceipt: readingCapabilityReceipt,
 });
+if (process.argv.includes("--preflight-only")) {
+  console.log(JSON.stringify({
+    result: "preflight_pass",
+    samples: rows.length,
+    candidateSnapshot,
+    readingWireProfile,
+    capabilityReceiptId: readingCapabilityReceipt?.receiptId,
+    modelRequests: 0,
+    publicSearchRequests: 0,
+  }, null, 2));
+  process.exit(0);
+}
+const core = hashPrivateSemanticAuditCoreFiles(repoRoot);
+const languages = [...new Set(rows.map((row) => outputLanguageForPrivateEval(row.language) as Lang))].sort();
 const readingMaxTokens = firstReadingBody.max_tokens;
 const readingManifestMetadata = privateSemanticAuditReadingManifestMetadata(
   readingResponseFormat,
   firstReadingBody.response_format,
+  readingCapabilityReceiptMetadata,
 );
 const readingSystemSha256ByLanguage = Object.fromEntries(languages.map((language) => {
   const row = rows.find((candidate) => outputLanguageForPrivateEval(candidate.language) === language);
@@ -227,6 +257,7 @@ const readingSystemSha256ByLanguage = Object.fromEntries(languages.map((language
     outputLang: language,
     contract: "standard",
     structuredOutputMode: readingResponseFormat,
+    structuredOutputCapabilityReceipt: readingCapabilityReceipt,
   });
   return [language, bodyPromptHashes(body).systemSha256];
 }));
@@ -255,6 +286,7 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
     outputLang,
     contract: "standard",
     structuredOutputMode: readingResponseFormat,
+    structuredOutputCapabilityReceipt: readingCapabilityReceipt,
   });
   const readingPrompt = bodyPromptHashes(readingBody);
   const base = {
@@ -285,6 +317,7 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
     outputLang,
     contract: "standard",
     structuredOutputMode: readingResponseFormat,
+    structuredOutputCapabilityReceipt: readingCapabilityReceipt,
     timeoutMs,
   });
   if (!reading.ok || !reading.brief) {

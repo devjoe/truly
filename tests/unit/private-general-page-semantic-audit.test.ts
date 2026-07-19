@@ -10,6 +10,7 @@ import {
   privateSemanticAuditAdapterResponseFormat,
   privateSemanticAuditReadingManifestMetadata,
   privateSemanticAuditReadingResponseFormat,
+  privateSemanticAuditReadingWireProfile,
   privateSemanticAuditRepairMode,
   semanticAuditCompletionsUrl,
 } from "../../scripts/lib/private-general-page-semantic-audit.mjs";
@@ -62,19 +63,46 @@ describe("private General Page semantic audit boundary", () => {
       "--reading-response-format",
       "json_schema",
     ])).toBe("json_schema");
+    expect(privateSemanticAuditReadingWireProfile([])).toBe("structural_v1");
+    expect(privateSemanticAuditReadingWireProfile([
+      "--reading-wire-profile",
+      "compact_cardinality_v1",
+    ])).toBe("compact_cardinality_v1");
     expect(privateSemanticAuditReadingManifestMetadata("json_object", { type: "json_object" }))
-      .toEqual({ responseFormat: "json_object" });
+      .toEqual({ responseFormat: "json_object", wireProfile: "json_object" });
     expect(privateSemanticAuditReadingManifestMetadata("json_schema", {
       type: "json_schema",
       json_schema: { strict: true, schema: { type: "object", properties: {} } },
     })).toEqual({
       responseFormat: "json_schema",
+      wireProfile: "structural_v1",
       schemaSha256: "8243f0af367f188a376f2c17b5eabe872a2f7a979813e0d4e2be6d594c2aa259",
+    });
+    expect(privateSemanticAuditReadingManifestMetadata("json_schema", {
+      type: "json_schema",
+      json_schema: { strict: true, schema: { type: "object", properties: {} } },
+    }, {
+      receiptId: "receipt-v1",
+      receiptSha256: "a".repeat(64),
+      evidenceSha256: "b".repeat(64),
+    })).toEqual({
+      responseFormat: "json_schema",
+      wireProfile: "compact_cardinality_v1",
+      schemaSha256: "8243f0af367f188a376f2c17b5eabe872a2f7a979813e0d4e2be6d594c2aa259",
+      capabilityReceipt: {
+        receiptId: "receipt-v1",
+        receiptSha256: "a".repeat(64),
+        evidenceSha256: "b".repeat(64),
+      },
     });
     expect(() => privateSemanticAuditReadingResponseFormat([
       "--reading-response-format",
       "none",
     ])).toThrow(/must be json_object or json_schema/);
+    expect(() => privateSemanticAuditReadingWireProfile([
+      "--reading-wire-profile",
+      "universal",
+    ])).toThrow(/must be structural_v1 or compact_cardinality_v1/);
   });
 
   it("allows only the declared model completions endpoint and never follows redirects", async () => {
