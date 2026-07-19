@@ -83,6 +83,9 @@ for (const file of files) {
       failures.push(`${normalized}: forbidden content (${rule.label})`);
     }
   }
+  if (startsWithSegment(normalized, ".github/workflows")) {
+    failures.push(...githubActionPinningFailures(normalized, content));
+  }
 }
 
 if (failures.length > 0) {
@@ -111,6 +114,20 @@ function hasEscapingParentReference(content, filePath) {
     }
   }
   return false;
+}
+
+function githubActionPinningFailures(filePath, content) {
+  const actionRefPattern = /^\s*uses:\s*([^@\s#]+)@([^\s#]+)/gm;
+  const failures = [];
+  let match;
+  while ((match = actionRefPattern.exec(content)) !== null) {
+    const action = match[1];
+    const ref = match[2];
+    if (action.startsWith("./") || action.startsWith("../")) continue;
+    if (/^[a-f0-9]{40}$/i.test(ref)) continue;
+    failures.push(`${filePath}: GitHub Action ${action}@${ref} must be pinned to a 40-character commit SHA`);
+  }
+  return failures;
 }
 
 function listCandidateFiles() {

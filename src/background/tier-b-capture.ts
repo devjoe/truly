@@ -1,6 +1,6 @@
 import { buildTierBDeepChatBody, type TierBChatBody } from "../lib/tier-b-client";
 
-export type TierBCaptureSource = "expand" | "manual" | "auto";
+export type TierBCaptureSource = "expand" | "manual" | "auto" | "prefetch";
 
 export type TierBCaptureInput = {
   postId: string;

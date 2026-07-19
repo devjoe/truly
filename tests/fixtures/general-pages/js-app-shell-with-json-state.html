@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Client App Shell With State Fixture</title>
+</head>
+<body>
+  <div id="app">
+    <p>Loading story workspace. The client application has not rendered the readable article yet.</p>
+  </div>
+  <template id="draft-template">
+    private draft investigation should never appear in extracted text
+  </template>
+  <script type="application/json" id="bootstrap-state">
+    {"body":"member only full story should never appear in extracted text"}
+  </script>
+  <script>window.__FAKE_APP__ = true;</script>
+</body>
+</html>

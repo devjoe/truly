@@ -1,4 +1,11 @@
 {
-  "extensionName": { "message": "Truly" },
-  "extensionDescription": { "message": "重視隱私、協助梳理脈絡的閱讀小幫手" }
+  "extensionName": {
+    "message": "Truly"
+  },
+  "extensionDescription": {
+    "message": "重視隱私、協助梳理脈絡的閱讀小幫手"
+  },
+  "commandReadCurrentRegion": {
+    "message": "分析滑鼠所在的段落"
+  }
 }

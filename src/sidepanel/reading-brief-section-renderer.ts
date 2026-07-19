@@ -45,13 +45,21 @@ export function renderReadingBriefSectionElement({
   }
 
   if ((pending || queued) && !brief) {
+    section.classList.add("is-loading");
+    section.setAttribute("aria-busy", "true");
     const loading = document.createElement("div");
     loading.className = "reading-brief-loading";
     loading.textContent = t("sidepanel.dynamic.readingBrief.loading", lang);
     loading.setAttribute("role", "status");
     loading.setAttribute("aria-live", "polite");
-    loading.setAttribute("aria-busy", "true");
     section.appendChild(loading);
+    const reserve = document.createElement("div");
+    reserve.className = "reading-brief-loading-reserve";
+    reserve.setAttribute("aria-hidden", "true");
+    for (let index = 0; index < 5; index += 1) {
+      reserve.appendChild(document.createElement("span"));
+    }
+    section.appendChild(reserve);
     return section;
   }
 
@@ -92,8 +100,6 @@ export function renderReadingBriefSectionElement({
   const body = renderReadingBriefBody(event, brief, lang);
   if (body.childElementCount === 0 && section.childElementCount === 0) return null;
   if (!revealedIds.has(event.id)) {
-    section.classList.add("sidepanel-reveal-step", "sidepanel-reveal-reading");
-    section.style.setProperty("--truly-reveal-index", "0");
     revealedIds.add(event.id);
   }
   if (body.childElementCount > 0) section.appendChild(body);

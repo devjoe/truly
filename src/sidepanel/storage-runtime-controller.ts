@@ -23,7 +23,7 @@ export interface CreateSidepanelStorageRuntimeControllerOptions {
 }
 
 export interface SidepanelStorageRuntimeController {
-  initializeStorageState(): void;
+  initializeStorageState(): Promise<void>;
 }
 
 export function createSidepanelStorageRuntimeController({
@@ -35,7 +35,7 @@ export function createSidepanelStorageRuntimeController({
 }: CreateSidepanelStorageRuntimeControllerOptions): SidepanelStorageRuntimeController {
   return {
     initializeStorageState() {
-      initializeSidepanelStorageState({
+      return initializeSidepanelStorageState({
         storageSync: storage.sync,
         storageLocal: storage.local,
         storageOnChanged: storage.onChanged,

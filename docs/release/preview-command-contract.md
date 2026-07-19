@@ -53,8 +53,10 @@ npm run release:bump-cws-preview
 ```
 
 The CWS helper bumps both the Chrome-compatible numeric version and the human
-Preview label. For example, after `0.1.1 Preview 9`, the next CWS Preview is
-`0.1.2 Preview 10`, with tag `v0.1.2-preview.10`.
+Preview label counter. The Preview label counter is global, so it can diverge
+from the numeric package version when GitHub-only previews advance the label
+without a CWS numeric bump. For example, after `0.1.1 Preview 11`, the next
+CWS Preview is `0.1.2 Preview 12`, with tag `v0.1.2-preview.12`.
 
 ## Preview Closeout Checklist
 
@@ -123,6 +125,8 @@ release/security surfaces:
   endpoint behavior;
 - localhost/dev-reload logic, remote-provider handling, or optional host
   permission flows;
+- Page/Web current-page reading, optional all-sites access, screenshot-assisted
+  recovery, or other session-only page-content handling;
 - release scripts, CWS package scripts, privacy policy, CWS declarations, or
   reviewer notes.
 
@@ -156,6 +160,9 @@ Run local repo-read mode when any of these are true:
   may have shifted;
 - the change touches manifest permissions, CSP, optional host permissions,
   storage, diagnostics, model endpoints, or external handoff behavior;
+- the change touches Page/Web screenshot-assisted recovery, user confirmation
+  flows, session-only page-content handling, or public privacy claims for those
+  flows;
 - release/CWS scripts, package contents, public-boundary checks, privacy docs,
   reviewer notes, or source-package rules changed;
 - there is any risk that private fixtures, generated output, secrets, local
@@ -320,13 +327,24 @@ extension ZIP, source ZIP, and build report that can later become a GitHub
 Release, but it does not itself create the GitHub Release.
 
 `npm run cws:package` is the Chrome Web Store upload-package entrypoint. It
-requires a clean tree, a branch that is not behind its upstream, no repo-local
-dev processes, the current Preview release tag pointing at `HEAD`,
-`check:public`, a packaged ZIP audit, and `cws:preflight`. Since CWS packaging
-happens after the GitHub Release tag exists, it allows the release metadata tag
-collision only after verifying that the tag is the current commit. It writes a
-CWS-specific package report under `artifacts/cws/` with the extension ZIP path,
-SHA-256, commit, build ID, and submission input paths.
+requires a clean tree, a branch that is not behind its upstream, a branch that
+is caught up with `origin/main`, no repo-local dev processes, the current
+Preview release tag pointing at `HEAD`, `check:public`, a packaged ZIP audit,
+and `cws:preflight`. Since CWS packaging happens after the GitHub Release tag
+exists, it allows the release metadata tag collision only after verifying that
+the tag is the current commit. It writes a CWS-specific package report under
+`artifacts/cws/` with the extension ZIP path, SHA-256, commit, build ID,
+mainline state, and submission input paths.
+
+`npm run cws:package:local-smoke` is a non-uploadable pre-push smoke path. It
+builds and audits a local extension ZIP under `artifacts/cws-local-smoke/`, runs
+`check:public` and `cws:preflight`, and writes a report that says
+`Uploadable: no`. It records upstream and `origin/main` state for reviewer
+context, but intentionally does not enforce upload gates such as upstream sync,
+mainline freshness, or release-tag state.
+Its ZIP must never be uploaded to Chrome Web Store. Use the official
+`npm run cws:package` command after the branch is pushed, caught up with
+`origin/main`, and the release tag is at `HEAD`.
 
 `npm run cws:preflight` is intentionally deterministic and local. It verifies
 that the CWS docs mention the current version, version name, and recommended

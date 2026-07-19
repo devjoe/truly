@@ -2,10 +2,15 @@
   "manifest_version": 3,
   "default_locale": "en",
   "name": "Truly",
-  "version": "0.1.1",
-  "version_name": "0.1.1 Preview 10",
+  "version": "0.1.2",
+  "version_name": "0.1.2 Preview 12",
   "description": "Privacy-conscious reading assistance for social feeds and web pages.",
-  "permissions": ["storage", "activeTab", "sidePanel"],
+  "permissions": [
+    "storage",
+    "activeTab",
+    "sidePanel",
+    "scripting"
+  ],
   "host_permissions": [
     "http://localhost/*",
     "http://127.0.0.1/*",
@@ -36,17 +41,35 @@
   "background": {
     "service_worker": "background/service-worker.js"
   },
+  "commands": {
+    "truly-read-current-region": {
+      "suggested_key": {
+        "default": "Alt+Shift+R"
+      },
+      "description": "__MSG_commandReadCurrentRegion__"
+    }
+  },
   "content_scripts": [
     {
-      "matches": ["*://*.facebook.com/*"],
-      "js": ["content_scripts/graphql-interceptor.js"],
+      "matches": [
+        "*://*.facebook.com/*"
+      ],
+      "js": [
+        "content_scripts/graphql-interceptor.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN"
     },
     {
-      "matches": ["*://*.facebook.com/*"],
-      "js": ["content_scripts/feed-filter.js"],
-      "css": ["content_scripts/feed-filter.css"],
+      "matches": [
+        "*://*.facebook.com/*"
+      ],
+      "js": [
+        "content_scripts/feed-filter.js"
+      ],
+      "css": [
+        "content_scripts/feed-filter.css"
+      ],
       "run_at": "document_idle"
     }
   ],

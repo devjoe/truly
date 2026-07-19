@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Privacy Panel Fixture</title>
+  <link rel="canonical" href="https://example.test/features/privacy-panel">
+</head>
+<body>
+  <div role="dialog" aria-label="Cookie preferences">
+    <p>Accept all cookies Reject nonessential Manage preferences</p>
+  </div>
+  <article>
+    <h1>Privacy Panel Fixture</h1>
+    <p>The privacy panel explains how readers can inspect local decisions before sending a request to a model provider. This synthetic page includes an overlay-like consent banner that should not become the extracted article.</p>
+    <p>The article describes local state, explicit actions, and clear labels for external handoff. It uses fake product language and avoids any source text from a real privacy page.</p>
+    <p>The closing paragraph gives the parser enough material to prefer the article body over the short banner. It also checks that common consent actions do not leak into the extracted preview.</p>
+  </article>
+</body>
+</html>

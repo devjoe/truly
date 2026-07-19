@@ -1,7 +1,7 @@
 # MV3 Remote-Code And CSP Compliance Note
 
 Status: Alpha readiness note
-Last updated: 2026-06-28
+Last updated: 2026-07-04
 
 This note records the current Chrome MV3 compliance boundary for Alpha review.
 It should stay aligned with `src/manifest.json`,
@@ -45,11 +45,26 @@ longer needs it.
 ## Permission Boundary
 
 Truly does not request `downloads`, `history`, broad `tabs`, `webRequest`, or
-`declarativeNetRequest`. Optional host permissions are reserved for
-user-configured model endpoints and should be requested only when the user saves
-or tests an endpoint that needs that origin.
+`declarativeNetRequest`. `scripting` is limited to user-triggered current-page
+reading under the `activeTab` boundary by default. Optional host permissions are
+reserved for explicit user actions: user-configured model endpoints, or the
+General Page all-sites Settings opt-in that lets the Side Panel read the current
+active page while it is open. This does not enable background crawling,
+background model submission, automatic screenshot capture, or persistent
+full-article storage.
 
 ## Security Follow-ups
+
+## CI Supply-Chain Boundary
+
+GitHub Actions workflows pin third-party actions to commit SHA refs instead of
+mutable version tags. The pinned refs keep CI and artifact generation
+reproducible for review. Dependabot is configured for both `npm` and
+`github-actions` updates so action updates happen through reviewable pull
+requests instead of silent tag movement.
+
+`npm run check:public-boundary` rejects external workflow actions that are not
+pinned to a 40-character commit SHA.
 
 ### Endpoint URL credentials and cleartext HTTP
 

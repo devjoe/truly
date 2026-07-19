@@ -4,7 +4,8 @@ export interface InitializeSidepanelBootstrapOptions {
   installTooltips(): void;
   installOptionsPageShortcut(): void;
   initTabs(onActivate: (tab: TabId) => void): (tab: TabId) => void;
-  initializeStorageState(): void;
+  initializeStorageState(): void | Promise<void>;
+  onStorageReady?(): void;
 }
 
 export function initializeSidepanelBootstrap({
@@ -12,10 +13,11 @@ export function initializeSidepanelBootstrap({
   installOptionsPageShortcut,
   initTabs,
   initializeStorageState,
+  onStorageReady,
 }: InitializeSidepanelBootstrapOptions): (tab: TabId) => void {
   installTooltips();
   installOptionsPageShortcut();
   const activateTab = initTabs(() => {});
-  initializeStorageState();
+  void Promise.resolve(initializeStorageState()).then(() => onStorageReady?.());
   return activateTab;
 }

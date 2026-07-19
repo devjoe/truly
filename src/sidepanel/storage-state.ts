@@ -54,14 +54,20 @@ export function initializeSidepanelStorageState({
   applyDeveloperMode,
   applyTheme,
   renderAnalysisPane,
-}: InitializeSidepanelStorageStateOptions): void {
+}: InitializeSidepanelStorageStateOptions): Promise<void> {
   refreshSidepanelTierAConfig({ storageLocal, state });
 
-  storageSync.get(["settings"], (result) => {
-    state.cachedSettings = normalizeUserSettings(result.settings as Partial<UserSettings> | undefined);
-    applyDeveloperMode(state.cachedSettings.developerMode === true);
-    applyTheme?.(state.cachedSettings);
-    if (state.currentViewPostId) renderAnalysisPane();
+  const ready = new Promise<void>((resolve) => {
+    storageSync.get(["settings"], (result) => {
+      try {
+        state.cachedSettings = normalizeUserSettings(result.settings as Partial<UserSettings> | undefined);
+        applyDeveloperMode(state.cachedSettings.developerMode === true);
+        applyTheme?.(state.cachedSettings);
+        if (state.currentViewPostId) renderAnalysisPane();
+      } finally {
+        resolve();
+      }
+    });
   });
 
   storageOnChanged?.addListener?.((changes, areaName) => {
@@ -73,4 +79,6 @@ export function initializeSidepanelStorageState({
       state.cachedTierAModel = changes.ollamaModel.newValue;
     }
   });
+
+  return ready;
 }

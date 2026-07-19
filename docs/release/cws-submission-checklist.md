@@ -1,9 +1,9 @@
 # Chrome Web Store Submission Checklist
 
-Status: Preview 9 submission checklist
-Last updated: 2026-06-27
+Status: Preview 12 submission checklist
+Last updated: 2026-07-04
 
-Use this checklist when submitting the Preview 9 build to Chrome Web
+Use this checklist when submitting the Preview 12 build to Chrome Web
 Store. The dashboard copy should still come from
 `docs/release/cws-listing-copy.md`; this file is the operational checklist.
 
@@ -22,16 +22,34 @@ Store. The dashboard copy should still come from
 - [ ] If starting a new CWS-bound Preview, run
   `npm run release:bump-cws-preview` instead of only bumping
   `manifest.version_name`.
+- [ ] Before dashboard upload, confirm the Chrome Web Store dashboard has no
+  already published, in-review, or otherwise occupied package for the current
+  numeric `manifest.version`.
+- [x] Record the outcome of Preview 9's numeric `0.1.1` submission before
+  dashboard upload.
+  - Result: `0.1.1 Preview 9` was published to Chrome Web Store as `Unlisted`.
+  - Publication notification received: 2026-07-04
+  - Item ID: `kdgkgifmdflocjockbfnhkkncbdihpoj`
+  - Item link:
+    <https://chrome.google.com/webstore/detail/kdgkgifmdflocjockbfnhkkncbdihpoj>
+  - Preview 12 can proceed as an update to the existing item after final human
+    review and release tagging.
 - [ ] Run `npm run cws:package` from a clean, pushed branch.
+- [ ] Confirm the package report says `Uploadable: yes`.
+- [ ] Confirm the package report says `Dirty tree: no`.
+- [ ] Confirm the package report says `origin/main` is `caught_up` for the
+  package commit.
 - [ ] Confirm the package report says the current Preview release tag points at
   the package commit.
 - [ ] Upload the extension ZIP recorded in the generated
-  `artifacts/cws/0.1.1-<commit>-<timestamp>/cws-package-report.md`.
+  `artifacts/cws/0.1.2-<commit>-<timestamp>/cws-package-report.md`.
+- [ ] Do not upload any ZIP from `artifacts/cws-local-smoke/`; those artifacts
+  are local packaging smoke evidence only and are explicitly non-uploadable.
 - [ ] Keep the CWS package report open while filling the dashboard.
 - [ ] Confirm package metadata:
-  - Version: `0.1.1`
-  - Version name: `0.1.1 Preview 9`
-  - Recommended tag: `v0.1.1-preview.9`
+  - Version: `0.1.2`
+  - Version name: `0.1.2 Preview 12`
+  - Recommended tag: `v0.1.2-preview.12`
   - Commit: use the commit recorded in the CWS package report.
 - [ ] Confirm the packaged manifest does not include
   `commands.reload-extension`.
@@ -48,6 +66,7 @@ Store. The dashboard copy should still come from
   - reading assistance;
   - reading signals;
   - context and summary;
+  - user-triggered Page/Web reading;
   - user-triggered handoff.
 - [ ] Avoid unsupported claims:
   - authoritative truth;
@@ -86,7 +105,9 @@ Store. The dashboard copy should still come from
 - [ ] Use `docs/release/permission-justification.md` for permission
   justifications.
 - [ ] Confirm optional broad host permissions are described as endpoint-driven
-  and user-triggered.
+  and user-triggered. If General Page all-sites access is mentioned, it must be
+  described as a separate Settings opt-in for reading the current active page
+  only while the Side Panel is open.
 
 ## Reviewer Notes
 
@@ -96,6 +117,8 @@ Store. The dashboard copy should still come from
   - no Truly-operated backend is required;
   - no dedicated Facebook test account or hosted model endpoint is provided;
   - a supported Facebook page state is required for the full in-page flow;
+  - Page/Web review can be tested on ordinary public pages through explicit
+    toolbar/popup activation or the Settings all-sites opt-in;
   - Gemini Nano availability and speed depend on Chrome, device capability,
     model availability, feature status, and first-run model setup;
   - reviewers can use a local/private model endpoint if Gemini Nano is
@@ -129,14 +152,20 @@ Store. The dashboard copy should still come from
 
 ## After Submission
 
-- [x] Record Preview 9 submission date and time.
+- [x] Record previous CWS submission date and time.
   - Submitted for Chrome Web Store review: 2026-06-27 19:13 CST
   - Submitted package:
     `truly-cws-extension-0.1.1-7bdb3a06170c.zip`
   - Package commit: `7bdb3a06170c`
   - GitHub Release: `v0.1.1-preview.9`
-  - Submitted version: `0.1.1 Preview 9`
+  - Submitted version: previous Preview 9 submission for numeric version `0.1.1`
   - Submitted visibility: `Unlisted`
+- [x] Record previous CWS publication result.
+  - Published notification received: 2026-07-04
+  - Published version: Preview 9 of version `0.1.1`
+  - Published visibility: `Unlisted`
+  - Published item link:
+    <https://chrome.google.com/webstore/detail/kdgkgifmdflocjockbfnhkkncbdihpoj>
 - [x] Record the previous submission date and time in release notes or a short
   follow-up comment.
   - Submitted for Chrome Web Store review: 2026-06-24 14:48 CST

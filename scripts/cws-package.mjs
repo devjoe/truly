@@ -4,10 +4,12 @@ import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import {
   assertCleanTree,
+  assertMainlineCaughtUp,
   assertNoDevProcesses,
   assertTagMatchesHead,
   assertUpstreamSynced,
   clearReleaseLock,
+  collectCwsAssetEvidence,
   createReleaseLock,
   readDistBuildId,
   readProjectMetadata,
@@ -35,6 +37,8 @@ const dirty = dirtyFiles.length > 0;
 const upstream = assertUpstreamSynced({
   allowUnpushedEnv: "TRULY_ALLOW_UNPUSHED_CWS_PACKAGE",
 });
+const uploadable = !dirty && upstream.ahead === 0;
+const mainline = assertMainlineCaughtUp();
 const releaseTag = assertTagMatchesHead(recommendedTag);
 
 assertNoDevProcesses();
@@ -64,7 +68,9 @@ try {
     commit,
     branch,
     upstream,
+    mainline,
     releaseTag,
+    uploadable,
     dirty,
     dirtyFiles,
     buildId: readDistBuildId(),
@@ -74,8 +80,11 @@ try {
       sha256: sha256File(extensionZip),
     },
     checks: [
-      dirty ? "dirty tree allowed for local smoke package" : "git tree clean",
-      "branch synced with upstream",
+      dirty ? "dirty tree escape hatch used; package must not be uploaded" : "git tree clean",
+      upstream.ahead > 0
+        ? "unpushed branch escape hatch used; package must not be uploaded"
+        : "branch synced with upstream",
+      "branch caught up with origin/main",
       "release tag points at HEAD",
       "no repo-local dev processes",
       "npm run check:public with verified release tag collision",
@@ -90,6 +99,7 @@ try {
       permissionJustification: "docs/release/permission-justification.md",
       assets: "docs/assets/cws/",
     },
+    cwsAssetEvidence: collectCwsAssetEvidence(),
   };
 
   writeFileSync(join(outDir, "cws-package-report.json"), `${JSON.stringify(report, null, 2)}\n`);
@@ -112,7 +122,9 @@ function renderReport(report) {
     `- Commit: ${report.commit}`,
     `- Branch: ${report.branch}`,
     `- Upstream: ${report.upstream.upstream}`,
+    `- Mainline: ${report.mainline.baseRef} (${report.mainline.status}; ahead=${report.mainline.ahead}, behind=${report.mainline.behind}, ancestor=${report.mainline.ancestor})`,
     `- Release tag: ${report.releaseTag.tag}`,
+    `- Uploadable: ${report.uploadable ? "yes" : "no"}`,
     `- Dirty tree: ${dirtyLine}`,
     `- Build ID: ${report.buildId ?? "not found"}`,
     `- Built at: ${report.builtAt}`,
@@ -129,6 +141,13 @@ function renderReport(report) {
     "## CWS Inputs",
     "",
     ...Object.values(report.cwsInputs).map((path) => `- \`${path}\``),
+    "",
+    "## CWS Asset Evidence",
+    "",
+    ...report.cwsAssetEvidence.map((asset) => {
+      const actual = asset.actual ? `${asset.actual.width}x${asset.actual.height}` : "unreadable";
+      return `- \`${asset.path}\`: expected ${asset.width}x${asset.height}, actual ${actual}, status=${asset.status}`;
+    }),
     "",
   ].join("\n");
 }

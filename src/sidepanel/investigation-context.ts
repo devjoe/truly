@@ -59,7 +59,7 @@ function trHandoff(key: string, lang: Lang, vars?: Record<string, string | numbe
 function trimText(text: string | undefined, limit = 2000): string | undefined {
   const normalized = (text || "").replace(/\s+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
   if (!normalized) return undefined;
-  return normalized.length > limit ? `${normalized.slice(0, limit).trim()}……` : normalized;
+  return normalized.length > limit ? `${normalized.slice(0, limit).trim()}…` : normalized;
 }
 
 function cleanHandoffUrl(raw: string | undefined): string | undefined {

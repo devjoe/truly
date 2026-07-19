@@ -39,7 +39,7 @@
   },
   {
     "id": "fenced-json-reading-brief",
-    "description": "Fenced JSON is accepted only when the fence wraps a single object.",
+    "description": "Fenced JSON is accepted only when the fence wraps a single object, while source questions stay out of follow-ups.",
     "model": "fenced-brief-contract",
     "raw": "```json\n{\"bg\":[{\"t\":\"官方公告\",\"why\":\"可由原站確認\"}],\"qs\":[{\"q\":\"範例套件 moderation approved 官方公告\",\"kind\":\"source\"}],\"note\":\"優先對照官方連結。\"}\n```",
     "expected": {
@@ -48,12 +48,6 @@
         {
           "t": "官方公告",
           "why": "可由原站確認"
-        }
-      ],
-      "qs": [
-        {
-          "q": "範例套件 moderation approved 官方公告",
-          "kind": "source"
         }
       ],
       "note": "優先對照官方連結。"

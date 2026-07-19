@@ -4,11 +4,11 @@ import { t } from "../lib/i18n";
 import { modelDisplayIdentity } from "../lib/model-display";
 import { copyReadingBriefQuestion } from "./browser-actions";
 import {
+  buildEventReadingBriefQuestionActionPayload,
   googleSearchUrl,
   readingBriefContextRows,
-  readingBriefQuestionDisplay,
   readingBriefQuestionLabel,
-  readingBriefQuestionSearchQuery,
+  type ReadingBriefQuestionActionPayload,
   type ReadingBriefQuestionItem,
 } from "./reading-brief-text";
 import {
@@ -43,6 +43,86 @@ function createCopyIcon(): SVGSVGElement {
   return svg;
 }
 
+interface ReadingBriefQuestionListOptions {
+  label: string;
+  items: ReadingBriefQuestionActionPayload[];
+  lang: Lang;
+  blockClassName?: string;
+  copyButtonClassName?: string;
+  onCopy?: (button: HTMLButtonElement, question: string) => void;
+}
+
+export function createReadingBriefQuestionList({
+  label,
+  items,
+  lang,
+  blockClassName = "",
+  copyButtonClassName = "",
+  onCopy,
+}: ReadingBriefQuestionListOptions): HTMLDivElement {
+  const block = document.createElement("div");
+  block.className = [
+    "reading-brief-block",
+    "reading-brief-question-block",
+    blockClassName,
+    items.length === 1 ? "is-single" : "",
+  ].filter(Boolean).join(" ");
+
+  const heading = document.createElement("div");
+  heading.className = "reading-brief-block-label";
+  heading.textContent = label;
+  block.appendChild(heading);
+
+  const list = document.createElement("ul");
+  list.className = "reading-brief-list reading-brief-question-list";
+  for (const item of items) {
+    const row = document.createElement("li");
+    row.className = "reading-brief-question-row";
+
+    const text = document.createElement("span");
+    text.className = "reading-brief-question-text";
+    text.textContent = item.displayText;
+    row.appendChild(text);
+
+    const actions = document.createElement("span");
+    actions.className = "reading-brief-question-actions";
+
+    const copy = document.createElement("button");
+    copy.type = "button";
+    copy.className = ["reading-brief-copy-btn", copyButtonClassName].filter(Boolean).join(" ");
+    copy.dataset.question = item.copyText;
+    copy.appendChild(createCopyIcon());
+    copy.title = t("sidepanel.dynamic.readingBrief.copyQuestion", lang);
+    copy.setAttribute("aria-label", t("sidepanel.dynamic.readingBrief.copyQuestionAria", lang, {
+      question: item.displayText,
+    }));
+    if (onCopy) {
+      copy.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onCopy(copy, item.copyText);
+      });
+    }
+    actions.appendChild(copy);
+
+    const link = document.createElement("a");
+    link.className = "reading-brief-google-link";
+    link.href = googleSearchUrl(item.aiModePrompt);
+    link.target = "_blank";
+    link.rel = "noopener noreferrer";
+    link.textContent = t("sidepanel.dynamic.readingBrief.askGemini", lang);
+    link.setAttribute("aria-label", t("sidepanel.dynamic.readingBrief.askGeminiAria", lang, {
+      query: item.aiModePrompt,
+    }));
+    link.title = t("sidepanel.dynamic.readingBrief.askGeminiTitle", lang);
+    actions.appendChild(link);
+    row.appendChild(actions);
+    list.appendChild(row);
+  }
+
+  block.appendChild(list);
+  return block;
+}
+
 function appendReadingBriefList(parent: HTMLElement, title: string, rows: string[]): void {
   if (rows.length === 0) return;
   const block = document.createElement("div");
@@ -65,65 +145,16 @@ function appendReadingBriefList(parent: HTMLElement, title: string, rows: string
 function appendReadingBriefQuestions(
   parent: HTMLElement,
   event: DashboardPostEvent,
-  brief: ReadingBrief,
   questions: ReadingBriefQuestionItem[],
   lang: Lang,
 ): void {
   if (questions.length === 0) return;
-  const block = document.createElement("div");
-  block.className = "reading-brief-block";
-  const label = document.createElement("div");
-  label.className = "reading-brief-block-label";
-  label.textContent = readingBriefQuestionLabel(event, lang);
-  block.appendChild(label);
-
-  const list = document.createElement("ul");
-  list.className = "reading-brief-list reading-brief-question-list";
-  for (const item of questions) {
-    const displayQuestion = readingBriefQuestionDisplay(item.q);
-    const searchQuery = readingBriefQuestionSearchQuery(event, item.q, brief, lang);
-    const row = document.createElement("li");
-    row.className = "reading-brief-question-row";
-
-    const text = document.createElement("span");
-    text.className = "reading-brief-question-text";
-    text.textContent = displayQuestion;
-    row.appendChild(text);
-
-    const actions = document.createElement("span");
-    actions.className = "reading-brief-question-actions";
-
-    const copy = document.createElement("button");
-    copy.type = "button";
-    copy.className = "reading-brief-copy-btn";
-    copy.appendChild(createCopyIcon());
-    copy.title = t("sidepanel.dynamic.readingBrief.copyQuestion", lang);
-    copy.setAttribute("aria-label", t("sidepanel.dynamic.readingBrief.copyQuestionAria", lang, {
-      question: displayQuestion,
-    }));
-    copy.addEventListener("click", (e) => {
-      e.stopPropagation();
-      copyReadingBriefQuestion(copy, displayQuestion, lang);
-    });
-    actions.appendChild(copy);
-
-    const link = document.createElement("a");
-    link.className = "reading-brief-google-link";
-    link.href = googleSearchUrl(searchQuery);
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    link.textContent = t("sidepanel.dynamic.readingBrief.askGemini", lang);
-    link.setAttribute("aria-label", t("sidepanel.dynamic.readingBrief.askGeminiAria", lang, {
-      query: searchQuery,
-    }));
-    link.title = t("sidepanel.dynamic.readingBrief.askGeminiTitle", lang);
-    actions.appendChild(link);
-    row.appendChild(actions);
-
-    list.appendChild(row);
-  }
-  block.appendChild(list);
-  parent.appendChild(block);
+  parent.appendChild(createReadingBriefQuestionList({
+    label: readingBriefQuestionLabel(event, lang),
+    items: questions.map((item) => buildEventReadingBriefQuestionActionPayload(event, item, lang)),
+    lang,
+    onCopy: (button, question) => copyReadingBriefQuestion(button, question, lang),
+  }));
 }
 
 function appendReadingBriefModelNote(
@@ -175,7 +206,7 @@ export function renderReadingBriefBody(event: DashboardPostEvent, brief: Reading
     body.appendChild(note);
   }
   appendReadingBriefList(body, t("sidepanel.dynamic.readingBrief.verify", lang), verificationRows.length > 0 ? verificationRows : fallbackRows);
-  appendReadingBriefQuestions(body, event, brief, visibleQuestions, lang);
+  appendReadingBriefQuestions(body, event, visibleQuestions, lang);
   if (hasVisibleContent) appendReadingBriefModelNote(body, brief, lang);
   return body;
 }

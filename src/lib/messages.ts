@@ -30,7 +30,21 @@ import type {
   Lang,
 } from "./types";
 import type { LlmPostContext } from "./ollama-client";
+import type { ReadingSurface } from "./reading-surface-types";
+import type { ReadingTarget, ReadingTargetErrorReason } from "./reading-target-types";
+import type { ReadingActivation } from "./reading-action-types";
+import type { ReadingCommandEnvelope } from "./reading-command-envelope";
+import type { GeneralPageBrief } from "./general-page-analysis";
+import type { GeneralPageModelContext } from "./general-page-model-context";
+import type { DeepModelWorkSource, ModelWorkPriority, ReadingBriefModelWorkSource } from "./model-work";
 import type { ReadinessFeature, ReadinessRecord, ReadinessSnapshot } from "./readiness";
+import type {
+  GeneralPageEffectiveModelContext,
+  GeneralPageEffectiveModelContextUse,
+  GeneralPageParserAdvisorAdvice,
+  GeneralPageParserAdvisorCandidateBlock,
+  GeneralPageParserAdvisorRequest,
+} from "./general-page-parser-advisor";
 
 // ---------------------------------------------------------------------------
 // Live dashboard pipeline (content script → service worker → side panel)
@@ -73,6 +87,161 @@ export interface RequestCurrentViewPostMsg {
 export interface ManualViewPostMsg {
   type: "MANUAL_VIEW_POST";
   id: string;
+}
+
+// ---------------------------------------------------------------------------
+// General page reader seams
+// ---------------------------------------------------------------------------
+
+export interface QueuePageReadingCommandMsg {
+  type: "QUEUE_PAGE_READING_COMMAND";
+  envelope: ReadingCommandEnvelope;
+}
+
+export interface QueuePageReadingCommandResultMsg {
+  type: "QUEUE_PAGE_READING_COMMAND_RESULT";
+  requestId: string;
+  ok: boolean;
+  error?: string;
+}
+
+export interface ReadingCommandAvailableMsg {
+  type: "READING_COMMAND_AVAILABLE";
+  requestId: string;
+  tabId: number;
+}
+
+export interface PageReadingRequestMsg {
+  type: "PAGE_READING_REQUEST";
+  requestId?: string;
+  tabId?: number;
+  inject?: boolean;
+  activation?: ReadingActivation;
+}
+
+export interface PageReadingResultMsg {
+  type: "PAGE_READING_RESULT";
+  requestId?: string;
+  surface: ReadingSurface;
+  candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
+  tabId?: number;
+  elapsedMs?: number;
+}
+
+export interface PageReadingErrorMsg {
+  type: "PAGE_READING_ERROR";
+  requestId?: string;
+  error: string;
+  tabId?: number;
+  elapsedMs?: number;
+}
+
+export interface ReadingTargetRequestMsg {
+  type: "READING_TARGET_REQUEST";
+  tabId: number;
+  trigger: "selection" | "hotkey" | "context-menu" | "click-hold";
+  activation?: ReadingActivation;
+  surfaceId?: string;
+}
+
+export interface ReadingTargetResultMsg {
+  type: "READING_TARGET_RESULT";
+  target: ReadingTarget;
+  tabId?: number;
+}
+
+export interface ReadingTargetErrorMsg {
+  type: "READING_TARGET_ERROR";
+  error: ReadingTargetErrorReason;
+  tabId?: number;
+}
+
+export interface GeneralPageCandidateBlockTextRequestMsg {
+  type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST";
+  tabId: number;
+  surfaceId: string;
+  blockId: string;
+}
+
+export interface GeneralPageCandidateBlockTextResultMsg {
+  type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT";
+  tabId?: number;
+  surfaceId: string;
+  blockId: string;
+  text: string;
+}
+
+export interface GeneralPageCandidateBlockTextErrorMsg {
+  type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_ERROR";
+  tabId?: number;
+  surfaceId?: string;
+  blockId?: string;
+  error: "candidate_block_not_found" | "candidate_block_stale" | "candidate_block_extraction_failed" | "page_grant_missing";
+}
+
+export interface GeneralPageParserAdvisorProviderRuntime {
+  configSource: "tier-b-provider";
+  provider: TierBProvider;
+  effectiveProvider: TierAProvider | TierBProvider;
+  endpoint: string;
+  model: string;
+  /** Stored provider capability used by trusted background request builders. */
+  responseFormat: OpenAIResponseFormatMode;
+  canUseModel: boolean;
+  mode: "rule-based-runtime-baseline" | "tier-b-short-json" | "tier-b-short-json-fallback";
+  blockedReason?: string;
+}
+
+export interface GeneralPageParserAdvisorRequestMsg {
+  type: "GENERAL_PAGE_PARSER_ADVISOR_REQUEST";
+  tabId?: number;
+  request: GeneralPageParserAdvisorRequest;
+  providerRuntime: GeneralPageParserAdvisorProviderRuntime;
+  outputLang?: Lang;
+}
+
+export interface GeneralPageParserAdvisorResultMsg {
+  type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT";
+  tabId?: number;
+  ok: boolean;
+  advice?: GeneralPageParserAdvisorAdvice;
+  effectiveModelContext?: GeneralPageEffectiveModelContext;
+  providerRuntime: GeneralPageParserAdvisorProviderRuntime;
+  error?: string;
+}
+
+export interface GeneralPageAnalysisRequestMsg {
+  type: "GENERAL_PAGE_ANALYSIS_REQUEST";
+  tabId: number;
+  analysisKey: string;
+  scope: "page" | "focus";
+  priority: Extract<ModelWorkPriority, "user_blocking" | "foreground">;
+  context: GeneralPageModelContext;
+  allowedUse: GeneralPageEffectiveModelContextUse;
+  providerRuntime: GeneralPageParserAdvisorProviderRuntime;
+  outputLang?: Lang;
+  /** Session-only, user-confirmed screenshot. Never persisted or logged. */
+  screenshotDataUrl?: string;
+}
+
+export interface GeneralPageAnalysisResultMsg {
+  type: "GENERAL_PAGE_ANALYSIS_RESULT";
+  tabId: number;
+  ok: boolean;
+  brief?: GeneralPageBrief;
+  /** A lower-priority, ephemeral action candidate is being prepared. */
+  investigationPending?: boolean;
+  error?: string;
+}
+
+export interface GeneralPageInvestigationResultMsg {
+  type: "GENERAL_PAGE_INVESTIGATION_RESULT";
+  tabId: number;
+  analysisKey: string;
+  scope: "page" | "focus";
+  claimIndex: number;
+  status: "prepared" | "ineligible" | "unavailable";
+  preparedClaim?: import("./general-page-analysis").GeneralPageBriefClaim;
 }
 
 // ---------------------------------------------------------------------------
@@ -236,7 +405,7 @@ export interface DeepClassifyMsg {
   outputLang?: Lang;
   /** Why Tier B was triggered. "auto" is the sequential-queue path.
    *  "manual" is retained for legacy captured/replayed payloads. */
-  source?: "expand" | "manual" | "auto";
+  source?: DeepModelWorkSource;
 }
 
 export interface DeepClassifyResultMsg {
@@ -263,6 +432,7 @@ export interface ReadingBriefRequestMsg {
    *  extension settings, not Facebook UI locale or post language. */
   outputLang?: Lang;
   event: DashboardPostEvent;
+  source?: ReadingBriefModelWorkSource;
 }
 
 export interface ReadingBriefResultMsg {
@@ -416,6 +586,23 @@ export type TrulyMessage =
   | CurrentViewPostMsg
   | RequestCurrentViewPostMsg
   | ManualViewPostMsg
+  | QueuePageReadingCommandMsg
+  | QueuePageReadingCommandResultMsg
+  | ReadingCommandAvailableMsg
+  | PageReadingRequestMsg
+  | PageReadingResultMsg
+  | PageReadingErrorMsg
+  | ReadingTargetRequestMsg
+  | ReadingTargetResultMsg
+  | ReadingTargetErrorMsg
+  | GeneralPageCandidateBlockTextRequestMsg
+  | GeneralPageCandidateBlockTextResultMsg
+  | GeneralPageCandidateBlockTextErrorMsg
+  | GeneralPageParserAdvisorRequestMsg
+  | GeneralPageParserAdvisorResultMsg
+  | GeneralPageAnalysisRequestMsg
+  | GeneralPageAnalysisResultMsg
+  | GeneralPageInvestigationResultMsg
   | SelectorHealthUpdateMsg
   | OllamaClassifyMsg
   | OllamaResultMsg

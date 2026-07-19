@@ -3,7 +3,11 @@
 // fallbacks from event data alone — no DOM, no module state, no chrome APIs —
 // so they are unit-testable in isolation. DOM rendering and the score-based
 // trigger predicates stay in sidepanel.ts.
-import type { DashboardPostEvent, ReadingBrief } from "../lib/types";
+import type {
+  DashboardPostEvent,
+  ReadingBrief,
+  ReadingBriefQuestionKind,
+} from "../lib/types";
 import type { Lang } from "../lib/types";
 import { t } from "../lib/i18n";
 import { resolveStructuredPostContext } from "../lib/post-context";
@@ -11,8 +15,34 @@ import { cleanSearchContextText } from "./format";
 
 export type ReadingBriefQuestionItem = NonNullable<ReadingBrief["qs"]>[number];
 
+export interface ReadingBriefQuestionActionSource {
+  title?: string;
+  summary?: string;
+  url?: string;
+}
+
+/**
+ * One bounded semantic projection for every follow-up-question action.
+ * `agentTask` is contract-only: no runtime currently sends it to an agent.
+ */
+export interface ReadingBriefQuestionActionPayload {
+  version: 1;
+  modelText: string;
+  displayText: string;
+  copyText: string;
+  googleQuery: string;
+  aiModePrompt: string;
+  agentTask: {
+    version: 1;
+    type: "reading_follow_up";
+    kind: ReadingBriefQuestionKind;
+    question: string;
+    context?: string;
+    sourceUrl?: string;
+  };
+}
+
 export const AI_IMAGE_READING_BRIEF_FALLBACK_THRESHOLD = 0.8;
-const GEMINI_QUERY_CONTEXT_LIMIT = 420;
 const URL_RE = /https?:\/\/[^\s)）\]】>"'「」]+/g;
 
 export function googleSearchUrl(query: string): string {
@@ -41,15 +71,21 @@ function cleanQuestionUrl(raw: string | undefined): string | undefined {
   if (!input) return undefined;
   try {
     const url = new URL(input);
-    for (const key of [...url.searchParams.keys()]) {
-      if (key.startsWith("__") || ["fbclid", "mibextid", "rdid", "share_url"].includes(key)) {
-        url.searchParams.delete(key);
-      }
-    }
+    if (!/^https?:$/i.test(url.protocol) || url.username || url.password || url.port) return undefined;
+    const hostname = url.hostname.replace(/^\[|\]$/g, "").replace(/\.$/, "").toLowerCase();
+    if (
+      !hostname.includes(".") ||
+      hostname.includes(":") ||
+      /(?:^|\.)(?:localhost|local|internal|lan|home|test|invalid|example|onion)$/.test(hostname) ||
+      /^(?:0|10|127|169\.254|192\.168)\./.test(hostname) ||
+      /^172\.(?:1[6-9]|2\d|3[01])\./.test(hostname)
+    ) return undefined;
+    url.search = "";
     url.hash = "";
-    return url.toString();
+    const output = url.toString();
+    return Array.from(output).length <= 260 ? output : undefined;
   } catch {
-    return input;
+    return undefined;
   }
 }
 
@@ -76,9 +112,46 @@ function queryLabel(key: string, lang: Lang): string {
   return t(`sidepanel.dynamic.readingBrief.query.${key}`, lang);
 }
 
-export function questionSourceContext(event: DashboardPostEvent, lang: Lang = "zh-TW"): string {
-  const postContext = resolveStructuredPostContext(event);
+function boundedActionQuestion(value: string, limit: number): string {
+  return Array.from(value.trim().replace(/\s+/g, " ")).slice(0, limit).join("");
+}
+
+function questionNeedsSourceContext(modelText: string, displayText: string): boolean {
+  if (/(?:這篇|此|該|本)(?:貼文|文章|內容)|(?:這|此|該)則(?:貼文|內容)?|\b(?:this|the)\s+(?:post|article|content)\b/iu.test(modelText)) {
+    return true;
+  }
+  if (/(?:這|此|該|本|上述|前述)(?:場|次|項|份|段|則|個)?(?:演說|演講|發言|談話|訪問|記者會|事件|政策|判決|研究|報告|公告|聲明|影片|圖片|表格|數據)|\b(?:this|that|the|above|aforementioned)\s+(?:speech|remarks?|interview|event|policy|ruling|study|report|announcement|statement|video|image|table|data)\b/iu.test(modelText)) {
+    return true;
+  }
+  return /^(?:有哪些不同觀點|有何不同觀點|背景是什麼|脈絡是什麼|為什麼重要|這代表什麼|what are the different views|what is the background|why does it matter|what does this mean)[？?]?$/iu
+    .test(displayText.trim());
+}
+
+function prependOptionalContext(
+  context: string,
+  requiredTail: string,
+  limit: number,
+  separator: " " | "\n",
+): string {
+  const tail = boundedActionQuestion(requiredTail, limit);
+  const remaining = limit - Array.from(tail).length - Array.from(separator).length;
+  if (remaining <= 0) return tail;
+  const prefix = boundedActionQuestion(context, remaining);
+  return prefix ? `${prefix}${separator}${tail}` : tail;
+}
+
+function actionSourceContext(source: ReadingBriefQuestionActionSource, lang: Lang, includeUrl: boolean): string {
   const parts: string[] = [];
+  if (source.title) appendLabeledContext(parts, queryLabel("source", lang), source.title.replace(URL_RE, ""), 180, querySeparator(lang));
+  if (includeUrl && source.url) {
+    appendCompactContext(parts, `${queryLabel("link", lang)}${querySeparator(lang)}${cleanQuestionUrl(source.url)}`, 260);
+  }
+  if (source.summary) appendLabeledContext(parts, queryLabel("summary", lang), source.summary.replace(URL_RE, ""), 180, querySeparator(lang));
+  return parts.join(" ");
+}
+
+export function readingBriefQuestionActionSource(event: DashboardPostEvent): ReadingBriefQuestionActionSource {
+  const postContext = resolveStructuredPostContext(event);
   const sourceTitle = postContext.linkPreview || postContext.sharedContent;
   const sourceUrl =
     firstExternalUrl([
@@ -88,23 +161,12 @@ export function questionSourceContext(event: DashboardPostEvent, lang: Lang = "z
       event.reshareOriginalText,
     ].filter(Boolean).join("\n")) ||
     cleanQuestionUrl(event.postUrl);
-  if (sourceTitle) appendLabeledContext(parts, queryLabel("source", lang), sourceTitle, 180, querySeparator(lang));
-  if (sourceUrl) appendCompactContext(parts, `${queryLabel("link", lang)}${querySeparator(lang)}${sourceUrl}`, 260);
   const summary = event.decision.deepClassification?.summary || event.summary;
-  if (summary) appendLabeledContext(parts, queryLabel("summary", lang), summary, 180, querySeparator(lang));
-  return parts.join(" ");
-}
-
-export function searchQuestionContext(event: DashboardPostEvent, _brief?: ReadingBrief, lang: Lang = "zh-TW"): string {
-  const parts: string[] = [];
-  appendCompactContext(parts, questionSourceContext(event, lang), GEMINI_QUERY_CONTEXT_LIMIT);
-  let combined = "";
-  for (const part of parts) {
-    const next = combined ? `${combined}；${part}` : part;
-    if (next.length > GEMINI_QUERY_CONTEXT_LIMIT) break;
-    combined = next;
-  }
-  return combined;
+  return {
+    ...(sourceTitle ? { title: sourceTitle } : {}),
+    ...(summary ? { summary } : {}),
+    ...(sourceUrl ? { url: sourceUrl } : {}),
+  };
 }
 
 export function stripQuestionDeixis(question: string): string {
@@ -126,19 +188,70 @@ export function readingBriefQuestionDisplay(question: string): string {
   return clean || question.trim();
 }
 
-export function readingBriefQuestionSearchQuery(event: DashboardPostEvent, question: string, brief?: ReadingBrief, lang: Lang = "zh-TW"): string {
-  const cleanQuestion = cleanSearchContextText(stripQuestionDeixis(question) || question, 120);
-  const context = searchQuestionContext(event, brief, lang);
-  if (!context) return cleanQuestion || question.trim();
-  if (hasSearchArtifact(cleanQuestion)) return `${context} ${queryLabel("officialInfo", lang)}`;
-  const combined = `${context} ${queryLabel("question", lang)}${querySeparator(lang)}${cleanQuestion} ${queryLabel("publicSources", lang)}`
-    .replace(/\s+/g, " ")
-    .trim();
-  return combined || cleanQuestion || question.trim();
+export function buildReadingBriefQuestionActionPayload(input: {
+  question: string;
+  kind: ReadingBriefQuestionKind;
+  lang?: Lang;
+  source?: ReadingBriefQuestionActionSource;
+}): ReadingBriefQuestionActionPayload {
+  const lang = input.lang ?? "zh-TW";
+  const modelText = boundedActionQuestion(input.question, 140);
+  const displayText = boundedActionQuestion(readingBriefQuestionDisplay(modelText), 140) || modelText;
+  const sourceTitle = cleanSearchContextText(input.source?.title?.replace(URL_RE, "") ?? "", 180);
+  const sourceSummary = cleanSearchContextText(input.source?.summary?.replace(URL_RE, "") ?? "", 180);
+  const sourceUrl = cleanQuestionUrl(input.source?.url);
+  const source: ReadingBriefQuestionActionSource = {
+    ...(sourceTitle ? { title: sourceTitle } : {}),
+    ...(sourceSummary ? { summary: sourceSummary } : {}),
+    ...(sourceUrl ? { url: sourceUrl } : {}),
+  };
+  const needsSourceContext = questionNeedsSourceContext(modelText, displayText);
+  const refersToPost = /貼文|\bpost\b/iu.test(modelText);
+  const useSummaryContext = needsSourceContext && Boolean(source.summary) && (refersToPost || !source.title);
+  const actionSource: ReadingBriefQuestionActionSource = {
+    ...(useSummaryContext && source.summary ? { summary: source.summary } : {}),
+    ...(needsSourceContext && !useSummaryContext && source.title ? { title: source.title } : {}),
+    ...(source.url ? { url: source.url } : {}),
+  };
+  const portableContext = actionSourceContext(actionSource, lang, false);
+  const fullContext = actionSourceContext(actionSource, lang, true);
+  const questionText = `${queryLabel("question", lang)}${querySeparator(lang)}${displayText}`;
+  const copyText = portableContext
+    ? prependOptionalContext(portableContext, questionText, 520, "\n")
+    : displayText;
+  const googleContext = cleanSearchContextText(actionSource.title || actionSource.summary || "", 120);
+  const googleQuery = prependOptionalContext(googleContext, displayText, 240, " ");
+  const aiModeTail = `${questionText} ${queryLabel("publicSources", lang)}`;
+  const aiModePrompt = prependOptionalContext(fullContext, aiModeTail, 760, " ");
+  return {
+    version: 1,
+    modelText,
+    displayText,
+    copyText,
+    googleQuery,
+    aiModePrompt,
+    agentTask: {
+      version: 1,
+      type: "reading_follow_up",
+      kind: input.kind,
+      question: displayText,
+      ...(portableContext ? { context: portableContext } : {}),
+      ...(source.url ? { sourceUrl: source.url } : {}),
+    },
+  };
 }
 
-export function hasSearchArtifact(text: string): boolean {
-  return /https?:\/\/|(?:^|\s)(?:curl|wget|npm|pnpm|brew|git)\s|fsSL|[a-z]{2,}:\/{1,2}|\.g(?:\s|$)/i.test(text);
+export function buildEventReadingBriefQuestionActionPayload(
+  event: DashboardPostEvent,
+  question: ReadingBriefQuestionItem,
+  lang: Lang = "zh-TW",
+): ReadingBriefQuestionActionPayload {
+  return buildReadingBriefQuestionActionPayload({
+    question: question.q,
+    kind: question.kind,
+    lang,
+    source: readingBriefQuestionActionSource(event),
+  });
 }
 
 export function needsAiImageReadingBriefQuestionFallback(event: DashboardPostEvent): boolean {

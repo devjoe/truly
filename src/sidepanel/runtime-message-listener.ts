@@ -1,4 +1,5 @@
 import type { TrulyMessage } from "../lib/messages";
+import type { GeneralPageInvestigationResultMsg, PageReadingErrorMsg, PageReadingResultMsg } from "../lib/messages";
 import type { DashboardPostEvent } from "../lib/types";
 import { normalizeUserSettings } from "../lib/settings";
 import {
@@ -36,6 +37,9 @@ export interface InstallSidepanelRuntimeMessageListenerOptions {
   renderAnalysisPane(): void;
   activateAnalysisTab?(): void;
   applyTheme?(settings: SidepanelViewPostState["cachedSettings"]): void;
+  pageReadingResult?(message: PageReadingResultMsg): void;
+  pageReadingError?(message: PageReadingErrorMsg): void;
+  generalPageInvestigationResult?(message: GeneralPageInvestigationResultMsg): void;
 }
 
 export function installSidepanelRuntimeMessageListener({
@@ -49,6 +53,9 @@ export function installSidepanelRuntimeMessageListener({
   renderAnalysisPane,
   activateAnalysisTab,
   applyTheme,
+  pageReadingResult,
+  pageReadingError,
+  generalPageInvestigationResult,
 }: InstallSidepanelRuntimeMessageListenerOptions): void {
   runtimeOnMessage.addListener((message) => {
     return handleSidepanelRuntimeMessage(message, {
@@ -88,6 +95,9 @@ export function installSidepanelRuntimeMessageListener({
           renderAnalysisPane,
         });
       },
+      pageReadingResult,
+      pageReadingError,
+      generalPageInvestigationResult,
     });
   });
 }

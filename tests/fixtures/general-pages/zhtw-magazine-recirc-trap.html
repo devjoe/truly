@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>合成文化專題的正文選取測試</title>
+  <link rel="canonical" href="https://magazine.example.test/culture/slow-lens-fixture">
+  <meta property="og:site_name" content="範例文化誌">
+  <meta name="author" content="合成作者">
+</head>
+<body>
+  <header>範例文化誌 影像 生活 專題 搜尋 會員</header>
+  <div class="app-shell">
+    <section class="visual-cover">
+      <img src="/images/cover.png" alt="合成封面圖">
+      <p>本期推薦 快門慢想 城市散步 影像筆記 編輯選讀 專題入口。</p>
+      <p>這些合成推薦文字放在正文之前，用來模擬雜誌版型的循環導讀，不應成為模型脈絡的開頭。</p>
+    </section>
+    <section class="culture-strip">
+      <h2>快門慢想</h2>
+      <a href="/culture/teaser-one">延伸閱讀一</a>
+      <a href="/culture/teaser-two">延伸閱讀二</a>
+      <a href="/culture/teaser-three">延伸閱讀三</a>
+      <p>編輯選讀卡片摘要一。編輯選讀卡片摘要二。編輯選讀卡片摘要三。</p>
+    </section>
+    <div class="feature-body" id="story-content">
+      <h1>合成文化專題的正文選取測試</h1>
+      <p>這個合成雜誌頁面描述一場虛構影像工作坊，正文從這裡開始，目的是測試 fallback 是否能選到真正的文章段落。</p>
+      <p>第二段說明參與者如何整理公開活動筆記、比較不同段落的脈絡，並確認所有內容都是假人物、假網址與假場景。</p>
+      <p>第三段補足長度，讓抽取器不能只依賴頁面最前方的推薦區塊，而必須根據段落密度、標題相似度與連結密度挑選正文。</p>
+      <p>最後一段描述後續整理方式：工作坊會把公開資料做成摘要表，並保留人工覆核欄位，避免把廣告、導覽或推薦卡片誤送模型。補充段落說明這個合成案例需要穩定超過抽取門檻，才能測試長文雜誌版型的正文選取。</p>
+      <a href="/culture/source-note">Article source</a>
+    </div>
+    <section class="editor-picks">
+      <h2>延伸專題</h2>
+      <p>快門慢想延伸專題、城市觀察、影像工具箱、讀者投稿與下期預告。</p>
+    </section>
+  </div>
+  <footer>關於我們 隱私權 服務條款</footer>
+</body>
+</html>

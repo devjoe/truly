@@ -58,6 +58,12 @@ import {
   resolveLanguage,
   t,
 } from "../lib/i18n";
+import {
+  canManageGeneralPageAllSitesPermission,
+  generalPageHostAccessStatus,
+  removeGeneralPageAllSitesPermission,
+  requestGeneralPageAllSitesPermission,
+} from "../lib/general-page-host-permission";
 import type { Lang, LanguageSetting } from "../lib/types";
 import { debugLog } from "../lib/logger";
 
@@ -74,6 +80,7 @@ async function saveSettings(settings: UserSettings): Promise<void> {
 
 type ApiKeyStorageKey = "tierAApiKey" | "tierBApiKey";
 type ApiKeySessionFlagKey = "tierAApiKeySessionOnly" | "tierBApiKeySessionOnly";
+const ACTIVE_EXTENSION_PAGE_MARKER_KEY = "trulyActiveExtensionPage";
 
 async function sessionStorageGet(keys: string[]): Promise<Record<string, unknown>> {
   return chrome.storage.session?.get(keys).catch(() => ({} as Record<string, unknown>)) ??
@@ -86,6 +93,23 @@ async function sessionStorageSet(values: Record<string, unknown>): Promise<void>
 
 async function sessionStorageRemove(keys: string[]): Promise<void> {
   await chrome.storage.session?.remove(keys).catch(() => {});
+}
+
+function markActiveExtensionPage(): void {
+  void browser.tabs.getCurrent().catch(() => undefined).then((tab) =>
+    document.visibilityState === "hidden" && tab?.active !== true
+      ? undefined
+      : sessionStorageSet({
+          [ACTIVE_EXTENSION_PAGE_MARKER_KEY]: {
+            kind: "options",
+            tabId: tab?.id,
+            title: document.title,
+            url: location.href,
+            ts: Date.now(),
+            buildId: __TRULY_BUILD_ID__,
+          },
+        }),
+  );
 }
 
 async function persistApiKeyPreference(options: {
@@ -260,6 +284,12 @@ function makeUuid(): string {
 }
 
 async function init() {
+  markActiveExtensionPage();
+  window.addEventListener("focus", markActiveExtensionPage);
+  window.addEventListener("pageshow", markActiveExtensionPage);
+  document.addEventListener("visibilitychange", markActiveExtensionPage);
+  window.setInterval(markActiveExtensionPage, 10_000);
+
   const settings = await loadSettings();
   const themeController = createExtensionThemeController();
   themeController.setMode(settings.themeMode);
@@ -1209,6 +1239,73 @@ async function init() {
       await broadcastSettingsUpdate(settings);
     });
   }
+
+  const generalPageAccessStatus = document.getElementById("generalPageAccessStatus");
+  const generalPageAccessGrant = document.getElementById("generalPageAccessGrant") as HTMLButtonElement | null;
+  const generalPageAccessRevoke = document.getElementById("generalPageAccessRevoke") as HTMLButtonElement | null;
+  let generalPageAccessPendingAction: "grant" | "revoke" | null = null;
+  let generalPageAccessLastMessage = "";
+
+  async function renderGeneralPageAccess(): Promise<void> {
+    if (!generalPageAccessStatus || !generalPageAccessGrant || !generalPageAccessRevoke) return;
+    const status = await generalPageHostAccessStatus();
+    const disabled = !!generalPageAccessPendingAction || status === "unavailable";
+    generalPageAccessStatus.textContent = generalPageAccessLastMessage ||
+      optT(`options.generalPageAccess.status.${status}`);
+    generalPageAccessStatus.className = status === "all_sites"
+      ? "status-text status-ok"
+      : status === "unavailable"
+      ? "status-text status-error"
+      : "status-text";
+    generalPageAccessGrant.disabled = disabled || status === "all_sites";
+    generalPageAccessRevoke.disabled = disabled || status !== "all_sites";
+    generalPageAccessGrant.textContent = optT(
+      generalPageAccessPendingAction === "grant"
+        ? "options.generalPageAccess.granting"
+        : "options.generalPageAccess.grant",
+    );
+    generalPageAccessRevoke.textContent = optT(
+      generalPageAccessPendingAction === "revoke"
+        ? "options.generalPageAccess.revoking"
+        : "options.generalPageAccess.revoke",
+    );
+  }
+
+  function renderGeneralPageAccessSoon(): void {
+    void renderGeneralPageAccess();
+  }
+
+  i18nDynamicRenderers.push(renderGeneralPageAccessSoon);
+  renderGeneralPageAccessSoon();
+
+  generalPageAccessGrant?.addEventListener("click", async () => {
+    if (!canManageGeneralPageAllSitesPermission()) {
+      generalPageAccessLastMessage = optT("options.generalPageAccess.failed");
+      renderGeneralPageAccessSoon();
+      return;
+    }
+    generalPageAccessPendingAction = "grant";
+    generalPageAccessLastMessage = "";
+    await renderGeneralPageAccess();
+    const granted = await requestGeneralPageAllSitesPermission();
+    generalPageAccessPendingAction = null;
+    generalPageAccessLastMessage = optT(
+      granted ? "options.generalPageAccess.granted" : "options.generalPageAccess.denied",
+    );
+    await renderGeneralPageAccess();
+  });
+
+  generalPageAccessRevoke?.addEventListener("click", async () => {
+    generalPageAccessPendingAction = "revoke";
+    generalPageAccessLastMessage = "";
+    await renderGeneralPageAccess();
+    const removed = await removeGeneralPageAllSitesPermission();
+    generalPageAccessPendingAction = null;
+    generalPageAccessLastMessage = optT(
+      removed ? "options.generalPageAccess.removed" : "options.generalPageAccess.failed",
+    );
+    await renderGeneralPageAccess();
+  });
 
   // Provider selection
   const providerSelect = document.getElementById(

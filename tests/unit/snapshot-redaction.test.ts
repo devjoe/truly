@@ -1,4 +1,5 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { JSDOM } from "jsdom";
 
 type SnapshotInternals = typeof import("../../src/sidepanel/snapshot").__snapshotInternals;
 
@@ -75,5 +76,23 @@ describe("debug snapshot secret redaction", () => {
         tierBApiKey: internals.REDACTED_SECRET,
       },
     });
+  });
+
+  it("redacts Page/Web screenshot data URLs from exported sidepanel DOM", () => {
+    const dom = new JSDOM(`
+      <body>
+        <section class="page-reader-screenshot" data-state="preview">
+          <img class="page-reader-screenshot-preview" alt="Preview" src="data:image/jpeg;base64,c2NyZWVuc2hvdA==">
+        </section>
+        <img class="other-preview" src="data:image/png;base64,c2Vjb25kYXJ5">
+      </body>
+    `);
+
+    const html = internals.redactSidepanelDomHtml(dom.window.document.body);
+
+    expect(html).not.toContain("data:image/");
+    expect(html).not.toContain("c2NyZWVuc2hvdA");
+    expect(html).toContain(internals.REDACTED_SCREENSHOT_DATA_URL);
+    expect(html).toContain("data-snapshot-redacted=\"screenshot-preview\"");
   });
 });

@@ -1,4 +1,11 @@
 {
-  "extensionName": { "message": "Truly" },
-  "extensionDescription": { "message": "Privacy-conscious reading assistant for social feeds and web pages" }
+  "extensionName": {
+    "message": "Truly"
+  },
+  "extensionDescription": {
+    "message": "Privacy-conscious reading assistant for social feeds and web pages"
+  },
+  "commandReadCurrentRegion": {
+    "message": "Analyze the paragraph under the mouse pointer"
+  }
 }

@@ -1,8 +1,8 @@
 {
-  "publishedVersion": "0.1.0",
-  "publishedVersionName": "0.1.0 Preview 8",
-  "publishedTag": "v0.1.0-preview.8",
-  "publishedAt": "2026-06-25",
+  "publishedVersion": "0.1.1",
+  "publishedVersionName": "0.1.1 Preview 9",
+  "publishedTag": "v0.1.1-preview.9",
+  "publishedAt": "2026-07-04",
   "visibility": "Unlisted",
   "itemId": "kdgkgifmdflocjockbfnhkkncbdihpoj",
   "notes": "Update this after each successful Chrome Web Store publication. CWS requires manifest.version to increase for each uploaded package."

@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Selection Fixture</title>
+</head>
+<body>
+  <article>
+    <h1>Selection Fixture</h1>
+    <p>This synthetic article is available for whole-page extraction, but the contract test passes a meaningful selection. The extractor should prefer that selected text and mark the result with a selection-only warning.</p>
+    <p>The remaining body text is intentionally different from the selected excerpt so the test can prove selected text has priority only when it is long enough to be useful.</p>
+  </article>
+</body>
+</html>

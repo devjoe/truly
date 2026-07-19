@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
-import { existsSync, readFileSync, statSync } from "node:fs";
-import { relative, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
+  collectCwsAssetEvidence,
   readProjectMetadata,
   root,
 } from "./lib/cws-artifacts.mjs";
@@ -23,12 +24,6 @@ const requiredFiles = [
   "THIRD_PARTY_NOTICES.md",
   "src/icons/icon-128.png",
 ];
-const requiredPngs = [
-  ["docs/assets/cws/truly-cws-professional-screenshot-01-feed-signal.png", 1280, 800],
-  ["docs/assets/cws/truly-cws-professional-screenshot-02-expanded-context.png", 1280, 800],
-  ["docs/assets/cws/truly-cws-professional-screenshot-03-side-panel-handoff.png", 1280, 800],
-  ["docs/assets/cws/truly-cws-promo-og-image.png", 440, 280],
-];
 const versionedDocs = [
   "docs/release/cws-submission-checklist.md",
   "docs/release/cws-reviewer-notes.md",
@@ -39,25 +34,89 @@ const expectedSnippets = [
   versionName,
   recommendedTag,
 ];
+const contractDocs = [
+  {
+    path: "docs/release/preview-command-contract.md",
+    snippets: [
+      "cws:package:local-smoke",
+      "Uploadable: no",
+      "must never be uploaded to Chrome Web Store",
+    ],
+  },
+  {
+    path: "docs/release/cws-reviewer-notes.md",
+    snippets: [
+      "artifacts/cws-local-smoke/",
+      "explicitly non-uploadable",
+      "Screenshot-assisted recovery is offered only after a user-triggered Page/Web",
+      "vision input",
+      "not written to extension storage or logs",
+      "authorize-domain action",
+      "authorizes a single domain from the Page/Web side panel",
+    ],
+  },
+  {
+    path: "docs/release/privacy-policy.md",
+    snippets: [
+      "screenshot-assisted recovery",
+      "confirm the preview",
+      "not written to Chrome extension storage, logs",
+      "durable page history",
+      "automatically while the Side Panel is",
+      "authorize a single domain",
+      "Closing the side panel stops these",
+    ],
+  },
+  {
+    path: "docs/release/permission-justification.md",
+    snippets: [
+      "Page/Web screenshot-assisted recovery uses the same user-gesture boundary",
+      "does not add a separate screenshot permission",
+      "not written to Chrome extension storage or logs",
+      "single-domain grant",
+      "authorize-domain action",
+      "while the Side Panel is open",
+    ],
+  },
+  {
+    path: "docs/release/cws-submission-checklist.md",
+    snippets: [
+      "artifacts/cws-local-smoke/",
+      "explicitly non-uploadable",
+      "Before dashboard upload",
+      "otherwise occupied package",
+      "Record the outcome of Preview 9's numeric `0.1.1` submission before",
+    ],
+  },
+  {
+    path: "docs/release/cws-listing-copy.md",
+    snippets: [
+      "Page/Web screenshot-assisted recovery",
+      "selected model source supports",
+      "user confirms the preview",
+      "session-only and is not stored",
+      "hook in-page Facebook",
+      "GraphQL/network responses",
+      "General Page all-sites access",
+      "sponsorship signals",
+      "authorizes a single domain",
+      "while the Side Panel is open",
+    ],
+  },
+];
 const errors = [];
 
 for (const path of requiredFiles) {
   if (!existsSync(resolve(root, path))) errors.push(`missing required CWS file: ${path}`);
 }
 
-for (const [path, width, height] of requiredPngs) {
-  const absolutePath = resolve(root, path);
-  if (!existsSync(absolutePath)) {
-    errors.push(`missing required CWS image: ${path}`);
-    continue;
-  }
-  const actual = readPngDimensions(absolutePath);
-  if (!actual) {
-    errors.push(`CWS image is not a readable PNG: ${path}`);
-    continue;
-  }
-  if (actual.width !== width || actual.height !== height) {
-    errors.push(`CWS image size mismatch: ${path} expected ${width}x${height}, got ${actual.width}x${actual.height}`);
+for (const asset of collectCwsAssetEvidence()) {
+  if (!asset.exists) {
+    errors.push(`missing required CWS image: ${asset.path}`);
+  } else if (!asset.actual) {
+    errors.push(`CWS image is not a readable PNG: ${asset.path}`);
+  } else if (asset.status !== "ok") {
+    errors.push(`CWS image size mismatch: ${asset.path} expected ${asset.width}x${asset.height}, got ${asset.actual.width}x${asset.actual.height}`);
   }
 }
 
@@ -73,6 +132,17 @@ for (const path of versionedDocs) {
   const stalePreview = text.match(new RegExp(`${escapeRegExp(version)} Preview (?!${escapeRegExp(versionName.split(" Preview ")[1] ?? "")})\\d+`));
   if (stalePreview) {
     errors.push(`${path} appears to mention stale preview label: ${stalePreview[0]}`);
+  }
+}
+
+for (const entry of contractDocs) {
+  const absolutePath = resolve(root, entry.path);
+  if (!existsSync(absolutePath)) continue;
+  const text = readFileSync(absolutePath, "utf8");
+  for (const snippet of entry.snippets) {
+    if (!text.includes(snippet)) {
+      errors.push(`${entry.path} does not mention required CWS contract snippet: ${snippet}`);
+    }
   }
 }
 
@@ -94,19 +164,6 @@ if (errors.length > 0) {
 }
 
 console.log(`CWS preflight passed (${versionName} / ${recommendedTag}).`);
-
-function readPngDimensions(path) {
-  const stat = statSync(path);
-  if (!stat.isFile() || stat.size < 24) return null;
-  const data = readFileSync(path);
-  const signature = data.slice(0, 8).toString("hex");
-  if (signature !== "89504e470d0a1a0a") return null;
-  return {
-    width: data.readUInt32BE(16),
-    height: data.readUInt32BE(20),
-    path: relative(root, path),
-  };
-}
 
 function readJsonIfExists(path) {
   const absolutePath = resolve(root, path);

@@ -103,6 +103,10 @@ function buildContext(reviewKind) {
   const untrackedFiles = git(["ls-files", "--others", "--exclude-standard"], "").trim().split("\n").filter(Boolean);
   const untrackedTextFiles = untrackedFiles.filter(isPublicSafeTextFile);
   const latestCwsReport = reviewKind === "cws" ? latestFile("artifacts/cws", "cws-package-report.md") : null;
+  const latestCwsLocalSmokeReport = reviewKind === "cws"
+    ? latestFile("artifacts/cws-local-smoke", "cws-local-smoke-report.md")
+    : null;
+  const includeRuntimePrivacyEvidence = reviewKind === "security" || reviewKind === "cws";
 
   return {
     reviewKind,
@@ -139,12 +143,18 @@ function buildContext(reviewKind) {
       permissionJustification: reviewKind !== "functional" ? readText("docs/release/permission-justification.md", 30000) : "",
       privacyPolicy: reviewKind !== "functional" ? readText("docs/release/privacy-policy.md", 30000) : "",
       cwsPackageReport: latestCwsReport ? readFile(latestCwsReport, 20000) : "",
+      cwsLocalSmokeReport: latestCwsLocalSmokeReport ? readFile(latestCwsLocalSmokeReport, 20000) : "",
+      pageReadingRuntime: includeRuntimePrivacyEvidence ? readText("src/sidepanel/page-reading-runtime.ts", 90000) : "",
+      generalPageHostPermission: includeRuntimePrivacyEvidence ? readText("src/lib/general-page-host-permission.ts", 12000) : "",
+      generalPageModelIntegrationAudit: includeRuntimePrivacyEvidence ? readText("tests/audit/general-page-model-integration-audit.test.ts", 20000) : "",
+      pageReadingRuntimeTests: includeRuntimePrivacyEvidence ? readText("tests/unit/page-reading-runtime.test.ts", 70000) : "",
+      generalPageHostPermissionTests: includeRuntimePrivacyEvidence ? readText("tests/unit/general-page-host-permission.test.ts", 12000) : "",
     },
     limits: {
       diffCapChars: 70000,
       generatedAndPrivateMaterialExcluded: [
         "dist/",
-        "artifacts/ release binaries except selected CWS report",
+        "artifacts/ release binaries except selected CWS/package-smoke reports",
         ".env*",
         "node_modules/",
         "browser profiles",
@@ -275,6 +285,8 @@ function buildPrompt(reviewKind, context) {
     functional: [
       "release regression risk",
       "settings and model-source behavior",
+      "Page/Web current-page reading UX, optional all-sites access, and reviewer-visible failure states",
+      "screenshot-assisted recovery UX claims, including user confirmation and visible preview behavior",
       "manifest/package/release metadata consistency",
       "missing tests or manual checks",
       "Chrome Web Store-visible UX or documentation mismatch",
@@ -286,11 +298,13 @@ function buildPrompt(reviewKind, context) {
       "message passing and postMessage origin validation",
       "DOM injection and attacker-controlled text handling",
       "external endpoint, localhost, and optional permission behavior",
+      "Page/Web screenshot-assisted recovery data flow, including user confirmation, vision-gated use, session-only handling, and absence from storage or logs",
     ],
     cws: [
       "CWS package/report consistency",
       "privacy declarations and listing claims",
       "permission justification mismatch",
+      "Page/Web all-sites opt-in and screenshot-assisted recovery claims in reviewer notes, privacy policy, and permission justifications",
       "remote-code ambiguity",
       "reviewer-note completeness",
       "dashboard upload or review rejection risks",
@@ -369,6 +383,11 @@ function describeClaudeFailure(stdout, stderr) {
     const parsed = JSON.parse(stdout || "{}");
     const parts = [];
     if (parsed.subtype) parts.push(parsed.subtype);
+    if (parsed.is_error === true) parts.push("is_error=true");
+    if (parsed.api_error_status) parts.push(`api_error_status=${parsed.api_error_status}`);
+    if (typeof parsed.result === "string" && parsed.result.trim()) {
+      parts.push(`result=${capText(parsed.result.trim(), 500)}`);
+    }
     if (Array.isArray(parsed.errors) && parsed.errors.length > 0) {
       parts.push(parsed.errors.join("; "));
     }

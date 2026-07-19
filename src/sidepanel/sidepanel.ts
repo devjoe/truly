@@ -1,7 +1,7 @@
 import type {
   DashboardPostEvent,
 } from "../lib/types";
-import { initTabs } from "./tabs";
+import { initTabs, setTabAvailability, shouldShowPageReadCurrentAction } from "./tabs";
 import { installTooltips, suppressTooltip } from "./tooltip";
 import { panelState } from "./state";
 // Re-exported so existing importers (e.g. sidepanel-render.test.ts) keep a
@@ -22,6 +22,8 @@ import { createSidepanelDashboardReplayRuntime } from "./dashboard-replay-runtim
 import { createSidepanelStorageRuntimeController } from "./storage-runtime-controller";
 import { createSidepanelDashboardHistoryRuntime } from "./dashboard-history-runtime";
 import { createSidepanelTabActivationRuntime } from "./tab-activation-runtime-controller";
+import { createSidepanelPageReadingRuntime } from "./page-reading-runtime";
+import { loadReadinessSnapshot, READINESS_STORAGE_KEY } from "../lib/readiness-storage";
 import { initializeSidepanelBootstrap } from "./bootstrap-lifecycle";
 import type { FeedExpandedRenderOptions } from "./feed-expanded-renderer";
 import { createExtensionThemeController } from "../lib/theme-mode";
@@ -39,6 +41,7 @@ const themeController = createExtensionThemeController();
 const languageController = createExtensionLanguageController();
 
 const analysisPaneEl = document.getElementById("analysis-pane")!;
+const pagePaneEl = document.getElementById("page-pane")!;
 
 // currentViewPostId / manualFocusHoldUntil / replayInProgress live in panelState
 // (./state). MANUAL_FOCUS_HOLD_MS gates the manual-focus hold; see
@@ -89,6 +92,51 @@ const readingSurface = createSidepanelReadingSurface({
   getLang: () => languageController.current(),
 });
 
+let generalPageVisionSupported = false;
+void loadReadinessSnapshot(chrome.storage.local as never).then((snapshot) => {
+  generalPageVisionSupported = snapshot?.ai_analysis?.capabilities?.vision === "supported";
+}).catch(() => {});
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes[READINESS_STORAGE_KEY]) return;
+  void loadReadinessSnapshot(chrome.storage.local as never).then((snapshot) => {
+    generalPageVisionSupported = snapshot?.ai_analysis?.capabilities?.vision === "supported";
+  }).catch(() => {});
+});
+
+const pageReadingRuntime = createSidepanelPageReadingRuntime({
+  pagePaneEl,
+  runtime: chrome.runtime,
+  tabs: {
+    query: (queryInfo) => chrome.tabs.query(queryInfo),
+    get: (tabId) => chrome.tabs.get(tabId),
+    update: (tabId, updateProperties) => chrome.tabs.update(tabId, updateProperties),
+    focusWindow: (windowId) => chrome.windows.update(windowId, { focused: true }),
+    captureVisibleTab: (windowId, options) => chrome.tabs.captureVisibleTab(windowId, options),
+    onActivated: chrome.tabs.onActivated,
+    onUpdated: chrome.tabs.onUpdated,
+    onRemoved: chrome.tabs.onRemoved,
+  },
+  activateTab: tabActivationRuntime.activateTab,
+  setTabAvailability,
+  getLang: () => languageController.current(),
+  getSettings: () => panelState.cachedSettings,
+  getTierAEndpoint: () => panelState.cachedTierAEndpoint,
+  getTierAModel: () => panelState.cachedTierAModel,
+  now: Date.now,
+  sessionStore: {
+    get: (key) => chrome.storage.session.get(key),
+    remove: (key) => chrome.storage.session.remove(key),
+    onChanged: chrome.storage.onChanged,
+  },
+  getVisionSupported: () => generalPageVisionSupported,
+});
+
+if (new URLSearchParams(location.search).has("generalPageReaderAudit")) {
+  (globalThis as typeof globalThis & {
+    __trulyPageReadingRuntime?: typeof pageReadingRuntime;
+  }).__trulyPageReadingRuntime = pageReadingRuntime;
+}
+
 const postRuntimeController = createSidepanelPostRuntimeController({
   runtimeState,
   panelState,
@@ -121,6 +169,7 @@ const storageRuntime = createSidepanelStorageRuntimeController({
   applyTheme: (settings: UserSettings) => {
     themeController.setMode(settings.themeMode);
     languageController.setLanguage(settings.language);
+    pageReadingRuntime.refresh();
   },
   renderAnalysisPane,
 });
@@ -145,11 +194,15 @@ installSidepanelRuntimeMessageListener({
   applyTheme: (settings) => {
     themeController.setMode(settings.themeMode);
     languageController.setLanguage(settings.language);
+    pageReadingRuntime.refresh();
   },
   addPost: postRuntimeController.addPost,
   replayDashboardEvents: dashboardReplayRuntime.replayDashboardEvents,
   renderAnalysisPane,
   activateAnalysisTab: tabActivationRuntime.activateAnalysisTab,
+  pageReadingResult: pageReadingRuntime.handlePageReadingResult,
+  pageReadingError: pageReadingRuntime.handlePageReadingError,
+  generalPageInvestigationResult: pageReadingRuntime.handleGeneralPageInvestigationResult,
 });
 
 // Request replay on mount so the panel doesn't start empty after reopen.
@@ -170,7 +223,13 @@ currentViewRuntime.installRefreshListeners();
 const activateTab = initializeSidepanelBootstrap({
   installTooltips,
   installOptionsPageShortcut,
-  initTabs,
+  initTabs: (onActivate) => initTabs((tab) => {
+    pageReadingRuntime.setWorkspace(tab === "focus" ? "focus" : "page");
+    const readButton = document.getElementById("pageReadCurrent");
+    if (readButton) readButton.hidden = !shouldShowPageReadCurrentAction(tab);
+    onActivate(tab);
+  }),
   initializeStorageState: storageRuntime.initializeStorageState,
+  onStorageReady: pageReadingRuntime.install,
 });
 tabActivationRuntime.setActivateTab(activateTab);

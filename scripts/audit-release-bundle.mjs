@@ -47,7 +47,7 @@ const EXECUTABLE_REMOTE_PATTERNS = [
   /\bimport\s*\(\s*["']https?:\/\//,
   /\bnew\s+(?:Shared)?Worker\s*\(\s*["']https?:\/\//,
 ];
-const EXPECTED_REQUIRED_PERMISSIONS = ["activeTab", "sidePanel", "storage"];
+const EXPECTED_REQUIRED_PERMISSIONS = ["activeTab", "scripting", "sidePanel", "storage"];
 const EXPECTED_HOST_PERMISSIONS = [
   "*://*.facebook.com/*",
   "*://*.fbcdn.net/*",

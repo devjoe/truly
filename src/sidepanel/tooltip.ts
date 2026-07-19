@@ -64,6 +64,22 @@ export function installTooltips(): void {
     hideTooltip();
   });
 
+  document.addEventListener("focusin", (e) => {
+    const target = (e.target as HTMLElement | null)?.closest?.(
+      "[data-tooltip]"
+    ) as HTMLElement | null;
+    if (!target) return;
+    tooltipTarget = target;
+    positionTooltip(target);
+  });
+
+  document.addEventListener("focusout", (e) => {
+    if (!tooltipTarget) return;
+    const related = e.relatedTarget as HTMLElement | null;
+    if (related && tooltipTarget.contains(related)) return;
+    hideTooltip();
+  });
+
   document.addEventListener(
     "pointerdown",
     (e) => {

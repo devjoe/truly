@@ -18,8 +18,6 @@ import {
   type ReadingWorkspaceRuntimeState,
 } from "./reading-workspace-decision";
 
-const FEEDBACK_URL = "https://trulyreader.org/feedback/";
-
 export interface InvestigationActionRendererOptions {
   runtimeState: ReadingWorkspaceRuntimeState;
   settings?: Pick<UserSettings, "markdownDownloadMode">;
@@ -127,6 +125,15 @@ export function renderInvestigationActionSection(
   status.className = "investigation-action-status";
   status.setAttribute("role", "status");
   status.setAttribute("aria-live", "polite");
+  const footer = document.createElement("div");
+  footer.className = "investigation-action-footer";
+  footer.hidden = true;
+  footer.appendChild(status);
+
+  const setStatus = (message: string): void => {
+    status.textContent = message;
+    footer.hidden = !message;
+  };
 
   const createCopyButton = (): HTMLButtonElement => {
     const copyBtn = document.createElement("button");
@@ -138,14 +145,14 @@ export function renderInvestigationActionSection(
 
     copyBtn.addEventListener("click", async () => {
       copyBtn.disabled = true;
-      status.textContent = t("sidepanel.dynamic.actions.copying", lang);
+      setStatus(t("sidepanel.dynamic.actions.copying", lang));
       try {
         const context = buildPostInvestigationContext(event, lang);
         await copyTextToClipboard(formatInvestigationMarkdown(context, lang));
-        status.textContent = t("sidepanel.dynamic.actions.copied", lang);
+        setStatus(t("sidepanel.dynamic.actions.copied", lang));
       } catch (err) {
         logger.warn("[Truly Sidepanel] Markdown copy failed:", err);
-        status.textContent = t("sidepanel.dynamic.actions.copyFailed", lang);
+        setStatus(t("sidepanel.dynamic.actions.copyFailed", lang));
       } finally {
         copyBtn.disabled = false;
       }
@@ -164,7 +171,7 @@ export function renderInvestigationActionSection(
 
     downloadBtn.addEventListener("click", async () => {
       downloadBtn.disabled = true;
-      status.textContent = t("sidepanel.dynamic.actions.preparingDownload", lang);
+      setStatus(t("sidepanel.dynamic.actions.preparingDownload", lang));
       try {
         const context = buildPostInvestigationContext(event, lang);
         const markdown = formatInvestigationMarkdown(context, lang);
@@ -174,12 +181,12 @@ export function renderInvestigationActionSection(
           "text/markdown;charset=utf-8",
           { mode: options.settings?.markdownDownloadMode },
         );
-        status.textContent = outcome === "cancelled"
+        setStatus(outcome === "cancelled"
           ? t("sidepanel.dynamic.actions.downloadCancelled", lang)
-          : t("sidepanel.dynamic.actions.downloaded", lang);
+          : t("sidepanel.dynamic.actions.downloaded", lang));
       } catch (err) {
         logger.warn("[Truly Sidepanel] Markdown download failed:", err);
-        status.textContent = t("sidepanel.dynamic.actions.downloadFailed", lang);
+        setStatus(t("sidepanel.dynamic.actions.downloadFailed", lang));
       } finally {
         downloadBtn.disabled = false;
       }
@@ -198,17 +205,17 @@ export function renderInvestigationActionSection(
   metaAiBtn.dataset.tooltip = t("sidepanel.dynamic.actions.askMetaAiTooltip", lang);
   metaAiBtn.addEventListener("click", async () => {
     metaAiBtn.disabled = true;
-    status.textContent = t("sidepanel.dynamic.actions.copying", lang);
+    setStatus(t("sidepanel.dynamic.actions.copying", lang));
     try {
       const context = buildPostInvestigationContext(event, lang);
       await copyTextToClipboard(formatMetaAiAnalysisPrompt(context, lang));
       const opened = openExternalToolUrl(META_AI_URL);
-      status.textContent = opened
+      setStatus(opened
         ? t("sidepanel.dynamic.actions.metaAiCopiedOpened", lang)
-        : t("sidepanel.dynamic.actions.metaAiCopiedManual", lang);
+        : t("sidepanel.dynamic.actions.metaAiCopiedManual", lang));
     } catch (err) {
       logger.warn("[Truly Sidepanel] Meta AI handoff failed:", err);
-      status.textContent = t("sidepanel.dynamic.actions.copyFailed", lang);
+      setStatus(t("sidepanel.dynamic.actions.copyFailed", lang));
     } finally {
       metaAiBtn.disabled = false;
     }
@@ -216,19 +223,6 @@ export function renderInvestigationActionSection(
   row.appendChild(metaAiBtn);
 
   section.appendChild(row);
-  const footer = document.createElement("div");
-  footer.className = "investigation-action-footer";
-  footer.appendChild(status);
-
-  const feedbackLink = document.createElement("a");
-  feedbackLink.className = "investigation-feedback-link";
-  feedbackLink.href = FEEDBACK_URL;
-  feedbackLink.target = "_blank";
-  feedbackLink.rel = "noopener noreferrer";
-  feedbackLink.textContent = t("sidepanel.dynamic.actions.feedback", lang);
-  feedbackLink.setAttribute("aria-label", t("sidepanel.dynamic.actions.feedbackAria", lang));
-  footer.appendChild(feedbackLink);
-
   section.appendChild(footer);
   return section;
 }

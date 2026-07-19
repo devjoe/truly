@@ -15,6 +15,32 @@ import { fileURLToPath } from "node:url";
 export const root = fileURLToPath(new URL("../..", import.meta.url));
 export const releaseLockPath = resolve(root, "tmp/release-preview.lock");
 export const devStatePath = resolve(root, "tmp/dev-singleton.json");
+export const CWS_ASSET_REQUIREMENTS = [
+  {
+    path: "docs/assets/cws/truly-cws-professional-screenshot-01-feed-signal.png",
+    width: 1280,
+    height: 800,
+    role: "screenshot",
+  },
+  {
+    path: "docs/assets/cws/truly-cws-professional-screenshot-02-expanded-context.png",
+    width: 1280,
+    height: 800,
+    role: "screenshot",
+  },
+  {
+    path: "docs/assets/cws/truly-cws-professional-screenshot-03-side-panel-handoff.png",
+    width: 1280,
+    height: 800,
+    role: "screenshot",
+  },
+  {
+    path: "docs/assets/cws/truly-cws-promo-og-image.png",
+    width: 440,
+    height: 280,
+    role: "small_promo_tile",
+  },
+];
 
 const crcTable = Array.from({ length: 256 }, (_, index) => {
   let crc = index;
@@ -47,7 +73,11 @@ export function readJson(path) {
 
 export function git(args, fallback = "") {
   try {
-    return execFileSync("git", args, { cwd: root, encoding: "utf8" });
+    return execFileSync("git", args, {
+      cwd: root,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    });
   } catch {
     return fallback;
   }
@@ -102,6 +132,41 @@ export function assertUpstreamSynced({ allowUnpushedEnv }) {
   }
 
   return { upstream, ahead, behind };
+}
+
+export function readMainlineState(baseRef = process.env.TRULY_MERGE_BASE_REF || "origin/main") {
+  const baseCommit = git(["rev-parse", "--verify", `${baseRef}^{commit}`], "").trim();
+  if (!baseCommit) return { baseRef, ahead: null, behind: null, ancestor: false, status: "missing" };
+
+  const ancestor = spawnGit(["merge-base", "--is-ancestor", baseRef, "HEAD"]).status === 0;
+  const [behindRaw, aheadRaw] = git(["rev-list", "--left-right", "--count", `${baseRef}...HEAD`], "0\t0")
+    .trim()
+    .split(/\s+/);
+  const behind = Number(behindRaw);
+  const ahead = Number(aheadRaw);
+  return {
+    baseRef,
+    ahead,
+    behind,
+    ancestor,
+    status: ancestor && behind === 0 ? "caught_up" : "behind_or_diverged",
+  };
+}
+
+export function assertMainlineCaughtUp({ baseRef = process.env.TRULY_MERGE_BASE_REF || "origin/main" } = {}) {
+  const state = readMainlineState(baseRef);
+  if (state.status === "missing") {
+    console.error(`Refusing to package for CWS because the mainline base ref is missing: ${state.baseRef}`);
+    console.error("Fetch the remote mainline first, for example `git fetch origin main`.");
+    process.exit(1);
+  }
+  if (state.status !== "caught_up") {
+    console.error(`Refusing to package for CWS because HEAD is not caught up with ${state.baseRef}.`);
+    console.error(`- ${state.baseRef}...HEAD: behind=${state.behind}, ahead=${state.ahead}`);
+    console.error(`- ancestor=${state.ancestor}`);
+    process.exit(1);
+  }
+  return state;
 }
 
 export function assertTagMatchesHead(tag) {
@@ -187,6 +252,25 @@ export function readDistBuildId() {
   }
 }
 
+export function collectCwsAssetEvidence() {
+  return CWS_ASSET_REQUIREMENTS.map((asset) => {
+    const absolutePath = resolve(root, asset.path);
+    const actual = readPngDimensions(absolutePath);
+    const exists = existsSync(absolutePath);
+    const status = actual && actual.width === asset.width && actual.height === asset.height
+      ? "ok"
+      : exists
+        ? "mismatch_or_unreadable"
+        : "missing";
+    return {
+      ...asset,
+      exists,
+      actual,
+      status,
+    };
+  });
+}
+
 export function parsePreviewNumber(versionName, version) {
   const match = new RegExp(`^${escapeRegExp(version)} Preview ([1-9]\\d*)$`).exec(versionName ?? "");
   return match?.[1] ?? null;
@@ -207,6 +291,24 @@ function isAlive(pid) {
     return true;
   } catch {
     return false;
+  }
+}
+
+function spawnGit(args) {
+  try {
+    return {
+      status: 0,
+      stdout: execFileSync("git", args, {
+        cwd: root,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      }),
+    };
+  } catch (error) {
+    return {
+      status: typeof error.status === "number" ? error.status : 1,
+      stdout: typeof error.stdout === "string" ? error.stdout : "",
+    };
   }
 }
 
@@ -241,6 +343,23 @@ function repoDevProcesses() {
     }
   }
   return processes;
+}
+
+function readPngDimensions(path) {
+  try {
+    const stat = statSync(path);
+    if (!stat.isFile() || stat.size < 24) return null;
+    const data = readFileSync(path);
+    const signature = data.slice(0, 8).toString("hex");
+    if (signature !== "89504e470d0a1a0a") return null;
+    return {
+      width: data.readUInt32BE(16),
+      height: data.readUInt32BE(20),
+      path: relative(root, path),
+    };
+  } catch {
+    return null;
+  }
 }
 
 function shouldExcludeExtensionPath(path) {

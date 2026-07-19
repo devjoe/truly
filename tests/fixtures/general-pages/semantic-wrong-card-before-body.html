@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>合成地方新聞：公共車輛臨停爭議說明</title>
+  <meta property="og:title" content="合成地方新聞：公共車輛臨停爭議說明">
+  <meta property="og:site_name" content="Synthetic Daily">
+</head>
+<body>
+  <main>
+    <nav>
+      <a href="/">首頁</a>
+      <a href="/politics">政治</a>
+      <a href="/society">社會</a>
+      <a href="/health">健康</a>
+      <a href="/shopping">購物</a>
+      <a href="/search">搜尋</a>
+    </nav>
+    <section class="ad-banner">合成遊戲廣告與促銷內容不應進入正文。</section>
+    <article class="recommend-card">
+      <h2>從受助到助人！合成推薦卡片不應被選為本文</h2>
+      <p>這張卡片描述另一則完全無關的公益活動，雖然它使用 article 標籤，也有足夠長度，但不含目前頁面的標題。</p>
+      <p>若抽取器只偏好 semantic article，就會把這段推薦卡片誤認成主要新聞，造成錯文摘要。</p>
+    </article>
+    <article class="post-style1">
+      <p>長榮海運合成內線交易新聞是一張沒有標題錨點的故事卡，它使用很像正式新聞的 article 標籤與 post class。</p>
+      <p>這張卡片也刻意放入作者、時間與分類文字，模擬新聞網站常見的側欄或下方推薦故事，不能被視為目前頁面的主要內容。</p>
+      <p>若抽取器只看 semantic article 權重，這段 unrelated story card 會勝過真正正文，導致摘要完全針對錯誤文章。</p>
+    </article>
+    <section class="story-shell">
+      <h1>合成地方新聞：公共車輛臨停爭議說明</h1>
+      <div class="post-content">
+        <p>第一段描述合成地方新聞的核心事件，兩名公共職務人員參與公開活動時，座車臨停位置引發民眾討論，並附上<a href="/topic/traffic">交通議題</a>與<a href="/topic/public-duty">公共勤務</a>連結。</p>
+        <p>第二段說明警方檢視影像後確認違規態樣，後續將依照一般交通規則辦理，避免事件被不同政治立場過度延伸，並提供<a href="/source/police">警方說明</a>。</p>
+        <p>第三段補充當事單位表示會檢討行程安排，並提供公開紀錄給需要查核的讀者參考，包含<a href="/records/agenda">公開行程</a>與<a href="/records/video">影像紀錄</a>。</p>
+        <p>第四段補足測試長度，確認抽取器會選取真正正文，而不是頁面上方的推薦卡片、廣告或導覽列，即使正文容器本身包含多個來源連結。</p>
+      </div>
+    </section>
+    <div class="post-featured partner">
+      <h2>相關新聞</h2>
+      <p>另一則合成相關新聞描述完全不同的油品流向事件，雖然文字更多、段落更多，但只是頁面下方推薦區。</p>
+      <p>第二則合成相關新聞描述攻擊事件與機場攔截，與本頁公共車輛臨停爭議沒有直接關係。</p>
+      <p>第三則合成相關新聞描述圖書館改建、氣象提醒與地方活動，這些卡片都不應成為主要抽取結果。</p>
+      <p>第四則合成相關新聞用來拉高推薦區長度，避免抽取器只因為文字較多就錯選 recirculation block。</p>
+      <p>第五則合成相關新聞繼續補足長度，測試 partner 或 featured 類型的推薦區會被降權。</p>
+    </div>
+  </main>
+</body>
+</html>

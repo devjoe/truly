@@ -1,0 +1,86 @@
+[
+  {
+    "id": "zh-health-efficacy",
+    "surface": "facebook",
+    "language": "zh-TW",
+    "expected": "claim",
+    "text": "安康研究中心宣稱，每天飲用其草本飲品八週，可以讓六十五歲以上長者的跌倒風險降低百分之四十。貼文同時提供一般生活建議，但沒有附上臨床試驗、研究方法或主管機關核准資料。內文描述飲品含有多種植物萃取物，並安排使用者分享飲用心得，卻沒有交代受試者如何招募、是否設置對照組、跌倒風險如何測量，也沒有說明研究是否經過同儕審查。文章最後連到購買頁面，鼓勵家屬替長者訂購三個月份量，並表示庫存有限。部分留言詢問是否能與慢性病藥物一起使用，帳號只回覆可私訊諮詢，沒有提供醫師評估或藥物交互作用資料。"
+  },
+  {
+    "id": "zh-routine-promotion",
+    "surface": "facebook",
+    "language": "zh-TW",
+    "expected": "abstain",
+    "text": "山海書店宣布週六下午舉辦新書分享會，現場有作者簽名與限量書籤，活動免費入場但座位有限。貼文主要邀請讀者留言報名，也分享店內交通方式與營業時間，並提醒攜帶報名確認信以便工作人員安排座位。活動流程包括主持人開場、作者朗讀與現場提問，參加者可自行決定是否購書。店家也提醒附近停車位不多，建議搭乘大眾運輸，若遇天候不佳則會在官方社群更新資訊。整篇內容只是單次文化活動通知，沒有健康效果、公共預算、法律狀態或普遍性研究結論。貼文附上過去活動的室內照片，僅用來呈現場地氣氛，並沒有把照片當成任何外部事實的證據。"
+  },
+  {
+    "id": "zh-personal-experience",
+    "surface": "facebook",
+    "language": "zh-TW",
+    "expected": "abstain",
+    "text": "作者分享自己第一次搭夜車前往東部旅行的感受，覺得沿途風景令人平靜，也提到車廂稍冷、下次會多帶一件外套。全文是個人旅遊心得，沒有宣稱普遍效果或公共政策事實，結尾只是詢問朋友是否也有類似旅行回憶。她描述在車站買便當、聽音樂以及清晨看見海岸的片段，並坦言有幾段路睡得不好。這些敘述都限定為自己的主觀經驗，沒有推論所有旅客都會有相同感受，也沒有比較不同交通方式的安全性、價格或環境影響。留言區則有人分享自己喜歡的座位與行李整理方式。作者回覆時也只談個人偏好，沒有推薦特定業者、保證旅程品質或要求讀者採取任何行動。"
+  },
+  {
+    "id": "zh-medical-marketing",
+    "surface": "facebook",
+    "language": "zh-TW",
+    "expected": "claim",
+    "text": "明亮視力診所在廣告中表示，新式光照療程能在三次治療後改善八成青少年的近視，並稱此療程沒有副作用。廣告附有預約折扣，但未提供研究名稱、樣本數、對照組設計或醫療指引，也沒有說明哪些患者不適用。診所列出療程時間與預約方式，並以數名家長的短評作為成功案例。文中沒有區分視力暫時變化與近視度數長期控制，也未交代追蹤期間、退出人數或不良反應的收集方法。文章鼓勵家長在開學前完成療程，並聲稱越早開始效果越穩定。讀者若相信這些效果與安全性主張，可能因此改變未成年人的醫療選擇，所以需要獨立臨床證據判斷。"
+  },
+  {
+    "id": "zh-official-source-sufficient",
+    "surface": "facebook",
+    "language": "zh-TW",
+    "expected": "abstain",
+    "text": "河岸美術館官方帳號公告，七月二十五日將閉館一天進行空調維護，翌日上午十時恢復開放。貼文只說明閉館時間、退票方式與客服電話，沒有其他健康、安全或公共利益主張。已購買當日門票的訪客可選擇全額退款或改期，團體預約則由服務人員逐一聯絡。館方提醒戶外園區不受影響，但室內商店與咖啡區會同步暫停營業。這是館方對自身短期營運安排的第一手公告，沒有聲稱工程能改善城市安全、節省公共預算或帶來醫療效果。公告下方列出常見問題，內容只涵蓋寄物櫃、停車折抵與會員票券展延，均屬一般現場服務安排等相關資訊。"
+  },
+  {
+    "id": "zh-public-budget",
+    "surface": "facebook",
+    "language": "zh-TW",
+    "expected": "claim",
+    "text": "一篇地方社團貼文聲稱，青川市政府把今年防洪預算削減三成，導致兩座抽水站無法更新。貼文沒有附預算書、採購資料或議會紀錄，並呼籲居民要求市府公開相關決策文件與工程時程，以釐清雨季前的設備狀態。作者貼出積水照片，但沒有說明拍攝日期，也沒有證明照片與預算變動之間的因果關係。內文另提到里長曾在會議中要求改善排水，不過沒有附完整會議紀錄。若要判斷削減幅度是否正確，需要比對市府年度預算、議會審議資料與抽水站採購進度。這項說法涉及居民安全與公共支出，查證時也應把預算調整和設備未更新的因果關係分開處理。"
+  },
+  {
+    "id": "en-market-statistic",
+    "surface": "news",
+    "language": "en",
+    "expected": "claim",
+    "text": "A report about the Norvale housing market says median apartment prices fell 18 percent in June after a new lending rule took effect. The article cites unnamed brokers but provides no registry data, transaction series, or central-bank release supporting the figure."
+  },
+  {
+    "id": "en-signed-opinion",
+    "surface": "news",
+    "language": "en",
+    "expected": "abstain",
+    "text": "In this signed essay, technology columnist Mira Holt argues that humane software should protect quiet time and resist constant optimization. She describes this as her design philosophy and recommends slower product decisions, without asserting a measurable external event or result."
+  },
+  {
+    "id": "en-legal-stage",
+    "surface": "news",
+    "language": "en",
+    "expected": "claim",
+    "text": "A local report states that prosecutors charged the company Blue Vale Systems with falsifying twelve safety certificates. The company denied wrongdoing. The supplied article contains no charging document, court docket, or statement from the prosecutor's office."
+  },
+  {
+    "id": "en-entertainment-trivia",
+    "surface": "news",
+    "language": "en",
+    "expected": "abstain",
+    "text": "A entertainment site previews actor Rowan Pike's next comedy and lists the trailer release date, costume colors, and a fan event planned for Friday. The page contains promotional quotes and scheduling details but no consequential health, legal, financial, or public-interest assertion."
+  },
+  {
+    "id": "en-public-safety",
+    "surface": "news",
+    "language": "en",
+    "expected": "claim",
+    "text": "Residents say the Westbridge transit authority disabled fire alarms at four underground stations for six weeks while replacement parts were delayed. The report does not include inspection records, maintenance logs, or a response from the transit safety regulator."
+  },
+  {
+    "id": "en-source-sufficient-announcement",
+    "surface": "news",
+    "language": "en",
+    "expected": "abstain",
+    "text": "The Lakeside University website announces that its library will open two hours later next Monday for routine electrical maintenance. The notice gives the temporary schedule and contact desk details and makes no broader claim about safety, funding, or service quality."
+  }
+]

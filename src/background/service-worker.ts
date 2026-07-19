@@ -13,7 +13,7 @@
 // reloads are cosmetic noise (the content script context dies mid-flight)
 // and are silently ignored on the content side.
 
-import { callTierBDeepDetailed, callTierBReadingBrief } from "../lib/tier-b-client";
+import { callTierBDeepDetailed, callTierBGeneralPageBrief, callTierBGeneralPageParserAdvisor, callTierBReadingBrief } from "../lib/tier-b-client";
 import { callGeminiNanoTierB, callGeminiNanoReadingBrief, GEMINI_NANO_PROVIDER } from "../lib/gemini-nano-client";
 import { initDevReloadClient } from "./dev-reload-client";
 import type { TierAProvider, TierBProvider } from "../lib/types";
@@ -21,9 +21,15 @@ import {
   providerEndpointKind,
 } from "../lib/provider-capabilities";
 import { providerCanRunTierBFeature } from "../lib/feature-readiness";
+import {
+  buildRuleBasedGeneralPageParserAdvice,
+  isGeneralPageParserAdvisorAdviceCompatible,
+} from "../lib/general-page-parser-advisor";
 import type {
   TrulyMessage,
   DeepClassifyResultMsg,
+  GeneralPageAnalysisResultMsg,
+  GeneralPageParserAdvisorResultMsg,
   ReadingBriefResultMsg,
   ReadinessRunChecksResultMsg,
   ExportLogBufferResultMsg,
@@ -41,10 +47,27 @@ import { DashboardRuntimeState } from "./dashboard-state";
 import { createTierBCaptureBuffer, maybeCaptureTierB } from "./tier-b-capture";
 import { classifyTierAPosts } from "./tier-a-classification";
 import { debugLog } from "../lib/logger";
+import {
+  investigationAdapterStructuredOutputMode,
+  resolveTrustedTierARuntime,
+  resolveTrustedTierBProviderRuntime,
+  type StoredModelRuntimeInput,
+} from "./trusted-model-runtime";
+import { isSupportedScreenshotDataUrl } from "../lib/screenshot-data-url";
+import { queueReadingCommand } from "./reading-command-mailbox";
+import { createPageReaderTabTransport } from "./page-reader-tab-transport";
+import {
+  modelWorkPriorityForDeepSource,
+  modelWorkPriorityForReadingBriefSource,
+  modelWorkResourceKey,
+} from "../lib/model-work";
+import { ModelWorkScheduler } from "./model-work-scheduler";
+import { scheduleGeneralPageInvestigationPreparation } from "./general-page-investigation-background";
 
 // Capture console output for the debug snapshot bundle. Idempotent — if
 // the SW wakes from suspension this is a no-op. See lib/log-buffer.ts.
 installLogBuffer();
+const modelWorkScheduler = new ModelWorkScheduler({ foregroundBurstLimit: 3 });
 
 const CLASSIFICATION_CACHE_KEY_RE = /^classificationCacheV\d+$/;
 const CLASSIFICATION_CACHE_BUILD_ID_KEY = "classificationCacheBuildId";
@@ -66,21 +89,32 @@ async function storedSecretString(keys: string[]): Promise<string | undefined> {
   return undefined;
 }
 
-async function tierAApiKeyForMessage(
-  message: Extract<TrulyMessage, { type: "OLLAMA_CLASSIFY" }>,
+async function storedModelRuntimeInput(): Promise<StoredModelRuntimeInput> {
+  const [syncStored, localStored] = await Promise.all([
+    chrome.storage.sync.get("settings"),
+    chrome.storage.local.get(["ollamaEndpoint", "ollamaModel"]),
+  ]);
+  return {
+    settings: syncStored.settings,
+    ollamaEndpoint: localStored.ollamaEndpoint,
+    ollamaModel: localStored.ollamaModel,
+  };
+}
+
+async function tierAApiKeyForProvider(
+  provider: TierAProvider | undefined,
+  endpointKind: string | undefined,
 ): Promise<string | undefined> {
-  if (message.apiKey?.trim()) return message.apiKey.trim();
-  if (message.endpointKind !== OPENAI_COMPAT_PROVIDER && message.provider !== OPENAI_COMPAT_PROVIDER) {
+  if (endpointKind !== OPENAI_COMPAT_PROVIDER && provider !== OPENAI_COMPAT_PROVIDER) {
     return undefined;
   }
   return storedSecretString(["tierAApiKey", "apiKey"]);
 }
 
-async function tierBApiKeyForMessage(
-  message: Extract<TrulyMessage, { type: "DEEP_CLASSIFY" | "READING_BRIEF_REQUEST" }>,
+async function tierBApiKeyForProvider(
+  provider: TierAProvider | TierBProvider | undefined,
 ): Promise<string | undefined> {
-  if (message.apiKey?.trim()) return message.apiKey.trim();
-  if (message.provider !== OPENAI_COMPAT_PROVIDER) return undefined;
+  if (provider !== OPENAI_COMPAT_PROVIDER) return undefined;
   return storedSecretString(["tierBApiKey"]);
 }
 
@@ -156,6 +190,11 @@ if (__TRULY_DEV_BUILD__) {
 // every intermediate update.
 
 const dashboardState = new DashboardRuntimeState(300);
+const pageReaderTabTransport = createPageReaderTabTransport({
+  scripting: chrome.scripting,
+  tabs: chrome.tabs,
+  expectedBuildId: __TRULY_BUILD_ID__,
+});
 
 function broadcastOpenDashboardForPost(id: string): void {
   const msg = { type: "OPEN_DASHBOARD_FOR_POST", id } satisfies TrulyMessage;
@@ -192,6 +231,29 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
     return false;
   }
 
+  if (message.type === "QUEUE_PAGE_READING_COMMAND") {
+    void queueReadingCommand({
+      message,
+      sender,
+      extensionId: chrome.runtime.id,
+      storage: chrome.storage.session,
+      notify: (hint) => chrome.runtime.sendMessage(hint),
+      now: Date.now,
+    }).then((result) => {
+      try { sendResponse(result); } catch {}
+    }).catch((error) => {
+      try {
+        sendResponse({
+          type: "QUEUE_PAGE_READING_COMMAND_RESULT",
+          requestId: message.envelope?.requestId || "",
+          ok: false,
+          error: error instanceof Error ? error.message.slice(0, 200) : "reading_command_queue_failed",
+        } satisfies TrulyMessage);
+      } catch {}
+    });
+    return true;
+  }
+
   if (message.type === "POST_CLASSIFIED") {
     // Buffer for replay on dashboard open…
     dashboardState.bufferEvent(message.event);
@@ -216,6 +278,192 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
       }
     }).catch(() => {});
     return false;
+  }
+
+  if (message.type === "READING_TARGET_REQUEST") {
+    const supportedTargetRequest =
+      (message.trigger === "selection" && message.activation?.targetKind === "selection") ||
+      (message.trigger === "hotkey" && message.activation?.targetKind === "current-region");
+    if (!supportedTargetRequest) {
+      try {
+        sendResponse({
+          type: "READING_TARGET_ERROR",
+          tabId: message.tabId,
+          error: "reading_target_unsupported",
+        } satisfies TrulyMessage);
+      } catch {}
+      return false;
+    }
+
+    void pageReaderTabTransport.requestTarget(message).then((reply) => sendResponse(reply));
+    return true;
+  }
+
+  if (message.type === "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST") {
+    void pageReaderTabTransport.requestCandidateBlock(message).then((reply) => sendResponse(reply));
+    return true;
+  }
+
+  if (message.type === "GENERAL_PAGE_PARSER_ADVISOR_REQUEST") {
+    (async () => {
+      let modelAttempted = false;
+      let trustedRuntime = message.providerRuntime;
+      try {
+        trustedRuntime = resolveTrustedTierBProviderRuntime(
+          "ai_analysis",
+          await storedModelRuntimeInput(),
+        );
+        if (trustedRuntime.canUseModel && trustedRuntime.endpoint && trustedRuntime.model) {
+          modelAttempted = true;
+          const apiKey = await tierBApiKeyForProvider(trustedRuntime.effectiveProvider);
+          const modelResult = await modelWorkScheduler.enqueue({
+            id: `parser-advisor:${message.tabId}:${Date.now()}`,
+            resourceKey: modelWorkResourceKey(trustedRuntime),
+            priority: "foreground",
+            run: () => callTierBGeneralPageParserAdvisor({
+              endpoint: trustedRuntime.endpoint!,
+              model: trustedRuntime.model!,
+              apiKey,
+              request: message.request,
+              outputLang: message.outputLang,
+            }),
+          });
+          if (
+            modelResult.ok &&
+            modelResult.advice &&
+            isGeneralPageParserAdvisorAdviceCompatible(message.request, modelResult.advice)
+          ) {
+            sendResponse({
+              type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+              tabId: message.tabId,
+              ok: true,
+              advice: modelResult.advice,
+              providerRuntime: {
+                ...trustedRuntime,
+                mode: "tier-b-short-json",
+              },
+            } satisfies GeneralPageParserAdvisorResultMsg);
+            return;
+          }
+          console.warn(
+            "[Truly General Page Parser Advisor] model fallback:",
+            modelResult.error ?? "advisor_incompatible_with_deterministic_risk",
+          );
+        }
+
+        const advice = buildRuleBasedGeneralPageParserAdvice(message.request);
+        sendResponse({
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: message.tabId,
+          ok: true,
+          advice,
+          providerRuntime: {
+            ...trustedRuntime,
+            mode: modelAttempted ? "tier-b-short-json-fallback" : "rule-based-runtime-baseline",
+          },
+        } satisfies GeneralPageParserAdvisorResultMsg);
+      } catch (error) {
+        sendResponse({
+          type: "GENERAL_PAGE_PARSER_ADVISOR_RESULT",
+          tabId: message.tabId,
+          ok: false,
+          providerRuntime: {
+            ...trustedRuntime,
+            mode: modelAttempted ? "tier-b-short-json-fallback" : "rule-based-runtime-baseline",
+          },
+          error: error instanceof Error ? error.message.slice(0, 200) : "parser_advisor_failed",
+        } satisfies GeneralPageParserAdvisorResultMsg);
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === "GENERAL_PAGE_ANALYSIS_REQUEST") {
+    (async () => {
+      try {
+        const trustedRuntime = resolveTrustedTierBProviderRuntime(
+          "ai_analysis",
+          await storedModelRuntimeInput(),
+        );
+        if (!trustedRuntime.canUseModel || !trustedRuntime.endpoint || !trustedRuntime.model) {
+          throw new Error(trustedRuntime.blockedReason || "general_page_brief_provider_unavailable");
+        }
+        const screenshotDataUrl = message.screenshotDataUrl;
+        if (screenshotDataUrl !== undefined && !isSupportedScreenshotDataUrl(screenshotDataUrl)) {
+          throw new Error("general_page_brief_invalid_screenshot_data_url");
+        }
+        const startedAt = Date.now();
+        const apiKey = await tierBApiKeyForProvider(trustedRuntime.effectiveProvider);
+        const result = await modelWorkScheduler.enqueue({
+          id: `general-page:${message.tabId}:${message.scope}:${message.analysisKey}`,
+          resourceKey: modelWorkResourceKey(trustedRuntime),
+          priority: message.priority,
+          dedupeKey: `general-page:${message.tabId}:${message.scope}:${message.analysisKey}`,
+          run: () => callTierBGeneralPageBrief({
+            endpoint: trustedRuntime.endpoint!,
+            model: trustedRuntime.model!,
+            apiKey,
+            context: message.context,
+            allowedUse: message.allowedUse,
+            outputLang: message.outputLang,
+            // Runtime promotion to schema-constrained output is gated by a
+            // separate provider capability check; keep current behavior until
+            // that gate has passed for the configured endpoint and model.
+            structuredOutputMode: "json_object",
+            screenshotDataUrl,
+          }),
+        });
+        if (result.ok && result.brief) {
+          const investigationPending = message.allowedUse !== "page_overview_only" &&
+            !message.screenshotDataUrl && Boolean(result.brief.claims?.[0]);
+          sendResponse({
+            type: "GENERAL_PAGE_ANALYSIS_RESULT",
+            tabId: message.tabId,
+            ok: true,
+            ...(investigationPending ? { investigationPending: true } : {}),
+            brief: {
+              ...result.brief,
+              elapsedMs: Date.now() - startedAt,
+            },
+          } satisfies GeneralPageAnalysisResultMsg);
+          if (investigationPending) {
+            scheduleGeneralPageInvestigationPreparation({
+              scheduler: modelWorkScheduler,
+              request: message,
+              brief: result.brief,
+              endpoint: trustedRuntime.endpoint,
+              model: trustedRuntime.model,
+              structuredOutputMode: investigationAdapterStructuredOutputMode(trustedRuntime.responseFormat),
+              apiKey,
+              resourceKey: modelWorkResourceKey(trustedRuntime),
+              sendMessage: (outgoing) => chrome.runtime.sendMessage(outgoing),
+            });
+          }
+          return;
+        }
+        sendResponse({
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: message.tabId,
+          ok: false,
+          error: result.error ?? "general_page_brief_failed",
+        } satisfies GeneralPageAnalysisResultMsg);
+      } catch (error) {
+        sendResponse({
+          type: "GENERAL_PAGE_ANALYSIS_RESULT",
+          tabId: message.tabId,
+          ok: false,
+          error: error instanceof Error ? error.message.slice(0, 200) : "general_page_brief_failed",
+        } satisfies GeneralPageAnalysisResultMsg);
+      }
+    })();
+    return true;
+  }
+
+  if (message.type === "PAGE_READING_REQUEST") {
+    void pageReaderTabTransport.requestPage(message).then((reply) => {
+      try { sendResponse(reply); } catch {}
+    });
+    return true;
   }
 
   if (message.type === "DASHBOARD_REPLAY_REQUEST") {
@@ -370,28 +618,49 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   }
 
   if (message.type === "DEEP_CLASSIFY") {
-    const { postId, text, imageUrls, filteredImageCount, endpoint, model } = message;
+    const { postId, text, imageUrls, filteredImageCount } = message;
     const outputLang = message.outputLang ?? "zh-TW";
-    if (message.provider !== GEMINI_NANO_PROVIDER) {
-      try {
-        maybeCaptureTierB(__trulyTierBCapture, message);
-      } catch (e) {
-        console.warn("[Truly BG] Tier B capture failed:", e);
-      }
-    }
     (async () => {
       try {
-        const result = message.provider === GEMINI_NANO_PROVIDER
-          ? await callGeminiNanoTierB({ text, imageUrls, filteredImageCount, outputLang })
-          : await callTierBDeepDetailed({
-              endpoint,
-              model,
-              apiKey: await tierBApiKeyForMessage(message),
-              text,
-              imageUrls,
-              filteredImageCount,
-              outputLang,
+        const trustedRuntime = resolveTrustedTierBProviderRuntime(
+          "ai_analysis",
+          await storedModelRuntimeInput(),
+        );
+        const provider = trustedRuntime.effectiveProvider;
+        if (provider !== GEMINI_NANO_PROVIDER) {
+          try {
+            maybeCaptureTierB(__trulyTierBCapture, {
+              ...message,
+              endpoint: trustedRuntime.endpoint,
+              model: trustedRuntime.model,
             });
+          } catch (e) {
+            console.warn("[Truly BG] Tier B capture failed:", e);
+          }
+        }
+        if (!trustedRuntime.canUseModel) {
+          throw new Error(trustedRuntime.blockedReason || "tier_b_provider_unavailable");
+        }
+        if (provider !== GEMINI_NANO_PROVIDER && (!trustedRuntime.endpoint || !trustedRuntime.model)) {
+          throw new Error("tier_b_endpoint_model_unavailable");
+        }
+        const apiKey = await tierBApiKeyForProvider(provider);
+        const result = await modelWorkScheduler.enqueue({
+          id: `deep:${postId}:${Date.now()}`,
+          resourceKey: modelWorkResourceKey(trustedRuntime),
+          priority: modelWorkPriorityForDeepSource(message.source),
+          run: () => provider === GEMINI_NANO_PROVIDER
+            ? callGeminiNanoTierB({ text, imageUrls, filteredImageCount, outputLang })
+            : callTierBDeepDetailed({
+                endpoint: trustedRuntime.endpoint!,
+                model: trustedRuntime.model!,
+                apiKey,
+                text,
+                imageUrls,
+                filteredImageCount,
+                outputLang,
+              }),
+        });
         const reply: DeepClassifyResultMsg = result.ok && result.deep
           ? { type: "DEEP_CLASSIFY_RESULT", postId, ok: true, deep: result.deep }
           : { type: "DEEP_CLASSIFY_RESULT", postId, ok: false, error: result.error ?? "tier_b_failed" };
@@ -411,27 +680,41 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   }
 
   if (message.type === "READING_BRIEF_REQUEST") {
-    const { postId, endpoint, model, event } = message;
+    const { postId, event } = message;
     const outputLang = message.outputLang ?? "zh-TW";
     (async () => {
       try {
-        if (message.provider && !providerCanRunTierBFeature("reading_brief", message.provider)) {
-          throw new Error(`${message.provider}_reading_brief_unsupported`);
+        const trustedRuntime = resolveTrustedTierBProviderRuntime(
+          "reading_brief",
+          await storedModelRuntimeInput(),
+        );
+        const provider = trustedRuntime.effectiveProvider;
+        if (!trustedRuntime.canUseModel || !providerCanRunTierBFeature("reading_brief", provider)) {
+          throw new Error(trustedRuntime.blockedReason || `${provider}_reading_brief_unsupported`);
+        }
+        if (provider !== GEMINI_NANO_PROVIDER && (!trustedRuntime.endpoint || !trustedRuntime.model)) {
+          throw new Error("reading_brief_endpoint_model_unavailable");
         }
         dashboardState.patchEvent(postId, {
           readingBriefPending: true,
           readingBriefError: undefined,
         });
         const startedAt = Date.now();
-        const brief = message.provider === GEMINI_NANO_PROVIDER
-          ? await callGeminiNanoReadingBrief({ event, outputLang })
-          : await callTierBReadingBrief({
-              endpoint,
-              model,
-              apiKey: await tierBApiKeyForMessage(message),
-              event,
-              outputLang,
-            });
+        const apiKey = await tierBApiKeyForProvider(provider);
+        const brief = await modelWorkScheduler.enqueue({
+          id: `reading-brief:${postId}:${Date.now()}`,
+          resourceKey: modelWorkResourceKey(trustedRuntime),
+          priority: modelWorkPriorityForReadingBriefSource(message.source),
+          run: () => provider === GEMINI_NANO_PROVIDER
+            ? callGeminiNanoReadingBrief({ event, outputLang })
+            : callTierBReadingBrief({
+                endpoint: trustedRuntime.endpoint!,
+                model: trustedRuntime.model!,
+                apiKey,
+                event,
+                outputLang,
+              }),
+        });
         if (brief) {
           const timedBrief = { ...brief, elapsedMs: Date.now() - startedAt };
           const updated = dashboardState.patchEvent(postId, {
@@ -503,9 +786,11 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
 
     (async () => {
       try {
+        const trustedRuntime = resolveTrustedTierARuntime(await storedModelRuntimeInput());
         const { requestedIds, results } = await classifyTierAPosts({
           ...message,
-          apiKey: await tierAApiKeyForMessage(message),
+          ...trustedRuntime,
+          apiKey: await tierAApiKeyForProvider(trustedRuntime.provider, trustedRuntime.endpointKind),
         });
         debugLog(`[Truly BG] Ollama done: ${Object.keys(results).length} results (rules=${message.customRules?.length ?? 0})`);
         if (typeof tabId === "number") {
@@ -538,8 +823,10 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
     if (tabId) {
       if (message.status === "unhealthy") {
         tabHealthState.set(tabId, "unhealthy");
-        chrome.action.setBadgeText({ text: "!", tabId });
-        chrome.action.setBadgeBackgroundColor({ color: "#e41e3f", tabId });
+        // Selector health is maintainer/debug evidence, not an end-user
+        // toolbar warning. Keep it available through GET_STATS and clear any
+        // stale badge left by older builds.
+        chrome.action.setBadgeText({ text: "", tabId });
       } else if (message.status === "healthy") {
         tabHealthState.delete(tabId);
         chrome.action.setBadgeText({ text: "", tabId });
@@ -551,7 +838,35 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
   return false;
 });
 
-// Per-tab selector-health state. Unhealthy tabs show a red "!" action badge.
+// Slice 6b: current-region hotkey. The command opens the side panel and
+// leaves a session-storage marker the panel consumes on bootstrap or via the
+// storage listener. A plain command does NOT grant activeTab, so this only
+// works when the page-reader content script is already injected (the user
+// has read the page in this session); otherwise the panel shows the existing
+// toolbar-activation guidance.
+export const PENDING_CURRENT_REGION_READ_KEY = "pendingCurrentRegionRead";
+
+export function handleReadCurrentRegionCommand(
+  tab: { id?: number; windowId?: number } | undefined,
+  now = Date.now(),
+): void {
+  if (typeof tab?.id !== "number") return;
+  chrome.storage.session
+    .set({ [PENDING_CURRENT_REGION_READ_KEY]: { tabId: tab.id, ts: now } })
+    .catch(() => {});
+  if (typeof tab.windowId === "number" && chrome.sidePanel?.open) {
+    chrome.sidePanel.open({ windowId: tab.windowId }).catch(() => {});
+  }
+}
+
+chrome.commands?.onCommand.addListener((command, tab) => {
+  if (command === "truly-read-current-region") {
+    handleReadCurrentRegionCommand(tab ?? undefined);
+  }
+});
+
+// Per-tab selector-health state. This remains a debug/stat signal only; the
+// toolbar badge is reserved for user-actionable states.
 const tabHealthState = new Map<number, "unhealthy">();
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {

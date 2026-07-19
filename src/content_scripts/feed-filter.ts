@@ -316,7 +316,7 @@ async function tierBIdlePrefetch() {
     tierBInflight = true;
     tierBInflightStableId = bestStableId;
     try {
-      await dispatchDeepClassify(bestEl, "auto");
+      await dispatchDeepClassify(bestEl, "prefetch");
       __trulyAudit({ ts: performance.now(), event: "idle-prefetch-done", stableId: bestStableId });
     } catch (err) {
       console.warn("[Truly] Tier B idle prefetch failed:", err);
@@ -476,6 +476,7 @@ function maybePrefetchReadingBrief(event: DashboardPostEvent, post: PostData): v
     model: gate.model,
     provider: gate.effectiveProvider,
     outputLang,
+    source: "prefetch",
     event,
   };
   browser.runtime.sendMessage(req).then((reply: ReadingBriefResultMsg | undefined) => {
@@ -659,7 +660,7 @@ function mergeLiveExpandedPost(stored: PostData, fresh: PostData | null, el: HTM
  *  captured that BEFORE the user clicked 查看更多 / See more). Returns
  *  null if Tier B isn't enabled, no endpoint, or the post hasn't passed
  *  Tier A yet. `source` is just for log clarity (auto vs expand/manual). */
-async function dispatchDeepClassify(el: HTMLElement, source: "auto" | "expand" | "manual"): Promise<void> {
+async function dispatchDeepClassify(el: HTMLElement, source: NonNullable<DeepClassifyMsg["source"]>): Promise<void> {
   const stableId = el.dataset.trulyStableId;
   const trulyId = el.dataset.trulyId;
   const id = stableId || trulyId;
@@ -1291,7 +1292,14 @@ function repairMissingHeadsUpPanels(): void {
 
     const decision = postIdToTierA.get(stableId);
     const post = postFromArticle(el) || postIdToData.get(stableId);
-    if (!decision || !post) continue;
+    if (!post) continue;
+
+    if (!decision) {
+      reserveHeadsUpSlot(post.element === el ? post : { ...post, element: el }, currentContentLang());
+      repaired += 1;
+      if (repaired >= 8) break;
+      continue;
+    }
 
     const repairedPost = post.element === el ? post : { ...post, element: el };
     rememberPostData(stableId, repairedPost);
@@ -1676,11 +1684,11 @@ async function init() {
   });
 
   startFeedInterception(handleNewPost);
+  resetStats();
   startSurfaceCollapseObserver();
   installLocationRescanMonitor();
   window.setInterval(scanCollapsibleSurfaces, 2000);
   window.setInterval(repairMissingHeadsUpPanels, 1500);
-  resetStats();
 }
 
 init();

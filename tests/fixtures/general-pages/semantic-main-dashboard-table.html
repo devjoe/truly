@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Inference Overview Dashboard Fixture</title>
+    <meta property="og:title" content="Inference Overview Dashboard Fixture">
+    <link rel="canonical" href="https://metrics.example.test/d/overview">
+  </head>
+  <body>
+    <header>
+      <a href="https://metrics.example.test/">Metrics Home</a>
+      <a href="https://metrics.example.test/dashboards">Dashboards</a>
+      <a href="https://metrics.example.test/alerts">Alerts</a>
+    </header>
+    <main class="dashboard-shell" role="main">
+      <h1>Inference Overview Dashboard Fixture</h1>
+      <p class="summary">
+        This synthetic dashboard table fixture has enough visible text to tempt
+        complete extraction, but it is a data surface rather than a single
+        complete article.
+      </p>
+      <section class="dashboard-controls" aria-label="Dashboard controls">
+        <button>Last 24 hours</button>
+        <button>Last 7 days</button>
+        <button>Refresh</button>
+        <button>Export</button>
+        <label>Filter cluster <input value="fictional-west"></label>
+        <label>Query <input value="latency"></label>
+      </section>
+      <section class="metric-grid">
+        <article class="metric-panel" data-testid="latency-panel">
+          <h2>Latency p95</h2>
+          <p>248 ms</p>
+          <p>Panel note: the value is a fictional dashboard metric.</p>
+        </article>
+        <article class="metric-panel" data-testid="throughput-panel">
+          <h2>Requests per minute</h2>
+          <p>18,420</p>
+          <p>Panel note: the number is generated fixture text.</p>
+        </article>
+        <article class="metric-panel" data-testid="error-panel">
+          <h2>Error budget</h2>
+          <p>91 percent remaining</p>
+          <p>Panel note: this is not a narrative paragraph.</p>
+        </article>
+        <article class="metric-panel" data-testid="score-panel">
+          <h2>Quality score</h2>
+          <p>0.82</p>
+          <p>Panel note: dashboards can look text rich without being articles.</p>
+        </article>
+      </section>
+      <section class="leaderboard-panel">
+        <h2>Model leaderboard table</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Model</th>
+              <th>Median latency</th>
+              <th>Review score</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td>Fictional Alpha</td><td>112 ms</td><td>91</td></tr>
+            <tr><td>2</td><td>Fictional Beta</td><td>140 ms</td><td>88</td></tr>
+            <tr><td>3</td><td>Fictional Gamma</td><td>166 ms</td><td>84</td></tr>
+            <tr><td>4</td><td>Fictional Delta</td><td>190 ms</td><td>79</td></tr>
+            <tr><td>5</td><td>Fictional Epsilon</td><td>236 ms</td><td>73</td></tr>
+            <tr><td>6</td><td>Fictional Zeta</td><td>280 ms</td><td>68</td></tr>
+          </tbody>
+        </table>
+      </section>
+      <nav class="dashboard-links" aria-label="Dashboard links">
+        <a href="https://metrics.example.test/d/overview?panel=latency">Latency panel</a>
+        <a href="https://metrics.example.test/d/overview?panel=throughput">Throughput panel</a>
+        <a href="https://metrics.example.test/d/overview?panel=errors">Error panel</a>
+        <a href="https://metrics.example.test/d/overview?panel=leaderboard">Leaderboard panel</a>
+      </nav>
+    </main>
+  </body>
+</html>

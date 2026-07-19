@@ -15,6 +15,11 @@ import {
 import { loadReadinessSnapshot } from "../lib/readiness-storage";
 import type { GetSidePanelStateResultMsg } from "../lib/messages";
 import { debugLog } from "../lib/logger";
+import { isGeneralPageReadableUrl } from "../lib/page-readability";
+import {
+  createReadingCommandEnvelope,
+  createReadingRequestId,
+} from "../lib/reading-command-envelope";
 
 debugLog(`[Truly Popup] Loaded buildId=${__TRULY_BUILD_ID__}`);
 
@@ -59,6 +64,10 @@ function readinessSummary(record: ReadinessRecord | undefined, fallback: string,
   return t(`readiness.status.${record.status}`, lang);
 }
 
+function isGeneralPageUrl(rawUrl: string): boolean {
+  return isGeneralPageReadableUrl(rawUrl, chrome.runtime.id);
+}
+
 async function init() {
   const settings = await loadSettings();
   createExtensionThemeController().setMode(settings.themeMode);
@@ -86,6 +95,7 @@ async function init() {
   }
 
   const pageSupport = getFacebookPageSupport(activeUrl);
+  const generalPageSupported = isGeneralPageUrl(activeUrl);
 
   const pageDot = document.getElementById("pageDot")!;
   const readinessTitle = document.getElementById("readinessTitle")!;
@@ -178,8 +188,8 @@ async function init() {
   }
 
   function renderReadiness(): void {
-    const canUseSidePanelAction = settings.enabled && pageSupport.supported;
-    const showCloseAction = canUseSidePanelAction && sidePanelOpen;
+    const canUseSidePanelAction = settings.enabled && (pageSupport.supported || generalPageSupported);
+    const showCloseAction = settings.enabled && pageSupport.supported && sidePanelOpen;
     dashboardLink.disabled = !canUseSidePanelAction;
     dashboardLink.setAttribute("aria-disabled", dashboardLink.disabled ? "true" : "false");
     dashboardLink.dataset.sidepanelOpen = showCloseAction ? "true" : "false";
@@ -188,6 +198,8 @@ async function init() {
         ? showCloseAction
           ? t("popup.closeSidebar", lang)
           : t("popup.openSidebar", lang)
+        : generalPageSupported
+          ? t("popup.readPage", lang)
         : t("popup.unavailable", lang)
     );
 
@@ -217,6 +229,13 @@ async function init() {
     }
 
     if (!pageSupport.supported) {
+      if (generalPageSupported) {
+        readinessTitle.textContent = t("popup.generalPage.title", lang);
+        readinessDetail.textContent = t("popup.generalPage.detail", lang);
+        pageDot.className = "status-dot ok";
+        hideExpandable();
+        return;
+      }
       readinessTitle.textContent = t("popup.unsupported.title", lang);
       readinessDetail.textContent = pageSupport.isFacebook
         ? t("popup.unsupported.detailFb", lang)
@@ -301,12 +320,29 @@ async function init() {
     if (dashboardLink.disabled) return;
     const win = await chrome.windows.getCurrent();
     if (win.id != null) {
-      if (sidePanelOpen && sidePanelCanClose) {
+      const pageReadRequest = generalPageSupported && typeof activeTab.id === "number"
+        ? browser.runtime.sendMessage({
+            type: "QUEUE_PAGE_READING_COMMAND",
+            envelope: createReadingCommandEnvelope({
+              requestId: createReadingRequestId(),
+              tabId: activeTab.id,
+              url: activeUrl,
+              activation: {
+                source: "popup",
+                targetKind: "page",
+                action: "read",
+              },
+              createdAt: Date.now(),
+            }),
+          }).catch(() => {})
+        : null;
+      if (pageSupport.supported && sidePanelOpen && sidePanelCanClose) {
         await chrome.sidePanel.close({ windowId: win.id }).catch(() => {});
         sidePanelOpen = false;
       } else {
         await chrome.sidePanel.open({ windowId: win.id }).catch(() => {});
         sidePanelOpen = true;
+        await pageReadRequest;
       }
     }
     window.close();

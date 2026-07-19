@@ -4,12 +4,15 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { connectCdp } from "./lib/cdp-client.mjs";
+
 const ROOT = resolve(fileURLToPath(new URL("..", import.meta.url)));
 const DIST_BUILD_ID = resolve(ROOT, "dist", "build-id.txt");
 const CDP_PORT = Number(process.env.CDP_PORT || 9222);
 const CDP_BASE = `http://127.0.0.1:${CDP_PORT}`;
 const EXPECT_LOCALE = (process.env.TRULY_AUDIT_EXPECT_LOCALE || "").trim();
 const REQUESTED_TARGET_ID = (process.env.TRULY_AUDIT_TARGET_ID || "").trim();
+const EXTENSION_ID = (process.env.TRULY_EXTENSION_ID || "").trim();
 const AUTO_RELOAD = /^(1|true|yes)$/i.test(process.env.TRULY_AUDIT_AUTO_RELOAD || "");
 const ALLOW_FOCUS = /^(1|true|yes)$/i.test(process.env.CDP_ALLOW_FOCUS || "");
 const STAMP = new Date().toISOString().replace(/[:.]/g, "-");
@@ -43,6 +46,25 @@ const ENGLISH_CHROME_TOKENS = [
 ];
 const CHINESE_TRULY_TOKENS = [
   "分析完成",
+  "分析中",
+  "更新中",
+  "分享內容",
+  "需查證",
+  "資訊品質疑慮",
+  "商業訊號",
+  "政治議題",
+  "有情緒",
+  "情緒較強",
+  "AI 味",
+  "自訂規則",
+  "解析文章失敗",
+  "情緒挑動",
+  "心得",
+  "AI 文",
+  "AI 圖",
+  "事實風險",
+  "操弄風險",
+  "低品質",
   "深入閱讀",
   "詳細",
   "收合",
@@ -51,6 +73,11 @@ const CHINESE_TRULY_TOKENS = [
 ];
 const PANEL_ACTION_PATTERN = "^(深入閱讀|建議查核|Deep reading|Deep read|Read deeper|Suggested fact-check|Fact-check suggested)$";
 const SIDEPANEL_RENDER_WAIT_MS = 1600;
+const AUDIT_READY_TIMEOUT_MS = Number(process.env.TRULY_AUDIT_READY_TIMEOUT_MS || 25_000);
+const AUDIT_READY_POLL_MS = Number(process.env.TRULY_AUDIT_READY_POLL_MS || 750);
+const HEADSUP_SEEK_STEPS = Number(process.env.TRULY_AUDIT_HEADSUP_SEEK_STEPS || 14);
+const HEADSUP_SEEK_SCROLL_PX = Number(process.env.TRULY_AUDIT_HEADSUP_SEEK_SCROLL_PX || 650);
+const HEADSUP_SEEK_WAIT_MS = Number(process.env.TRULY_AUDIT_HEADSUP_SEEK_WAIT_MS || 900);
 
 function usage() {
   console.log(`Usage: node scripts/audit-facebook-current.mjs
@@ -62,7 +89,10 @@ Environment:
   CDP_PORT=9222
   TRULY_AUDIT_EXPECT_LOCALE=zh|en|zh-Hant|zh-TW
   TRULY_AUDIT_TARGET_ID=<Chrome-CDP-target-id>
+  TRULY_EXTENSION_ID=<loaded-extension-id>
   TRULY_AUDIT_AUTO_RELOAD=1   reload stale Truly extension + Facebook tab, then audit
+  TRULY_AUDIT_READY_TIMEOUT_MS=25000
+  TRULY_AUDIT_HEADSUP_SEEK_STEPS=14
   CDP_ALLOW_FOCUS=1            allow focus-required side-panel click fallback
 `);
 }
@@ -90,98 +120,6 @@ async function fetchJson(url, timeoutMs = 2500) {
   } finally {
     clearTimeout(timer);
   }
-}
-
-function connectCdp(webSocketDebuggerUrl) {
-  if (typeof WebSocket !== "function") {
-    throw new Error("global WebSocket is unavailable in this Node runtime");
-  }
-
-  const ws = new WebSocket(webSocketDebuggerUrl);
-  let nextId = 1;
-  const pending = new Map();
-  const opened = new Promise((resolveOpen, rejectOpen) => {
-    ws.addEventListener("open", () => resolveOpen());
-    ws.addEventListener("error", () => rejectOpen(new Error("CDP websocket connection failed")), { once: true });
-  });
-
-  ws.addEventListener("message", (event) => {
-    const message = JSON.parse(event.data);
-    if (!message.id || !pending.has(message.id)) return;
-    const { resolve, reject } = pending.get(message.id);
-    pending.delete(message.id);
-    if (message.error) reject(new Error(message.error.message ?? JSON.stringify(message.error)));
-    else resolve(message.result);
-  });
-
-  async function send(method, params = {}) {
-    await opened;
-    const id = nextId++;
-    const response = new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
-    ws.send(JSON.stringify({ id, method, params }));
-    return response;
-  }
-
-  return {
-    send,
-    async evaluate(expression) {
-      const result = await send("Runtime.evaluate", {
-        expression,
-        awaitPromise: true,
-        returnByValue: true,
-        timeout: 10_000,
-      });
-      if (result.exceptionDetails) {
-        throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || "Runtime.evaluate failed");
-      }
-      return result.result?.value ?? null;
-    },
-    async evaluateJson(expression) {
-      const raw = await this.evaluate(`JSON.stringify((${expression}))`);
-      return raw ? JSON.parse(raw) : null;
-    },
-    async clickAt(x, y) {
-      await send("Input.dispatchMouseEvent", {
-        type: "mouseMoved",
-        x,
-        y,
-        button: "none",
-      });
-      await send("Input.dispatchMouseEvent", {
-        type: "mousePressed",
-        x,
-        y,
-        button: "left",
-        clickCount: 1,
-      });
-      await send("Input.dispatchMouseEvent", {
-        type: "mouseReleased",
-        x,
-        y,
-        button: "left",
-        clickCount: 1,
-      });
-    },
-    async reload() {
-      await send("Page.enable").catch(() => {});
-      await send("Page.reload", { ignoreCache: true });
-    },
-    async bringToFront() {
-      await send("Page.bringToFront");
-    },
-    async screenshot(path) {
-      await send("Page.enable").catch(() => {});
-      const result = await send("Page.captureScreenshot", {
-        format: "png",
-        fromSurface: true,
-        captureBeyondViewport: false,
-      });
-      writeFileSync(path, Buffer.from(result.data, "base64"));
-    },
-    close() {
-      ws.close();
-    },
-  };
 }
 
 function isFacebookTarget(target) {
@@ -285,7 +223,10 @@ async function findTrulyServiceWorker(targets, expectedBuildId) {
     }
   }
 
-  const truly = found.find((entry) => entry.meta.buildId === expectedBuildId) || found[0] || null;
+  const requested = EXTENSION_ID
+    ? found.find((entry) => entry.meta.id === EXTENSION_ID)
+    : null;
+  const truly = requested || found.find((entry) => entry.meta.buildId === expectedBuildId) || found[0] || null;
   return { found: found.map((entry) => entry.meta), selected: truly };
 }
 
@@ -384,15 +325,176 @@ async function getContentScriptStats(serviceWorkerEntry, pageUrl) {
   }
 }
 
+async function readFacebookReadiness(page, serviceWorkerEntry, pageUrl) {
+  const pageState = await page.evaluateJson(`(() => ({
+    buildId: document.documentElement.dataset.trulyBuildId || null,
+    hosts: document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}).length,
+    taggedPosts: document.querySelectorAll(${JSON.stringify(TAGGED_POST_SELECTOR)}).length,
+    skippedPosts: document.querySelectorAll(${JSON.stringify(SKIPPED_POST_SELECTOR)}).length,
+    articles: document.querySelectorAll('[role="article"], article').length,
+    readyState: document.readyState
+  }))()`).catch((error) => ({ error: error.message }));
+  const runtime = await getContentScriptStats(serviceWorkerEntry, pageUrl);
+  return {
+    pageState,
+    stats: runtime.stats || null,
+    error: pageState.error || runtime.stats?.error || null,
+  };
+}
+
+function facebookReadinessSatisfied(snapshot) {
+  const pageState = snapshot?.pageState || {};
+  const stats = snapshot?.stats || {};
+  const hasPageEvidence =
+    (pageState.hosts ?? 0) > 0 ||
+    (pageState.taggedPosts ?? 0) > 0 ||
+    (pageState.skippedPosts ?? 0) > 0 ||
+    (stats.postsScanned ?? 0) > 0;
+  const selectorSettled =
+    !stats.selectorHealth ||
+    stats.selectorHealth === "healthy" ||
+    ((pageState.hosts ?? 0) > 0 && stats.selectorHealth !== "unhealthy");
+  return Boolean(hasPageEvidence && selectorSettled);
+}
+
+async function waitForFacebookReadiness(page, serviceWorkerEntry, pageUrl) {
+  const startedAt = Date.now();
+  const samples = [];
+  let latest = null;
+
+  while (Date.now() - startedAt <= AUDIT_READY_TIMEOUT_MS) {
+    latest = await readFacebookReadiness(page, serviceWorkerEntry, pageUrl);
+    samples.push({
+      elapsedMs: Date.now() - startedAt,
+      hosts: latest.pageState?.hosts ?? null,
+      taggedPosts: latest.pageState?.taggedPosts ?? null,
+      skippedPosts: latest.pageState?.skippedPosts ?? null,
+      articles: latest.pageState?.articles ?? null,
+      postsScanned: latest.stats?.postsScanned ?? null,
+      selectorHealth: latest.stats?.selectorHealth ?? null,
+      error: latest.error ?? null,
+    });
+    if (facebookReadinessSatisfied(latest)) break;
+    await sleep(AUDIT_READY_POLL_MS);
+  }
+
+  return {
+    ok: facebookReadinessSatisfied(latest),
+    waitedMs: Date.now() - startedAt,
+    timeoutMs: AUDIT_READY_TIMEOUT_MS,
+    latest,
+    samples,
+  };
+}
+
+async function seekHeadsUpCandidate(page) {
+  return page.evaluate(`new Promise(async (resolve) => {
+    const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+    const actionPattern = new RegExp(${JSON.stringify(PANEL_ACTION_PATTERN)});
+    const rectOf = (el) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return {
+        top: Math.round(r.top),
+        bottom: Math.round(r.bottom),
+        w: Math.round(r.width),
+        h: Math.round(r.height)
+      };
+    };
+    const snapshot = (step) => {
+      const hosts = Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}));
+      const tagged = Array.from(document.querySelectorAll("[data-truly-id]"));
+      return {
+        step,
+        scrollY: Math.round(window.scrollY),
+        hosts: hosts.length,
+        tagged: tagged.length,
+        sponsored: tagged.filter((el) => el.getAttribute("data-truly-sponsored") === "true").length,
+        skipped: document.querySelectorAll(${JSON.stringify(SKIPPED_POST_SELECTOR)}).length,
+        sample: tagged.slice(-5).map((el, index) => ({
+          index,
+          sponsored: el.getAttribute("data-truly-sponsored"),
+          skip: el.getAttribute("data-truly-skip-reason"),
+          hasHeadsUp: !!el.querySelector(${JSON.stringify(HEADSUP_HOST_SELECTOR)}),
+          hasAction: Array.from((el.querySelector(${JSON.stringify(HEADSUP_HOST_SELECTOR)})?.shadowRoot || el)
+            .querySelectorAll("button, [role='button']"))
+            .some((button) => actionPattern.test(norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))),
+          hasCollapse: !!el.querySelector(".truly-collapse-bar"),
+          rect: rectOf(el),
+          text: norm(el.innerText || el.textContent).slice(0, 180)
+        }))
+      };
+    };
+    const samples = [];
+    let firstHostSnapshot = null;
+    const settle = () => new Promise((resolveDelay) => setTimeout(resolveDelay, ${HEADSUP_SEEK_WAIT_MS}));
+    for (let step = 0; step <= ${HEADSUP_SEEK_STEPS}; step += 1) {
+      await settle();
+      const current = snapshot(step);
+      samples.push(current);
+      const hosts = Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}));
+      if (!firstHostSnapshot && hosts[0]) {
+        firstHostSnapshot = { host: hosts[0], step };
+      }
+      const actionableHost = hosts.find((host) => {
+        const root = host.shadowRoot || host;
+        return Array.from(root.querySelectorAll("button, [role='button']")).some((button) =>
+          actionPattern.test(norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))
+        );
+      });
+      if (actionableHost) {
+        actionableHost.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
+        await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+        resolve({
+          ok: true,
+          reason: "heads-up-action-found",
+          steps: step,
+          finalScrollY: Math.round(window.scrollY),
+          samples
+        });
+        return;
+      }
+      if (step < ${HEADSUP_SEEK_STEPS}) {
+        window.scrollBy(0, ${HEADSUP_SEEK_SCROLL_PX});
+      }
+    }
+    if (firstHostSnapshot?.host) {
+      firstHostSnapshot.host.scrollIntoView({ block: "start", inline: "nearest", behavior: "instant" });
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 250));
+      resolve({
+        ok: true,
+        reason: "heads-up-found-without-action",
+        steps: firstHostSnapshot.step,
+        finalScrollY: Math.round(window.scrollY),
+        samples
+      });
+      return;
+    }
+    resolve({
+      ok: false,
+      reason: "heads-up-not-found",
+      steps: ${HEADSUP_SEEK_STEPS},
+      finalScrollY: Math.round(window.scrollY),
+      samples
+    });
+  })`).catch((error) => ({
+    ok: false,
+    reason: "seek-error",
+    error: error instanceof Error ? error.message : String(error),
+    samples: [],
+  }));
+}
+
 function localeExpectationMatches(signals) {
   if (!EXPECT_LOCALE) return { ok: true, detail: "not requested" };
   const expected = EXPECT_LOCALE.toLowerCase();
   if (expected === "zh" || expected === "zh-tw" || expected === "zh-hant") {
     const htmlLangOk = signals.htmlLang?.toLowerCase().startsWith("zh");
     const chromeTokenCount = signals.chineseChromeMatches?.length ?? 0;
+    const englishChromeTokenCount = signals.englishChromeMatches?.length ?? 0;
     const trulyTokenCount = signals.chineseTrulyMatches?.length ?? 0;
     return {
-      ok: Boolean(htmlLangOk && chromeTokenCount >= 2 && trulyTokenCount >= 1),
+      ok: Boolean(htmlLangOk && chromeTokenCount >= 1 && englishChromeTokenCount === 0 && trulyTokenCount >= 1),
       detail:
         `htmlLang=${signals.htmlLang || "(none)"} ` +
         `fbZh=${(signals.chineseChromeMatches ?? []).join(",") || "(none)"} ` +
@@ -444,6 +546,12 @@ async function captureSidePanelTarget(target, index) {
         };
       };
       const analysis = document.querySelector("[role='tabpanel'][data-tab='analysis'], #analysis-pane");
+      const readingBrief = document.querySelector(".reading-brief-body");
+      const referenceSection = document.querySelector(".reference-section");
+      const referenceHeading = document.querySelector(".reference-context-heading");
+      const readingRect = rectOf(readingBrief);
+      const referenceRect = rectOf(referenceSection);
+      const actionSection = document.querySelector(".investigation-actions");
       const bodyText = norm(document.body?.innerText || document.documentElement?.innerText || document.body?.textContent || "");
       const inspected = Array.from(document.querySelectorAll(
         "button,a,.post-card,.analysis-overview,.details-row,.details-label,.chip,.necessity-pill,.source-badge,.deep-ai-chip,.iq-chip,.analysis-context-tag,.placeholder"
@@ -469,6 +577,23 @@ async function captureSidePanelTarget(target, index) {
           .map((button) => norm(button.innerText || button.textContent || button.getAttribute("aria-label") || ""))
           .filter(Boolean)
           .slice(0, 60),
+        feedVisualHierarchy: {
+          hasReferenceHeading: Boolean(referenceHeading),
+          hasReadingBrief: Boolean(readingBrief),
+          hasReferenceSection: Boolean(referenceSection),
+          referenceOpen: referenceSection instanceof HTMLDetailsElement ? referenceSection.open : null,
+          readingTop: readingRect?.top ?? null,
+          referenceTop: referenceRect?.top ?? null,
+          readingBeforeReference: Boolean(readingRect && referenceRect && readingRect.top <= referenceRect.top)
+        },
+        feedActionBar: {
+          present: Boolean(actionSection),
+          compact: actionSection?.classList.contains("is-compact") ?? false,
+          hasVisibleLabel: Boolean(actionSection?.querySelector(".investigation-actions-label")),
+          hasVisibleHint: Boolean(actionSection?.querySelector(".investigation-actions-hint")),
+          hasFooter: Boolean(actionSection?.querySelector(".investigation-action-footer")),
+          actionCount: actionSection?.querySelectorAll("button,a").length ?? 0
+        },
         rawDebugVisible: /Raw decision|GraphQL 查詢|原始回應 JSON|送出的文字/.test(bodyText),
         overflow: inspected.filter((item) => item.overflow),
         inspectedCount: inspected.length
@@ -491,10 +616,35 @@ async function captureSidePanelTarget(target, index) {
   }
 }
 
-async function auditSidePanelWorkflow(page) {
+async function readPendingOpenPost(serviceWorkerEntry) {
+  if (!serviceWorkerEntry?.target?.webSocketDebuggerUrl)
+    return { error: "service-worker-unavailable" };
+  return evaluateTarget(serviceWorkerEntry.target, `new Promise((resolve) => {
+    chrome.storage.session.get("pendingOpenPost", (stored) => {
+      resolve({
+        pendingOpenPost: stored?.pendingOpenPost || null,
+        lastError: chrome.runtime.lastError?.message || null
+      });
+    });
+  })`).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
+}
+
+async function clearPendingOpenPost(serviceWorkerEntry) {
+  if (!serviceWorkerEntry?.target?.webSocketDebuggerUrl)
+    return { error: "service-worker-unavailable" };
+  return evaluateTarget(serviceWorkerEntry.target, `new Promise((resolve) => {
+    chrome.storage.session.remove("pendingOpenPost", () => {
+      resolve({ ok: !chrome.runtime.lastError, lastError: chrome.runtime.lastError?.message || null });
+    });
+  })`).catch((error) => ({ error: error instanceof Error ? error.message : String(error) }));
+}
+
+async function auditSidePanelWorkflow(page, serviceWorkerEntry) {
   const beforeTargets = await fetchJson(`${CDP_BASE}/json/list`)
     .then((targets) => targets.filter(isSidePanelTarget).map((target) => target.id))
     .catch(() => []);
+  await clearPendingOpenPost(serviceWorkerEntry);
+  const beforePendingOpenPost = await readPendingOpenPost(serviceWorkerEntry);
   const findButton = () => page.evaluate(`(() => {
     const norm = (s) => String(s || "").replace(/\\s+/g, " ").trim();
     const actionPattern = new RegExp(${JSON.stringify(PANEL_ACTION_PATTERN)});
@@ -520,6 +670,7 @@ async function auditSidePanelWorkflow(page) {
       return {
         found: true,
         text: norm(target.innerText || target.textContent || target.getAttribute("aria-label") || ""),
+        postId: host.closest("[data-truly-id]")?.getAttribute("data-truly-id") || null,
         x: rect.x + rect.width / 2,
         y: rect.y + rect.height / 2,
         rect: {
@@ -589,6 +740,7 @@ async function auditSidePanelWorkflow(page) {
   const sidePanelTargets = sidePanelTargetsAfterClick.length > 0
     ? sidePanelTargetsAfterClick
     : await readSidePanelTargets();
+  const afterPendingOpenPost = await readPendingOpenPost(serviceWorkerEntry);
   const captures = [];
   for (const [index, target] of sidePanelTargets.entries()) {
     captures.push(await captureSidePanelTarget(target, index).catch((error) => ({
@@ -614,16 +766,30 @@ async function auditSidePanelWorkflow(page) {
     if ((capture.data?.overflow?.length ?? 0) > 0) {
       problems.push(`sidepanel-horizontal-overflow:${capture.data.overflow.length}`);
     }
+    if (capture.data?.feedVisualHierarchy?.hasReadingBrief && capture.data?.feedVisualHierarchy?.hasReferenceSection) {
+      if (capture.data.feedVisualHierarchy.referenceOpen)
+        problems.push("sidepanel-feed-reference-open-by-default");
+    }
     if (!capture.data?.text)
       problems.push("sidepanel-dom-text-empty");
   }
 
   const openedNewTarget = sidePanelTargets.some((target) => !beforeTargets.includes(target.id));
+  const pendingPostMatches = Boolean(
+    button.found &&
+    button.postId &&
+    afterPendingOpenPost?.pendingOpenPost === button.postId,
+  );
+  const actionDelivered = sidePanelTargets.length > 0 || pendingPostMatches;
   return {
-    ok: button.found && sidePanelTargets.length > 0 && problems.length === 0,
+    ok: button.found && actionDelivered && problems.length === 0,
     button,
     clickAttempts,
     focusAllowed: ALLOW_FOCUS,
+    beforePendingOpenPost,
+    afterPendingOpenPost,
+    pendingPostMatches,
+    actionDelivered,
     beforeTargetCount: beforeTargets.length,
     targetCount: sidePanelTargets.length,
     openedNewTarget,
@@ -640,6 +806,9 @@ function writeSummary(report, failures) {
   const sidePanel = report.sidePanel;
   const remediation = report.remediation;
   const localeSignals = report.audit.localeSignals;
+  const sidePanelSummary = sidePanel?.button?.found
+    ? "side-panel workflow passed."
+    : "side-panel workflow was skipped because the current heads-up had no action button.";
   const lines = [
     "# Facebook Current Page Audit",
     "",
@@ -652,6 +821,8 @@ function writeSummary(report, failures) {
     `- Heads-up hosts: ${report.audit.counts.hosts}`,
     `- Tagged posts: ${report.audit.counts.taggedPosts}`,
     `- Selector health: ${report.runtime.stats?.selectorHealth || "(unavailable)"}`,
+    `- Readiness wait: ${report.readiness?.ok ? "settled" : "timed out"} (${report.readiness?.waitedMs ?? 0}ms)`,
+    `- Heads-up seek: ${report.headsUpSeek?.ok ? "found" : "not found"} (${report.headsUpSeek?.reason || "not run"})`,
     `- Side Panel targets: ${sidePanel?.targetCount ?? 0}`,
     "",
     "## Verdict",
@@ -661,7 +832,7 @@ function writeSummary(report, failures) {
     "## Human Summary",
     "",
     failures.length === 0
-      ? "- Current Facebook page, build freshness, locale, heads-up overlay, expand toggle, and side-panel workflow passed."
+      ? `- Current Facebook page, build freshness, locale, heads-up overlay, and expand state passed; ${sidePanelSummary}`
       : `- Audit found ${failures.length} failing check(s). Review the checks and remediation sections before trusting this browser state.`,
     "",
     "## Build Freshness Remediation",
@@ -691,6 +862,18 @@ function writeSummary(report, failures) {
     "",
     ...report.checks.map((check) => formatStep(check.ok, check.label, check.detail)),
     "",
+    "## Heads-Up Seek",
+    "",
+    `- Result: ${report.headsUpSeek?.ok ? "found" : "not found"}`,
+    `- Reason: ${report.headsUpSeek?.reason || "(none)"}`,
+    `- Steps: ${report.headsUpSeek?.steps ?? 0}`,
+    `- Final scrollY: ${report.headsUpSeek?.finalScrollY ?? 0}`,
+    ...(report.headsUpSeek?.samples?.length
+      ? report.headsUpSeek.samples.slice(-5).map((sample) =>
+          `- sample #${sample.step}: hosts=${sample.hosts} tagged=${sample.tagged} sponsored=${sample.sponsored} skipped=${sample.skipped}`
+        )
+      : ["- no seek samples"]),
+    "",
     "## Heads-Up Boundary Sample",
     "",
     ...report.audit.hostDetails.slice(0, 8).map((host) =>
@@ -703,6 +886,8 @@ function writeSummary(report, failures) {
     `- Targets: ${sidePanel?.targetCount ?? 0}`,
     `- Opened new target: ${sidePanel?.openedNewTarget ? "yes" : "no"}`,
     `- Focus fallback allowed: ${sidePanel?.focusAllowed ? "yes" : "no"}`,
+    `- Action delivered: ${sidePanel?.actionDelivered ? "yes" : "no"}${sidePanel?.pendingPostMatches ? " (pendingOpenPost matched)" : ""}`,
+    `- Pending post: ${sidePanel?.beforePendingOpenPost?.pendingOpenPost || "(none)"} -> ${sidePanel?.afterPendingOpenPost?.pendingOpenPost || "(none)"}`,
     `- Click attempts: ${sidePanel?.clickAttempts?.length
       ? sidePanel.clickAttempts.map((attempt) => `${attempt.method}:${attempt.targetCount}`).join(", ")
       : "none"}`,
@@ -712,7 +897,13 @@ function writeSummary(report, failures) {
           `- #${index}: title=${capture.data?.title || capture.target?.title || "(unknown)"} ` +
           `text=${capture.data?.text ? "present" : "empty"} ` +
           `overflow=${capture.data?.overflow?.length ?? 0} ` +
-          `rawDebug=${capture.data?.rawDebugVisible ? "yes" : "no"}`
+          `rawDebug=${capture.data?.rawDebugVisible ? "yes" : "no"} ` +
+          `feedHierarchy=${capture.data?.feedVisualHierarchy
+            ? `readingBeforeReference=${capture.data.feedVisualHierarchy.readingBeforeReference ? "yes" : "no"},referenceOpen=${capture.data.feedVisualHierarchy.referenceOpen ? "yes" : "no"}`
+            : "n/a"} ` +
+          `feedActions=${capture.data?.feedActionBar
+            ? `compact=${capture.data.feedActionBar.compact ? "yes" : "no"},copyVisible=${capture.data.feedActionBar.hasVisibleLabel || capture.data.feedActionBar.hasVisibleHint ? "yes" : "no"},actions=${capture.data.feedActionBar.actionCount}`
+            : "n/a"}`
         )
       : ["- no side-panel capture"]),
     "",
@@ -767,8 +958,9 @@ const page = connectCdp(pageTarget.webSocketDebuggerUrl);
 const screenshots = [];
 
 try {
-  await new Promise((resolve) => setTimeout(resolve, 1000));
-  const initialScroll = await page.evaluate("window.scrollY").catch(() => 0);
+  const readiness = await waitForFacebookReadiness(page, serviceWorker.selected, pageTarget.url);
+  const originalScroll = await page.evaluate("window.scrollY").catch(() => 0);
+  const headsUpSeek = await seekHeadsUpCandidate(page);
   const initialViewport = resolve(OUT_DIR, "viewport-initial.png");
   await page.screenshot(initialViewport).catch(() => {});
   screenshots.push(initialViewport);
@@ -791,6 +983,11 @@ try {
       };
     };
     const visibleText = (el) => norm(el?.innerText || el?.textContent || "");
+    const controlText = (root) => Array.from(root?.querySelectorAll?.("button,[role='button']") || [])
+      .map((el) => norm(el.innerText || el.textContent || el.getAttribute("aria-label") || ""))
+      .filter(Boolean)
+      .join(" ");
+    const rootText = (root) => norm(visibleText(root) + " " + controlText(root));
     const hosts = Array.from(document.querySelectorAll(${JSON.stringify(HEADSUP_HOST_SELECTOR)}));
     const taggedPosts = Array.from(document.querySelectorAll(${JSON.stringify(TAGGED_POST_SELECTOR)}));
     const articles = Array.from(document.querySelectorAll('[role="article"], article'));
@@ -803,7 +1000,7 @@ try {
       const article = host.closest("[data-truly-id],[role='article'],article");
       const hostRect = rectOf(host);
       const articleRect = rectOf(article);
-      const summaryText = visibleText(summary);
+      const summaryText = visibleText(summary) || controlText(root);
       const detailText = visibleText(detail);
       const problems = [];
       if (!article) problems.push("missing-post-boundary");
@@ -832,7 +1029,7 @@ try {
     const bodyText = visibleText(document.body).slice(0, 2500);
     const headsUpText = hosts.map((host) => {
       const root = host.shadowRoot || host;
-      return visibleText(root);
+      return rootText(root);
     }).join(" ");
     return {
       url: location.href,
@@ -876,18 +1073,20 @@ try {
     const headsUp = root.querySelector(${JSON.stringify(HEADSUP_PANEL_SELECTOR)});
     const summary = root.querySelector(${JSON.stringify(HEADSUP_SUMMARY_SELECTOR)}) || root.querySelector("button");
     const before = summary?.getAttribute("aria-expanded") || null;
-    summary?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+    const clicked = before !== "true";
+    if (clicked) summary?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
     return new Promise((resolve) => setTimeout(() => {
       resolve({
         ok: true,
         before,
         after: summary?.getAttribute("aria-expanded") || null,
+        clicked,
         text: norm(headsUp?.innerText || headsUp?.textContent || "").slice(0, 600)
       });
     }, 350));
   })()`).catch((error) => ({ ok: false, error: error.message }));
 
-  const sidePanel = await auditSidePanelWorkflow(page);
+  const sidePanel = await auditSidePanelWorkflow(page, serviceWorker.selected);
   const hasHeadsUpAction = sidePanel.button.found;
   for (const capture of sidePanel.captures) {
     if (capture.screenshot) screenshots.push(capture.screenshot);
@@ -917,27 +1116,29 @@ try {
       detail: runtime.stats?.selectorHealth || "(unavailable)",
     },
     {
-      label: "heads-up expand toggles",
-      ok: hasHeadsUpAction ? firstInteraction.ok && firstInteraction.before !== firstInteraction.after : true,
+      label: "heads-up expand state",
+      ok: hasHeadsUpAction
+        ? firstInteraction.ok && (firstInteraction.after === "true" || firstInteraction.before !== firstInteraction.after)
+        : true,
       detail: hasHeadsUpAction
-        ? firstInteraction.ok ? `${firstInteraction.before} -> ${firstInteraction.after}` : firstInteraction.error
-        : "quiet heads-up; no expandable action",
+        ? firstInteraction.ok ? `${firstInteraction.before} -> ${firstInteraction.after}${firstInteraction.clicked ? "" : " (already expanded)"}` : firstInteraction.error
+        : "no heads-up action button; skipped",
     },
     {
       label: "sidepanel opens from heads-up action",
-      ok: hasHeadsUpAction ? sidePanel.targetCount > 0 : true,
+      ok: hasHeadsUpAction ? sidePanel.actionDelivered : true,
       detail: hasHeadsUpAction
-        ? `${sidePanel.button.text}; targets=${sidePanel.targetCount}; new=${sidePanel.openedNewTarget ? "yes" : "no"}`
-        : "quiet heads-up; side panel action not expected",
+        ? `${sidePanel.button.text}; delivered=${sidePanel.actionDelivered ? "yes" : "no"}; targets=${sidePanel.targetCount}; pending=${sidePanel.pendingPostMatches ? "yes" : "no"}; new=${sidePanel.openedNewTarget ? "yes" : "no"}`
+        : "no heads-up action button; skipped",
     },
     {
       label: "sidepanel visual health",
       ok: hasHeadsUpAction ? sidePanel.problems.length === 0 : true,
-      detail: hasHeadsUpAction ? sidePanel.problems.join("; ") || "none" : "quiet heads-up; skipped",
+      detail: hasHeadsUpAction ? sidePanel.problems.join("; ") || "none" : "no heads-up action button; skipped",
     },
   ];
 
-  await page.evaluate(`window.scrollTo(0, ${Number(initialScroll) || 0})`).catch(() => {});
+  await page.evaluate(`window.scrollTo(0, ${Number(originalScroll) || 0})`).catch(() => {});
 
   const report = {
     capturedAt: new Date().toISOString(),
@@ -946,6 +1147,8 @@ try {
     page: { url: audit.url, title: audit.title, selectedTargetId: pageTarget.id },
     serviceWorker,
     remediation,
+    readiness,
+    headsUpSeek,
     audit,
     interaction: firstInteraction,
     sidePanel,
