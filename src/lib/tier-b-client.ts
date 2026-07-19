@@ -13,6 +13,7 @@ import type {
 import type { GeneralPageModelContext } from "./general-page-model-context";
 import {
   applyGeneralPageBriefPostGuards,
+  GENERAL_PAGE_BRIEF_RESPONSE_SCHEMA,
   parseGeneralPageBriefContent,
   type GeneralPageBrief,
 } from "./general-page-analysis";
@@ -448,6 +449,9 @@ export interface TierBGeneralPageBriefRequest {
   allowedUse: GeneralPageEffectiveModelContextUse;
   timeoutMs?: number;
   outputLang?: Lang;
+  /** Provider capability, not a provider wire field. This OpenAI-compatible
+   *  transport maps it to the appropriate response_format request. */
+  structuredOutputMode: "json_schema" | "json_object";
   /** Opt-in candidate contract used only by private evaluation. */
   contract?: "standard" | "investigation_v3";
   /** Opt-in format repair used only while evaluating an unstable candidate contract. */
@@ -460,11 +464,19 @@ export interface TierBGeneralPageBriefResult {
   ok: boolean;
   brief: GeneralPageBrief | null;
   raw?: string;
+  /** Provider-neutral completion telemetry used by private evaluation and
+   *  capability checks. Product UI does not persist or render these fields. */
+  finishReason?: string;
+  usage?: {
+    promptTokens?: number;
+    completionTokens?: number;
+    totalTokens?: number;
+  };
   /** Number of model requests used. A second request is allowed only when an
    *  explicitly opted-in candidate response fails the General Page contract. */
   attempts?: 1 | 2;
   formatRecovered?: boolean;
-  error?: "general_page_brief_network_error" | "general_page_brief_timeout" | "general_page_brief_http_error" | "general_page_brief_format_error";
+  error?: "general_page_brief_network_error" | "general_page_brief_timeout" | "general_page_brief_http_error" | "general_page_brief_truncated" | "general_page_brief_format_error";
 }
 
 export interface TierBGeneralPageInvestigationAdapterRequest extends GeneralPageInvestigationAdapterInput {
@@ -535,7 +547,8 @@ export interface TierBChatBody {
         json_schema: {
           name: string;
           strict: true;
-          schema: typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA |
+          schema: typeof GENERAL_PAGE_BRIEF_RESPONSE_SCHEMA |
+            typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA |
             typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_BATCH_RESPONSE_SCHEMA;
         };
       };
@@ -810,6 +823,12 @@ export function buildGeneralPageBriefPrompt(
 }
 
 export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefRequest): TierBChatBody {
+  if (req.structuredOutputMode !== "json_schema" && req.structuredOutputMode !== "json_object") {
+    throw new Error("general_page_brief_structured_output_mode_required");
+  }
+  if (req.structuredOutputMode === "json_schema" && req.contract === "investigation_v3") {
+    throw new Error("general_page_brief_candidate_contract_has_no_schema");
+  }
   const body: TierBChatBody = {
     model: req.model,
     messages: [
@@ -818,7 +837,16 @@ export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefReq
     ],
     temperature: 0,
     max_tokens: 1_100,
-    response_format: { type: "json_object" },
+    response_format: req.structuredOutputMode === "json_schema"
+      ? {
+          type: "json_schema",
+          json_schema: {
+            name: "truly_general_page_brief_v1",
+            strict: true,
+            schema: GENERAL_PAGE_BRIEF_RESPONSE_SCHEMA,
+          },
+        }
+      : { type: "json_object" },
     truncate_prompt_tokens: TIER_B_CONTEXT_LIMIT_TOKENS,
     chat_template_kwargs: { enable_thinking: false },
   };
@@ -1096,19 +1124,43 @@ export async function callTierBGeneralPageBrief(
         return { ok: false, brief: null, raw: errBody, attempts: attempt, error: "general_page_brief_http_error" };
       }
       const data = await resp.json();
-      const raw = String(data?.choices?.[0]?.message?.content || "").trim();
+      const choice = data?.choices?.[0];
+      const finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : undefined;
+      const usage = normalizeTierBTokenUsage(data?.usage);
+      const raw = String(choice?.message?.content || "").trim();
+      if (finishReason === "length") {
+        return {
+          ok: false,
+          brief: null,
+          raw,
+          attempts: attempt,
+          finishReason,
+          ...(usage ? { usage } : {}),
+          error: "general_page_brief_truncated",
+        };
+      }
       const parsed = parseGeneralPageBriefContent(raw, req.model, req.outputLang);
       if (!parsed.ok || !parsed.value) {
         console.warn(`[Truly General Page Brief] contract error: ${parsed.error}`);
         if (attempt === 1 && req.enableFormatRepair) continue;
-        return { ok: false, brief: null, raw: raw.slice(0, 1200), attempts: attempt, error: "general_page_brief_format_error" };
+        return {
+          ok: false,
+          brief: null,
+          raw,
+          attempts: attempt,
+          ...(finishReason ? { finishReason } : {}),
+          ...(usage ? { usage } : {}),
+          error: "general_page_brief_format_error",
+        };
       }
       const brief = applyGeneralPageBriefPostGuards(parsed.value, req.allowedUse);
       return {
         ok: true,
         brief,
-        raw: raw.slice(0, 1200),
+        raw,
         attempts: attempt,
+        ...(finishReason ? { finishReason } : {}),
+        ...(usage ? { usage } : {}),
         ...(attempt === 2 ? { formatRecovered: true } : {}),
       };
     }
@@ -1122,6 +1174,23 @@ export async function callTierBGeneralPageBrief(
   } finally {
     clearTimeout(timer);
   }
+}
+
+function normalizeTierBTokenUsage(value: unknown): TierBGeneralPageBriefResult["usage"] | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const record = value as Record<string, unknown>;
+  const tokenCount = (key: string): number | undefined => {
+    const count = record[key];
+    return typeof count === "number" && Number.isFinite(count) && count >= 0 ? count : undefined;
+  };
+  const usage = {
+    promptTokens: tokenCount("prompt_tokens"),
+    completionTokens: tokenCount("completion_tokens"),
+    totalTokens: tokenCount("total_tokens"),
+  };
+  return usage.promptTokens === undefined && usage.completionTokens === undefined && usage.totalTokens === undefined
+    ? undefined
+    : usage;
 }
 
 export async function callTierBGeneralPageInvestigationAdapter(

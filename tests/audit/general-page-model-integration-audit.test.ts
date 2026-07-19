@@ -42,6 +42,7 @@ describe("General Page model integration audit", () => {
       }),
       allowedUse: "article_or_selection_analysis",
       outputLang: "en",
+      structuredOutputMode: "json_object",
       timeoutMs: 5_000,
     });
 
@@ -82,6 +83,7 @@ describe("General Page model integration audit", () => {
       }),
       allowedUse: "article_or_selection_analysis",
       outputLang: "en",
+      structuredOutputMode: "json_object",
       timeoutMs: 5_000,
     });
 
@@ -113,6 +115,7 @@ describe("General Page model integration audit", () => {
       }),
       allowedUse: "page_overview_only",
       outputLang: "en",
+      structuredOutputMode: "json_object",
       timeoutMs: 5_000,
     });
 
@@ -142,6 +145,7 @@ describe("General Page model integration audit", () => {
       allowedUse: "article_or_selection_analysis",
       outputLang: "en",
       contract: "investigation_v3",
+      structuredOutputMode: "json_object",
       enableFormatRepair: true,
       timeoutMs: 5_000,
     });
@@ -171,6 +175,7 @@ describe("General Page model integration audit", () => {
       context: modelContext({}),
       allowedUse: "article_or_selection_analysis",
       outputLang: "en",
+      structuredOutputMode: "json_object",
       timeoutMs: 5_000,
     });
 
@@ -178,6 +183,36 @@ describe("General Page model integration audit", () => {
       ok: false,
       attempts: 1,
       error: "general_page_brief_format_error",
+    });
+    expect(captured).toHaveLength(1);
+  });
+
+  it("reports provider truncation and normalized token telemetry without attempting JSON repair", async () => {
+    const captured: CapturedRequest[] = [];
+    const endpoint = await startMockEndpoint(captured, {
+      schemaVersion: 1,
+      summary: "Incomplete response",
+    }, {
+      finishReason: "length",
+      usage: { prompt_tokens: 321, completion_tokens: 1_100, total_tokens: 1_421 },
+    });
+
+    const result = await callTierBGeneralPageBrief({
+      endpoint,
+      model: "audit-brief-model",
+      context: modelContext({}),
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+      structuredOutputMode: "json_schema",
+      timeoutMs: 5_000,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      attempts: 1,
+      error: "general_page_brief_truncated",
+      finishReason: "length",
+      usage: { promptTokens: 321, completionTokens: 1_100, totalTokens: 1_421 },
     });
     expect(captured).toHaveLength(1);
   });
@@ -212,6 +247,10 @@ function modelContext(overrides: Partial<GeneralPageModelContext>): GeneralPageM
 async function startMockEndpoint(
   captured: CapturedRequest[],
   responseContent: Record<string, unknown> | Record<string, unknown>[],
+  metadata: {
+    finishReason?: string;
+    usage?: Record<string, number>;
+  } = {},
 ): Promise<string> {
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const chunks: Buffer[] = [];
@@ -228,10 +267,12 @@ async function startMockEndpoint(
       : responseContent;
     res.end(JSON.stringify({
       choices: [{
+        finish_reason: metadata.finishReason ?? "stop",
         message: {
           content: JSON.stringify(selectedContent),
         },
       }],
+      usage: metadata.usage,
     }));
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));

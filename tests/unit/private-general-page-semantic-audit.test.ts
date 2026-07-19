@@ -8,6 +8,8 @@ import {
   privateSemanticAuditAdapterManifestMetadata,
   privateSemanticAuditAdapterModelMetadata,
   privateSemanticAuditAdapterResponseFormat,
+  privateSemanticAuditReadingManifestMetadata,
+  privateSemanticAuditReadingResponseFormat,
   privateSemanticAuditRepairMode,
   semanticAuditCompletionsUrl,
 } from "../../scripts/lib/private-general-page-semantic-audit.mjs";
@@ -50,6 +52,27 @@ describe("private General Page semantic audit boundary", () => {
       .toThrow(/format\/body mismatch/);
     expect(() => privateSemanticAuditAdapterResponseFormat([
       "--adapter-response-format",
+      "none",
+    ])).toThrow(/must be json_object or json_schema/);
+  });
+
+  it("records the Reading Brief wire mode separately from its provider-neutral schema", () => {
+    expect(privateSemanticAuditReadingResponseFormat([])).toBe("json_object");
+    expect(privateSemanticAuditReadingResponseFormat([
+      "--reading-response-format",
+      "json_schema",
+    ])).toBe("json_schema");
+    expect(privateSemanticAuditReadingManifestMetadata("json_object", { type: "json_object" }))
+      .toEqual({ responseFormat: "json_object" });
+    expect(privateSemanticAuditReadingManifestMetadata("json_schema", {
+      type: "json_schema",
+      json_schema: { strict: true, schema: { type: "object", properties: {} } },
+    })).toEqual({
+      responseFormat: "json_schema",
+      schemaSha256: "8243f0af367f188a376f2c17b5eabe872a2f7a979813e0d4e2be6d594c2aa259",
+    });
+    expect(() => privateSemanticAuditReadingResponseFormat([
+      "--reading-response-format",
       "none",
     ])).toThrow(/must be json_object or json_schema/);
   });

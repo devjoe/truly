@@ -263,6 +263,7 @@ describe("General Page analysis contract", () => {
       context,
       allowedUse: "article_or_selection_analysis",
       outputLang: "en",
+      structuredOutputMode: "json_object",
     });
     expect(typeof withoutShot.messages[1]?.content).toBe("string");
     expect(withoutShot.max_tokens).toBe(1_100);
@@ -298,6 +299,7 @@ describe("General Page analysis contract", () => {
       context,
       allowedUse: "article_or_selection_analysis",
       outputLang: "zh-TW",
+      structuredOutputMode: "json_object",
     });
     const zhPrompt = String(zhStandard.messages[0]?.content);
     expect(zhPrompt).toContain("schemaVersion 與 summary 永遠必填");
@@ -331,6 +333,7 @@ describe("General Page analysis contract", () => {
       allowedUse: "article_or_selection_analysis",
       outputLang: "en",
       contract: "investigation_v3",
+      structuredOutputMode: "json_object",
     });
     const v3EnglishPrompt = String(v3English.messages[0]?.content);
     expect(v3EnglishPrompt).toContain("Every claim MUST include policy");
@@ -346,6 +349,7 @@ describe("General Page analysis contract", () => {
       allowedUse: "article_or_selection_analysis",
       outputLang: "zh-TW",
       contract: "investigation_v3",
+      structuredOutputMode: "json_object",
     });
     const v3ZhPrompt = String(v3Zh.messages[0]?.content);
     expect(v3ZhPrompt).toContain("每個 claim 都必須包含 policy");
@@ -360,6 +364,7 @@ describe("General Page analysis contract", () => {
       context,
       allowedUse: "article_or_selection_analysis",
       outputLang: "en",
+      structuredOutputMode: "json_object",
       screenshotDataUrl: "data:image/jpeg;base64,c3ludGhldGljLXNjcmVlbnNob3Q=",
     });
     const content = withShot.messages[1]?.content;

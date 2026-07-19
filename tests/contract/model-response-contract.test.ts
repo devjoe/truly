@@ -245,6 +245,7 @@ describe("Tier B General Page brief public contract", () => {
       context: generalPageContext,
       allowedUse: "article_or_selection_analysis",
       outputLang: "en",
+      structuredOutputMode: "json_object",
     });
 
     expect(body.response_format).toEqual({ type: "json_object" });
@@ -256,6 +257,30 @@ describe("Tier B General Page brief public contract", () => {
     expect(body.messages[1]?.content).toContain("Selected passage about a fictional public notice.");
   });
 
+  it("maps the provider-neutral schema capability to a strict OpenAI-compatible response format", () => {
+    const body = buildTierBGeneralPageBriefChatBody({
+      endpoint: "http://model-runtime.example/v1",
+      model: "schema-capable-model",
+      context: generalPageContext,
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+      structuredOutputMode: "json_schema",
+    });
+
+    expect(body.response_format).toMatchObject({
+      type: "json_schema",
+      json_schema: {
+        name: "truly_general_page_brief_v1",
+        strict: true,
+        schema: {
+          type: "object",
+          additionalProperties: false,
+          required: ["schemaVersion", "summary", "bg", "claims", "qs", "note"],
+        },
+      },
+    });
+  });
+
   it("uses the overview system variant for page overview only contexts", () => {
     const body = buildTierBGeneralPageBriefChatBody({
       endpoint: "http://localhost:11434",
@@ -263,6 +288,7 @@ describe("Tier B General Page brief public contract", () => {
       context: { ...generalPageContext, targetKind: "page" },
       allowedUse: "page_overview_only",
       outputLang: "en",
+      structuredOutputMode: "json_object",
     });
 
     expect(body.messages[0]?.content).toContain("page overview only");

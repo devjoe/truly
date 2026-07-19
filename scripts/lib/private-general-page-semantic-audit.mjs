@@ -47,6 +47,30 @@ export function privateSemanticAuditAdapterResponseFormat(argv) {
   return value;
 }
 
+export function privateSemanticAuditReadingResponseFormat(argv) {
+  const index = argv.indexOf("--reading-response-format");
+  const value = index >= 0 ? argv[index + 1] : "json_object";
+  if (value !== "json_object" && value !== "json_schema") {
+    throw new Error("--reading-response-format must be json_object or json_schema");
+  }
+  return value;
+}
+
+export function privateSemanticAuditReadingManifestMetadata(responseFormat, wireResponseFormat) {
+  if (responseFormat === "json_object") {
+    if (wireResponseFormat?.type !== "json_object") throw new Error("reading response format/body mismatch");
+    return { responseFormat: "json_object" };
+  }
+  if (responseFormat !== "json_schema" || wireResponseFormat?.type !== "json_schema" ||
+      wireResponseFormat?.json_schema?.strict !== true || !wireResponseFormat?.json_schema?.schema) {
+    throw new Error("reading response format/body mismatch");
+  }
+  return {
+    responseFormat: "json_schema",
+    schemaSha256: sha256Text(JSON.stringify(wireResponseFormat.json_schema.schema)),
+  };
+}
+
 export function privateSemanticAuditAdapterModelMetadata(responseFormat) {
   if (responseFormat === "json_schema") {
     return { responseFormat: "json_schema", adapterMaxTokens: 3_200 };

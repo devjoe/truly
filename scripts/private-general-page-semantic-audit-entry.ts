@@ -23,6 +23,8 @@ import {
   privateSemanticAuditAdapterManifestMetadata,
   privateSemanticAuditAdapterModelMetadata,
   privateSemanticAuditAdapterResponseFormat,
+  privateSemanticAuditReadingManifestMetadata,
+  privateSemanticAuditReadingResponseFormat,
   privateSemanticAuditRepairMode,
   semanticAuditCompletionsUrl,
   sha256Text,
@@ -136,6 +138,7 @@ const expectedCount = Number(required("--sample-count"));
 const concurrency = Math.max(1, Math.min(4, Number(option("--concurrency", "2")) || 2));
 const timeoutMs = Math.max(1_000, Math.min(120_000, Number(option("--timeout-ms", "45_000")) || 45_000));
 const repairMode = privateSemanticAuditRepairMode(process.argv);
+const readingResponseFormat = privateSemanticAuditReadingResponseFormat(process.argv);
 const adapterResponseFormat = privateSemanticAuditAdapterResponseFormat(process.argv);
 const adapterModelMetadata = privateSemanticAuditAdapterModelMetadata(adapterResponseFormat);
 const adapterMaxTokens = adapterModelMetadata.adapterMaxTokens;
@@ -199,14 +202,20 @@ const core = hashPrivateSemanticAuditCoreFiles(repoRoot);
 const languages = [...new Set(rows.map((row) => outputLanguageForPrivateEval(row.language) as Lang))].sort();
 const firstReadingRow = rows[0];
 if (!firstReadingRow) throw new Error("Private semantic audit requires at least one input row");
-const readingMaxTokens = buildTierBGeneralPageBriefChatBody({
+const firstReadingBody = buildTierBGeneralPageBriefChatBody({
   endpoint,
   model,
   context: buildGeneralPageModelContext(surfaceFor(firstReadingRow)),
-  allowedUse: "page_full_text",
+  allowedUse: "article_or_selection_analysis",
   outputLang: outputLanguageForPrivateEval(firstReadingRow.language) as Lang,
   contract: "standard",
-}).max_tokens;
+  structuredOutputMode: readingResponseFormat,
+});
+const readingMaxTokens = firstReadingBody.max_tokens;
+const readingManifestMetadata = privateSemanticAuditReadingManifestMetadata(
+  readingResponseFormat,
+  firstReadingBody.response_format,
+);
 const readingSystemSha256ByLanguage = Object.fromEntries(languages.map((language) => {
   const row = rows.find((candidate) => outputLanguageForPrivateEval(candidate.language) === language);
   if (!row) throw new Error(`Missing prompt row for ${language}`);
@@ -214,9 +223,10 @@ const readingSystemSha256ByLanguage = Object.fromEntries(languages.map((language
     endpoint,
     model,
     context: buildGeneralPageModelContext(surfaceFor(row)),
-    allowedUse: "page_full_text",
+    allowedUse: "article_or_selection_analysis",
     outputLang: language,
     contract: "standard",
+    structuredOutputMode: readingResponseFormat,
   });
   return [language, bodyPromptHashes(body).systemSha256];
 }));
@@ -241,9 +251,10 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
     endpoint,
     model,
     context,
-    allowedUse: "page_full_text",
+    allowedUse: "article_or_selection_analysis",
     outputLang,
     contract: "standard",
+    structuredOutputMode: readingResponseFormat,
   });
   const readingPrompt = bodyPromptHashes(readingBody);
   const base = {
@@ -270,9 +281,10 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
     model,
     apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
     context,
-    allowedUse: "page_full_text",
+    allowedUse: "article_or_selection_analysis",
     outputLang,
     contract: "standard",
+    structuredOutputMode: readingResponseFormat,
     timeoutMs,
   });
   if (!reading.ok || !reading.brief) {
@@ -285,6 +297,8 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
         latencyMs: Date.now() - readingStarted,
         error: reading.error || "model_error",
         attempts: reading.attempts,
+        finishReason: reading.finishReason,
+        usage: reading.usage,
         raw: reading.raw,
         prompt: readingPrompt,
       },
@@ -314,6 +328,8 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
         latencyMs: Date.now() - readingStarted,
         attempts: reading.attempts,
         formatRecovered: reading.formatRecovered,
+        finishReason: reading.finishReason,
+        usage: reading.usage,
         brief,
         raw: reading.raw,
         prompt: readingPrompt,
@@ -351,6 +367,8 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
         latencyMs: adapterStarted - readingStarted,
         attempts: reading.attempts,
         formatRecovered: reading.formatRecovered,
+        finishReason: reading.finishReason,
+        usage: reading.usage,
         brief,
         raw: reading.raw,
         prompt: readingPrompt,
@@ -384,6 +402,8 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
       latencyMs: adapterStarted - readingStarted,
       attempts: reading.attempts,
       formatRecovered: reading.formatRecovered,
+      finishReason: reading.finishReason,
+      usage: reading.usage,
       brief,
       raw: reading.raw,
       prompt: readingPrompt,
@@ -466,6 +486,10 @@ const manifest = {
     timeoutMs,
     concurrency,
   },
+  reading: {
+    contract: "truly-general-page-brief-v1",
+    ...readingManifestMetadata,
+  },
   adapter: {
     repairMode,
     runtimeParity: repairMode === "none",
@@ -479,6 +503,9 @@ const manifest = {
   counts: {
     readingSucceeded: results.filter((result) => result.reading && (result.reading as { ok?: boolean }).ok).length,
     readingFailed: count("reading_failed") + count("reading_ineligible"),
+    readingTruncated: results.filter((result) =>
+      (result.reading as { error?: string } | undefined)?.error === "general_page_brief_truncated"
+    ).length,
     noClaim: count("no_claim"),
     adapterRequested: results.filter((result) => !["no_claim", "reading_failed", "reading_ineligible"].includes(String(result.pipelineStatus))).length,
     adapterFailed: count("adapter_failed"),
@@ -514,6 +541,7 @@ console.log(JSON.stringify({
   split,
   repairMode,
   adapterResponseFormat,
+  readingResponseFormat,
   adapterMaxTokens,
   samples: rows.length,
   ...manifest.counts,

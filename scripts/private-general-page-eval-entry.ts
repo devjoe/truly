@@ -88,9 +88,10 @@ function promptVariantSha(row: InputRow): string {
     endpoint,
     model,
     context: buildGeneralPageModelContext(surfaceFor(row)),
-    allowedUse: "page_full_text",
+    allowedUse: "article_or_selection_analysis",
     outputLang: outputLanguageForPrivateEval(row.language),
     contract: "investigation_v3",
+    structuredOutputMode: "json_object",
   });
   const system = body.messages.find((message) => message.role === "system")?.content ?? "";
   return crypto.createHash("sha256").update(JSON.stringify(system)).digest("hex");
@@ -115,9 +116,10 @@ async function evaluateRow(row: InputRow) {
     endpoint,
     model,
     context: buildGeneralPageModelContext(surfaceFor(row)),
-    allowedUse: "page_full_text" as const,
+    allowedUse: "article_or_selection_analysis" as const,
     outputLang,
     contract: "investigation_v3" as const,
+    structuredOutputMode: "json_object" as const,
     enableFormatRepair: true,
   };
   const started = Date.now();

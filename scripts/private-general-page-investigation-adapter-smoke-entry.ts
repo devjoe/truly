@@ -132,9 +132,10 @@ const readingSystemSha256ByLanguage = Object.fromEntries(languages.map((language
     endpoint,
     model,
     context: buildGeneralPageModelContext(surfaceFor(fixture)),
-    allowedUse: "page_full_text",
+    allowedUse: "article_or_selection_analysis",
     outputLang: language,
     contract: "standard",
+    structuredOutputMode: "json_object",
   });
   return [language, bodySystemSha256(body)];
 }));

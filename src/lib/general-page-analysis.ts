@@ -93,6 +93,79 @@ export interface GeneralPageBriefClaim extends ReadingBriefClaim {
   displayQ?: string;
 }
 
+/** Provider-neutral output contract for a General Page reading brief.
+ *
+ * Providers may express this capability with different wire protocols. The
+ * OpenAI-compatible transport maps it to `response_format.json_schema`; other
+ * transports must map the same schema explicitly or report that constrained
+ * output is unsupported. */
+export const GENERAL_PAGE_BRIEF_RESPONSE_SCHEMA = {
+  type: "object",
+  additionalProperties: false,
+  required: ["schemaVersion", "summary", "bg", "claims", "qs", "note"],
+  properties: {
+    schemaVersion: { type: "integer", const: 1 },
+    summary: { type: "string", minLength: 1, maxLength: 320 },
+    bg: {
+      type: "array",
+      maxItems: 2,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["t", "why"],
+        properties: {
+          t: { type: "string", minLength: 1, maxLength: 80 },
+          why: { type: "string", minLength: 1, maxLength: 120 },
+        },
+      },
+    },
+    claims: {
+      type: "array",
+      maxItems: 3,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["c", "why", "need", "q", "atom"],
+        properties: {
+          c: { type: "string", minLength: 1, maxLength: 180 },
+          why: { type: "string", minLength: 1, maxLength: 120 },
+          need: { type: "string", minLength: 1, maxLength: 90 },
+          q: { type: "string", minLength: 1, maxLength: 180 },
+          atom: {
+            type: "object",
+            additionalProperties: false,
+            required: ["s", "p", "o"],
+            properties: {
+              s: { type: "string", minLength: 1, maxLength: 80 },
+              p: { type: "string", minLength: 1, maxLength: 100 },
+              o: { type: "string", minLength: 1, maxLength: 160 },
+            },
+          },
+        },
+      },
+    },
+    qs: {
+      type: "array",
+      maxItems: 1,
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["q", "kind"],
+        properties: {
+          q: { type: "string", minLength: 1, maxLength: 140 },
+          kind: { type: "string", enum: ["understand", "context", "counter", "image"] },
+        },
+      },
+    },
+    note: {
+      anyOf: [
+        { type: "null" },
+        { type: "string", maxLength: 200 },
+      ],
+    },
+  },
+} as const;
+
 export type GeneralPageAnalysisEligibilityReason =
   | "session_not_ready"
   | "stale_surface"

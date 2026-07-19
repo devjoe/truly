@@ -406,6 +406,10 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
             context: message.context,
             allowedUse: message.allowedUse,
             outputLang: message.outputLang,
+            // Runtime promotion to schema-constrained output is gated by a
+            // separate provider capability check; keep current behavior until
+            // that gate has passed for the configured endpoint and model.
+            structuredOutputMode: "json_object",
             screenshotDataUrl,
           }),
         });
