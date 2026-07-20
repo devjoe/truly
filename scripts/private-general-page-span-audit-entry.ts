@@ -1,0 +1,322 @@
+import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+import process from "node:process";
+import { execFileSync } from "node:child_process";
+
+import {
+  buildGeneralPageInvestigationActionPresentation,
+  buildGeneralPageInvestigationSpanAdapterSystemPrompt,
+} from "../src/lib/general-page-investigation-span-adapter";
+import { buildInvestigationSpanCandidates } from "../src/lib/investigation-span-candidate";
+import {
+  buildTierBGeneralPageInvestigationSpanAdapterChatBody,
+  callTierBGeneralPageInvestigationSpanAdapter,
+} from "../src/lib/tier-b-client";
+import type { Lang } from "../src/lib/types";
+import {
+  assertPrivateSemanticAuditCandidateSnapshot,
+  installPrivateSemanticAuditNetworkGuard,
+  semanticAuditCompletionsUrl,
+  sha256Text,
+} from "./lib/private-general-page-semantic-audit.mjs";
+import {
+  assertPrivateEvalPaths,
+  parsePrivateEvalJsonl,
+  privateEvalInputErrors,
+} from "./lib/private-general-page-eval.mjs";
+
+type StructuredOutputMode = "json_schema" | "json_object";
+
+interface InputRow {
+  sampleId: string;
+  surface: "facebook" | "news";
+  dataCategory?: string;
+  language: Lang;
+  sourceSha256: string;
+  text: string;
+  sourceContext?: {
+    title?: string;
+    sourceName?: string;
+    publishedAt?: string;
+    url?: string;
+  };
+}
+
+function option(name: string, fallback?: string): string | undefined {
+  const index = process.argv.indexOf(name);
+  return index >= 0 ? process.argv[index + 1] : fallback;
+}
+
+function required(name: string): string {
+  const value = option(name);
+  if (!value) throw new Error(`Missing ${name}`);
+  return value;
+}
+
+function boundedInteger(name: string, fallback: number, minimum: number, maximum: number): number {
+  const value = Number(option(name, String(fallback)));
+  if (!Number.isInteger(value) || value < minimum || value > maximum) throw new Error(`Invalid ${name}`);
+  return value;
+}
+
+function responseFormat(): StructuredOutputMode {
+  const value = option("--response-format", "json_object");
+  if (value !== "json_schema" && value !== "json_object") throw new Error("Invalid --response-format");
+  return value;
+}
+
+function languageOption(): Lang {
+  const value = option("--output-language", "zh-TW");
+  if (value !== "zh-TW" && value !== "en") throw new Error("Invalid --output-language");
+  return value;
+}
+
+function gitOutput(repoRoot: string, args: string[]): string {
+  return execFileSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+    maxBuffer: 16 * 1024 * 1024,
+  });
+}
+
+function writePrivateFile(target: string, value: unknown): void {
+  fs.mkdirSync(path.dirname(target), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(target, `${JSON.stringify(value, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+}
+
+if (!process.argv.includes("--confirm-private-data-send")) {
+  throw new Error("Missing --confirm-private-data-send");
+}
+
+const inputPath = required("--input");
+const outputPath = required("--output");
+const metaOutputPath = required("--meta-output");
+const endpoint = required("--endpoint");
+const model = required("--model");
+const runId = required("--run-id");
+const datasetVersion = required("--dataset-version");
+const expectedCandidateCommit = required("--expected-candidate-commit");
+const expectedTrackedDiffSha256 = required("--expected-tracked-diff-sha256");
+const declaredCategories = required("--data-categories");
+const expectedCount = boundedInteger("--sample-count", 30, 1, 100);
+const concurrency = boundedInteger("--concurrency", 2, 1, 4);
+const timeoutMs = boundedInteger("--timeout-ms", 120_000, 5_000, 120_000);
+const structuredOutputMode = responseFormat();
+const outputLang = languageOption();
+if (!/^[a-z0-9][a-z0-9._-]{2,80}$/i.test(runId) ||
+    !/^[a-z0-9][a-z0-9._-]{2,80}$/i.test(datasetVersion)) {
+  throw new Error("Invalid run or dataset identifier");
+}
+
+const paths = assertPrivateEvalPaths(inputPath, outputPath, metaOutputPath, process.cwd());
+if (fs.existsSync(paths.output) || fs.existsSync(paths.metaOutput)) {
+  throw new Error("Private span audit output already exists; a run path may be used only once");
+}
+const inputFile = fs.readFileSync(paths.input, "utf8");
+const rows = parsePrivateEvalJsonl(inputFile) as InputRow[];
+const inputErrors = privateEvalInputErrors(rows, expectedCount, declaredCategories);
+if (inputErrors.length > 0) throw new Error(inputErrors.join("; "));
+
+const repoRoot = gitOutput(process.cwd(), ["rev-parse", "--show-toplevel"]).trim();
+const candidateCommit = gitOutput(repoRoot, ["rev-parse", "HEAD"]).trim();
+const trackedDiff = gitOutput(repoRoot, ["diff", "--binary", "HEAD"]);
+const candidateSnapshot = assertPrivateSemanticAuditCandidateSnapshot({
+  actualCommit: candidateCommit,
+  actualTrackedDiff: trackedDiff,
+  expectedCommit: expectedCandidateCommit,
+  expectedTrackedDiffSha256,
+});
+const worktreeStatus = gitOutput(repoRoot, ["status", "--porcelain=v1", "--untracked-files=all"]);
+if (worktreeStatus.length > 0) throw new Error("Private span audit requires a clean candidate worktree");
+
+const firstRow = rows[0];
+if (!firstRow) throw new Error("Private span audit requires at least one row");
+const firstCandidates = buildInvestigationSpanCandidates(firstRow.text, {
+  maxCandidates: 48,
+  maxCharacters: 240,
+});
+if (firstCandidates.length < 1) throw new Error("First row has no span candidates");
+const protocolBody = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
+  endpoint,
+  model,
+  structuredOutputMode,
+  candidates: firstCandidates,
+  targetKind: "page",
+  source: firstRow.sourceContext,
+  sourceLang: firstRow.language,
+  outputLang,
+});
+if (protocolBody.response_format?.type !== structuredOutputMode || protocolBody.temperature !== 0) {
+  throw new Error("Span audit response format/body mismatch");
+}
+
+const preflight = {
+  result: "preflight_pass",
+  runId,
+  datasetVersion,
+  samples: rows.length,
+  candidateSnapshot,
+  responseFormat: structuredOutputMode,
+  outputLanguage: outputLang,
+  modelRequests: 0,
+  publicSearchRequests: 0,
+  actionsOpened: 0,
+};
+if (process.argv.includes("--preflight-only")) {
+  console.log(JSON.stringify(preflight, null, 2));
+  process.exit(0);
+}
+
+const startedAt = new Date().toISOString();
+const results = new Array<Record<string, unknown>>(rows.length);
+let cursor = 0;
+let modelRequests = 0;
+const originalFetch = globalThis.fetch;
+const guardedFetch = installPrivateSemanticAuditNetworkGuard(endpoint, originalFetch.bind(globalThis));
+globalThis.fetch = (async (input, init) => {
+  modelRequests += 1;
+  return guardedFetch(input, init);
+}) as typeof fetch;
+
+async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
+  const candidates = buildInvestigationSpanCandidates(row.text, {
+    maxCandidates: 48,
+    maxCharacters: 240,
+  });
+  const base = {
+    schemaVersion: 1,
+    sampleId: row.sampleId,
+    surface: row.surface,
+    dataCategory: row.dataCategory || `${row.surface}-original`,
+    sourceSha256: row.sourceSha256,
+    candidateCount: candidates.length,
+  };
+  if (candidates.length < 1) {
+    return { ...base, ok: false, status: "no_candidates", actions: [] };
+  }
+  const started = Date.now();
+  const result = await callTierBGeneralPageInvestigationSpanAdapter({
+    endpoint,
+    model,
+    structuredOutputMode,
+    timeoutMs,
+    apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
+    candidates,
+    targetKind: "page",
+    source: row.sourceContext,
+    sourceLang: row.language,
+    outputLang,
+  });
+  const selections = result.value?.decision === "prepared" ? result.value.selections : [];
+  const actions = selections.map((selection) => ({
+    ...selection,
+    presentation: buildGeneralPageInvestigationActionPresentation(selection, {
+      outputLang,
+      source: row.sourceContext,
+    }),
+    exactGrounding: row.text.slice(selection.start, selection.end) === selection.exactClaim,
+  }));
+  return {
+    ...base,
+    ok: result.ok,
+    status: result.ok ? result.value?.decision : "protocol_failed",
+    latencyMs: Date.now() - started,
+    attempts: result.attempts,
+    finishReason: result.finishReason,
+    usage: result.usage,
+    error: result.error,
+    issue: result.issue,
+    reason: result.value?.reason,
+    actions,
+    raw: result.raw,
+  };
+}
+
+async function worker(): Promise<void> {
+  while (true) {
+    const index = cursor++;
+    if (index >= rows.length) return;
+    results[index] = await evaluateRow(rows[index]);
+  }
+}
+
+try {
+  await Promise.all(Array.from({ length: concurrency }, () => worker()));
+} finally {
+  globalThis.fetch = originalFetch;
+}
+
+const resultFile = `${results.map((row) => JSON.stringify(row)).join("\n")}\n`;
+fs.mkdirSync(path.dirname(paths.output), { recursive: true, mode: 0o700 });
+fs.writeFileSync(paths.output, resultFile, { flag: "wx", mode: 0o600 });
+const protocolSucceeded = results.filter((row) => row.ok === true).length;
+const prepared = results.filter((row) => row.status === "prepared").length;
+const abstained = results.filter((row) => row.status === "abstain").length;
+const actionCount = results.reduce((sum, row) => sum + (Array.isArray(row.actions) ? row.actions.length : 0), 0);
+const exactGrounding = results.reduce((sum, row) => sum +
+  (Array.isArray(row.actions) ? row.actions.filter((action) => action.exactGrounding === true).length : 0), 0);
+const meta = {
+  schemaVersion: 1,
+  task: "general_page_investigation_span_forward_dev",
+  runId,
+  datasetVersion,
+  split: "dev",
+  candidate: {
+    commit: candidateSnapshot.commit,
+    trackedDiffSha256: candidateSnapshot.trackedDiffSha256,
+  },
+  contract: {
+    selector: "exact_span_v2",
+    promptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
+    responseFormat: structuredOutputMode,
+    outputLanguage: outputLang,
+    repairMode: "none",
+    maxCandidates: 48,
+    maxActions: 3,
+  },
+  model: {
+    provider: "openai-compatible",
+    endpoint,
+    name: model,
+    temperature: protocolBody.temperature,
+    maxTokens: protocolBody.max_tokens,
+    timeoutMs,
+    concurrency,
+  },
+  data: {
+    sampleCount: rows.length,
+    declaredCategories: declaredCategories.split(",").map((value) => value.trim()).filter(Boolean),
+  },
+  counts: {
+    protocolSucceeded,
+    protocolFailed: rows.length - protocolSucceeded,
+    prepared,
+    abstained,
+    actionCount,
+    exactGrounding,
+  },
+  networkBoundary: {
+    allowedCompletionsUrl: semanticAuditCompletionsUrl(endpoint),
+    redirects: "error",
+    modelRequests,
+    publicSearchRequests: 0,
+    actionsOpened: 0,
+  },
+  artifacts: {
+    inputSha256: sha256Text(inputFile),
+    resultSha256: sha256Text(resultFile),
+  },
+  startedAt,
+  completedAt: new Date().toISOString(),
+};
+writePrivateFile(paths.metaOutput, meta);
+console.log(JSON.stringify({
+  result: protocolSucceeded === rows.length ? "pass" : "fail",
+  ...meta.counts,
+  modelRequests,
+  publicSearchRequests: 0,
+  actionsOpened: 0,
+  output: "private-data/runs/<private>",
+}, null, 2));
+if (protocolSucceeded !== rows.length) process.exitCode = 1;

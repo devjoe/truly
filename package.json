@@ -49,6 +49,7 @@
     "eval:gpr:semantic-audit:private": "node scripts/run-private-general-page-semantic-audit.mjs",
     "eval:gpr:investigation-adapter-protocol-smoke:private": "node scripts/run-private-general-page-investigation-adapter-smoke.mjs",
     "preflight:gpr:span-adapter:synthetic": "node scripts/run-general-page-investigation-span-adapter-preflight.mjs",
+    "eval:gpr:span-selector:private": "node scripts/run-private-general-page-span-audit.mjs",
     "eval:gpr:investigation-plan:private": "node scripts/run-private-investigation-plan-eval.mjs",
     "eval:gpr:investigation-candidate-plan:private": "node scripts/run-private-investigation-candidate-plan.mjs",
     "eval:gpr:investigation-case-plan:private": "node scripts/run-private-investigation-case-plan.mjs",
