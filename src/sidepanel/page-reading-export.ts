@@ -1,6 +1,7 @@
 import type { GeneralPageBrief } from "../lib/general-page-analysis";
 import type { GeneralPageModelSourceLink } from "../lib/general-page-model-context";
 import type { GeneralPageEffectiveModelContextUse } from "../lib/general-page-parser-advisor";
+import type { GeneralPageInvestigationActionPresentation } from "../lib/general-page-investigation-span-adapter";
 import { t } from "../lib/i18n";
 import { modelDisplayIdentity } from "../lib/model-display";
 import type { Lang } from "../lib/types";
@@ -19,6 +20,7 @@ export interface PageReadingExportPacket {
   excerpt?: string;
   links?: GeneralPageModelSourceLink[];
   brief: GeneralPageBrief;
+  investigationActions?: GeneralPageInvestigationActionPresentation[];
   allowedUse?: GeneralPageEffectiveModelContextUse;
 }
 
@@ -100,7 +102,12 @@ function briefTextSections(packet: PageReadingExportPacket): string[] {
       sections.push(`• ${clean(item.t)}：${clean(item.why)}${clean(item.q) ? `（${clean(item.q)}）` : ""}`);
     }
   }
-  if (brief.claims?.length) {
+  if (packet.investigationActions?.length) {
+    sections.push("", t("sidepanel.dynamic.readingBrief.verify", lang));
+    for (const action of packet.investigationActions) {
+      sections.push(`• ${clean(action.displayClaim)}（${clean(action.evidenceHint)}）`);
+    }
+  } else if (brief.claims?.length) {
     sections.push("", t("sidepanel.dynamic.readingBrief.verify", lang));
     for (const claim of brief.claims) {
       sections.push(`• ${t("sidepanel.dynamic.readingBrief.needEvidence", lang, {
@@ -155,7 +162,12 @@ export function formatFullPageReadingMarkdown(packet: PageReadingExportPacket): 
       lines.push(`- **${markdownText(item.t)}：** ${markdownText(item.why)}${clean(item.q) ? `（${markdownText(item.q ?? "")}）` : ""}`);
     }
   }
-  if (brief.claims?.length) {
+  if (packet.investigationActions?.length) {
+    lines.push("", `### ${markdownText(t("sidepanel.dynamic.readingBrief.verify", lang))}`, "");
+    for (const action of packet.investigationActions) {
+      lines.push(`- ${markdownText(action.displayClaim)}（${markdownText(action.evidenceHint)}）`);
+    }
+  } else if (brief.claims?.length) {
     lines.push("", `### ${markdownText(t("sidepanel.dynamic.readingBrief.verify", lang))}`, "");
     for (const claim of brief.claims) {
       lines.push(`- ${markdownText(t("sidepanel.dynamic.readingBrief.needEvidence", lang, {

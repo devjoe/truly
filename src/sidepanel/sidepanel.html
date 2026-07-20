@@ -1058,6 +1058,11 @@
     .page-claim-section > ul {
       padding-left: 20px;
       list-style: disc;
+      animation: truly-investigation-batch-in 150ms ease-out both;
+    }
+    @keyframes truly-investigation-batch-in {
+      from { opacity: 0; transform: translateY(2px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     .page-claim-section > h4 {
       display: flex;
@@ -1212,6 +1217,9 @@
     }
     @media (prefers-reduced-motion: reduce) {
       .page-reader-analysis.is-ready {
+        animation: none;
+      }
+      .page-claim-section > ul {
         animation: none;
       }
       .page-claim-investigation .page-claim-investigation-need {

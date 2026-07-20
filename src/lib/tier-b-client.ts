@@ -36,6 +36,15 @@ import {
   type GeneralPageInvestigationAdapterValue,
 } from "./general-page-investigation-adapter";
 import {
+  buildGeneralPageInvestigationSpanAdapterPrompt,
+  buildGeneralPageInvestigationSpanAdapterSystemPrompt,
+  generalPageInvestigationSpanAdapterJsonSchema,
+  parseAndMaterializeGeneralPageSpanAdapter,
+  type GeneralPageInvestigationSpanAdapterInput,
+  type GeneralPageInvestigationSpanAdapterValue,
+  type ParsedGeneralPageInvestigationSpanAdapterContent,
+} from "./general-page-investigation-span-adapter";
+import {
   buildGeneralPageParserAdvisorSystemPrompt,
   buildGeneralPageParserAdvisorUserPrompt,
   type GeneralPageEffectiveModelContextUse,
@@ -232,6 +241,40 @@ export function generalPageBriefSystemPrompt(
   const lang = tierBOutputLang(outputLang);
   const overview = allowedUse === "page_overview_only";
   const investigation = contract === "investigation_v3";
+  if (!investigation && lang === "en") {
+    return [
+      "You are Truly's General Page reading assistant. Return exactly one JSON object and nothing else.",
+      "Required shape: {\"schemaVersion\":1,\"summary\":\"neutral summary\",\"bg\":[{\"t\":\"point\",\"why\":\"importance\"}],\"claims\":[],\"qs\":[{\"q\":\"follow-up question\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"optional reminder\"}. schemaVersion and summary are always required. bg, claims, and qs must be arrays of objects or empty arrays, never arrays of strings.",
+      "Write every natural-language field in English. summary must be one complete neutral sentence ending in punctuation; aim for no more than 24 English words and never exceed 32. bg <=2 items; claims exactly 0 items; qs <=1 item. Keep every other string under 28 words.",
+      "Use only the supplied page context. Do not invent sources, dates, authors, facts, motives, or URLs.",
+      "Treat Page Text as the primary reading target. Ignore navigation, recommended or related stories, other-story headlines, and Source Links unless Page Text explicitly makes them part of the current article. Never complete an abruptly cut fragment.",
+      "Each bg item must contain exactly one background concept. Include author identity only when it materially changes how the page should be interpreted, and never combine author identity with another person, concept, or event in one item.",
+      "When targetKind is selection, summarize and analyze only the selected text; surrounding text is context only.",
+      overview
+        ? "This is page overview only. Describe what kind of page it is, what linked topics or sections appear, and what the reader may inspect next. Return claims as an empty array."
+        : "Return one neutral summary, useful background, and at most one natural follow-up question.",
+      "claims must be an empty array. The independent Investigation Selector owns verification actions; do not write claims, verification questions, evidence requirements, search queries, or action text.",
+      "qs is only for understanding, context, counter-perspectives, or image interpretation; never verify/source. It must stay grounded in the primary Page Text and must not introduce an unrelated person, event, country, conflict, or political frame.",
+      "Do not use markdown. Do not output extra fields.",
+    ].join("\n");
+  }
+  if (!investigation) {
+    return [
+      "你是 Truly 的一般網頁閱讀助理。只能回傳一個 JSON 物件，不得輸出其他文字。",
+      "必須符合：{\"schemaVersion\":1,\"summary\":\"中立摘要\",\"bg\":[{\"t\":\"重點\",\"why\":\"為何重要\"}],\"claims\":[],\"qs\":[{\"q\":\"延伸問題\",\"kind\":\"understand|context|counter|image\"}],\"note\":\"可選提醒\"}。schemaVersion 與 summary 永遠必填；bg、claims、qs 必須是物件陣列或空陣列，絕對不可使用字串陣列。",
+      `所有自然語言欄位使用台灣慣用繁體中文。summary 必須是一句有句末標點的中立完整句，目標 60 字內且不得超過 80 字；bg 最多 2 項；claims 必須剛好 0 項；qs 最多 1 項。${ZHTW_OUTPUT_GUIDANCE}。`,
+      "只能使用提供的頁面脈絡。不要發明來源、日期、作者、事實、動機或網址。",
+      "Page Text 是主要閱讀對象。除非 Page Text 明確把內容納入本文，否則忽略導覽、推薦或相關文章、其他新聞標題與 Source Links；文字若中途截斷，不得自行補完。",
+      "每個 bg 項目只能包含一個背景概念。只有作者身分會實質影響文章解讀時才可納入，而且不得在同一項中混入另一個人物、概念或事件。",
+      "targetKind 是 selection 時，只摘要與分析選取文字；surrounding text 只能當脈絡，不可當成摘要主體。",
+      overview
+        ? "這只允許頁面總覽。請描述這是什麼類型的頁面、它連到哪些主題或區塊、讀者下一步可檢視什麼。"
+        : "回傳一個中立摘要、有用背景，以及至多一個自然的延伸問題。",
+      "claims 必須是空陣列。獨立的 Investigation Selector 負責查核 action；不得撰寫 claim、查核問題、證據需求、搜尋 query 或 action 文案。",
+      "qs 只放理解、背景、反方觀點或影像理解問題，不得使用 verify/source；必須以主要 Page Text 為依據，不得加入無關人物、事件、國家、衝突或政治框架。",
+      "不要 markdown，不要輸出其他欄位。",
+    ].join("\n");
+  }
   if (lang === "en") {
     return [
       "You are Truly's General Page reading assistant. Return exactly one JSON object and nothing else.",
@@ -521,6 +564,17 @@ export interface TierBGeneralPageInvestigationAdapterBatchRequest extends Genera
   timeoutMs?: number;
 }
 
+/** OpenAI-compatible lowering for the evaluation-only model-neutral span-ID
+ * contract. Other providers may use a different explicit transport adapter. */
+export interface TierBGeneralPageInvestigationSpanAdapterRequest
+  extends GeneralPageInvestigationSpanAdapterInput {
+  endpoint: string;
+  model: string;
+  structuredOutputMode: "json_schema" | "json_object";
+  apiKey?: string;
+  timeoutMs?: number;
+}
+
 export interface TierBGeneralPageInvestigationAdapterResult {
   ok: boolean;
   value: GeneralPageInvestigationAdapterValue | null;
@@ -538,6 +592,23 @@ export interface TierBGeneralPageInvestigationAdapterBatchResult {
   ok: boolean;
   value: GeneralPageInvestigationAdapterBatchValue | null;
   error?: TierBGeneralPageInvestigationAdapterResult["error"];
+}
+
+export interface TierBGeneralPageInvestigationSpanAdapterResult {
+  ok: boolean;
+  value: GeneralPageInvestigationSpanAdapterValue | null;
+  raw?: string;
+  finishReason?: string;
+  usage?: TierBGeneralPageBriefResult["usage"];
+  issue?: ParsedGeneralPageInvestigationSpanAdapterContent["issue"];
+  attempts?: 1;
+  error?:
+    | "investigation_span_adapter_network_error"
+    | "investigation_span_adapter_timeout"
+    | "investigation_span_adapter_http_error"
+    | "investigation_span_adapter_truncated"
+    | "investigation_span_adapter_invalid_json"
+    | "investigation_span_adapter_invalid_schema";
 }
 
 export interface TierBGeneralPageParserAdvisorResult {
@@ -575,7 +646,8 @@ export interface TierBChatBody {
           schema: typeof GENERAL_PAGE_BRIEF_STRUCTURAL_WIRE_SCHEMA |
             typeof GENERAL_PAGE_BRIEF_COMPACT_CARDINALITY_WIRE_SCHEMA |
             typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA |
-            typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_BATCH_RESPONSE_SCHEMA;
+            typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_BATCH_RESPONSE_SCHEMA |
+            ReturnType<typeof generalPageInvestigationSpanAdapterJsonSchema>;
         };
       };
   reasoning_effort?: "none";
@@ -882,7 +954,7 @@ export function buildTierBGeneralPageBriefChatBody(req: TierBGeneralPageBriefReq
       { role: "user", content: generalPageBriefUserContent(req) },
     ],
     temperature: 0,
-    max_tokens: 1_100,
+    max_tokens: req.contract === "investigation_v3" ? 1_100 : 700,
     response_format: req.structuredOutputMode === "json_schema"
       ? {
           type: "json_schema",
@@ -960,6 +1032,43 @@ export function buildTierBGeneralPageInvestigationAdapterBatchChatBody(
             name: "truly_general_page_investigation_adapter_batch_v1",
             strict: true,
             schema: GENERAL_PAGE_INVESTIGATION_ADAPTER_BATCH_RESPONSE_SCHEMA,
+          },
+        }
+      : { type: "json_object" },
+    truncate_prompt_tokens: TIER_B_CONTEXT_LIMIT_TOKENS,
+    chat_template_kwargs: { enable_thinking: false },
+  };
+  if (shouldRequestOpenAICompatNoThinking(req.endpoint, req.model)) body.reasoning_effort = "none";
+  return body;
+}
+
+export function buildTierBGeneralPageInvestigationSpanAdapterChatBody(
+  req: TierBGeneralPageInvestigationSpanAdapterRequest,
+): TierBChatBody {
+  if (req.structuredOutputMode !== "json_schema" && req.structuredOutputMode !== "json_object") {
+    throw new Error("investigation_span_adapter_structured_output_mode_required");
+  }
+  const constrained = req.structuredOutputMode === "json_schema";
+  const body: TierBChatBody = {
+    model: req.model,
+    messages: [
+      {
+        role: "system",
+        content: buildGeneralPageInvestigationSpanAdapterSystemPrompt(),
+      },
+      { role: "user", content: buildGeneralPageInvestigationSpanAdapterPrompt(req) },
+    ],
+    temperature: 0,
+    max_tokens: 400,
+    response_format: constrained
+      ? {
+          type: "json_schema",
+          json_schema: {
+            name: "truly_general_page_investigation_span_adapter_v2",
+            strict: true,
+            schema: generalPageInvestigationSpanAdapterJsonSchema(
+              req.candidates.map(({ id }) => id),
+            ),
           },
         }
       : { type: "json_object" },
@@ -1383,6 +1492,88 @@ export async function callTierBGeneralPageInvestigationAdapterBatch(
       error: error instanceof DOMException && error.name === "AbortError"
         ? "investigation_adapter_timeout"
         : "investigation_adapter_network_error",
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function callTierBGeneralPageInvestigationSpanAdapter(
+  req: TierBGeneralPageInvestigationSpanAdapterRequest,
+): Promise<TierBGeneralPageInvestigationSpanAdapterResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(
+    () => ctrl.abort(),
+    req.timeoutMs ?? TIER_B_GENERAL_PAGE_INVESTIGATION_ADAPTER_TIMEOUT_MS,
+  );
+  try {
+    const resp = await fetch(tierBCompletionsUrl(req.endpoint), {
+      method: "POST",
+      headers: jsonRequestHeaders(req.apiKey),
+      body: JSON.stringify(buildTierBGeneralPageInvestigationSpanAdapterChatBody(req)),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      return { ok: false, value: null, attempts: 1, error: "investigation_span_adapter_http_error" };
+    }
+    let data: any;
+    try {
+      data = await resp.json();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return { ok: false, value: null, attempts: 1, error: "investigation_span_adapter_timeout" };
+      }
+      if (error instanceof SyntaxError) {
+        return { ok: false, value: null, attempts: 1, error: "investigation_span_adapter_invalid_json" };
+      }
+      throw error;
+    }
+    const choice = data?.choices?.[0];
+    const finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : undefined;
+    const usage = normalizeTierBTokenUsage(data?.usage);
+    const raw = String(choice?.message?.content || "").trim();
+    if (finishReason === "length") {
+      return {
+        ok: false,
+        value: null,
+        raw,
+        finishReason,
+        ...(usage ? { usage } : {}),
+        attempts: 1,
+        error: "investigation_span_adapter_truncated",
+      };
+    }
+    const parsed = parseAndMaterializeGeneralPageSpanAdapter(raw, req.candidates);
+    if (!parsed.ok || !parsed.value) {
+      return {
+        ok: false,
+        value: null,
+        raw,
+        ...(finishReason ? { finishReason } : {}),
+        ...(usage ? { usage } : {}),
+        ...(parsed.issue ? { issue: parsed.issue } : {}),
+        attempts: 1,
+        error: parsed.error === "invalid_schema"
+          ? "investigation_span_adapter_invalid_schema"
+          : "investigation_span_adapter_invalid_json",
+      };
+    }
+    return {
+      ok: true,
+      value: parsed.value,
+      raw,
+      ...(finishReason ? { finishReason } : {}),
+      ...(usage ? { usage } : {}),
+      attempts: 1,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      value: null,
+      attempts: 1,
+      error: error instanceof DOMException && error.name === "AbortError"
+        ? "investigation_span_adapter_timeout"
+        : "investigation_span_adapter_network_error",
     };
   } finally {
     clearTimeout(timer);

@@ -19,10 +19,35 @@ const ABSTENTION_REASONS: InvestigationPlanAbstentionReason[] = [
   "low_consequence", "not_grounded", "unsafe_to_plan",
 ];
 
+const DEPENDENT_ZH_START = /^(?:並|且|而|但|又|也|因此|所以|業者|該(?:公司|產品|計畫|政策|案件|命令|公告)|此(?:事|案|產品|計畫|政策|命令|公告)|前述|上述|退款作業|召回原因)/u;
+const DEPENDENT_EN_START = /^(?:and|but|or|also|then|however|therefore|each|it|they|he|she|this|that|these|those|the company)\b/iu;
+const DEPENDENT_EN_EVENT_REFERENCE = /\b(?:the|this|that) (?:recall|decision|announcement|program|plan|order|proposal)\b/iu;
+
+function isContextIndependentSpan(text: string): boolean {
+  const compact = text.replace(/\s+/gu, " ").trim();
+  return !DEPENDENT_ZH_START.test(compact) &&
+    !DEPENDENT_EN_START.test(compact) &&
+    !DEPENDENT_EN_EVENT_REFERENCE.test(compact);
+}
+
 function trimmedRange(source: string, start: number, end: number): { start: number; end: number } | undefined {
   while (start < end && /\s/u.test(source[start])) start += 1;
   while (end > start && /\s/u.test(source[end - 1])) end -= 1;
   return end > start ? { start, end } : undefined;
+}
+
+function sentenceRanges(source: string): Array<{ start: number; end: number }> {
+  const ranges: Array<{ start: number; end: number }> = [];
+  const segmenter = new Intl.Segmenter(undefined, { granularity: "sentence" });
+  for (const part of segmenter.segment(source)) {
+    const trimmed = trimmedRange(source, part.index, part.index + part.segment.length);
+    if (!trimmed) continue;
+    let end = trimmed.end;
+    while (end > trimmed.start && /[。！？!?.]/u.test(source[end - 1])) end -= 1;
+    const withoutTerminalPunctuation = trimmedRange(source, trimmed.start, end);
+    if (withoutTerminalPunctuation) ranges.push(withoutTerminalPunctuation);
+  }
+  return ranges;
 }
 
 /** Exact local candidate enumeration; it selects no claim and adds no text. */
@@ -35,26 +60,36 @@ export function buildInvestigationSpanCandidates(
     !Number.isInteger(options.maxCharacters) || options.maxCharacters < 20 || options.maxCharacters > 600 ||
     !Number.isInteger(minimum) || minimum < 3 || minimum > options.maxCharacters) throw new TypeError("invalid span candidate options");
   const ranges: Array<{ start: number; end: number }> = [];
-  let sentenceStart = 0;
-  for (let index = 0; index <= source.length; index += 1) {
-    const boundary = index === source.length || /[。！？!?\n]/u.test(source[index]);
-    if (!boundary) continue;
-    const sentence = trimmedRange(source, sentenceStart, index);
-    if (sentence) {
-      const exact = source.slice(sentence.start, sentence.end);
-      if ([...exact].length >= minimum && [...exact].length <= options.maxCharacters && !detectCompoundPropositionSignal(exact)) ranges.push(sentence);
-      let clauseStart = sentence.start;
-      for (let cursor = sentence.start; cursor <= sentence.end; cursor += 1) {
-        if (cursor < sentence.end && !/[，,；;]/u.test(source[cursor])) continue;
-        const clause = trimmedRange(source, clauseStart, cursor);
-        if (clause) {
-          const clauseText = source.slice(clause.start, clause.end);
-          if ([...clauseText].length >= minimum && [...clauseText].length <= options.maxCharacters && !detectCompoundPropositionSignal(clauseText)) ranges.push(clause);
-        }
-        clauseStart = cursor + 1;
+  for (const sentence of sentenceRanges(source)) {
+    const exact = source.slice(sentence.start, sentence.end);
+    const compound = detectCompoundPropositionSignal(exact);
+    const delimiters: Array<{ start: number; end: number }> = [];
+    let hasEnglishCoordination = false;
+    for (let cursor = sentence.start; cursor < sentence.end; cursor += 1) {
+      if (/[，；;]/u.test(source[cursor])) delimiters.push({ start: cursor, end: cursor + 1 });
+    }
+    for (const match of exact.matchAll(/(?:,\s*|\s+)(?:and|but)\s+/giu)) {
+      const left = exact.slice(0, match.index).trim();
+      const right = exact.slice(match.index + match[0].length).trim();
+      const leftHasPredicate = /\b(?:\p{L}+ed|said|says?|reports?|announces?|estimates?|orders?|closes?|recalls?|promises?|moves?|will|would|has|have|is|are|was|were)\b/iu.test(left);
+      if ([...left].length >= minimum && [...right].length >= minimum && leftHasPredicate) {
+        hasEnglishCoordination = true;
+        delimiters.push({ start: sentence.start + match.index, end: sentence.start + match.index + match[0].length });
       }
     }
-    sentenceStart = index + 1;
+    if ([...exact].length >= minimum && [...exact].length <= options.maxCharacters &&
+      !compound && !hasEnglishCoordination && isContextIndependentSpan(exact)) ranges.push(sentence);
+    delimiters.sort((left, right) => left.start - right.start);
+    let clauseStart = sentence.start;
+    for (const delimiter of [...delimiters, { start: sentence.end, end: sentence.end }]) {
+      const clause = trimmedRange(source, clauseStart, delimiter.start);
+      if (clause) {
+        const clauseText = source.slice(clause.start, clause.end);
+        if ([...clauseText].length >= minimum && [...clauseText].length <= options.maxCharacters &&
+          !detectCompoundPropositionSignal(clauseText) && isContextIndependentSpan(clauseText)) ranges.push(clause);
+      }
+      clauseStart = delimiter.end;
+    }
   }
   const seen = new Set<string>();
   const unique = ranges.sort((left, right) => left.start - right.start || left.end - right.end).filter((range) => {
@@ -62,8 +97,11 @@ export function buildInvestigationSpanCandidates(
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, options.maxCandidates);
-  return unique.map((range, index) => ({
+  });
+  const maximal = unique.filter((range, index) => !unique.some((other, otherIndex) =>
+    index !== otherIndex && other.start <= range.start && other.end >= range.end &&
+    (other.start < range.start || other.end > range.end)));
+  return maximal.slice(0, options.maxCandidates).map((range, index) => ({
     id: `span:${index + 1}`,
     exactText: source.slice(range.start, range.end),
     start: range.start,

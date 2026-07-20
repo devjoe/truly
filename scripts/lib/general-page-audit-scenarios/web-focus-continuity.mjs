@@ -17,11 +17,20 @@ export async function runWebFocusContinuityScenario({
   artifactPath,
 }) {
   await waitFor(side, `(() => Boolean(document.querySelector('#page-pane .page-reader-analysis:not(.is-running) .page-reader-analysis-summary')))()`, 20_000, "Web analysis before Focus switch");
-  const webBeforeFocus = await side.evaluateJson(`(() => ({
-    documentHasFocus: document.hasFocus(),
-    summary: document.querySelector('#page-pane .page-reader-analysis-summary')?.textContent?.trim() || null,
-    activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
-  }))()`);
+  const webBeforeFocus = await side.evaluateJson(`(() => {
+    const reference = document.querySelector('#page-pane .page-reader-analysis h4');
+    const referenceStyle = reference ? getComputedStyle(reference) : null;
+    return {
+      documentHasFocus: document.hasFocus(),
+      summary: document.querySelector('#page-pane .page-reader-analysis-summary')?.textContent?.trim() || null,
+      referenceStyle: referenceStyle ? {
+        color: referenceStyle.color,
+        fontSize: referenceStyle.fontSize,
+        fontWeight: referenceStyle.fontWeight,
+      } : null,
+      activeState: globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || null,
+    };
+  })()`);
   await waitFor(side, `(() => document.querySelector('.tab[data-tab="focus"]')?.getAttribute('aria-disabled') !== 'true')()`, 4000, "Web Focus tab available");
   await side.evaluate(`document.querySelector('.tab[data-tab="focus"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); undefined`);
   const focusActivationState = await side.evaluateJson(`(() => ({
@@ -141,7 +150,10 @@ export async function runWebFocusContinuityScenario({
   const focusBeforeWeb = await side.evaluateJson(`(() => {
     const pane = document.querySelector('#page-pane');
     const heading = pane?.querySelector('.page-reader-focus-analysis .page-reader-analysis-header h3');
-    const reference = pane?.querySelector('.page-reader-analysis h4');
+    const reference = pane?.querySelector([
+      '.page-reader-analysis h4',
+      '.page-reader-analysis-questions h4',
+    ].join(', '));
     const headingStyle = heading ? getComputedStyle(heading) : null;
     const referenceStyle = reference ? getComputedStyle(reference) : null;
     return {
@@ -206,7 +218,8 @@ export function assertWebFocusContinuity({ selection, continuity }) {
   if (continuity?.webBeforeFocus?.summary === focus?.summary) {
     errors.push("deterministic Web and Focus summaries were not distinct");
   }
-  if (JSON.stringify(focus?.headingStyle) !== JSON.stringify(focus?.referenceStyle)) {
+  const referenceStyle = focus?.referenceStyle || continuity?.webBeforeFocus?.referenceStyle;
+  if (JSON.stringify(focus?.headingStyle) !== JSON.stringify(referenceStyle)) {
     errors.push("Focus overview typography does not match the subsection hierarchy");
   }
   if (!/^(套用選取內容|Apply selected content)$/.test(focus?.updateButtonText || "")) {
@@ -220,10 +233,11 @@ export function assertWebFocusContinuity({ selection, continuity }) {
 
 export function webFocusContinuitySummary(continuity) {
   const focus = continuity?.focusBeforeWeb;
+  const referenceStyle = focus?.referenceStyle || continuity?.webBeforeFocus?.referenceStyle;
   return {
     webPreserved: continuity?.webAfterFocus?.summary === continuity?.webBeforeFocus?.summary,
     focusPreserved: continuity?.focusAfterWeb?.summary === focus?.summary,
-    typographyAligned: JSON.stringify(focus?.headingStyle) === JSON.stringify(focus?.referenceStyle),
+    typographyAligned: JSON.stringify(focus?.headingStyle) === JSON.stringify(referenceStyle),
     focusAction: focus?.updateButtonText || "(missing)",
     documentFocusStates: [
       continuity?.webBeforeFocus,

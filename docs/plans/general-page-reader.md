@@ -855,6 +855,37 @@ next candidate gate closed; no fresh holdout should be created yet.
   the canonical projection and runtime DOM regressions, which require zero rows
   and actions until the whole batch settles. Artifacts remain gitignored under
   `tmp/general-page-ui-check-2026-07-19T18-42-23-451Z`.
+- The clean-commit proof for the same atomic contract used build
+  `1784487314020-f67a79b`. The no-focus CDP matrix passed Page/Focus continuity,
+  430 px layout, pending / mixed-terminal / all-rejected claim states, and four
+  Side Panel focus observations that all remained `false`. Private artifacts
+  remain under
+  `tmp/general-page-ui-check-2026-07-19T18-55-28-607Z`.
+- A stalled background preparation now fails closed after a 120-second UI
+  deadline. The entire batch becomes unavailable, the quiet pending section
+  disappears, and late results for the expired analysis cannot revive a
+  partial row. Page and Focus deadlines remain session-only, are cancelled by
+  terminal settlement, navigation, a replacement analysis, or tab removal,
+  and do not add retries or persistence. A fake-timer runtime regression locks
+  the partial-ready then stalled case.
+- A 30-row observational product gate reused an already-consumed development
+  cohort (15 Facebook and 15 news); it is not a fresh benchmark or release
+  claim. The production-compatible JSON-object reading path completed only
+  2/30 rows (26 format failures and two truncations). A diagnostic structural
+  schema comparison completed 14/30 and truncated 16/30. Every completed
+  Adapter batch abstained, so 30/30 pages had no approved action section. This
+  produced zero false actions on 12 existing negative controls, but also zero
+  materialized actions on 18 existing checkworthy-likely rows. Diagnostic
+  Adapter latency was p50 6.5 seconds, p90 12.3 seconds, and max 16.4 seconds;
+  no call approached the 120-second recovery deadline. Raw rows, outputs, and
+  manual review remain only in the private evaluation repository.
+- Product gate decision: accept the approved-only, atomic, fail-closed UI/state
+  mechanics, but keep claim-action release authority false. The current
+  default reading wire is not reliable on the evaluated endpoint/model and
+  approved-action coverage is not useful. Do not enter evidence-first Phase 4
+  until a provider-neutral, capability-receipted bounded transport passes a
+  fresh preflight and a separately preregistered real-data slice can measure
+  Adapter precision, recall, locale consistency, and Gemini handoff quality.
 - A later 2026-07-18 no-focus CDP pass used dev build
   `1784398754095-5fa9f41-dirty` and confirmed that a single `bg` item has a
   visible bullet at both 360 px and 430 px. Web/Focus continuity, typography,
@@ -998,6 +1029,40 @@ next candidate gate closed; no fresh holdout should be created yet.
   Adapter boundary, keeps routine commercial venue events context-only, and
   adds bounded source context to portable questions that refer to an unnamed
   event. It opens no action, search, holdout or release authority.
+
+### 2026-07-20 Narrow Investigation Selector Preflight
+
+- The first evaluation-only exact-span Adapter still asked the model to write
+  `why`, `need`, a source-language question, and a localized display question.
+  A one-repair v6 run passed its automatic 30-row synthetic gate, but human
+  review rejected it: several selected actions depended on vague references or
+  context added by model-authored wording. Passing JSON and locale checks was
+  therefore not sufficient semantic evidence.
+- The replacement v2 wire is deliberately narrower. One request may return only
+  `candidateId`, `evidenceFamily`, and the small `claimKind` / `consequence`
+  policy enums. Local code materializes the exact source text and offsets, the
+  localized evidence hint, and the self-contained Gemini handoff. The request
+  uses a 400-token budget, has no repair or silent fallback, and retains an
+  explicit `json_schema` versus `json_object` provider lowering.
+- Candidate enumeration now rejects obvious context-dependent fragments and
+  does not expose a shorter nested span when an accepted atomic span contains
+  it. This is a structural source-boundary rule, not a language-specific claim
+  classifier; the model remains responsible for check-worthiness and may
+  abstain.
+- Three repeated v8 synthetic passes completed 90/90 one-shot protocol calls.
+  Positive preparation was 18/18, 17/18, and 18/18; every pass abstained on all
+  12/12 negative controls. After deterministic nested-span removal, v9 again
+  completed 30/30 one-shot calls, prepared 17/18 positives, and abstained on
+  12/12 negatives. Human review found no remaining nested duplicates,
+  vague-reference fragments, or compound selected actions. Raw prompts and
+  per-row outputs remain gitignored under `tmp/private-data/runs/`.
+- This establishes a technical preflight candidate only. It does not change
+  runtime rendering, consume a fresh private Page/Feed cohort, or authorize a
+  release. Runtime promotion requires a reviewed product decision to separate
+  Reading context from investigation actions, independent provider capability
+  evidence for the new wire, and the already-preregistered fresh dual-surface
+  semantic gate. The adversarial record is rendered locally at
+  `tmp/grill-reports/gpr-release-pipeline-2026-07-20.html`.
 
 ## Verification Gates
 

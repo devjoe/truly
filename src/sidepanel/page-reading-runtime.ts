@@ -100,6 +100,7 @@ import {
   materializeScopeSession,
   pageScopeForSession,
   projectApprovedPageClaims,
+  projectPreparedPageInvestigationActions,
   replaceScopeState,
   scopeStateForSession,
   type MaterializedPageReadingSession,
@@ -129,6 +130,7 @@ type PagePlatform = PageReadabilityPlatform;
 export type PageWorkspace = ReadingWorkspace;
 const LOADING_ELAPSED_VISIBLE_THRESHOLD_MS = 2_000;
 const AUTO_READ_DEBOUNCE_MS = 700;
+const INVESTIGATION_PREPARATION_DEADLINE_MS = 120_000;
 
 interface BrowserTab {
   id?: number;
@@ -412,6 +414,10 @@ function buildExportPacket(
     session.investigation,
     session.analysis?.key,
   ).items.map((item) => item.claim);
+  const investigationActions = projectPreparedPageInvestigationActions(
+    session.investigation,
+    session.analysis?.key,
+  ).items;
   const { claims: _provisionalClaims, ...briefWithoutProvisionalClaims } = brief;
   const approvedBrief: GeneralPageBrief = approvedClaims.length > 0
     ? { ...briefWithoutProvisionalClaims, claims: approvedClaims }
@@ -429,6 +435,7 @@ function buildExportPacket(
     excerpt,
     links: modelContext?.links,
     brief: approvedBrief,
+    ...(investigationActions.length > 0 ? { investigationActions } : {}),
     allowedUse: session.analysis?.allowedUse,
   };
 }
@@ -1041,20 +1048,59 @@ function briefClaimsHtml(
   tr: (key: string, params?: Record<string, string | number>) => string,
   lang: Lang,
 ): string {
-  const projection = projectApprovedPageClaims(context?.investigation, context?.analysisKey);
-  if (!projection.pending && projection.items.length === 0) return "";
-  const rows = projection.items.map(({ claim, claimIndex }) => `
+  const actionProjection = projectPreparedPageInvestigationActions(
+    context?.investigation,
+    context?.analysisKey,
+  );
+  const legacyProjection = context?.investigation?.status === undefined
+    ? projectApprovedPageClaims(context?.investigation, context?.analysisKey)
+    : { items: [], pending: false };
+  const pending = actionProjection.pending || legacyProjection.pending;
+  if (!pending && actionProjection.items.length === 0 && legacyProjection.items.length === 0) return "";
+  const actionRows = actionProjection.items.map((action, actionIndex) => `
+      <li class="page-claim-row" data-claim-index="${actionIndex}">
+        ${investigationActionHtml({ action, actionIndex, tr })}
+      </li>`).join("");
+  const legacyRows = legacyProjection.items.map(({ claim, claimIndex }) => `
       <li class="page-claim-row" data-claim-index="${claimIndex}">
         ${claimInvestigationHtml({ claim, claimIndex, source: context?.source, tr, lang })}
       </li>`).join("");
-  const pending = projection.pending
+  const rows = actionRows || legacyRows;
+  const pendingHtml = pending
     ? `<span class="reading-brief-loading page-claim-section-loading" role="status" aria-label="${escapeHtml(tr("sidepanel.page.investigation.preparing"))}"></span>`
     : "";
   return `
-    <div class="page-reader-analysis-section page-claim-section${projection.pending ? " is-pending" : ""}">
-      <h4>${escapeHtml(tr("sidepanel.dynamic.readingBrief.verify"))}${pending}</h4>
+    <div class="page-reader-analysis-section page-claim-section">
+      <h4>${escapeHtml(tr("sidepanel.dynamic.readingBrief.verify"))}${pendingHtml}</h4>
       ${rows ? `<ul>${rows}</ul>` : ""}
     </div>`;
+}
+
+function investigationActionHtml({
+  action,
+  actionIndex,
+  tr,
+}: {
+  action: import("../lib/general-page-investigation-span-adapter").GeneralPageInvestigationActionPresentation;
+  actionIndex: number;
+  tr: (key: string, params?: Record<string, string | number>) => string;
+}): string {
+  const geminiLabel = tr("sidepanel.dynamic.readingBrief.askGemini");
+  const copyAriaLabel = tr("sidepanel.page.investigation.copyAria");
+  const evidenceLabel = tr("sidepanel.page.investigation.showNeed");
+  const needId = `page-claim-need-${actionIndex}`;
+  return `
+    <section class="page-claim-investigation">
+      <div class="page-claim-investigation-main">
+        <p class="page-claim-investigation-question">${escapeHtml(action.displayClaim)}</p>
+        <button class="page-claim-evidence-toggle" type="button" aria-expanded="false" aria-controls="${needId}" aria-label="${escapeHtml(evidenceLabel)}">${INFO_ICON_SVG}</button>
+      </div>
+      <p id="${needId}" class="page-claim-investigation-need" role="tooltip" aria-hidden="true">${escapeHtml(action.evidenceHint)}</p>
+      <div class="reading-brief-question-actions page-claim-investigation-actions">
+        <button class="reading-brief-copy-btn page-claim-copy-question" type="button" data-question="${escapeHtml(action.displayClaim)}" aria-label="${escapeHtml(copyAriaLabel)}" data-tooltip="${escapeHtml(copyAriaLabel)}">${COPY_ICON_SVG}</button>
+        <a class="reading-brief-google-link" href="${escapeHtml(geminiEvidenceSearchUrl(action.askAiPrompt))}" target="_blank" rel="noopener noreferrer">${escapeHtml(geminiLabel)}</a>
+      </div>
+    </section>`;
 }
 
 function claimInvestigationHtml({
@@ -1181,6 +1227,7 @@ export function createSidepanelPageReadingRuntime({
   let loadingTicker: ReturnType<typeof setInterval> | undefined;
   let autoReadTimer: ReturnType<typeof setTimeout> | undefined;
   let autoReadToken = 0;
+  const investigationDeadlineTimers = new Map<string, ReturnType<typeof setTimeout>>();
   const rereadTransactions = new Map<number, PageRereadTransaction>();
   const rereadFailures = new Set<number>();
   const consumedReadingCommandIds = new Set<string>();
@@ -1300,6 +1347,58 @@ export function createSidepanelPageReadingRuntime({
     if (!transaction || (requestId && transaction.requestId !== requestId)) return false;
     rereadTransactions.delete(tabId);
     return true;
+  }
+
+  function investigationDeadlineKey(tabId: number, scope: PageReadingScopeKind): string {
+    return `${tabId}:${scope}`;
+  }
+
+  function clearInvestigationDeadline(tabId: number, scope: PageReadingScopeKind): void {
+    const key = investigationDeadlineKey(tabId, scope);
+    const timer = investigationDeadlineTimers.get(key);
+    if (!timer) return;
+    clearTimeout(timer);
+    investigationDeadlineTimers.delete(key);
+  }
+
+  function clearTabInvestigationDeadlines(tabId: number): void {
+    clearInvestigationDeadline(tabId, "page");
+    clearInvestigationDeadline(tabId, "focus");
+  }
+
+  function scheduleInvestigationDeadline(
+    tabId: number,
+    scope: PageReadingScopeKind,
+    analysisKey: string,
+  ): void {
+    clearInvestigationDeadline(tabId, scope);
+    const timerKey = investigationDeadlineKey(tabId, scope);
+    const timer = setTimeout(() => {
+      investigationDeadlineTimers.delete(timerKey);
+      const session = sessions.get(tabId);
+      if (!session || session.status === "stale") return;
+      const currentScope = scopeStateForSession(session, scope);
+      const investigation = currentScope.investigation;
+      if (!investigation || investigation.analysisKey !== analysisKey || investigation.deadlineExpired) return;
+      const items = investigation.items ?? [];
+      if (investigation.status !== "preparing" && !items.some((item) => item.status === "preparing")) return;
+      sessions.set(tabId, replaceScopeState(session, scope, {
+        ...currentScope,
+        investigation: {
+          ...investigation,
+          status: "unavailable",
+          preparedActions: undefined,
+          deadlineExpired: true,
+          items: items.map((item) => ({
+            claimIndex: item.claimIndex,
+            status: "unavailable" as const,
+          })),
+        },
+      }));
+      if (tabId === activeTabId || tabId === displayTabId) render();
+    }, INVESTIGATION_PREPARATION_DEADLINE_MS);
+    (timer as { unref?: () => void }).unref?.();
+    investigationDeadlineTimers.set(timerKey, timer);
   }
 
   function restoreRereadAfterFailure(tabId: number, requestId: string | undefined): boolean {
@@ -1497,6 +1596,7 @@ export function createSidepanelPageReadingRuntime({
     const session = typeof nextTabId === "number" ? sessions.get(nextTabId) : undefined;
     if (session && activeUrl && !isMeaningfullySamePage(session.identity, activeUrl)) {
       if (typeof nextTabId === "number") focusTargetErrors.delete(nextTabId);
+      clearTabInvestigationDeadlines(session.tabId);
       rereadTransactions.delete(session.tabId);
       rereadFailures.delete(session.tabId);
       sessions.set(session.tabId, clearSessionForMeaningfulNavigation(session, {
@@ -1515,6 +1615,7 @@ export function createSidepanelPageReadingRuntime({
     const nextUrl = tab.url;
     if (!session || !nextUrl || isMeaningfullySamePage(session.identity, nextUrl)) return;
     focusTargetErrors.delete(tabId);
+    clearTabInvestigationDeadlines(tabId);
     rereadTransactions.delete(tabId);
     rereadFailures.delete(tabId);
     sessions.set(tabId, clearSessionForMeaningfulNavigation(session, {
@@ -2326,29 +2427,35 @@ export function createSidepanelPageReadingRuntime({
     const currentScope = scopeStateForSession(session, scope);
     if (currentScope.analysis?.key !== analysisKey) return;
     const claims = currentScope.analysis?.brief?.claims?.slice(0, 3) ?? [];
-    if (!claims.length) return;
     const previousInvestigation = currentScope.investigation?.analysisKey === analysisKey
       ? currentScope.investigation
       : undefined;
+    if (previousInvestigation?.status && previousInvestigation.status !== "preparing") return;
     const previousItems = previousInvestigation?.items ?? (
       typeof previousInvestigation?.claimIndex === "number"
         ? [{
             claimIndex: previousInvestigation.claimIndex,
             status: previousInvestigation.status,
             preparedClaim: previousInvestigation.preparedClaim,
-          }]
+        }]
         : []
     );
+    const nextItems = claims.map((_, claimIndex) => previousItems.find((item) => item.claimIndex === claimIndex) ?? ({
+      claimIndex,
+      status: "preparing" as const,
+    }));
+    const legacyBatchSettled = nextItems.length > 0 &&
+      nextItems.every((item) => item.status !== "preparing");
     sessions.set(tabId, replaceScopeState(session, scope, {
       ...currentScope,
       investigation: {
         analysisKey,
-        items: claims.map((_, claimIndex) => previousItems.find((item) => item.claimIndex === claimIndex) ?? ({
-          claimIndex,
-          status: "preparing" as const,
-        })),
+        status: legacyBatchSettled ? undefined : "preparing",
+        items: nextItems,
       },
     }));
+    if (legacyBatchSettled) clearInvestigationDeadline(tabId, scope);
+    else scheduleInvestigationDeadline(tabId, scope, analysisKey);
     if (tabId === activeTabId || tabId === displayTabId) render();
   }
 
@@ -2358,6 +2465,21 @@ export function createSidepanelPageReadingRuntime({
     const currentScope = scopeStateForSession(session, message.scope);
     if (currentScope.analysis?.key !== message.analysisKey ||
       (currentScope.analysis.status !== "running" && currentScope.analysis.status !== "ready")) return;
+    if (currentScope.investigation?.deadlineExpired) return;
+    if (message.preparedActions || message.claimIndex === undefined) {
+      if (message.status === "prepared" && !message.preparedActions?.length) return;
+      sessions.set(message.tabId, replaceScopeState(session, message.scope, {
+        ...currentScope,
+        investigation: {
+          analysisKey: message.analysisKey,
+          status: message.status === "prepared" ? "ready" : message.status,
+          ...(message.preparedActions?.length ? { preparedActions: message.preparedActions } : {}),
+        },
+      }));
+      clearInvestigationDeadline(message.tabId, message.scope);
+      if (message.tabId === activeTabId || message.tabId === displayTabId) render();
+      return;
+    }
     if (message.status === "prepared" && !message.preparedClaim) return;
     const previousInvestigation = currentScope.investigation?.analysisKey === message.analysisKey
       ? currentScope.investigation
@@ -2384,9 +2506,13 @@ export function createSidepanelPageReadingRuntime({
       ...currentScope,
       investigation: {
         analysisKey: message.analysisKey,
+        status: nextItems.some((item) => item.status === "preparing") ? "preparing" : undefined,
         items: nextItems,
       },
     }));
+    if (!nextItems.some((item) => item.status === "preparing")) {
+      clearInvestigationDeadline(message.tabId, message.scope);
+    }
     if (message.tabId === activeTabId || message.tabId === displayTabId) render();
   }
 
@@ -2396,6 +2522,9 @@ export function createSidepanelPageReadingRuntime({
     analysis: PageReadingAnalysisSession,
     scope: PageReadingScopeKind = "page",
   ): void {
+    if (analysis.status === "running" || analysis.status === "error") {
+      clearInvestigationDeadline(tabId, scope);
+    }
     const session = sessions.get(tabId);
     if (!session || session.status === "stale") return;
     if (
@@ -3024,6 +3153,7 @@ export function createSidepanelPageReadingRuntime({
     tabs.onRemoved?.addListener((tabId) => {
       const wasDisplayed = tabId === displayTabId;
       focusTargetErrors.delete(tabId);
+      clearTabInvestigationDeadlines(tabId);
       rereadTransactions.delete(tabId);
       rereadFailures.delete(tabId);
       sessions.delete(tabId);
@@ -3057,6 +3187,8 @@ export function createSidepanelPageReadingRuntime({
             }]
           : []
       );
+      const narrowInvestigationStatus = scopedSession?.investigation?.status;
+      const narrowActionCount = scopedSession?.investigation?.preparedActions?.length ?? 0;
       return {
         activeTabId,
         displayTabId,
@@ -3071,10 +3203,20 @@ export function createSidepanelPageReadingRuntime({
               advisorDecision: scopedSession.advisor?.advice?.decision ?? "none",
               analysisStatus: scopedSession.analysis?.status,
               analysisKey: scopedSession.analysis?.key,
-              investigationPreparingCount: investigationItems.filter((item) => item.status === "preparing").length,
-              investigationReadyCount: investigationItems.filter((item) => item.status === "ready").length,
-              investigationIneligibleCount: investigationItems.filter((item) => item.status === "ineligible").length,
-              investigationUnavailableCount: investigationItems.filter((item) => item.status === "unavailable").length,
+              investigationPreparingCount: narrowInvestigationStatus === "preparing"
+                ? 1
+                : investigationItems.filter((item) => item.status === "preparing").length,
+              investigationReadyCount: narrowInvestigationStatus === "ready"
+                ? narrowActionCount
+                : investigationItems.filter((item) => item.status === "ready").length,
+              investigationIneligibleCount: narrowInvestigationStatus === "ineligible"
+                ? 1
+                : investigationItems.filter((item) => item.status === "ineligible").length,
+              investigationUnavailableCount: narrowInvestigationStatus === "unavailable"
+                ? 1
+                : investigationItems.filter((item) => item.status === "unavailable").length,
+              investigationBatchStatus: narrowInvestigationStatus,
+              investigationActionCount: narrowActionCount,
               autoReadPending: scopedSession.autoReadPending,
               targetKind: scopedSession.surface ? modelContextForSession({ ...scopedSession, surface: scopedSession.surface }).targetKind : undefined,
               allowedUse: scopedSession.advisor?.effectiveModelContext?.allowedUse,

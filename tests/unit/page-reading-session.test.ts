@@ -9,6 +9,7 @@ import {
   failPageReadingSession,
   materializeScopeSession,
   projectApprovedPageClaims,
+  projectPreparedPageInvestigationActions,
   replaceScopeState,
   type PageReadingSession,
 } from "@src/sidepanel/page-reading-session";
@@ -187,6 +188,29 @@ describe("canonical page reading session", () => {
     expect(projectApprovedPageClaims({
       analysisKey: "stale-key",
       items: [{ claimIndex: 0, status: "ready", preparedClaim }],
+    }, "page-key")).toEqual({ items: [], pending: false });
+  });
+
+  it("projects the narrow selector batch atomically and ignores stale analysis keys", () => {
+    const preparedActions = [{
+      displayClaim: "食藥署公布232項產品名單",
+      evidenceHint: "建議比對官方公告",
+      askAiPrompt: "請查核以下原文陳述。",
+    }];
+
+    expect(projectPreparedPageInvestigationActions({
+      analysisKey: "page-key",
+      status: "preparing",
+    }, "page-key")).toEqual({ items: [], pending: true });
+    expect(projectPreparedPageInvestigationActions({
+      analysisKey: "page-key",
+      status: "ready",
+      preparedActions,
+    }, "page-key")).toEqual({ items: preparedActions, pending: false });
+    expect(projectPreparedPageInvestigationActions({
+      analysisKey: "stale-key",
+      status: "ready",
+      preparedActions,
     }, "page-key")).toEqual({ items: [], pending: false });
   });
 });

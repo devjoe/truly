@@ -1,4 +1,5 @@
 import type { GeneralPageBrief } from "../lib/general-page-analysis";
+import type { GeneralPageInvestigationActionPresentation } from "../lib/general-page-investigation-span-adapter";
 import type { GeneralPageEffectiveModelContextUse, GeneralPageParserAdvisorAdvice, GeneralPageParserAdvisorCandidateBlock, GeneralPageParserAdvisorRequest } from "../lib/general-page-parser-advisor";
 import type { GeneralPageParserAdvisorProviderRuntime } from "../lib/messages";
 import { isMeaningfullySamePage, pageUrlIdentity, type PageUrlIdentity } from "../lib/page-url-identity";
@@ -46,8 +47,33 @@ export interface PageClaimInvestigationItemSession {
 
 export interface PageClaimInvestigationSession extends Partial<PageClaimInvestigationItemSession> {
   analysisKey: string;
+  /** Atomic state for the narrow selector. */
+  status?: "preparing" | "ready" | "ineligible" | "unavailable";
+  preparedActions?: GeneralPageInvestigationActionPresentation[];
+  /** The background preparation did not settle within the bounded UI wait. */
+  deadlineExpired?: true;
   /** Current bounded batch. Legacy singular fields above remain readable for old ephemeral fixtures. */
   items?: PageClaimInvestigationItemSession[];
+}
+
+export interface PreparedPageInvestigationActionProjection {
+  items: GeneralPageInvestigationActionPresentation[];
+  pending: boolean;
+}
+
+/** Projects only a complete local action batch; partial model output is never visible. */
+export function projectPreparedPageInvestigationActions(
+  session: PageClaimInvestigationSession | undefined,
+  analysisKey: string | undefined,
+): PreparedPageInvestigationActionProjection {
+  if (!session || !analysisKey || session.analysisKey !== analysisKey) {
+    return { items: [], pending: false };
+  }
+  if (session.status === "preparing") return { items: [], pending: true };
+  if (session.status !== "ready" || !session.preparedActions?.length) {
+    return { items: [], pending: false };
+  }
+  return { items: session.preparedActions, pending: false };
 }
 
 export interface ApprovedPageClaimProjection {
@@ -88,18 +114,6 @@ export function projectApprovedPageClaims(
       .sort((a, b) => a.claimIndex - b.claimIndex),
     pending: false,
   };
-}
-
-export function investigationItemForClaim(
-  session: PageClaimInvestigationSession | undefined,
-  claimIndex: number,
-): PageClaimInvestigationItemSession | undefined {
-  if (!session) return undefined;
-  const item = session.items?.find((candidate) => candidate.claimIndex === claimIndex);
-  if (item) return item;
-  return session.claimIndex === claimIndex
-    ? { claimIndex, status: session.status, preparedClaim: session.preparedClaim }
-    : undefined;
 }
 
 export interface PageReadingScopeState {

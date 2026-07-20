@@ -329,7 +329,7 @@ async function startMockOpenAiEndpoint() {
     const hasImageUrl = JSON.stringify(userContent).includes('"image_url"');
     const kind = /parser recovery classifier/i.test(systemText)
       ? "parser-advisor"
-      : /prepare (?:one|a bounded batch of) candidate fact-check action/i.test(systemText)
+      : /prepare (?:one|a bounded batch of) candidate fact-check action|Select zero to three investigation actions from a fixed list/i.test(systemText)
       ? "investigation-adapter"
       : hasImageUrl
       ? "screenshot-brief"
@@ -378,43 +378,27 @@ async function startMockOpenAiEndpoint() {
       // Keep the derived preparation visible long enough for the UI audit to
       // prove the intermediate state instead of racing directly to ready.
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 3000));
-      const cluesLine = userText.split("\n").find((line) => line.startsWith('[{"claimIndex"'));
-      const clues = cluesLine ? JSON.parse(cluesLine) : [];
-      const groundedClaims = [
-        {
-          c: "The analyzed content is synthetic.",
-          q: "Is the analyzed content synthetic?",
-          atom: { s: "The analyzed content", p: "is", o: "synthetic" },
-        },
-        {
-          c: "The fixture uses no real website content.",
-          q: "Does the fixture use no real website content?",
-          atom: { s: "The fixture", p: "uses", o: "no real website content" },
-        },
-        {
-          c: "The audit runs against a local test page.",
-          q: "Does the audit run against a local test page?",
-          atom: { s: "The audit", p: "runs against", o: "a local test page" },
-        },
-      ];
-      content = JSON.stringify({
-        schemaVersion: 1,
-        results: clues.map(({ claimIndex, candidateClaim }) => {
-          const grounded = groundedClaims[claimIndex];
-          return {
-            claimIndex,
+      const candidateLine = userText.split("\n").find((line) => line.startsWith('[{"id":"span:'));
+      const candidates = candidateLine ? JSON.parse(candidateLine) : [];
+      const selected = candidates.filter(({ exactText }) =>
+        /^(?:The analyzed content is synthetic|The fixture uses no real website content|The audit runs against a local test page)$/u.test(exactText));
+      content = selected.length > 0
+        ? JSON.stringify({
+            schemaVersion: 2,
             decision: "prepared",
             reason: "actionable",
-            claim: {
-              ...candidateClaim,
-              ...(grounded && userText.includes(grounded.c) ? grounded : {}),
-              displayQ: candidateClaim.q,
-              attribution: null,
-              sourceQuote: grounded && userText.includes(grounded.c) ? grounded.c : candidateClaim.c,
-            },
-          };
-        }),
-      });
+            selections: selected.slice(0, 3).map(({ id }) => ({
+              candidateId: id,
+              evidenceFamily: "official_notice",
+              policy: { claimKind: "fact", consequence: "public_interest" },
+            })),
+          })
+        : JSON.stringify({
+            schemaVersion: 2,
+            decision: "abstain",
+            reason: "no_checkworthy_claim",
+            selections: [],
+          });
     } else {
       // Keep the ordinary reading-analysis state observable as a distinct UX
       // phase instead of letting the deterministic mock resolve in one frame.
@@ -1662,7 +1646,7 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
       `globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession?.investigationReadyCount === 3 &&
         document.querySelectorAll('#page-pane .page-claim-row .page-claim-investigation-actions').length === 3`,
       5000,
-      "background three-claim investigation preparation",
+      "background atomic investigation preparation",
     );
     const claimInvestigation = await observeClaimInvestigation(side, preparingState);
     const initialLoadTimeline = await side.evaluateJson(`(() => {
@@ -1977,6 +1961,7 @@ async function observePageBrief(side, readyScreenshotName) {
 
 async function observeClaimInvestigation(side, preparingState = null) {
   const beforeTargets = await fetch(`${CDP_BASE}/json`).then((response) => response.json()).catch(() => []);
+  await side.evaluate(`new Promise((resolve) => setTimeout(resolve, 180))`);
   const state = await side.evaluateJson(`(() => {
     const cards = [...document.querySelectorAll('#page-pane .page-claim-investigation')];
     const card = cards[0];
@@ -1997,8 +1982,8 @@ async function observeClaimInvestigation(side, preparingState = null) {
       rowCount: cards.length,
       bulletList: Boolean(list) && getComputedStyle(list).listStyleType === 'disc' &&
         cards.every((item) => getComputedStyle(item.closest('.page-claim-row')).display === 'list-item'),
-      localizedQuestions: cards.every((item) => /[\u3400-\u9fff]/u.test(
-        item.querySelector('.page-claim-investigation-question')?.textContent || '')),
+      sourceClaimsPresent: cards.every((item) =>
+        Boolean(item.querySelector('.page-claim-investigation-question')?.textContent?.trim())),
       actionsBelowQuestion: cards.every((item) => {
         const questionRect = item.querySelector('.page-claim-investigation-question')?.getBoundingClientRect();
         const actionRect = item.querySelector('.page-claim-investigation-actions')?.getBoundingClientRect();
@@ -2175,26 +2160,34 @@ async function auditClaimEvidenceHoverStates(side) {
 async function auditClaimFallbackStates(side) {
   const envelope = await side.evaluateJson(`(() => {
     const state = globalThis.__trulyPageReadingRuntime?.auditState?.() || {};
+    const preparedActions = [...document.querySelectorAll('#page-pane .page-claim-investigation')].map((card) => ({
+      displayClaim: card.querySelector('.page-claim-investigation-question')?.textContent?.trim() || '',
+      evidenceHint: card.querySelector('.page-claim-investigation-need')?.textContent?.trim() || '',
+      askAiPrompt: (() => {
+        const href = card.querySelector('.reading-brief-google-link')?.href || '';
+        try { return new URL(href).searchParams.get('q') || ''; } catch { return ''; }
+      })(),
+    })).filter((action) => action.displayClaim && action.evidenceHint && action.askAiPrompt);
     return {
-      available: Boolean(state.displayedSession?.analysisKey && typeof state.displayTabId === 'number'),
+      available: Boolean(state.displayedSession?.analysisKey && typeof state.displayTabId === 'number' && preparedActions.length > 0),
       analysisKey: state.displayedSession?.analysisKey || '',
       tabId: state.displayTabId ?? null,
+      preparedActions,
     };
   })()`);
   if (!envelope?.available) return { available: false };
 
-  const applyStatuses = async (statuses) => {
+  const applyResult = async (status, preparedActions) => {
     await side.evaluate(`(() => {
       const runtime = globalThis.__trulyPageReadingRuntime;
-      const statuses = ${JSON.stringify(statuses)};
-      statuses.forEach((status, claimIndex) => runtime?.handleGeneralPageInvestigationResult?.({
+      runtime?.handleGeneralPageInvestigationResult?.({
         type: 'GENERAL_PAGE_INVESTIGATION_RESULT',
         tabId: ${JSON.stringify(envelope.tabId)},
         analysisKey: ${JSON.stringify(envelope.analysisKey)},
         scope: 'page',
-        claimIndex,
-        status,
-      }));
+        status: ${JSON.stringify(status)},
+        ...(${JSON.stringify(preparedActions)} ? { preparedActions: ${JSON.stringify(preparedActions)} } : {}),
+      });
     })()`);
     await new Promise((resolve) => setTimeout(resolve, 240));
   };
@@ -2212,29 +2205,32 @@ async function auditClaimFallbackStates(side) {
       adapterReadyCount: runtimeState.investigationReadyCount ?? 0,
       adapterIneligibleCount: runtimeState.investigationIneligibleCount ?? 0,
       adapterUnavailableCount: runtimeState.investigationUnavailableCount ?? 0,
+      batchStatus: runtimeState.investigationBatchStatus || '',
       evidenceToggleCount: rows.filter((row) => row.querySelector('.page-claim-evidence-toggle')).length,
-      localizedQuestions: questions.every((question) => /[\u3400-\u9fff]/u.test(question)),
+      sourceClaimsPresent: questions.every(Boolean),
       inlineEvidenceNeedPresent: rows.some((row) => /（需要證據：|\\(Evidence needed:/.test(row.textContent || '')),
       legacyClaimCopyPresent: rows.some((row) => row.querySelector(':scope > .page-claim-copy')),
       questions,
     };
   })()`);
 
-  await applyStatuses(["prepared", "prepared", "ineligible"]);
-  const mixed = await observe();
+  await applyResult("ineligible", null);
+  const ineligible = await observe();
   await side.setViewport(430, 900);
-  await side.screenshot(resolve(OUT_DIR, "page-claim-mixed-430.png")).catch(() => {});
+  await side.screenshot(resolve(OUT_DIR, "page-claim-ineligible-430.png")).catch(() => {});
 
-  await applyStatuses(["unavailable", "ineligible", "unavailable"]);
-  const allFallback = await observe();
-  await side.screenshot(resolve(OUT_DIR, "page-claim-all-fallback-430.png")).catch(() => {});
+  await applyResult("unavailable", null);
+  const unavailable = await observe();
+  await side.screenshot(resolve(OUT_DIR, "page-claim-unavailable-430.png")).catch(() => {});
+
+  await applyResult("prepared", envelope.preparedActions);
 
   return {
     available: true,
-    mixed,
-    allFallback,
-    mixedScreenshot: relative(ROOT, resolve(OUT_DIR, "page-claim-mixed-430.png")),
-    allFallbackScreenshot: relative(ROOT, resolve(OUT_DIR, "page-claim-all-fallback-430.png")),
+    ineligible,
+    unavailable,
+    ineligibleScreenshot: relative(ROOT, resolve(OUT_DIR, "page-claim-ineligible-430.png")),
+    unavailableScreenshot: relative(ROOT, resolve(OUT_DIR, "page-claim-unavailable-430.png")),
   };
 }
 
@@ -3554,8 +3550,9 @@ function claimActionPayloadContract(result) {
         /google\.com$/u.test(aiModeUrl.hostname) &&
         aiModeUrl.searchParams.get("udm") === "50" &&
         aiModePrompt &&
-        /Evidence needed|需要的證據/u.test(aiModePrompt) &&
-        /Source URL \(metadata\)|來源網址（metadata）/u.test(aiModePrompt) &&
+        /Original claim|原文陳述/u.test(aiModePrompt) &&
+        /Evidence target|證據方向/u.test(aiModePrompt) &&
+        /Source metadata \(not evidence\)|來源中繼資料（不等於證據）/u.test(aiModePrompt) &&
         /127\.0\.0\.1/u.test(aiModePrompt)
       ),
       standardQueryLength: 0,
@@ -3715,7 +3712,7 @@ function qaMatrixRows(result) {
         result.success.claimInvestigation?.compactRows === true &&
         result.success.claimInvestigation?.rowCount === 3 &&
         result.success.claimInvestigation?.bulletList === true &&
-        result.success.claimInvestigation?.localizedQuestions === true &&
+        result.success.claimInvestigation?.sourceClaimsPresent === true &&
         result.success.claimInvestigation?.actionsBelowQuestion === true &&
         result.success.claimInvestigation?.compactActionProximity === true &&
         result.success.claimInvestigation?.manualStartPresent === false &&
@@ -3731,35 +3728,18 @@ function qaMatrixRows(result) {
         "; links=" + (result.success.claimInvestigation?.links?.length ?? 0),
     ],
     [
-      "Claim fallback presentation",
+      "Atomic claim fallback presentation",
       result.success.claimInvestigation?.fallbackStates?.available === true &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.rowCount === 2 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.compactRowCount === 2 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.readyCount === 0 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.adapterReadyCount === 2 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.adapterIneligibleCount === 1 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.actionCount === 2 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.evidenceToggleCount === 2 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.sectionPresent === true &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.pendingLoadingCount === 0 &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.localizedQuestions === true &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.inlineEvidenceNeedPresent === false &&
-        result.success.claimInvestigation?.fallbackStates?.mixed?.legacyClaimCopyPresent === false &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.rowCount === 0 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.compactRowCount === 0 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.readyCount === 0 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.adapterReadyCount === 0 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.adapterIneligibleCount === 1 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.adapterUnavailableCount === 2 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.actionCount === 0 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.evidenceToggleCount === 0 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.sectionPresent === false &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.pendingLoadingCount === 0 &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.localizedQuestions === true &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.inlineEvidenceNeedPresent === false &&
-        result.success.claimInvestigation?.fallbackStates?.allFallback?.legacyClaimCopyPresent === false,
-      "mixedActions=" + (result.success.claimInvestigation?.fallbackStates?.mixed?.actionCount ?? "missing") +
-        "; allFallbackActions=" + (result.success.claimInvestigation?.fallbackStates?.allFallback?.actionCount ?? "missing"),
+        result.success.claimInvestigation?.fallbackStates?.ineligible?.rowCount === 0 &&
+        result.success.claimInvestigation?.fallbackStates?.ineligible?.sectionPresent === false &&
+        result.success.claimInvestigation?.fallbackStates?.ineligible?.adapterIneligibleCount === 1 &&
+        result.success.claimInvestigation?.fallbackStates?.ineligible?.batchStatus === "ineligible" &&
+        result.success.claimInvestigation?.fallbackStates?.unavailable?.rowCount === 0 &&
+        result.success.claimInvestigation?.fallbackStates?.unavailable?.sectionPresent === false &&
+        result.success.claimInvestigation?.fallbackStates?.unavailable?.adapterUnavailableCount === 1 &&
+        result.success.claimInvestigation?.fallbackStates?.unavailable?.batchStatus === "unavailable",
+      "ineligibleRows=" + (result.success.claimInvestigation?.fallbackStates?.ineligible?.rowCount ?? "missing") +
+        "; unavailableRows=" + (result.success.claimInvestigation?.fallbackStates?.unavailable?.rowCount ?? "missing"),
     ],
     [
       "Claim Gemini payload",
@@ -4245,7 +4225,7 @@ function assertUiOnlyAudit(result) {
     success?.claimInvestigation?.compactRows !== true ||
     success?.claimInvestigation?.rowCount !== 3 ||
     success?.claimInvestigation?.bulletList !== true ||
-    success?.claimInvestigation?.localizedQuestions !== true ||
+    success?.claimInvestigation?.sourceClaimsPresent !== true ||
     success?.claimInvestigation?.actionsBelowQuestion !== true ||
     success?.claimInvestigation?.compactActionProximity !== true ||
     success?.claimInvestigation?.manualStartPresent !== false ||
@@ -4259,33 +4239,16 @@ function assertUiOnlyAudit(result) {
   const fallbackStates = success?.claimInvestigation?.fallbackStates;
   if (
     fallbackStates?.available !== true ||
-    fallbackStates?.mixed?.rowCount !== 2 ||
-    fallbackStates?.mixed?.compactRowCount !== 2 ||
-    fallbackStates?.mixed?.readyCount !== 0 ||
-    fallbackStates?.mixed?.adapterReadyCount !== 2 ||
-    fallbackStates?.mixed?.adapterIneligibleCount !== 1 ||
-    fallbackStates?.mixed?.actionCount !== 2 ||
-    fallbackStates?.mixed?.evidenceToggleCount !== 2 ||
-    fallbackStates?.mixed?.sectionPresent !== true ||
-    fallbackStates?.mixed?.pendingLoadingCount !== 0 ||
-    fallbackStates?.mixed?.localizedQuestions !== true ||
-    fallbackStates?.mixed?.inlineEvidenceNeedPresent !== false ||
-    fallbackStates?.mixed?.legacyClaimCopyPresent !== false ||
-    fallbackStates?.allFallback?.rowCount !== 0 ||
-    fallbackStates?.allFallback?.compactRowCount !== 0 ||
-    fallbackStates?.allFallback?.readyCount !== 0 ||
-    fallbackStates?.allFallback?.adapterReadyCount !== 0 ||
-    fallbackStates?.allFallback?.adapterIneligibleCount !== 1 ||
-    fallbackStates?.allFallback?.adapterUnavailableCount !== 2 ||
-    fallbackStates?.allFallback?.actionCount !== 0 ||
-    fallbackStates?.allFallback?.evidenceToggleCount !== 0 ||
-    fallbackStates?.allFallback?.sectionPresent !== false ||
-    fallbackStates?.allFallback?.pendingLoadingCount !== 0 ||
-    fallbackStates?.allFallback?.localizedQuestions !== true ||
-    fallbackStates?.allFallback?.inlineEvidenceNeedPresent !== false ||
-    fallbackStates?.allFallback?.legacyClaimCopyPresent !== false
+    fallbackStates?.ineligible?.rowCount !== 0 ||
+    fallbackStates?.ineligible?.sectionPresent !== false ||
+    fallbackStates?.ineligible?.adapterIneligibleCount !== 1 ||
+    fallbackStates?.ineligible?.batchStatus !== "ineligible" ||
+    fallbackStates?.unavailable?.rowCount !== 0 ||
+    fallbackStates?.unavailable?.sectionPresent !== false ||
+    fallbackStates?.unavailable?.adapterUnavailableCount !== 1 ||
+    fallbackStates?.unavailable?.batchStatus !== "unavailable"
   ) {
-    errors.push("Claim investigation mixed/all-fallback presentation was not compact and fail-closed");
+    errors.push("Claim investigation atomic fallback presentation was not fail-closed");
   }
   if (!claimActionPayloadContract(result).pass) {
     errors.push("Gemini AI Mode prompt did not preserve its safe metadata boundary");

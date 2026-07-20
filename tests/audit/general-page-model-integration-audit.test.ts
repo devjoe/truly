@@ -50,7 +50,7 @@ describe("General Page model integration audit", () => {
     expect(captured).toHaveLength(1);
     const rawBody = JSON.stringify(captured[0].body);
     const userContent = messageContent(captured[0].body, "user");
-    expect(captured[0].body.max_tokens).toBe(1_100);
+    expect(captured[0].body.max_tokens).toBe(700);
     expect(userContent).toContain(effectivePageText);
     expect(userContent).toContain("Effective source");
     expect(userContent).toContain("Effective image alt text");

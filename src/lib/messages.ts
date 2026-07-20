@@ -239,8 +239,11 @@ export interface GeneralPageInvestigationResultMsg {
   tabId: number;
   analysisKey: string;
   scope: "page" | "focus";
-  claimIndex: number;
   status: "prepared" | "ineligible" | "unavailable";
+  /** Atomic, locally materialized action batch from the narrow span selector. */
+  preparedActions?: import("./general-page-investigation-span-adapter").GeneralPageInvestigationActionPresentation[];
+  /** Legacy singular payload retained only for in-memory upgrade tolerance. */
+  claimIndex?: number;
   preparedClaim?: import("./general-page-analysis").GeneralPageBriefClaim;
 }
 

@@ -414,31 +414,27 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
           }),
         });
         if (result.ok && result.brief) {
-          const investigationPending = message.allowedUse !== "page_overview_only" &&
-            !message.screenshotDataUrl && Boolean(result.brief.claims?.[0]);
+          const investigationPending = scheduleGeneralPageInvestigationPreparation({
+            scheduler: modelWorkScheduler,
+            request: message,
+            endpoint: trustedRuntime.endpoint,
+            model: trustedRuntime.model,
+            structuredOutputMode: investigationAdapterStructuredOutputMode(trustedRuntime.responseFormat),
+            apiKey,
+            resourceKey: modelWorkResourceKey(trustedRuntime),
+            sendMessage: (outgoing) => chrome.runtime.sendMessage(outgoing),
+          });
+          const { claims: _provisionalClaims, ...readingBrief } = result.brief;
           sendResponse({
             type: "GENERAL_PAGE_ANALYSIS_RESULT",
             tabId: message.tabId,
             ok: true,
             ...(investigationPending ? { investigationPending: true } : {}),
             brief: {
-              ...result.brief,
+              ...readingBrief,
               elapsedMs: Date.now() - startedAt,
             },
           } satisfies GeneralPageAnalysisResultMsg);
-          if (investigationPending) {
-            scheduleGeneralPageInvestigationPreparation({
-              scheduler: modelWorkScheduler,
-              request: message,
-              brief: result.brief,
-              endpoint: trustedRuntime.endpoint,
-              model: trustedRuntime.model,
-              structuredOutputMode: investigationAdapterStructuredOutputMode(trustedRuntime.responseFormat),
-              apiKey,
-              resourceKey: modelWorkResourceKey(trustedRuntime),
-              sendMessage: (outgoing) => chrome.runtime.sendMessage(outgoing),
-            });
-          }
           return;
         }
         sendResponse({
