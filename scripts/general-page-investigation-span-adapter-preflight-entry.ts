@@ -19,6 +19,7 @@ import {
 import { sha256Text } from "./lib/private-general-page-semantic-audit.mjs";
 
 type FixtureKind = "prepared" | "abstain" | "attributed" | "compound" | "low-risk";
+type StructuredOutputMode = "json_schema" | "json_object";
 
 interface SyntheticFixture {
   sampleId: string;
@@ -52,6 +53,14 @@ function boundedInteger(name: string, fallback: number, minimum: number, maximum
   return value;
 }
 
+function structuredOutputMode(): StructuredOutputMode {
+  const value = option("--structured-output-mode") ?? "json_schema";
+  if (value !== "json_schema" && value !== "json_object") {
+    throw new Error("Invalid --structured-output-mode");
+  }
+  return value;
+}
+
 function outputLanguageFor(fixture: SyntheticFixture, index: number): Lang {
   const languageIndex = fixture.language === "zh-TW" ? index : index - 15;
   return languageIndex % 3 === 0 ? "en" : "zh-TW";
@@ -75,6 +84,7 @@ const endpoint = required("--endpoint");
 const model = required("--model");
 const concurrency = boundedInteger("--concurrency", 2, 1, 4);
 const timeoutMs = boundedInteger("--timeout-ms", 60_000, 5_000, 120_000);
+const responseFormat = structuredOutputMode();
 if (!outputPath.includes(`${path.sep}tmp${path.sep}private-data${path.sep}runs${path.sep}`)) {
   throw new Error("Synthetic span Adapter preflight output must stay under tmp/private-data/runs");
 }
@@ -106,7 +116,7 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
   const request = {
     endpoint,
     model,
-    structuredOutputMode: "json_schema" as const,
+    structuredOutputMode: responseFormat,
     apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
     timeoutMs,
     candidates,
@@ -202,7 +212,7 @@ const representativeCandidates = buildInvestigationSpanCandidates(representative
 const body = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
   endpoint,
   model,
-  structuredOutputMode: "json_schema",
+  structuredOutputMode: responseFormat,
   candidates: representativeCandidates,
   targetKind: "page",
   source: representative.source,
@@ -223,16 +233,16 @@ const artifact = {
     provider: "openai-compatible",
     endpoint,
     name: model,
-    responseFormat: "json_schema",
+    responseFormat,
     temperature: body.temperature,
     maxTokens: body.max_tokens,
     timeoutMs,
     concurrency,
   },
   contract: {
-    schemaSha256: sha256CanonicalJson(
-      body.response_format?.type === "json_schema" ? body.response_format.json_schema.schema : null,
-    ),
+    schemaSha256: body.response_format?.type === "json_schema"
+      ? sha256CanonicalJson(body.response_format.json_schema.schema)
+      : undefined,
     systemPromptSha256: sha256Text(String(body.messages[0]?.content ?? "")),
     fixtureSetSha256: sha256CanonicalJson(fixtures),
     sourceOwnership: "local_exact_span",

@@ -98,6 +98,11 @@ describe("evaluation-only General Page span Adapter v2", () => {
     expect(system).toContain("lacks its actor or object");
     expect(system).toContain("the company, the recall, 業者, 該產品");
     expect(system).toContain("IDs and small policy enums only");
+    expect(system).toContain('"schemaVersion":2');
+    expect(system).toContain('"decision":"prepared"');
+    expect(system).toContain('"decision":"abstain"');
+    expect(system).toContain("schemaVersion is always required");
+    expect(system).toContain("Ordinary product launches");
     expect(user).toContain('"id":"span:1"');
     expect(user).not.toContain("start");
     expect(user).not.toContain("end");
