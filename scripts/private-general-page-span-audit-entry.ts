@@ -24,6 +24,7 @@ import {
   assertPrivateEvalPaths,
   parsePrivateEvalJsonl,
   privateEvalInputErrors,
+  privateSpanAuditNoCandidateResult,
 } from "./lib/private-general-page-eval.mjs";
 
 type StructuredOutputMode = "json_schema" | "json_object";
@@ -193,7 +194,7 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
     candidateCount: candidates.length,
   };
   if (candidates.length < 1) {
-    return { ...base, ok: false, status: "no_candidates", actions: [] };
+    return privateSpanAuditNoCandidateResult(base);
   }
   const started = Date.now();
   const result = await callTierBGeneralPageInvestigationSpanAdapter({

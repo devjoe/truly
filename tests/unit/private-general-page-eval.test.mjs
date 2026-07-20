@@ -4,6 +4,7 @@ import {
   outputLanguageForPrivateEval,
   parsePrivateEvalJsonl,
   privateEvalInputErrors,
+  privateSpanAuditNoCandidateResult,
 } from "../../scripts/lib/private-general-page-eval.mjs";
 
 const recordText = "原始內容".repeat(30);
@@ -71,5 +72,16 @@ describe("private general page eval boundary", () => {
   it("maps only the supported answer languages", () => {
     expect(outputLanguageForPrivateEval("en")).toBe("en");
     expect(outputLanguageForPrivateEval("zh-TW")).toBe("zh-TW");
+  });
+
+  it("treats an empty deterministic span set as an abstention, not a protocol failure", () => {
+    expect(privateSpanAuditNoCandidateResult({ sampleId: record.sampleId, candidateCount: 0 })).toEqual({
+      sampleId: record.sampleId,
+      candidateCount: 0,
+      ok: true,
+      status: "abstain",
+      reason: "no_candidates",
+      actions: [],
+    });
   });
 });

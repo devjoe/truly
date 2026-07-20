@@ -102,3 +102,13 @@ export function assertPrivateEvalPaths(inputPath, outputPath, metaOutputPath, cw
 export function outputLanguageForPrivateEval(language) {
   return language === "en" ? "en" : "zh-TW";
 }
+
+export function privateSpanAuditNoCandidateResult(base) {
+  return {
+    ...base,
+    ok: true,
+    status: "abstain",
+    reason: "no_candidates",
+    actions: [],
+  };
+}
