@@ -185,4 +185,109 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it("retries one malformed protocol response with the identical request and reports recovery", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ finish_reason: "stop", message: { content: "{broken" } }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify(preparedWire) } }],
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(callTierBGeneralPageInvestigationSpanAdapter({
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "test-model",
+      structuredOutputMode: "json_object",
+      candidates,
+      targetKind: "page",
+      outputLang: "zh-TW",
+      sourceLang: "zh-TW",
+    })).resolves.toMatchObject({
+      ok: true,
+      attempts: 2,
+      protocolRecovered: true,
+      firstAttemptError: "investigation_span_adapter_invalid_json",
+      value: { schemaVersion: 5, selections: [{ candidateId: "span:2" }] },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(fetchMock.mock.calls[1]?.[1]?.body);
+  });
+
+  it("retries only a top-level root-shape failure, not an unknown candidate", async () => {
+    const rootShapeFetch = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ schemaVersion: ": 5, " }) } }],
+      }), { status: 200 }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        choices: [{ finish_reason: "stop", message: { content: JSON.stringify(preparedWire) } }],
+      }), { status: 200 }));
+    vi.stubGlobal("fetch", rootShapeFetch);
+
+    await expect(callTierBGeneralPageInvestigationSpanAdapter({
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "test-model",
+      structuredOutputMode: "json_object",
+      candidates,
+      targetKind: "page",
+    })).resolves.toMatchObject({
+      ok: true,
+      attempts: 2,
+      protocolRecovered: true,
+      firstAttemptError: "investigation_span_adapter_invalid_schema",
+      firstAttemptIssue: "root_shape",
+    });
+    expect(rootShapeFetch).toHaveBeenCalledTimes(2);
+
+    const unknownFetch = vi.fn(async () => new Response(JSON.stringify({
+      choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ schemaVersion: 5, candidateId: "span:99" }) } }],
+    }), { status: 200 }));
+    vi.stubGlobal("fetch", unknownFetch);
+    await expect(callTierBGeneralPageInvestigationSpanAdapter({
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "test-model",
+      structuredOutputMode: "json_object",
+      candidates,
+      targetKind: "page",
+    })).resolves.toMatchObject({
+      ok: false,
+      attempts: 1,
+      issue: "unknown_candidate",
+    });
+    expect(unknownFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops after one protocol retry and lets the one-shot release gate disable recovery", async () => {
+    const invalidResponse = () => new Response(JSON.stringify({
+      choices: [{ finish_reason: "stop", message: { content: "not-json" } }],
+    }), { status: 200 });
+    const retryFetch = vi.fn(async () => invalidResponse());
+    vi.stubGlobal("fetch", retryFetch);
+    await expect(callTierBGeneralPageInvestigationSpanAdapter({
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "test-model",
+      structuredOutputMode: "json_object",
+      candidates,
+      targetKind: "page",
+    })).resolves.toMatchObject({
+      ok: false,
+      attempts: 2,
+      firstAttemptError: "investigation_span_adapter_invalid_json",
+      protocolRecovered: false,
+    });
+    expect(retryFetch).toHaveBeenCalledTimes(2);
+
+    const oneShotFetch = vi.fn(async () => invalidResponse());
+    vi.stubGlobal("fetch", oneShotFetch);
+    await expect(callTierBGeneralPageInvestigationSpanAdapter({
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "test-model",
+      structuredOutputMode: "json_object",
+      candidates,
+      targetKind: "page",
+      maxProtocolAttempts: 1,
+    })).resolves.toMatchObject({ ok: false, attempts: 1 });
+    expect(oneShotFetch).toHaveBeenCalledTimes(1);
+  });
 });

@@ -124,6 +124,9 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     source: fixture.source,
     sourceLang: fixture.language,
     outputLang,
+    // Gate A measures provider first-attempt correctness. Runtime recovery is
+    // verified separately and must never turn a failed first response green.
+    maxProtocolAttempts: 1 as const,
   };
   const result = await callTierBGeneralPageInvestigationSpanAdapter(request);
   const expected = expectedDecision(fixture);
@@ -255,6 +258,7 @@ const artifact = {
     modelAuthoredFields: ["candidateId"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
     repairPolicy: "none_one_shot",
+    protocolRetryPolicy: "disabled_for_release_gate",
   },
   data: {
     category: "synthetic-only",

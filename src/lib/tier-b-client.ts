@@ -573,6 +573,10 @@ export interface TierBGeneralPageInvestigationSpanAdapterRequest
   structuredOutputMode: "json_schema" | "json_object";
   apiKey?: string;
   timeoutMs?: number;
+  /** Product runtime may repeat the identical request once for a narrowly
+   *  classified protocol-shape failure. Release gates set this to 1 so a
+   *  recovered response never masks first-attempt provider reliability. */
+  maxProtocolAttempts?: 1 | 2;
 }
 
 export interface TierBGeneralPageInvestigationAdapterResult {
@@ -601,7 +605,12 @@ export interface TierBGeneralPageInvestigationSpanAdapterResult {
   finishReason?: string;
   usage?: TierBGeneralPageBriefResult["usage"];
   issue?: ParsedGeneralPageInvestigationSpanAdapterContent["issue"];
-  attempts?: 1;
+  attempts?: 1 | 2;
+  protocolRecovered?: boolean;
+  firstAttemptError?:
+    | "investigation_span_adapter_invalid_json"
+    | "investigation_span_adapter_invalid_schema";
+  firstAttemptIssue?: "root_shape";
   error?:
     | "investigation_span_adapter_network_error"
     | "investigation_span_adapter_timeout"
@@ -1504,79 +1513,97 @@ export async function callTierBGeneralPageInvestigationAdapterBatch(
 export async function callTierBGeneralPageInvestigationSpanAdapter(
   req: TierBGeneralPageInvestigationSpanAdapterRequest,
 ): Promise<TierBGeneralPageInvestigationSpanAdapterResult> {
+  if (req.maxProtocolAttempts !== undefined && req.maxProtocolAttempts !== 1 && req.maxProtocolAttempts !== 2) {
+    throw new TypeError("investigation_span_adapter_max_protocol_attempts_invalid");
+  }
   const ctrl = new AbortController();
   const timer = setTimeout(
     () => ctrl.abort(),
     req.timeoutMs ?? TIER_B_GENERAL_PAGE_INVESTIGATION_ADAPTER_TIMEOUT_MS,
   );
-  try {
-    const resp = await fetch(tierBCompletionsUrl(req.endpoint), {
-      method: "POST",
-      headers: jsonRequestHeaders(req.apiKey),
-      body: JSON.stringify(buildTierBGeneralPageInvestigationSpanAdapterChatBody(req)),
-      signal: ctrl.signal,
-    });
-    if (!resp.ok) {
-      return { ok: false, value: null, attempts: 1, error: "investigation_span_adapter_http_error" };
-    }
-    let data: any;
+  const body = JSON.stringify(buildTierBGeneralPageInvestigationSpanAdapterChatBody(req));
+  const singleAttempt = async (): Promise<Omit<TierBGeneralPageInvestigationSpanAdapterResult, "attempts">> => {
     try {
-      data = await resp.json();
-    } catch (error) {
-      if (error instanceof DOMException && error.name === "AbortError") {
-        return { ok: false, value: null, attempts: 1, error: "investigation_span_adapter_timeout" };
+      const resp = await fetch(tierBCompletionsUrl(req.endpoint), {
+        method: "POST",
+        headers: jsonRequestHeaders(req.apiKey),
+        body,
+        signal: ctrl.signal,
+      });
+      if (!resp.ok) {
+        return { ok: false, value: null, error: "investigation_span_adapter_http_error" };
       }
-      if (error instanceof SyntaxError) {
-        return { ok: false, value: null, attempts: 1, error: "investigation_span_adapter_invalid_json" };
+      let data: any;
+      try {
+        data = await resp.json();
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return { ok: false, value: null, error: "investigation_span_adapter_timeout" };
+        }
+        if (error instanceof SyntaxError) {
+          return { ok: false, value: null, error: "investigation_span_adapter_invalid_json" };
+        }
+        throw error;
       }
-      throw error;
-    }
-    const choice = data?.choices?.[0];
-    const finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : undefined;
-    const usage = normalizeTierBTokenUsage(data?.usage);
-    const raw = String(choice?.message?.content || "").trim();
-    if (finishReason === "length") {
+      const choice = data?.choices?.[0];
+      const finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : undefined;
+      const usage = normalizeTierBTokenUsage(data?.usage);
+      const raw = String(choice?.message?.content || "").trim();
+      if (finishReason === "length") {
+        return {
+          ok: false,
+          value: null,
+          raw,
+          finishReason,
+          ...(usage ? { usage } : {}),
+          error: "investigation_span_adapter_truncated",
+        };
+      }
+      const parsed = parseAndMaterializeGeneralPageSpanAdapter(raw, req.candidates);
+      if (!parsed.ok || !parsed.value) {
+        return {
+          ok: false,
+          value: null,
+          raw,
+          ...(finishReason ? { finishReason } : {}),
+          ...(usage ? { usage } : {}),
+          ...(parsed.issue ? { issue: parsed.issue } : {}),
+          error: parsed.error === "invalid_schema"
+            ? "investigation_span_adapter_invalid_schema"
+            : "investigation_span_adapter_invalid_json",
+        };
+      }
       return {
-        ok: false,
-        value: null,
-        raw,
-        finishReason,
-        ...(usage ? { usage } : {}),
-        attempts: 1,
-        error: "investigation_span_adapter_truncated",
-      };
-    }
-    const parsed = parseAndMaterializeGeneralPageSpanAdapter(raw, req.candidates);
-    if (!parsed.ok || !parsed.value) {
-      return {
-        ok: false,
-        value: null,
+        ok: true,
+        value: parsed.value,
         raw,
         ...(finishReason ? { finishReason } : {}),
         ...(usage ? { usage } : {}),
-        ...(parsed.issue ? { issue: parsed.issue } : {}),
-        attempts: 1,
-        error: parsed.error === "invalid_schema"
-          ? "investigation_span_adapter_invalid_schema"
-          : "investigation_span_adapter_invalid_json",
+      };
+    } catch (error) {
+      return {
+        ok: false,
+        value: null,
+        error: error instanceof DOMException && error.name === "AbortError"
+          ? "investigation_span_adapter_timeout"
+          : "investigation_span_adapter_network_error",
       };
     }
+  };
+  try {
+    const first = await singleAttempt();
+    const retryable = first.error === "investigation_span_adapter_invalid_json" ||
+      (first.error === "investigation_span_adapter_invalid_schema" && first.issue === "root_shape");
+    if (first.ok || !retryable || req.maxProtocolAttempts === 1) {
+      return { ...first, attempts: 1 };
+    }
+    const second = await singleAttempt();
     return {
-      ok: true,
-      value: parsed.value,
-      raw,
-      ...(finishReason ? { finishReason } : {}),
-      ...(usage ? { usage } : {}),
-      attempts: 1,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      value: null,
-      attempts: 1,
-      error: error instanceof DOMException && error.name === "AbortError"
-        ? "investigation_span_adapter_timeout"
-        : "investigation_span_adapter_network_error",
+      ...second,
+      attempts: 2,
+      protocolRecovered: second.ok,
+      firstAttemptError: first.error as NonNullable<TierBGeneralPageInvestigationSpanAdapterResult["firstAttemptError"]>,
+      ...(first.issue === "root_shape" ? { firstAttemptIssue: first.issue } : {}),
     };
   } finally {
     clearTimeout(timer);

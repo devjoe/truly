@@ -38,7 +38,9 @@ export interface GeneralPageModelContext {
   sourceName?: string;
   publishedAt?: string;
   selectedText?: string;
-  extractionMethod: ReadingSurface["extraction"]["method"];
+  extractionMethod:
+    | ReadingSurface["extraction"]["method"]
+    | ReadingTarget["extraction"]["method"];
   extractionStatus: ReadingSurface["extraction"]["status"];
   mainText: string;
   surroundingText?: string;
