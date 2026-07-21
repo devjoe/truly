@@ -1058,8 +1058,8 @@ function briefClaimsHtml(
   const pending = actionProjection.pending || legacyProjection.pending;
   if (!pending && actionProjection.items.length === 0 && legacyProjection.items.length === 0) return "";
   const actionRows = actionProjection.items.map((action, actionIndex) => `
-      <li class="page-claim-row" data-claim-index="${actionIndex}">
-        ${investigationActionHtml({ action, actionIndex, tr })}
+      <li class="page-claim-row${actionIndex === 0 ? " is-primary" : ""}" data-claim-index="${actionIndex}">
+        ${investigationActionHtml({ action, actionIndex, primary: actionIndex === 0, tr })}
       </li>`).join("");
   const legacyRows = legacyProjection.items.map(({ claim, claimIndex }) => `
       <li class="page-claim-row" data-claim-index="${claimIndex}">
@@ -1079,10 +1079,12 @@ function briefClaimsHtml(
 function investigationActionHtml({
   action,
   actionIndex,
+  primary,
   tr,
 }: {
   action: import("../lib/general-page-investigation-span-adapter").GeneralPageInvestigationActionPresentation;
   actionIndex: number;
+  primary: boolean;
   tr: (key: string, params?: Record<string, string | number>) => string;
 }): string {
   const geminiLabel = tr("sidepanel.dynamic.readingBrief.askGemini");
@@ -1092,7 +1094,7 @@ function investigationActionHtml({
   return `
     <section class="page-claim-investigation">
       <div class="page-claim-investigation-main">
-        <p class="page-claim-investigation-question">${escapeHtml(action.displayClaim)}</p>
+        <p class="page-claim-investigation-question">${primary ? `<span class="page-claim-priority-label">${escapeHtml(tr("sidepanel.page.investigation.priority"))}</span>` : ""}${escapeHtml(action.displayClaim)}</p>
         <button class="page-claim-evidence-toggle" type="button" aria-expanded="false" aria-controls="${needId}" aria-label="${escapeHtml(evidenceLabel)}">${INFO_ICON_SVG}</button>
       </div>
       <p id="${needId}" class="page-claim-investigation-need" role="tooltip" aria-hidden="true">${escapeHtml(action.evidenceHint)}</p>

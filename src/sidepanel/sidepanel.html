@@ -1082,6 +1082,9 @@
     .page-claim-row::marker {
       color: var(--truly-sidepanel-muted-text);
     }
+    .page-claim-row.is-primary::marker {
+      color: var(--truly-sidepanel-link);
+    }
     .page-claim-copy {
       min-width: 0;
     }
@@ -1102,6 +1105,20 @@
     .page-claim-investigation .page-claim-investigation-question {
       padding-right: 31px;
       color: var(--truly-sidepanel-text);
+    }
+    .page-claim-priority-label {
+      display: inline-flex;
+      align-items: center;
+      margin-right: 6px;
+      padding: 1px 5px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--truly-sidepanel-link) 12%, transparent);
+      color: var(--truly-sidepanel-link);
+      font-size: var(--truly-type-caption);
+      font-weight: 700;
+      line-height: 1.25;
+      vertical-align: 1px;
+      white-space: nowrap;
     }
     .page-claim-evidence-toggle {
       position: absolute;

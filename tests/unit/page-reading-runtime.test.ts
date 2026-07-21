@@ -3475,18 +3475,26 @@ describe("sidepanel page reading runtime", () => {
         displayClaim: "Runtime fixture reports one synthetic claim.",
         evidenceHint: "建議比對官方公告",
         askAiPrompt: "請查核以下原文陳述。\n\n原文陳述：Runtime fixture reports one synthetic claim.\n\n來源中繼資料（不等於證據）：\nhttps://example.test/article",
+      }, {
+        displayClaim: "Runtime fixture reports one secondary claim.",
+        evidenceHint: "建議比對次要紀錄",
+        askAiPrompt: "請查核以下原文陳述。\n\n原文陳述：Runtime fixture reports one secondary claim.",
       }],
     });
     expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
     expect(pagePaneEl.querySelector(".page-claim-copy")).toBeNull();
     const readyCard = pagePaneEl.querySelector(".page-claim-investigation");
     expect(readyCard).not.toBeNull();
+    expect(readyCard?.closest(".page-claim-row")?.classList.contains("is-primary")).toBe(true);
+    expect(readyCard?.querySelector(".page-claim-priority-label")?.textContent).toBe("優先");
+    expect(pagePaneEl.querySelectorAll(".page-claim-row")).toHaveLength(2);
+    expect(pagePaneEl.querySelectorAll(".page-claim-priority-label")).toHaveLength(1);
     expect(readyCard?.textContent).not.toContain("查核問題");
     expect(readyCard?.textContent).toContain("Runtime fixture reports one synthetic claim.");
     expect(pagePaneEl.querySelector(".page-claim-section-loading")).toBeNull();
     expect(animateInvestigationState).not.toHaveBeenCalled();
     const links = [...pagePaneEl.querySelectorAll<HTMLAnchorElement>(".page-claim-investigation-actions a")];
-    expect(links).toHaveLength(1);
+    expect(links).toHaveLength(2);
     const aiModeQuery = new URL(links[0]!.href).searchParams.get("q") ?? "";
     expect(aiModeQuery).toContain("https://example.test/article");
     expect(aiModeQuery).toContain("請查核以下原文陳述");

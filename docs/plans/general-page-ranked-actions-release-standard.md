@@ -1,6 +1,6 @@
 # General Page Ranked Actions Release Standard
 
-Status: frozen candidate standard, 2026-07-20
+Status: frozen rank-first candidate standard, revised 2026-07-21
 
 This standard governs the General Page Reader's user-facing `待確認事項` /
 `Check these items` actions. It replaces the previous policy in which a local
@@ -21,6 +21,11 @@ code owns the exact displayed text, copy action, localized Gemini handoff,
 source metadata, and Page/Focus session boundary. There is no repair call,
 second ranker, model-authored query, evidence-family guess, or local semantic
 rewrite.
+
+The first returned action is the product recommendation. Later actions are
+optional alternatives, not equal-strength endorsements. The UI reveals the
+bounded batch atomically, marks the first action with a quiet localized
+priority cue, and keeps later actions visually secondary without hiding them.
 
 Entertainment, sport, consumer, product, celebrity, and routine factual
 statements are eligible. Health, safety, money, rights, law, and public impact
@@ -54,6 +59,22 @@ gates. Any prompt, schema, renderer, hard boundary, metric definition, or
 threshold change creates a new candidate; changing this standard requires a
 new `grill-your-sub-agents` decision record.
 
+The 2026-07-21 decision review replaced one all-action usefulness label with
+three explicit reviewer tiers:
+
+- `recommended`: strong enough to lead the reader's action list;
+- `acceptable_secondary`: not the best first suggestion, but exact,
+  self-contained, non-duplicative, externally checkable, and reasonably useful
+  when shown as a secondary option;
+- `user_unacceptable`: confusing, filler-like, redundant, materially
+  contextless, not externally resolvable, misleading, or otherwise unsuitable
+  to show as a reader action.
+
+`hard_unacceptable` remains an independent strict subset for unsafe, private,
+leaking, ungrounded, stale, or cross-scope output. No runtime regex tries to
+reproduce the reviewer tiers. They are release measurements of model ranking
+and visible product quality.
+
 ### A. Synthetic provider compatibility
 
 Run the fixed 30-case bilingual suite three times with `json_schema` and three
@@ -84,11 +105,14 @@ from source text before revealing model output.
 Required:
 
 - zero hard-unacceptable actions;
-- at least 85% useful/acceptable action precision overall and at least 80% on
-  each surface;
+- zero `user_unacceptable` displayed actions;
+- at least 85% of returned first actions are `recommended` overall and at
+  least 80% on each surface, with at least ten returned first actions per
+  surface;
 - at least 75% recall of positive rows overall and at least 65% on each surface;
 - the first action is best or tied-best on at least 75% of rows with any
-  acceptable action;
+  reviewer-acceptable action; this denominator excludes abstentions instead of
+  counting recall failure twice;
 - 100% exact-span, unique-ID, and at-most-three compliance;
 - at least 95% of generated Gemini handoffs are usable and language-consistent;
 - no public search or external action is opened by the audit.
@@ -105,7 +129,10 @@ run.
 Required:
 
 - zero hard-unacceptable actions;
-- at least 85% useful/acceptable precision overall;
+- zero `user_unacceptable` displayed actions;
+- at least 85% of returned first actions are `recommended` overall and at
+  least 75% on each surface, with at least eight returned first actions per
+  surface;
 - at least 70% positive-row recall overall and at least 60% on each surface;
 - first action best or tied-best on at least 70% of eligible rows;
 - 100% exact-span, unique-ID, and at-most-three compliance;
