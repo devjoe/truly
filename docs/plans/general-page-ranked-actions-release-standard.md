@@ -41,6 +41,8 @@ Local code rejects only failures a user should not receive:
 Topic importance, public-interest consequence, preferred evidence family, and
 stylistic atomicity are ranking signals, not local rejection reasons. The
 model may return no actions rather than choose the best of a bad candidate set.
+Duplicate rejection remains a local parser invariant because the portable
+JSON Schema subset does not assume provider support for `uniqueItems`.
 
 ## Frozen release gates
 

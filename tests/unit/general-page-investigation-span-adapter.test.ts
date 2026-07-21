@@ -49,8 +49,8 @@ describe("General Page ranked exact-span selector v3", () => {
 
     expect(schema.properties.schemaVersion.const).toBe(3);
     expect(schema.properties.selectedCandidateIds.maxItems).toBe(3);
-    expect(schema.properties.selectedCandidateIds.uniqueItems).toBe(true);
     expect(schema.properties.selectedCandidateIds.items.enum).toEqual(["span:1", "span:2"]);
+    expect(schema.properties.selectedCandidateIds).not.toHaveProperty("uniqueItems");
     expect(JSON.stringify(schema)).not.toMatch(/exactClaim|sourceQuote|displayQ|"q"|"why"|"need"/u);
     expect(JSON.stringify(schema)).not.toMatch(/policy|consequence|evidenceFamily/u);
   });

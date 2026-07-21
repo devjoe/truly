@@ -62,7 +62,6 @@ export function generalPageInvestigationSpanAdapterJsonSchema(candidateIds: stri
         type: "array",
         minItems: 0,
         maxItems: 3,
-        uniqueItems: true,
         items: { type: "string", enum: candidateIds },
       },
     },
