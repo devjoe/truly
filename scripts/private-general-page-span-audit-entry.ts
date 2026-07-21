@@ -131,21 +131,22 @@ const candidateSnapshot = assertPrivateSemanticAuditCandidateSnapshot({
 const worktreeStatus = gitOutput(repoRoot, ["status", "--porcelain=v1", "--untracked-files=all"]);
 if (worktreeStatus.length > 0) throw new Error("Private span audit requires a clean candidate worktree");
 
-const firstRow = rows[0];
-if (!firstRow) throw new Error("Private span audit requires at least one row");
-const firstCandidates = buildInvestigationSpanCandidates(firstRow.text, {
-  maxCandidates: 48,
-  maxCharacters: 240,
-});
-if (firstCandidates.length < 1) throw new Error("First row has no span candidates");
+const firstProtocolSample = rows.map((row) => ({
+  row,
+  candidates: buildInvestigationSpanCandidates(row.text, {
+    maxCandidates: 48,
+    maxCharacters: 240,
+  }),
+})).find(({ candidates }) => candidates.length > 0);
+if (!firstProtocolSample) throw new Error("Private span audit requires at least one row with span candidates");
 const protocolBody = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
   endpoint,
   model,
   structuredOutputMode,
-  candidates: firstCandidates,
+  candidates: firstProtocolSample.candidates,
   targetKind: "page",
-  source: firstRow.sourceContext,
-  sourceLang: firstRow.language,
+  source: firstProtocolSample.row.sourceContext,
+  sourceLang: firstProtocolSample.row.language,
   outputLang,
 });
 if (protocolBody.response_format?.type !== structuredOutputMode || protocolBody.temperature !== 0) {
