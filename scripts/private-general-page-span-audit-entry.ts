@@ -275,7 +275,7 @@ const meta = {
     outputLanguage: outputLang,
     repairMode: "none",
     maxCandidates: 48,
-    maxActions: 3,
+    maxActions: 1,
   },
   model: {
     provider: "openai-compatible",
