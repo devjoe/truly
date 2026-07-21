@@ -46,7 +46,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 3 as const,
+        schemaVersion: 4 as const,
         selections: [{
           candidateId: input.candidates[1].id,
           exactClaim: input.candidates[1].exactText,
@@ -116,7 +116,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 3 as const,
+        schemaVersion: 4 as const,
         selections: [{
           ...input.candidates[0],
           candidateId: input.candidates[0].id,
@@ -159,7 +159,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 3 as const,
+        schemaVersion: 4 as const,
         selections: [],
       },
     }));

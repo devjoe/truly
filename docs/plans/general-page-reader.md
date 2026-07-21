@@ -1066,9 +1066,10 @@ next candidate gate closed; no fresh holdout should be created yet.
 
 ### 2026-07-20 Ranked Action Contract
 
-- The successor runtime uses a still smaller v3 wire:
-  `{"schemaVersion":3,"selectedCandidateIds":[...]}`. The array is ordered,
-  contains at most three local exact-span IDs, and may be empty. The model no
+- The successor runtime uses a compact v4 wire:
+  `{"schemaVersion":4,"primaryCandidateId":...,"secondaryCandidateIds":[...]}`.
+  The primary is followed by at most two unique secondary local exact-span IDs;
+  a null primary with an empty secondary array is abstention. The model no
   longer writes a claim, question, reason, consequence, or evidence family.
 - The hard local boundary now rejects only user-unacceptable failures such as
   malformed or non-grounded IDs, incomplete spans, unsafe/private tasks,

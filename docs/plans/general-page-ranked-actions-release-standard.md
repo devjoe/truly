@@ -13,14 +13,15 @@ The selector receives a bounded list of exact spans produced locally from the
 current Page or Focus text. In one model call it returns only:
 
 ```json
-{"schemaVersion":3,"selectedCandidateIds":["span:4","span:1"]}
+{"schemaVersion":4,"primaryCandidateId":"span:4","secondaryCandidateIds":["span:1"]}
 ```
 
-The ordered IDs are the ranking. An empty array is a valid abstention. Local
-code owns the exact displayed text, copy action, localized Gemini handoff,
-source metadata, and Page/Focus session boundary. There is no repair call,
-second ranker, model-authored query, evidence-family guess, or local semantic
-rewrite.
+`primaryCandidateId` is the recommendation; `secondaryCandidateIds` preserves
+the later ranking. A null primary with an empty secondary array is abstention.
+Local code owns the exact displayed text, copy action, localized Gemini
+handoff, source metadata, and Page/Focus session boundary. There is no repair
+call, second ranker, model-authored query, evidence-family guess, or local
+semantic rewrite.
 
 The first returned action is the product recommendation. Later actions are
 optional alternatives, not equal-strength endorsements. The UI reveals the
