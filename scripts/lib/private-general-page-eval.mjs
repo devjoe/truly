@@ -87,6 +87,85 @@ export function privateEvalInputErrors(rows, expectedCount, declaredCategories) 
   return errors;
 }
 
+const RUNTIME_ENVELOPE_SOURCE_CLASSES = new Set([
+  "news_article",
+  "general_web",
+  "facebook",
+]);
+
+export function privateRuntimeEnvelopeInputErrors(rows, expectedCount, declaredCategories) {
+  const errors = [];
+  if (!Number.isInteger(expectedCount) || expectedCount < 1) errors.push("--sample-count must be a positive integer");
+  if (rows.length !== expectedCount) errors.push(`sample count mismatch: expected ${expectedCount}, found ${rows.length}`);
+  const declared = new Set(String(declaredCategories).split(",").map((value) => value.trim()).filter(Boolean));
+  const actual = new Set();
+  const seenIds = new Set();
+  for (const [index, row] of rows.entries()) {
+    const label = `line ${index + 1}`;
+    if (!row || typeof row !== "object" || Array.isArray(row)) {
+      errors.push(`${label}: record must be an object`);
+      continue;
+    }
+    if (row.schemaVersion !== 2) errors.push(`${label}: invalid runtime-envelope schemaVersion`);
+    if (typeof row.sampleId !== "string" || !/^rt_[a-f0-9]{32}$/.test(row.sampleId)) errors.push(`${label}: invalid opaque sampleId`);
+    if (seenIds.has(row.sampleId)) errors.push(`${label}: duplicate sampleId`);
+    seenIds.add(row.sampleId);
+    if (!RUNTIME_ENVELOPE_SOURCE_CLASSES.has(row.sourceClass)) errors.push(`${label}: invalid sourceClass`);
+    if (typeof row.captureSha256 !== "string" || !/^[a-f0-9]{64}$/.test(row.captureSha256)) errors.push(`${label}: invalid captureSha256`);
+    const capture = row.capture;
+    if (!capture || typeof capture !== "object" || Array.isArray(capture) || capture.schemaVersion !== 1) {
+      errors.push(`${label}: invalid capture envelope`);
+      continue;
+    }
+    const analysis = capture.analysis;
+    const adapter = capture.adapter;
+    if (!analysis || !adapter || !["page", "focus"].includes(analysis.scope)) {
+      errors.push(`${label}: invalid captured analysis scope`);
+      continue;
+    }
+    actual.add(`${analysis.scope}-${row.sourceClass}`);
+    if (analysis.allowedUse !== "article_or_selection_analysis" || analysis.hasScreenshot !== false) {
+      errors.push(`${label}: capture is outside the investigation runtime boundary`);
+    }
+    const text = analysis.context?.mainText;
+    if (typeof text !== "string" || text.trim().length < 80 || text.length > 8192) {
+      errors.push(`${label}: captured mainText must be 80-8192 characters`);
+    }
+    if (analysis.scope === "focus" && analysis.context?.targetKind !== "selection") {
+      errors.push(`${label}: Focus capture must use targetKind=selection`);
+    }
+    if (analysis.scope === "page" && analysis.context?.targetKind !== "page") {
+      errors.push(`${label}: Page capture must use targetKind=page`);
+    }
+    if (adapter.targetKind !== analysis.context?.targetKind || adapter.outputLang !== analysis.outputLang ||
+        !["zh-TW", "en"].includes(adapter.sourceLang) || !["zh-TW", "en"].includes(adapter.outputLang)) {
+      errors.push(`${label}: adapter metadata drifted from captured analysis`);
+    }
+    if (!Array.isArray(adapter.candidates) || adapter.candidates.length < 1 || adapter.candidates.length > 48) {
+      errors.push(`${label}: invalid captured candidates`);
+    } else if (typeof text === "string") {
+      const ids = new Set();
+      for (const candidate of adapter.candidates) {
+        if (!candidate || typeof candidate.id !== "string" || !/^span:\d+$/.test(candidate.id) || ids.has(candidate.id) ||
+            !Number.isInteger(candidate.start) || !Number.isInteger(candidate.end) || candidate.start < 0 ||
+            candidate.end <= candidate.start || candidate.end > text.length ||
+            candidate.exactText !== text.slice(candidate.start, candidate.end)) {
+          errors.push(`${label}: invalid exact captured candidate`);
+          break;
+        }
+        ids.add(candidate.id);
+      }
+    }
+    if (row.captureSha256 !== crypto.createHash("sha256").update(JSON.stringify(capture), "utf8").digest("hex")) {
+      errors.push(`${label}: captureSha256 does not match capture`);
+    }
+  }
+  if ([...actual].some((category) => !declared.has(category)) || [...declared].some((category) => !actual.has(category))) {
+    errors.push(`data categories mismatch: declared ${[...declared].sort().join(",")}; actual ${[...actual].sort().join(",")}`);
+  }
+  return errors;
+}
+
 export function assertPrivateEvalPaths(inputPath, outputPath, metaOutputPath, cwd) {
   const resolved = [inputPath, outputPath, metaOutputPath].map((value) => path.resolve(value));
   if (new Set(resolved).size !== resolved.length) throw new Error("Input, output, and meta output paths must differ");

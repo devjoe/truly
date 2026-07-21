@@ -10,6 +10,8 @@ import {
   reloadStaleExtensionWithFacebookRecovery,
 } from "./lib/general-page-audit-runtime-reload.mjs";
 import { resolveClaimPreparationEvidence } from "./lib/general-page-audit-claim-transition.mjs";
+import { classifyGeneralPageAuditMockRequest } from "./lib/general-page-audit-mock-kind.mjs";
+import { newExternalPageTargets } from "./lib/general-page-audit-targets.mjs";
 import { connectCdp as connectCdpClient } from "./lib/cdp-client.mjs";
 import {
   assertWebFocusContinuity,
@@ -47,6 +49,7 @@ const PHASE_TIMEOUT_MS = {
   storagePrivacy: 20_000,
 };
 const CDP_COMMAND_TIMEOUT_MS = 15_000;
+const EXPECTED_INVESTIGATION_ACTION_COUNT = 1;
 const WEB_SURFACE_READY_EXPRESSION = `(() => {
   const state = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession;
   return Boolean(document.querySelector('#page-pane .page-reader-card')) &&
@@ -327,15 +330,7 @@ async function startMockOpenAiEndpoint() {
       ? userContent.map((item) => item?.text || item?.image_url?.url || "").join("\n")
       : String(userContent || "");
     const hasImageUrl = JSON.stringify(userContent).includes('"image_url"');
-    const kind = /parser recovery classifier/i.test(systemText)
-      ? "parser-advisor"
-      : /prepare (?:one|a bounded batch of) candidate fact-check action|Select zero to three investigation actions from a fixed list/i.test(systemText)
-      ? "investigation-adapter"
-      : hasImageUrl
-      ? "screenshot-brief"
-      : /dominant color/i.test(systemText)
-      ? "vision-probe"
-      : "brief";
+    const kind = classifyGeneralPageAuditMockRequest(systemText, hasImageUrl);
     const wantsZhtw = /Taiwan Traditional Chinese|台灣慣用繁體中文/u.test(systemText);
     requests.push({
       kind,
@@ -1635,8 +1630,8 @@ async function auditSuccessfulRead(extensionId, allowedBase) {
     const pageBrief = await observePageBrief(side, "page-analysis-ready.png");
     await waitFor(
       side,
-      `globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession?.investigationReadyCount === 3 &&
-        document.querySelectorAll('#page-pane .page-claim-row .page-claim-investigation-actions').length === 3`,
+      `globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession?.investigationReadyCount === ${EXPECTED_INVESTIGATION_ACTION_COUNT} &&
+        document.querySelectorAll('#page-pane .page-claim-row .page-claim-investigation-actions').length === ${EXPECTED_INVESTIGATION_ACTION_COUNT}`,
       5000,
       "background atomic investigation preparation",
     );
@@ -2037,7 +2032,7 @@ async function observeClaimInvestigation(side, preparingState = null) {
     preparingScreenshot: preparingState?.observed
       ? relative(ROOT, resolve(OUT_DIR, "page-claim-investigation-preparing.png"))
       : null,
-    openedTargetOnPrepare: afterTargets.length !== beforeTargets.length,
+    openedTargetOnPrepare: newExternalPageTargets(beforeTargets, afterTargets).length > 0,
     evidenceDisclosure,
     evidenceScreenshot: evidenceDisclosure?.expanded
       ? relative(ROOT, resolve(OUT_DIR, "page-claim-evidence-open-430.png"))
@@ -2049,7 +2044,7 @@ async function observeClaimInvestigation(side, preparingState = null) {
 
 async function auditClaimEvidenceHoverStates(side) {
   const count = await side.evaluateJson(`document.querySelectorAll('#page-pane .page-claim-evidence-toggle').length`);
-  if (count !== 3) return { available: false, count };
+  if (count !== EXPECTED_INVESTIGATION_ACTION_COUNT) return { available: false, count };
   const states = [];
   await side.setViewport(430, 900);
   await side.evaluate(`(() => {
@@ -3702,7 +3697,7 @@ function qaMatrixRows(result) {
         result.success.claimInvestigation?.evidenceDisclosure?.hidden === false &&
         result.success.claimInvestigation?.evidenceHover?.consistent === true &&
         result.success.claimInvestigation?.compactRows === true &&
-        result.success.claimInvestigation?.rowCount === 3 &&
+        result.success.claimInvestigation?.rowCount === EXPECTED_INVESTIGATION_ACTION_COUNT &&
         result.success.claimInvestigation?.bulletList === true &&
         result.success.claimInvestigation?.sourceClaimsPresent === true &&
         result.success.claimInvestigation?.actionsBelowQuestion === true &&
@@ -4215,7 +4210,7 @@ function assertUiOnlyAudit(result) {
     success?.claimInvestigation?.evidenceDisclosure?.hidden !== false ||
     success?.claimInvestigation?.evidenceHover?.consistent !== true ||
     success?.claimInvestigation?.compactRows !== true ||
-    success?.claimInvestigation?.rowCount !== 3 ||
+    success?.claimInvestigation?.rowCount !== EXPECTED_INVESTIGATION_ACTION_COUNT ||
     success?.claimInvestigation?.bulletList !== true ||
     success?.claimInvestigation?.sourceClaimsPresent !== true ||
     success?.claimInvestigation?.actionsBelowQuestion !== true ||

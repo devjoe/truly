@@ -4,6 +4,7 @@ import {
   outputLanguageForPrivateEval,
   parsePrivateEvalJsonl,
   privateEvalInputErrors,
+  privateRuntimeEnvelopeInputErrors,
   privateSpanAuditNoCandidateResult,
 } from "../../scripts/lib/private-general-page-eval.mjs";
 
@@ -84,4 +85,48 @@ describe("private general page eval boundary", () => {
       actions: [],
     });
   });
+
+  it("accepts an exact runtime Page adapter envelope", () => {
+    const row = runtimeRow("page", "news_article", "page");
+    expect(privateRuntimeEnvelopeInputErrors([row], 1, "page-news_article")).toEqual([]);
+  });
+
+  it("rejects a Focus envelope whose target is not the exact selection", () => {
+    const row = runtimeRow("focus", "facebook", "page");
+    expect(privateRuntimeEnvelopeInputErrors([row], 1, "focus-facebook").join(" ")).toMatch(/targetKind=selection/);
+  });
 });
+
+function runtimeRow(scope, sourceClass, targetKind) {
+  const text = "This complete source sentence contains enough concrete detail for an exact runtime-envelope validation fixture.";
+  const capture = {
+    schemaVersion: 1,
+    capturedAt: 1,
+    analysis: {
+      tabId: 1,
+      analysisKey: "fixture",
+      scope,
+      priority: "derived",
+      context: { mainText: text, targetKind },
+      allowedUse: "article_or_selection_analysis",
+      outputLang: "en",
+      hasScreenshot: false,
+    },
+    adapter: {
+      endpoint: "http://gx10.local:8000/v1",
+      model: "qwen3.6-35b",
+      structuredOutputMode: "json_object",
+      candidates: [{ id: "span:1", exactText: text, start: 0, end: text.length }],
+      targetKind,
+      sourceLang: "en",
+      outputLang: "en",
+    },
+  };
+  return {
+    schemaVersion: 2,
+    sampleId: `rt_${"a".repeat(32)}`,
+    sourceClass,
+    captureSha256: crypto.createHash("sha256").update(JSON.stringify(capture)).digest("hex"),
+    capture,
+  };
+}

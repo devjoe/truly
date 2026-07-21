@@ -63,6 +63,7 @@ import {
 } from "../lib/model-work";
 import { ModelWorkScheduler } from "./model-work-scheduler";
 import { scheduleGeneralPageInvestigationPreparation } from "./general-page-investigation-background";
+import { createGeneralPageInvestigationCaptureBuffer } from "./general-page-investigation-capture";
 
 // Capture console output for the debug snapshot bundle. Idempotent — if
 // the SW wakes from suspension this is a no-op. See lib/log-buffer.ts.
@@ -169,6 +170,8 @@ void clearClassificationCacheOncePerRuntime();
 
 const __trulyTierBCapture = createTierBCaptureBuffer(60);
 (globalThis as any).__trulyTierBCapture = __trulyTierBCapture;
+const __trulyGeneralPageInvestigationCapture = createGeneralPageInvestigationCaptureBuffer(90);
+(globalThis as any).__trulyGeneralPageInvestigationCapture = __trulyGeneralPageInvestigationCapture;
 
 // Dev-only auto-reload: probes http://localhost:9012 (served by
 // scripts/dev-reload-server.mjs). Production builds must not probe localhost
@@ -422,6 +425,7 @@ chrome.runtime.onMessage.addListener((message: TrulyMessage, sender, sendRespons
             structuredOutputMode: investigationAdapterStructuredOutputMode(trustedRuntime.responseFormat),
             apiKey,
             resourceKey: modelWorkResourceKey(trustedRuntime),
+            capture: __trulyGeneralPageInvestigationCapture,
             sendMessage: (outgoing) => chrome.runtime.sendMessage(outgoing),
           });
           const { claims: _provisionalClaims, ...readingBrief } = result.brief;

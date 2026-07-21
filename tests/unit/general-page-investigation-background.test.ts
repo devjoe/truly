@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { scheduleGeneralPageInvestigationPreparation } from "@src/background/general-page-investigation-background";
+import { createGeneralPageInvestigationCaptureBuffer } from "@src/background/general-page-investigation-capture";
 import type { GeneralPageAnalysisRequestMsg } from "@src/lib/messages";
 
 const request: GeneralPageAnalysisRequestMsg = {
@@ -97,6 +98,68 @@ describe("background General Page investigation preparation", () => {
         askAiPrompt: expect.stringContaining("原文陳述：衛生局命令遠帆公司在七月三十一日前完成下架"),
       }],
     });
+  });
+
+  it("captures the exact selector envelope only when the volatile audit buffer is enabled", async () => {
+    const capture = createGeneralPageInvestigationCaptureBuffer(1);
+    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const callAdapter = vi.fn(async () => ({
+      ok: true,
+      attempts: 1 as const,
+      value: { schemaVersion: 5 as const, selections: [] },
+    }));
+
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request,
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_object",
+      apiKey: "must-not-be-captured",
+      resourceKey: "local|fixture-model",
+      capture,
+      callAdapter,
+      sendMessage: vi.fn(),
+    });
+    await vi.waitFor(() => expect(callAdapter).toHaveBeenCalledTimes(1));
+    expect(capture.items).toEqual([]);
+
+    capture.enabled = true;
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request: { ...request, analysisKey: "page:captured" },
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_object",
+      apiKey: "must-not-be-captured",
+      resourceKey: "local|fixture-model",
+      capture,
+      callAdapter,
+      sendMessage: vi.fn(),
+    });
+    await vi.waitFor(() => expect(callAdapter).toHaveBeenCalledTimes(2));
+
+    expect(capture.items).toHaveLength(1);
+    expect(capture.items[0]).toMatchObject({
+      schemaVersion: 1,
+      analysis: {
+        tabId: 42,
+        analysisKey: "page:captured",
+        scope: "page",
+        allowedUse: "article_or_selection_analysis",
+        context: { mainText: request.context.mainText, targetKind: "page" },
+        hasScreenshot: false,
+      },
+      adapter: {
+        endpoint: "http://127.0.0.1:8000/v1",
+        model: "fixture-model",
+        targetKind: "page",
+        candidates: expect.arrayContaining([
+          expect.objectContaining({ exactText: "食藥署公布232項產品名單" }),
+        ]),
+      },
+    });
+    expect(capture.items[0].adapter).not.toHaveProperty("apiKey");
   });
 
   it("preserves Focus as the only target and uses the interface language for local presentation", async () => {

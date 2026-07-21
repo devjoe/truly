@@ -16,6 +16,10 @@ import {
   ModelWorkScheduler,
   ModelWorkSupersededError,
 } from "./model-work-scheduler";
+import {
+  maybeCaptureGeneralPageInvestigation,
+  type GeneralPageInvestigationCaptureBuffer,
+} from "./general-page-investigation-capture";
 
 const MAX_SPAN_CANDIDATES = 48;
 const MAX_SPAN_CHARACTERS = 240;
@@ -28,6 +32,7 @@ export interface ScheduleGeneralPageInvestigationPreparationOptions {
   structuredOutputMode: TierBGeneralPageInvestigationSpanAdapterRequest["structuredOutputMode"];
   apiKey?: string;
   resourceKey: string;
+  capture?: GeneralPageInvestigationCaptureBuffer;
   callAdapter?: (
     request: TierBGeneralPageInvestigationSpanAdapterRequest,
   ) => Promise<TierBGeneralPageInvestigationSpanAdapterResult>;
@@ -91,6 +96,7 @@ export function scheduleGeneralPageInvestigationPreparation(
     sourceLang: investigationSourceLanguage(request.context.mainText, request.outputLang),
     outputLang: request.outputLang,
   };
+  maybeCaptureGeneralPageInvestigation(options.capture, request, adapterRequest);
   const id = `general-page-investigation:${request.tabId}:${request.scope}:${request.analysisKey}`;
   const work = options.scheduler.enqueue({
     id,

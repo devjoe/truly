@@ -1,6 +1,6 @@
 # General Page Ranked Actions Release Standard
 
-Status: frozen single-recommendation candidate standard, revised 2026-07-21
+Status: frozen single-recommendation runtime-envelope candidate standard, revised 2026-07-21
 
 This standard governs the General Page Reader's user-facing `待確認事項` /
 `Check these items` actions. It replaces the previous policy in which a local
@@ -51,7 +51,8 @@ on provider-specific JSON Schema features.
 ## Frozen release gates
 
 Every receipt must bind the candidate commit, tracked diff, prompt hash,
-schema hash, parser hash, endpoint, model, provider lowering, and build ID.
+schema hash, parser hash, endpoint, model, provider lowering, build ID,
+extractor hash, advisor/context hash, and candidate-builder hash.
 Semantic labels require two independent source-only reviewers and adjudication
 of disagreements. A candidate is frozen between the development and holdout
 gates. Any prompt, schema, renderer, hard boundary, metric definition, or
@@ -96,20 +97,41 @@ Required for every run:
 - no hard-boundary leak, repair, retry, public search, or opened action;
 - deterministic localized Gemini handoff generated from local data.
 
-### B. Fresh development audit
+### B. Fresh runtime-envelope development audit
 
-Preregister a new 60-row private development slice: 30 Facebook and 30 news
-rows, source-diverse, not used by earlier candidate tuning. Review eligibility
-from source text before revealing model output.
+Preregister a new 60-row private development slice at the production
+`GENERAL_PAGE_ANALYSIS_REQUEST` boundary: 30 Page and 30 Focus rows,
+source-diverse, not used by earlier candidate tuning. Page rows use the final
+effective context produced by the bound extraction and parser-advisor build.
+Focus rows use the exact authorized selection text. At least 15 Focus rows
+must originate on Facebook and at least 15 on non-Facebook web pages. Page
+rows include at least 15 news/article pages and at least 15 non-news general
+web pages.
+
+Whole Facebook feed-card text, raw `document.body.innerText`, link-preview
+mixtures, unpruned related/recirculation rails, screenshots,
+`page_overview_only`, stale/cross-scope state, and rows for which the selector
+would not be scheduled are not eligible selector inputs. Every exclusion is
+reported by reason; a reachable shipping extraction or advisor error is not
+an exclusion and fails the separate scope-fidelity requirement.
+
+Before revealing model output, each row binds its Page/Focus authorized-scope
+hash, final `mainText` hash and length, target kind, allowed use, extraction
+method/status/warnings, source platform/domain, candidate-set hash and count,
+candidate commit/build, and the extractor/advisor/context/candidate-builder
+hashes. Review eligibility only from that exact runtime-visible envelope.
 
 Required:
 
 - zero hard-unacceptable actions;
 - zero `user_unacceptable` displayed actions;
+- 100% scope fidelity: the bound effective context is the authorized Page body
+  or Focus target that the shipping runtime was allowed to analyze;
 - at least 85% of returned first actions are `recommended` overall and at
-  least 80% on each surface, with at least ten returned first actions per
-  surface;
-- at least 75% recall of positive rows overall and at least 65% on each surface;
+  least 80% in Page and Focus separately, with at least ten returned first
+  actions in each scope;
+- at least 75% recall of positive rows overall and at least 65% in Page and
+  Focus separately;
 - the first action is best or tied-best on at least 75% of rows with any
   reviewer-acceptable action; this denominator excludes abstentions instead of
   counting recall failure twice;
@@ -117,28 +139,51 @@ Required:
 - at least 95% of generated Gemini handoffs are usable and language-consistent;
 - no public search or external action is opened by the audit.
 
-Report every denominator. A surface metric is invalid when its denominator is
-smaller than ten. This gate is development evidence, not a holdout.
+Report every denominator. A scope metric is invalid when its denominator is
+smaller than ten. Platform, language, content category, extraction method, and
+readiness are diagnostic slices and do not receive lower thresholds. This gate
+is development evidence, not a holdout.
 
 ### C. Fresh untouched holdout
 
 After B passes and the candidate is frozen, preregister a new 30-row private
-holdout: 15 Facebook and 15 news rows. Do not inspect or tune on it before the
-run.
+holdout at the same request boundary: 15 Page and 15 Focus rows. At least 8
+Focus rows originate on Facebook; Page remains source-diverse across news and
+non-news general web. Do not inspect or tune on it before the run.
 
 Required:
 
 - zero hard-unacceptable actions;
 - zero `user_unacceptable` displayed actions;
+- 100% scope fidelity;
 - at least 85% of returned first actions are `recommended` overall and at
-  least 75% on each surface, with at least eight returned first actions per
-  surface;
-- at least 70% positive-row recall overall and at least 60% on each surface;
+  least 75% in Page and Focus separately, with at least eight returned first
+  actions in each scope;
+- at least 70% positive-row recall overall and at least 60% in Page and Focus
+  separately;
 - first action best or tied-best on at least 70% of eligible rows;
 - 100% exact-span and at-most-one compliance;
 - at least 95% usable, language-consistent Gemini handoffs.
 
 Any failure rejects the candidate. The holdout cannot be reused for tuning.
+
+### Mixed-role source contamination observatory
+
+Raw acquisition text remains useful for measuring attraction to secondary
+source roles, but it is not a release-gate proxy. The consumed Facebook-card
+and whole-body news cohort remains immutable and reports protocol validity,
+selection and abstention rates, reviewer tiers, exact-span rate, candidate
+counts, and selected-span provenance (`primary`, `shared_or_quoted`,
+`link_preview`, `related_or_recirculation`, `navigation_or_interface`, or
+`unknown`). It has no pass/fail threshold and cannot rescue or reject Gate B
+or C.
+
+If the observatory proves that the same contaminated input is reachable in the
+shipping runtime, that is a scope-fidelity failure. If it motivates any prompt,
+extractor, advisor, selector, or hard-boundary change, the change creates a new
+candidate and requires a fresh runtime-envelope cohort. Raw text, row-level
+reviews, and provenance labels remain private; only anonymous aggregates may
+be committed publicly.
 
 ### D. Runtime and release readiness
 
@@ -171,3 +216,14 @@ v5 single-recommendation wire as the next frozen candidate, not as a release.
 The independent reject branch correctly noted that reducing cardinality alone
 does not prove better ranking, so the numerical A-D gates above remain
 unchanged and v5 must earn passage on fresh data.
+
+The first v5 single-action development cohort also remains permanently
+`failed_consumed`: it found zero hard-unacceptable actions but failed visible
+recommendation quality, recall, and handoff requirements. A later pipeline
+alignment audit established that its Facebook rows were whole feed-card text,
+its news rows were whole document-body text, and its audit bypassed the
+shipping extraction/advisor boundary. The adversarial decision recorded in
+`tmp/grill-reports/gpr-runtime-envelope-gate-2026-07-21.html` therefore did not
+reclassify that result or lower any threshold. It created the runtime-envelope
+candidate standard above and retained the old data only as a non-gating
+contamination observatory.

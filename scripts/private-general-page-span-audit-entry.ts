@@ -24,6 +24,7 @@ import {
   assertPrivateEvalPaths,
   parsePrivateEvalJsonl,
   privateEvalInputErrors,
+  privateRuntimeEnvelopeInputErrors,
   privateSpanAuditNoCandidateResult,
 } from "./lib/private-general-page-eval.mjs";
 
@@ -41,6 +42,79 @@ interface InputRow {
     sourceName?: string;
     publishedAt?: string;
     url?: string;
+  };
+}
+
+interface RuntimeEnvelopeInputRow {
+  schemaVersion: 2;
+  sampleId: string;
+  sourceClass: "news_article" | "general_web" | "facebook";
+  captureSha256: string;
+  capture: {
+    schemaVersion: 1;
+    analysis: {
+      scope: "page" | "focus";
+      outputLang: Lang;
+      context: { mainText: string; targetKind: "page" | "selection" | "current-region" };
+    };
+    adapter: {
+      candidates: Array<{ id: `span:${number}`; exactText: string; start: number; end: number }>;
+      targetKind: "page" | "selection" | "current-region";
+      source?: InputRow["sourceContext"];
+      sourceLang?: Lang;
+      outputLang?: Lang;
+    };
+  };
+}
+
+interface NormalizedInputRow {
+  sampleId: string;
+  group: "facebook" | "news" | "page" | "focus";
+  scope?: "page" | "focus";
+  sourceClass?: RuntimeEnvelopeInputRow["sourceClass"];
+  dataCategory: string;
+  language: Lang;
+  sourceSha256: string;
+  text: string;
+  candidates: ReturnType<typeof buildInvestigationSpanCandidates>;
+  targetKind: "page" | "selection" | "current-region";
+  sourceContext?: InputRow["sourceContext"];
+  outputLang: Lang;
+  captureSha256?: string;
+}
+
+function normalizeInputRow(row: InputRow | RuntimeEnvelopeInputRow, defaultOutputLang: Lang): NormalizedInputRow {
+  if ((row as RuntimeEnvelopeInputRow).schemaVersion === 2) {
+    const runtime = row as RuntimeEnvelopeInputRow;
+    const text = runtime.capture.analysis.context.mainText;
+    return {
+      sampleId: runtime.sampleId,
+      group: runtime.capture.analysis.scope,
+      scope: runtime.capture.analysis.scope,
+      sourceClass: runtime.sourceClass,
+      dataCategory: `${runtime.capture.analysis.scope}-${runtime.sourceClass}`,
+      language: runtime.capture.adapter.sourceLang ?? runtime.capture.analysis.outputLang,
+      sourceSha256: sha256Text(text),
+      text,
+      candidates: runtime.capture.adapter.candidates,
+      targetKind: runtime.capture.adapter.targetKind,
+      sourceContext: runtime.capture.adapter.source,
+      outputLang: runtime.capture.adapter.outputLang ?? runtime.capture.analysis.outputLang,
+      captureSha256: runtime.captureSha256,
+    };
+  }
+  const legacy = row as InputRow;
+  return {
+    sampleId: legacy.sampleId,
+    group: legacy.surface,
+    dataCategory: legacy.dataCategory || `${legacy.surface}-original`,
+    language: legacy.language,
+    sourceSha256: legacy.sourceSha256,
+    text: legacy.text,
+    candidates: buildInvestigationSpanCandidates(legacy.text, { maxCandidates: 48, maxCharacters: 240 }),
+    targetKind: "page",
+    sourceContext: legacy.sourceContext,
+    outputLang: defaultOutputLang,
   };
 }
 
@@ -115,9 +189,16 @@ if (fs.existsSync(paths.output) || fs.existsSync(paths.metaOutput)) {
   throw new Error("Private span audit output already exists; a run path may be used only once");
 }
 const inputFile = fs.readFileSync(paths.input, "utf8");
-const rows = parsePrivateEvalJsonl(inputFile) as InputRow[];
-const inputErrors = privateEvalInputErrors(rows, expectedCount, declaredCategories);
+const rows = parsePrivateEvalJsonl(inputFile) as Array<InputRow | RuntimeEnvelopeInputRow>;
+const runtimeEnvelopeMode = rows.length > 0 && rows.every((row) => (row as RuntimeEnvelopeInputRow).schemaVersion === 2);
+const inputErrors = runtimeEnvelopeMode
+  ? privateRuntimeEnvelopeInputErrors(rows, expectedCount, declaredCategories)
+  : privateEvalInputErrors(rows, expectedCount, declaredCategories);
 if (inputErrors.length > 0) throw new Error(inputErrors.join("; "));
+const normalizedRows = rows.map((row) => normalizeInputRow(row, outputLang));
+if (runtimeEnvelopeMode && normalizedRows.some((row) => row.outputLang !== outputLang)) {
+  throw new Error("Captured output language does not match --output-language");
+}
 
 const repoRoot = gitOutput(process.cwd(), ["rev-parse", "--show-toplevel"]).trim();
 const candidateCommit = gitOutput(repoRoot, ["rev-parse", "HEAD"]).trim();
@@ -131,23 +212,17 @@ const candidateSnapshot = assertPrivateSemanticAuditCandidateSnapshot({
 const worktreeStatus = gitOutput(repoRoot, ["status", "--porcelain=v1", "--untracked-files=all"]);
 if (worktreeStatus.length > 0) throw new Error("Private span audit requires a clean candidate worktree");
 
-const firstProtocolSample = rows.map((row) => ({
-  row,
-  candidates: buildInvestigationSpanCandidates(row.text, {
-    maxCandidates: 48,
-    maxCharacters: 240,
-  }),
-})).find(({ candidates }) => candidates.length > 0);
+const firstProtocolSample = normalizedRows.find(({ candidates }) => candidates.length > 0);
 if (!firstProtocolSample) throw new Error("Private span audit requires at least one row with span candidates");
 const protocolBody = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
   endpoint,
   model,
   structuredOutputMode,
   candidates: firstProtocolSample.candidates,
-  targetKind: "page",
-  source: firstProtocolSample.row.sourceContext,
-  sourceLang: firstProtocolSample.row.language,
-  outputLang,
+  targetKind: firstProtocolSample.targetKind,
+  source: firstProtocolSample.sourceContext,
+  sourceLang: firstProtocolSample.language,
+  outputLang: firstProtocolSample.outputLang,
 });
 if (protocolBody.response_format?.type !== structuredOutputMode || protocolBody.temperature !== 0) {
   throw new Error("Span audit response format/body mismatch");
@@ -181,16 +256,15 @@ globalThis.fetch = (async (input, init) => {
   return guardedFetch(input, init);
 }) as typeof fetch;
 
-async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
-  const candidates = buildInvestigationSpanCandidates(row.text, {
-    maxCandidates: 48,
-    maxCharacters: 240,
-  });
+async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unknown>> {
+  const { candidates } = row;
   const base = {
     schemaVersion: 1,
     sampleId: row.sampleId,
-    surface: row.surface,
-    dataCategory: row.dataCategory || `${row.surface}-original`,
+    ...(runtimeEnvelopeMode
+      ? { scope: row.scope, sourceClass: row.sourceClass, captureSha256: row.captureSha256 }
+      : { surface: row.group }),
+    dataCategory: row.dataCategory,
     sourceSha256: row.sourceSha256,
     candidateCount: candidates.length,
   };
@@ -205,16 +279,16 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
     timeoutMs,
     apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
     candidates,
-    targetKind: "page",
+    targetKind: row.targetKind,
     source: row.sourceContext,
     sourceLang: row.language,
-    outputLang,
+    outputLang: row.outputLang,
   });
   const selections = result.value?.selections ?? [];
   const actions = selections.map((selection) => ({
     ...selection,
     presentation: buildGeneralPageInvestigationActionPresentation(selection, {
-      outputLang,
+      outputLang: row.outputLang,
       source: row.sourceContext,
     }),
     exactGrounding: row.text.slice(selection.start, selection.end) === selection.exactClaim,
@@ -239,7 +313,7 @@ async function worker(): Promise<void> {
   while (true) {
     const index = cursor++;
     if (index >= rows.length) return;
-    results[index] = await evaluateRow(rows[index]);
+    results[index] = await evaluateRow(normalizedRows[index]);
   }
 }
 
@@ -260,7 +334,9 @@ const exactGrounding = results.reduce((sum, row) => sum +
   (Array.isArray(row.actions) ? row.actions.filter((action) => action.exactGrounding === true).length : 0), 0);
 const meta = {
   schemaVersion: 1,
-  task: "general_page_investigation_span_forward_dev",
+  task: runtimeEnvelopeMode
+    ? "general_page_investigation_runtime_envelope_forward_dev"
+    : "general_page_investigation_span_forward_dev",
   runId,
   datasetVersion,
   split: "dev",
@@ -276,6 +352,7 @@ const meta = {
     repairMode: "none",
     maxCandidates: 48,
     maxActions: 1,
+    inputBoundary: runtimeEnvelopeMode ? "captured_adapter_envelope" : "legacy_rebuilt_candidates",
   },
   model: {
     provider: "openai-compatible",
