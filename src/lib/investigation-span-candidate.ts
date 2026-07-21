@@ -22,12 +22,16 @@ const ABSTENTION_REASONS: InvestigationPlanAbstentionReason[] = [
 const DEPENDENT_ZH_START = /^(?:並|且|而|但|又|也|因此|所以|業者|該(?:公司|產品|計畫|政策|案件|命令|公告)|此(?:事|案|產品|計畫|政策|命令|公告)|前述|上述|退款作業|召回原因)/u;
 const DEPENDENT_EN_START = /^(?:and|but|or|also|then|however|therefore|each|it|they|he|she|this|that|these|those|the company)\b/iu;
 const DEPENDENT_EN_EVENT_REFERENCE = /\b(?:the|this|that) (?:recall|decision|announcement|program|plan|order|proposal)\b/iu;
+const PROMPT_CONTROL_DIRECTIVE = /(?:\b(?:ignore|disregard|override)\b.{0,40}\b(?:previous|prior|system|developer)\b.{0,24}\b(?:instruction|message|prompt)s?\b|忽略.{0,16}(?:先前|之前|系統|開發者).{0,16}(?:指令|訊息|提示)|(?:system prompt|developer message|系統提示|開發者訊息))/iu;
+const PRIVATE_DATA_DIRECTIVE = /(?:\b(?:find|reveal|publish|send|provide|give me|look up)\b.{0,48}\b(?:password|home address|private phone|social security number|personal data)\b|(?:找出|提供|揭露|公布|傳送).{0,32}(?:密碼|住址|私人電話|身分證|非公開個資))/iu;
 
 function isContextIndependentSpan(text: string): boolean {
   const compact = text.replace(/\s+/gu, " ").trim();
   return !DEPENDENT_ZH_START.test(compact) &&
     !DEPENDENT_EN_START.test(compact) &&
-    !DEPENDENT_EN_EVENT_REFERENCE.test(compact);
+    !DEPENDENT_EN_EVENT_REFERENCE.test(compact) &&
+    !PROMPT_CONTROL_DIRECTIVE.test(compact) &&
+    !PRIVATE_DATA_DIRECTIVE.test(compact);
 }
 
 function trimmedRange(source: string, start: number, end: number): { start: number; end: number } | undefined {

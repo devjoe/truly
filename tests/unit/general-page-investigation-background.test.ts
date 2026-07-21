@@ -46,17 +46,13 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 2 as const,
-        decision: "prepared" as const,
-        reason: "actionable" as const,
+        schemaVersion: 3 as const,
         selections: [{
           candidateId: input.candidates[1].id,
           exactClaim: input.candidates[1].exactText,
           sourceQuote: input.candidates[1].exactText,
           start: input.candidates[1].start,
           end: input.candidates[1].end,
-          evidenceFamily: "official_notice" as const,
-          policy: { claimKind: "fact" as const, consequence: "law" as const },
         }],
       },
     }));
@@ -97,7 +93,7 @@ describe("background General Page investigation preparation", () => {
       status: "prepared",
       preparedActions: [{
         displayClaim: "衛生局命令遠帆公司在七月三十一日前完成下架",
-        evidenceHint: "建議比對官方公告",
+        evidenceHint: "比對直接相關的第一手或可信來源",
         askAiPrompt: expect.stringContaining("原文陳述：衛生局命令遠帆公司在七月三十一日前完成下架"),
       }],
     });
@@ -120,16 +116,12 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 2 as const,
-        decision: "prepared" as const,
-        reason: "actionable" as const,
+        schemaVersion: 3 as const,
         selections: [{
           ...input.candidates[0],
           candidateId: input.candidates[0].id,
           exactClaim: input.candidates[0].exactText,
           sourceQuote: input.candidates[0].exactText,
-          evidenceFamily: "regulatory_record" as const,
-          policy: { claimKind: "fact" as const, consequence: "money" as const },
         }],
       },
     }));
@@ -154,7 +146,7 @@ describe("background General Page investigation preparation", () => {
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       status: "prepared",
       preparedActions: [expect.objectContaining({
-        evidenceHint: "Compare with a regulator record",
+        evidenceHint: "Compare with directly relevant primary or authoritative evidence",
         askAiPrompt: expect.stringContaining("Original claim: The agency ordered a refund for 2,400 policies"),
       })],
     }));
@@ -167,9 +159,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 2 as const,
-        decision: "abstain" as const,
-        reason: "no_checkworthy_claim" as const,
+        schemaVersion: 3 as const,
         selections: [],
       },
     }));

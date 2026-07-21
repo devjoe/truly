@@ -112,7 +112,7 @@ export function scheduleGeneralPageInvestigationPreparation(
       });
       return;
     }
-    if (result.value.decision === "abstain") {
+    if (result.value.selections.length === 0) {
       sendSafely(options.sendMessage, {
         type: "GENERAL_PAGE_INVESTIGATION_RESULT",
         tabId: request.tabId,

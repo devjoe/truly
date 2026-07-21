@@ -45,6 +45,30 @@ checkpoint, push, merge, or release, still run:
 make verify
 ```
 
+## Ranked investigation action release gate
+
+The user-facing General Page `待確認事項` selector has a separate frozen
+release standard in
+`docs/plans/general-page-ranked-actions-release-standard.md`. Its public
+synthetic preflight sends only synthetic text and writes raw responses under
+gitignored `tmp/private-data/runs/`:
+
+```bash
+npm run preflight:gpr:span-adapter:synthetic -- \
+  --endpoint http://approved-local-endpoint/v1 \
+  --model approved-model \
+  --structured-output-mode json_schema \
+  --output tmp/private-data/runs/ranked-actions/schema-run-1.json \
+  --confirm-synthetic-model-send
+```
+
+Run the same fixed 30 cases three times for `json_schema` and three times for
+`json_object`. This proves provider lowering and one-shot wire stability only.
+The fresh 60-row development audit and untouched 30-row holdout must remain in
+the private evaluation repository; raw source text, labels, prompts, and
+per-row output never enter this public repository. Release authority remains
+false until all A-D gates pass on one frozen candidate.
+
 ### Private grounding evaluation runner
 
 The public repository owns the runtime-equivalent context builder, prompt,

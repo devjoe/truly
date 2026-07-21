@@ -18,7 +18,7 @@ import {
 } from "./lib/private-general-page-investigation-adapter-smoke.mjs";
 import { sha256Text } from "./lib/private-general-page-semantic-audit.mjs";
 
-type FixtureKind = "prepared" | "abstain" | "attributed" | "compound" | "low-risk";
+type FixtureKind = "prepared" | "abstain" | "attributed" | "compound" | "routine-fact";
 type StructuredOutputMode = "json_schema" | "json_object";
 
 interface SyntheticFixture {
@@ -72,7 +72,7 @@ function looksLikeLanguage(value: string, lang: Lang): boolean {
 }
 
 function expectedDecision(fixture: SyntheticFixture): "prepared" | "abstain" {
-  return fixture.fixtureKind === "abstain" || fixture.fixtureKind === "low-risk" ? "abstain" : "prepared";
+  return fixture.fixtureKind === "abstain" ? "abstain" : "prepared";
 }
 
 if (!process.argv.includes("--confirm-synthetic-model-send")) {
@@ -91,7 +91,7 @@ if (!outputPath.includes(`${path.sep}tmp${path.sep}private-data${path.sep}runs${
 if (fs.existsSync(outputPath)) throw new Error("Preflight output path already exists");
 
 const fixtures = buildInvestigationAdapterProtocolSmokeFixtures() as SyntheticFixture[];
-const positiveKinds = new Set<FixtureKind>(["prepared", "attributed", "compound"]);
+const positiveKinds = new Set<FixtureKind>(["prepared", "attributed", "compound", "routine-fact"]);
 const startedAt = new Date().toISOString();
 const results = new Array(fixtures.length);
 let cursor = 0;
@@ -127,7 +127,8 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
   };
   const result = await callTierBGeneralPageInvestigationSpanAdapter(request);
   const expected = expectedDecision(fixture);
-  const selections = result.value?.decision === "prepared" ? result.value.selections : [];
+  const selections = result.value?.selections ?? [];
+  const decision = selections.length > 0 ? "prepared" : "abstain";
   const presentations = selections.map((selection) =>
     buildGeneralPageInvestigationActionPresentation(selection, {
       outputLang,
@@ -145,8 +146,8 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     expectedDecision: expected,
     candidateCount: candidates.length,
     protocolOk: result.ok,
-    decision: result.value?.decision,
-    decisionCorrect: result.value?.decision === expected,
+    decision,
+    decisionCorrect: decision === expected,
     localeCorrect,
     selectionCount: selections.length,
     finishReason: result.finishReason,
@@ -183,7 +184,12 @@ const localeEligible = results.filter((row) => row.protocolOk && row.decision ==
 const localeCorrect = localeEligible.filter((row) => row.localeCorrect).length;
 const gates = {
   protocol: { result: protocolSucceeded, required: fixtures.length, pass: protocolSucceeded === fixtures.length },
-  positivePrepared: { result: positivePrepared, required: 15, denominator: positiveRows.length, pass: positivePrepared >= 15 },
+  positivePrepared: {
+    result: positivePrepared,
+    required: positiveRows.length,
+    denominator: positiveRows.length,
+    pass: positivePrepared === positiveRows.length,
+  },
   negativeAbstained: { result: negativeAbstained, required: negativeRows.length, denominator: negativeRows.length, pass: negativeAbstained === negativeRows.length },
   locale: {
     result: localeCorrect,
@@ -246,7 +252,7 @@ const artifact = {
     systemPromptSha256: sha256Text(String(body.messages[0]?.content ?? "")),
     fixtureSetSha256: sha256CanonicalJson(fixtures),
     sourceOwnership: "local_exact_span",
-    modelAuthoredFields: ["candidateId", "evidenceFamily", "policy"],
+    modelAuthoredFields: ["selectedCandidateIds"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
     repairPolicy: "none_one_shot",
   },

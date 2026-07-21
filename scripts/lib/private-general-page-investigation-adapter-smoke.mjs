@@ -145,7 +145,7 @@ const zhFixtures = [
     },
   },
   {
-    fixtureKind: "low-risk",
+    fixtureKind: "routine-fact",
     groundingText: "晴空鞋店本週推出薄荷綠慢跑鞋，門市提供三種鞋帶顏色。貼文鼓勵顧客週六到店試穿並分享照片。",
     candidateClaim: {
       c: "晴空鞋店本週推出薄荷綠慢跑鞋。",
@@ -155,7 +155,7 @@ const zhFixtures = [
     },
   },
   {
-    fixtureKind: "low-risk",
+    fixtureKind: "routine-fact",
     groundingText: "河岸咖啡館夏季菜單新增檸檬氣泡飲，內用杯附一片乾燥橙片。菜單價格與營業時間維持不變。",
     candidateClaim: {
       c: "河岸咖啡館夏季菜單新增檸檬氣泡飲。",
@@ -165,7 +165,7 @@ const zhFixtures = [
     },
   },
   {
-    fixtureKind: "low-risk",
+    fixtureKind: "routine-fact",
     groundingText: "星帆遊戲公告下週推出藍色飛船外觀，玩家可用活動代幣兌換。這項外觀不會改變角色能力。",
     candidateClaim: {
       c: "星帆遊戲下週推出藍色飛船外觀。",
@@ -298,7 +298,7 @@ const enFixtures = [
     },
   },
   {
-    fixtureKind: "low-risk",
+    fixtureKind: "routine-fact",
     groundingText: "Skyline Shoes introduced a mint-green running shoe this week and offers three lace colors in stores. The post invites customers to try it on Saturday.",
     candidateClaim: {
       c: "Skyline Shoes introduced a mint-green running shoe this week.",
@@ -308,21 +308,21 @@ const enFixtures = [
     },
   },
   {
-    fixtureKind: "low-risk",
+    fixtureKind: "routine-fact",
     groundingText: "Riverside Cafe added lemon soda to its summer menu and serves it with a dried orange slice. Prices and business hours did not change.",
     candidateClaim: {
       c: "Riverside Cafe added lemon soda to its summer menu.",
-      why: "This is low-risk menu information.",
+      why: "This is routine menu information.",
       need: "The cafe menu.",
       q: "Did Riverside Cafe add lemon soda to its summer menu?",
     },
   },
   {
-    fixtureKind: "low-risk",
+    fixtureKind: "routine-fact",
     groundingText: "Star Sail Games will release a blue spaceship cosmetic next week, redeemable with event tokens. The cosmetic does not change character abilities.",
     candidateClaim: {
       c: "Star Sail Games will release a blue spaceship cosmetic next week.",
-      why: "This is low-risk game-cosmetic information.",
+      why: "This is routine game-cosmetic information.",
       need: "The game event notice.",
       q: "Will Star Sail Games release a blue spaceship cosmetic next week?",
     },
@@ -363,7 +363,7 @@ export function assertInvestigationAdapterProtocolSmokeFixtures(fixtures) {
   }
   const ids = new Set();
   const languageCounts = { "zh-TW": 0, en: 0 };
-  const kindCounts = { prepared: 0, abstain: 0, attributed: 0, compound: 0, "low-risk": 0 };
+  const kindCounts = { prepared: 0, abstain: 0, attributed: 0, compound: 0, "routine-fact": 0 };
   for (const fixture of fixtures) {
     if (!fixture || typeof fixture !== "object" || Array.isArray(fixture)) throw new Error("Invalid synthetic fixture");
     if (fixture.dataCategory !== "synthetic-only") throw new Error("Synthetic protocol smoke accepts synthetic-only fixtures");

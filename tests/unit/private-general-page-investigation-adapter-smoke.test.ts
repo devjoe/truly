@@ -24,7 +24,7 @@ describe("private General Page Investigation Adapter protocol smoke", () => {
     expect(fixtures).toHaveLength(INVESTIGATION_ADAPTER_PROTOCOL_SMOKE_SAMPLE_COUNT);
     expect(fixtures.filter((fixture) => fixture.language === "zh-TW")).toHaveLength(15);
     expect(fixtures.filter((fixture) => fixture.language === "en")).toHaveLength(15);
-    for (const fixtureKind of ["prepared", "abstain", "attributed", "compound", "low-risk"]) {
+    for (const fixtureKind of ["prepared", "abstain", "attributed", "compound", "routine-fact"]) {
       expect(fixtures.filter((fixture) => fixture.fixtureKind === fixtureKind)).toHaveLength(6);
     }
     expect(new Set(fixtures.map((fixture) => fixture.sampleId))).toHaveLength(30);

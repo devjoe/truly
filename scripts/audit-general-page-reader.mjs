@@ -384,20 +384,12 @@ async function startMockOpenAiEndpoint() {
         /^(?:The analyzed content is synthetic|The fixture uses no real website content|The audit runs against a local test page)$/u.test(exactText));
       content = selected.length > 0
         ? JSON.stringify({
-            schemaVersion: 2,
-            decision: "prepared",
-            reason: "actionable",
-            selections: selected.slice(0, 3).map(({ id }) => ({
-              candidateId: id,
-              evidenceFamily: "official_notice",
-              policy: { claimKind: "fact", consequence: "public_interest" },
-            })),
+            schemaVersion: 3,
+            selectedCandidateIds: selected.slice(0, 3).map(({ id }) => id),
           })
         : JSON.stringify({
-            schemaVersion: 2,
-            decision: "abstain",
-            reason: "no_checkworthy_claim",
-            selections: [],
+            schemaVersion: 3,
+            selectedCandidateIds: [],
           });
     } else {
       // Keep the ordinary reading-analysis state observable as a distinct UX

@@ -1064,6 +1064,28 @@ next candidate gate closed; no fresh holdout should be created yet.
   semantic gate. The adversarial record is rendered locally at
   `tmp/grill-reports/gpr-release-pipeline-2026-07-20.html`.
 
+### 2026-07-20 Ranked Action Contract
+
+- The successor runtime uses a still smaller v3 wire:
+  `{"schemaVersion":3,"selectedCandidateIds":[...]}`. The array is ordered,
+  contains at most three local exact-span IDs, and may be empty. The model no
+  longer writes a claim, question, reason, consequence, or evidence family.
+- The hard local boundary now rejects only user-unacceptable failures such as
+  malformed or non-grounded IDs, incomplete spans, unsafe/private tasks,
+  cross-scope results, and privacy violations. Public-interest consequence and
+  topic category are ranking signals, not admission requirements.
+  Entertainment, sport, consumer, product, celebrity, and routine facts may
+  therefore appear when they are concrete, externally verifiable, and useful
+  for understanding the page.
+- This does not mean that the best of every weak set is published. The selector
+  is instructed not to fill a quota and can return an empty list. Exact display
+  text and a generic localized Gemini evidence handoff remain deterministic
+  local projections of the selected span.
+- The frozen A-D release ceremony, thresholds, reviewer requirements, and rule
+  for changing the standard are defined in
+  `docs/plans/general-page-ranked-actions-release-standard.md`. The previous
+  v2 evidence is historical and does not authorize the v3 runtime.
+
 ## Verification Gates
 
 Each implementation slice should pass:

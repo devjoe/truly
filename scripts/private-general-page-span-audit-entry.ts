@@ -209,7 +209,7 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
     sourceLang: row.language,
     outputLang,
   });
-  const selections = result.value?.decision === "prepared" ? result.value.selections : [];
+  const selections = result.value?.selections ?? [];
   const actions = selections.map((selection) => ({
     ...selection,
     presentation: buildGeneralPageInvestigationActionPresentation(selection, {
@@ -221,7 +221,7 @@ async function evaluateRow(row: InputRow): Promise<Record<string, unknown>> {
   return {
     ...base,
     ok: result.ok,
-    status: result.ok ? result.value?.decision : "protocol_failed",
+    status: result.ok ? (selections.length > 0 ? "prepared" : "abstain") : "protocol_failed",
     latencyMs: Date.now() - started,
     attempts: result.attempts,
     finishReason: result.finishReason,
@@ -268,7 +268,7 @@ const meta = {
     trackedDiffSha256: candidateSnapshot.trackedDiffSha256,
   },
   contract: {
-    selector: "exact_span_v2",
+    selector: "ranked_exact_span_v3",
     promptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
     responseFormat: structuredOutputMode,
     outputLanguage: outputLang,
