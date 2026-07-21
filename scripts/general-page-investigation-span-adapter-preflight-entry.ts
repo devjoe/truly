@@ -252,7 +252,7 @@ const artifact = {
     systemPromptSha256: sha256Text(String(body.messages[0]?.content ?? "")),
     fixtureSetSha256: sha256CanonicalJson(fixtures),
     sourceOwnership: "local_exact_span",
-    modelAuthoredFields: ["primaryCandidateId", "secondaryCandidateIds"],
+    modelAuthoredFields: ["candidateId"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
     repairPolicy: "none_one_shot",
   },

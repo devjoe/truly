@@ -1,6 +1,6 @@
 # General Page Ranked Actions Release Standard
 
-Status: frozen rank-first candidate standard, revised 2026-07-21
+Status: frozen single-recommendation candidate standard, revised 2026-07-21
 
 This standard governs the General Page Reader's user-facing `待確認事項` /
 `Check these items` actions. It replaces the previous policy in which a local
@@ -13,20 +13,18 @@ The selector receives a bounded list of exact spans produced locally from the
 current Page or Focus text. In one model call it returns only:
 
 ```json
-{"schemaVersion":4,"primaryCandidateId":"span:4","secondaryCandidateIds":["span:1"]}
+{"schemaVersion":5,"candidateId":"span:4"}
 ```
 
-`primaryCandidateId` is the recommendation; `secondaryCandidateIds` preserves
-the later ranking. A null primary with an empty secondary array is abstention.
-Local code owns the exact displayed text, copy action, localized Gemini
-handoff, source metadata, and Page/Focus session boundary. There is no repair
-call, second ranker, model-authored query, evidence-family guess, or local
-semantic rewrite.
+`candidateId` is the single recommendation; `null` is abstention. Local code
+owns the exact displayed text, copy action, localized Gemini handoff, source
+metadata, and Page/Focus session boundary. There is no repair call, second
+ranker, model-authored query, evidence-family guess, or local semantic rewrite.
 
-The first returned action is the product recommendation. Later actions are
-optional alternatives, not equal-strength endorsements. The UI reveals the
-bounded batch atomically, marks the first action with a quiet localized
-priority cue, and keeps later actions visually secondary without hiding them.
+The selected action is the product recommendation. The UI reveals it only
+after the one-shot selector settles; abstention reveals no investigation
+action. This intentionally avoids publishing weaker alternatives merely to
+increase visible coverage.
 
 Entertainment, sport, consumer, product, celebrity, and routine factual
 statements are eligible. Health, safety, money, rights, law, and public impact
@@ -47,8 +45,8 @@ Local code rejects only failures a user should not receive:
 Topic importance, public-interest consequence, preferred evidence family, and
 stylistic atomicity are ranking signals, not local rejection reasons. The
 model may return no actions rather than choose the best of a bad candidate set.
-Duplicate rejection remains a local parser invariant because the portable
-JSON Schema subset does not assume provider support for `uniqueItems`.
+The one-ID wire also removes duplicate and ordering ambiguity without relying
+on provider-specific JSON Schema features.
 
 ## Frozen release gates
 
@@ -60,13 +58,14 @@ gates. Any prompt, schema, renderer, hard boundary, metric definition, or
 threshold change creates a new candidate; changing this standard requires a
 new `grill-your-sub-agents` decision record.
 
-The 2026-07-21 decision review replaced one all-action usefulness label with
-three explicit reviewer tiers:
+The 2026-07-21 decision review retains three explicit reviewer tiers so the
+single selected action can be distinguished from a merely tolerable but weak
+recommendation:
 
 - `recommended`: strong enough to lead the reader's action list;
-- `acceptable_secondary`: not the best first suggestion, but exact,
-  self-contained, non-duplicative, externally checkable, and reasonably useful
-  when shown as a secondary option;
+- `acceptable_secondary`: exact, self-contained, externally checkable, and
+  potentially useful, but not strong enough to be the sole visible
+  recommendation;
 - `user_unacceptable`: confusing, filler-like, redundant, materially
   contextless, not externally resolvable, misleading, or otherwise unsuitable
   to show as a reader action.
@@ -92,7 +91,7 @@ top-rank gates below.
 Required for every run:
 
 - 30/30 protocol-valid outputs;
-- exact known IDs, preserved order, uniqueness, and at most three actions;
+- an exact known ID or null, with at most one action;
 - every positive control selected and every negative control abstained;
 - no hard-boundary leak, repair, retry, public search, or opened action;
 - deterministic localized Gemini handoff generated from local data.
@@ -114,7 +113,7 @@ Required:
 - the first action is best or tied-best on at least 75% of rows with any
   reviewer-acceptable action; this denominator excludes abstentions instead of
   counting recall failure twice;
-- 100% exact-span, unique-ID, and at-most-three compliance;
+- 100% exact-span and at-most-one compliance;
 - at least 95% of generated Gemini handoffs are usable and language-consistent;
 - no public search or external action is opened by the audit.
 
@@ -136,7 +135,7 @@ Required:
   surface;
 - at least 70% positive-row recall overall and at least 60% on each surface;
 - first action best or tied-best on at least 70% of eligible rows;
-- 100% exact-span, unique-ID, and at-most-three compliance;
+- 100% exact-span and at-most-one compliance;
 - at least 95% usable, language-consistent Gemini handoffs.
 
 Any failure rejects the candidate. The holdout cannot be reused for tuning.
@@ -148,7 +147,7 @@ and Focus continuity, preparing/ready/abstain/unavailable states, atomic batch
 reveal, stale-result suppression, screenshot consent, and ephemeral-session
 behavior. The derived selector must remain lower priority than primary reading
 work, must not starve the Feed queue, and must settle or leave the bounded UI
-state without exposing a partial batch. Typecheck, focused GPR tests, full
+state without exposing a partial result. Typecheck, focused GPR tests, full
 verification, build freshness, privacy policy, and Chrome Web Store readiness
 must all pass.
 
@@ -158,3 +157,17 @@ This candidate does not perform its own web retrieval, verdict generation, or
 automatic fact-check. `問 Gemini` remains a user-triggered handoff. Evidence
 source-family routing belongs to a later retrieval system that can inspect
 actual results; it is not guessed by this selector.
+
+## Candidate history
+
+The v4 primary-plus-secondary candidate failed its fresh development gate:
+hard safety and news recall held, but recommendation precision, Facebook
+recall, top-rank quality, and handoff usability did not. That consumed cohort
+is sealed and is not used for row-level v5 tuning.
+
+The adversarial decision at
+`tmp/grill-reports/gpr-v5-single-action-contract-2026-07-21.html` accepted the
+v5 single-recommendation wire as the next frozen candidate, not as a release.
+The independent reject branch correctly noted that reducing cardinality alone
+does not prove better ranking, so the numerical A-D gates above remain
+unchanged and v5 must earn passage on fresh data.

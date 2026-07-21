@@ -66,10 +66,18 @@ function lineRanges(source: string): Array<{ start: number; end: number }> {
       const text = source.slice(trimmed.start, trimmed.end);
       const marker = text.match(LIST_MARKER);
       const start = marker ? trimmed.start + marker[0].length : trimmed.start;
-      let end = trimmed.end;
-      while (end > start && /[。！？!?.]/u.test(source[end - 1])) end -= 1;
-      const withoutMarker = trimmedRange(source, start, end);
-      if (withoutMarker) ranges.push(withoutMarker);
+      const lineText = source.slice(start, trimmed.end);
+      const sentences = sentenceRanges(lineText);
+      if (sentences.length > 0) {
+        for (const sentence of sentences) {
+          ranges.push({ start: start + sentence.start, end: start + sentence.end });
+        }
+      } else {
+        let end = trimmed.end;
+        while (end > start && /[。！？!?.]/u.test(source[end - 1])) end -= 1;
+        const withoutMarker = trimmedRange(source, start, end);
+        if (withoutMarker) ranges.push(withoutMarker);
+      }
     }
     if (cursor < source.length && source[cursor] === "\r" && source[cursor + 1] === "\n") cursor += 1;
     lineStart = cursor + 1;

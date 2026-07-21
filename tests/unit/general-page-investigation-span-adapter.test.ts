@@ -19,21 +19,20 @@ const candidates: InvestigationSpanCandidate[] = [
 ];
 
 const preparedWire = {
-  schemaVersion: 4,
-  primaryCandidateId: "span:2",
-  secondaryCandidateIds: [],
+  schemaVersion: 5,
+  candidateId: "span:2",
 };
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("General Page ranked exact-span selector v4", () => {
+describe("General Page recommended exact-span selector v5", () => {
   it("lets the model select only ordered IDs while local code owns source text", () => {
     const result = parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify(preparedWire), candidates);
 
     expect(result).toEqual({
       ok: true,
       value: {
-        schemaVersion: 4,
+        schemaVersion: 5,
         selections: [{
           candidateId: "span:2",
           exactClaim: "業者必須在七月三十一日前完成下架",
@@ -45,58 +44,45 @@ describe("General Page ranked exact-span selector v4", () => {
     });
   });
 
-  it("constrains the wire to three ordered local IDs and contains no model-authored claim metadata", () => {
+  it("constrains the wire to one local ID or abstention and contains no model-authored claim metadata", () => {
     const schema = generalPageInvestigationSpanAdapterJsonSchema(candidates.map(({ id }) => id));
 
-    expect(schema.properties.schemaVersion.const).toBe(4);
-    expect(schema.properties.primaryCandidateId.enum).toEqual(["span:1", "span:2", null]);
-    expect(schema.properties.secondaryCandidateIds.maxItems).toBe(2);
-    expect(schema.properties.secondaryCandidateIds.items.enum).toEqual(["span:1", "span:2"]);
-    expect(schema.properties.secondaryCandidateIds).not.toHaveProperty("uniqueItems");
+    expect(schema.properties.schemaVersion.const).toBe(5);
+    expect(schema.properties.candidateId.enum).toEqual(["span:1", "span:2", null]);
     expect(JSON.stringify(schema)).not.toMatch(/exactClaim|sourceQuote|displayQ|"q"|"why"|"need"/u);
     expect(JSON.stringify(schema)).not.toMatch(/policy|consequence|evidenceFamily/u);
   });
 
-  it("uses an empty ordered ID list for abstention and rejects unknown or duplicate IDs", () => {
+  it("uses null for abstention and rejects unknown IDs or extra fields", () => {
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 4,
-      primaryCandidateId: null,
-      secondaryCandidateIds: [],
-    }), candidates)).toMatchObject({ ok: true, value: { schemaVersion: 4, selections: [] } });
+      schemaVersion: 5,
+      candidateId: null,
+    }), candidates)).toMatchObject({ ok: true, value: { schemaVersion: 5, selections: [] } });
 
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 4,
-      primaryCandidateId: "span:9",
-      secondaryCandidateIds: [],
+      schemaVersion: 5,
+      candidateId: "span:9",
     }), candidates)).toMatchObject({ ok: false, issue: "unknown_candidate" });
 
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 4,
-      primaryCandidateId: "span:2",
-      secondaryCandidateIds: ["span:2"],
-    }), candidates)).toMatchObject({ ok: false, issue: "duplicate_candidate" });
-
-    expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 4,
-      primaryCandidateId: 2,
-      secondaryCandidateIds: [],
+      schemaVersion: 5,
+      candidateId: 2,
     }), candidates)).toMatchObject({ ok: false, issue: "root_shape" });
 
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 4,
-      primaryCandidateId: null,
-      secondaryCandidateIds: ["span:1"],
+      schemaVersion: 5,
+      candidateId: null,
+      secondaryCandidateIds: [],
     }), candidates)).toMatchObject({ ok: false, issue: "root_shape" });
   });
 
-  it("preserves model ranking order without adding another ranker", () => {
+  it("materializes only the selected recommendation without adding another ranker", () => {
     const result = parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 4,
-      primaryCandidateId: "span:2",
-      secondaryCandidateIds: ["span:1"],
+      schemaVersion: 5,
+      candidateId: "span:2",
     }), candidates);
 
-    expect(result.value?.selections.map(({ candidateId }) => candidateId)).toEqual(["span:2", "span:1"]);
+    expect(result.value?.selections.map(({ candidateId }) => candidateId)).toEqual(["span:2"]);
   });
 
   it("makes domain-neutral ranking, abstention, and exact ownership explicit in the prompt", () => {
@@ -111,21 +97,20 @@ describe("General Page ranked exact-span selector v4", () => {
 
     expect(system).toContain("Local code owns the exact claim");
     expect(system).toContain("lacks its actor or object");
-    expect(system).toContain("Filter before ranking");
+    expect(system).toContain("two internal passes");
     expect(system).toContain("Reject an entire candidate if any part");
-    expect(system).toContain("Then rank only the survivors");
+    expect(system).toContain("Then choose only the single strongest survivor");
     expect(system).toContain("meta-statements about what the page cites");
     expect(system).toContain("incidental details whose verification would not materially change");
     expect(system).toContain("the company, the recall, 業者, 該產品");
-    expect(system).toContain('"schemaVersion":4');
-    expect(system).toContain("primaryCandidateId first");
+    expect(system).toContain('"schemaVersion":5');
+    expect(system).toContain("single strongest survivor");
+    expect(system).toContain("For social posts");
     expect(system).toContain("Entertainment, sports, consumer");
     expect(system).toContain("does not qualify merely because it is concrete");
     expect(system).toContain("Public interest");
-    expect(system).toContain("Do not fill a quota");
-    expect(system).toContain("strong first recommendation");
-    expect(system).toContain("Extra actions are a product defect");
-    expect(system).toContain("one strong action is the normal result");
+    expect(system).toContain("Return exactly one supplied candidateId or null");
+    expect(system).toContain("Good candidates include");
     expect(user).toContain('"id":"span:1"');
     expect(user).not.toContain("start");
     expect(user).not.toContain("end");
@@ -162,17 +147,16 @@ describe("General Page ranked exact-span selector v4", () => {
     expect(body.response_format).toMatchObject({
       type: "json_schema",
       json_schema: {
-        name: "truly_general_page_investigation_span_adapter_v4",
+        name: "truly_general_page_investigation_span_adapter_v5",
         strict: true,
         schema: {
           properties: {
-            primaryCandidateId: { enum: ["span:1", "span:2", null] },
-            secondaryCandidateIds: { maxItems: 2 },
+            candidateId: { enum: ["span:1", "span:2", null] },
           },
         },
       },
     });
-    expect(body.max_tokens).toBe(160);
+    expect(body.max_tokens).toBe(96);
   });
 
   it("calls the provider once and returns local materialization plus telemetry", async () => {
@@ -194,7 +178,7 @@ describe("General Page ranked exact-span selector v4", () => {
       ok: true,
       attempts: 1,
       usage: { promptTokens: 220, completionTokens: 50, totalTokens: 270 },
-      value: { schemaVersion: 4, selections: [{ exactClaim: candidates[1].exactText }] },
+      value: { schemaVersion: 5, selections: [{ exactClaim: candidates[1].exactText }] },
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

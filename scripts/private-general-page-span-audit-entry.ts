@@ -269,7 +269,7 @@ const meta = {
     trackedDiffSha256: candidateSnapshot.trackedDiffSha256,
   },
   contract: {
-    selector: "ranked_exact_span_v4",
+    selector: "ranked_exact_span_v5",
     promptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
     responseFormat: structuredOutputMode,
     outputLanguage: outputLang,

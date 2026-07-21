@@ -1059,15 +1059,15 @@ export function buildTierBGeneralPageInvestigationSpanAdapterChatBody(
       { role: "user", content: buildGeneralPageInvestigationSpanAdapterPrompt(req) },
     ],
     temperature: 0,
-    // The model returns one primary ID plus at most two secondary local IDs.
+    // The model returns one recommended local ID or abstains.
     // Keep the budget deliberately small so derived work does not crowd out
     // the primary Feed/Page reading queue.
-    max_tokens: 160,
+    max_tokens: 96,
     response_format: constrained
       ? {
           type: "json_schema",
           json_schema: {
-            name: "truly_general_page_investigation_span_adapter_v4",
+            name: "truly_general_page_investigation_span_adapter_v5",
             strict: true,
             schema: generalPageInvestigationSpanAdapterJsonSchema(
               req.candidates.map(({ id }) => id),
