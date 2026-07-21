@@ -1,4 +1,4 @@
-import { detectCompoundPropositionSignal, type InvestigationPlanAbstentionReason } from "./claim-investigation-planner";
+import type { InvestigationPlanAbstentionReason } from "./claim-investigation-planner";
 import type { Lang } from "./types";
 
 export interface InvestigationSpanCandidate {
@@ -102,41 +102,15 @@ export function buildInvestigationSpanCandidates(
     const marker = sentenceText.match(LIST_MARKER);
     if (marker) sentence = { start: sentence.start + marker[0].length, end: sentence.end };
     const exact = source.slice(sentence.start, sentence.end);
-    const compound = detectCompoundPropositionSignal(exact);
-    const delimiters: Array<{ start: number; end: number }> = [];
-    let hasEnglishCoordination = false;
-    for (let cursor = sentence.start; cursor < sentence.end; cursor += 1) {
-      if (/[，；;]/u.test(source[cursor])) delimiters.push({ start: cursor, end: cursor + 1 });
-    }
-    for (const match of exact.matchAll(/(?:,\s*|\s+)(?:and|but)\s+/giu)) {
-      const left = exact.slice(0, match.index).trim();
-      const right = exact.slice(match.index + match[0].length).trim();
-      const leftHasPredicate = /\b(?:\p{L}+ed|said|says?|reports?|announces?|estimates?|orders?|closes?|recalls?|promises?|moves?|will|would|has|have|is|are|was|were)\b/iu.test(left);
-      if ([...left].length >= minimum && [...right].length >= minimum && leftHasPredicate) {
-        hasEnglishCoordination = true;
-        delimiters.push({ start: sentence.start + match.index, end: sentence.start + match.index + match[0].length });
-      }
-    }
     if ([...exact].length >= minimum && [...exact].length <= options.maxCharacters &&
-      !compound && !hasEnglishCoordination && isContextIndependentSpan(exact)) ranges.push(sentence);
-    delimiters.sort((left, right) => left.start - right.start);
-    let clauseStart = sentence.start;
-    for (const delimiter of [...delimiters, { start: sentence.end, end: sentence.end }]) {
-      const clause = trimmedRange(source, clauseStart, delimiter.start);
-      if (clause) {
-        const clauseText = source.slice(clause.start, clause.end);
-        if ([...clauseText].length >= minimum && [...clauseText].length <= options.maxCharacters &&
-          !detectCompoundPropositionSignal(clauseText) && isContextIndependentSpan(clauseText)) ranges.push(clause);
-      }
-      clauseStart = delimiter.end;
-    }
+      isContextIndependentSpan(exact)) ranges.push(sentence);
   }
   // Social posts often use line breaks instead of sentence punctuation. Offer each
   // exact list line as an additional candidate while preserving source offsets.
   for (const line of lineRanges(source)) {
     const exact = source.slice(line.start, line.end);
     if ([...exact].length >= minimum && [...exact].length <= options.maxCharacters &&
-      !detectCompoundPropositionSignal(exact) && isContextIndependentSpan(exact)) ranges.push(line);
+      isContextIndependentSpan(exact)) ranges.push(line);
   }
   const seen = new Set<string>();
   const unique = ranges.sort((left, right) => left.start - right.start || left.end - right.end).filter((range) => {

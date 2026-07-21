@@ -7,10 +7,11 @@ import {
 } from "@src/lib/investigation-span-candidate";
 
 describe("constrained investigation span selection", () => {
-  it("builds bounded exact non-compound clauses with stable IDs and offsets", () => {
+  it("builds bounded exact complete statements with stable IDs and offsets", () => {
     const source = "導言。食藥署公布232項產品名單，並要求業者立即下架。金管會表示將持續監理市場。";
     const candidates = buildInvestigationSpanCandidates(source, { maxCandidates: 12, maxCharacters: 120 });
-    expect(candidates.map((candidate) => candidate.exactText)).toContain("食藥署公布232項產品名單");
+    expect(candidates.map((candidate) => candidate.exactText)).toContain("食藥署公布232項產品名單，並要求業者立即下架");
+    expect(candidates.map((candidate) => candidate.exactText)).not.toContain("食藥署公布232項產品名單");
     expect(candidates.map((candidate) => candidate.exactText)).not.toContain("並要求業者立即下架");
     expect(candidates.every((candidate) => source.slice(candidate.start, candidate.end) === candidate.exactText)).toBe(true);
     expect(candidates.map((candidate) => candidate.id)).toEqual(candidates.map((_, index) => `span:${index + 1}`));
@@ -38,12 +39,14 @@ describe("constrained investigation span selection", () => {
     expect(exact.some((value) => value === "2 percent at 6 a")).toBe(false);
   });
 
-  it("offers exact atomic clauses from an English coordinated sentence", () => {
+  it("keeps an English coordinated sentence intact instead of manufacturing a dependent clause", () => {
     const source = "The Pine Coast Education Office closed Seabreeze School for two days and moved the citywide English exam to August 9, 2026.";
     const candidates = buildInvestigationSpanCandidates(source, { maxCandidates: 12, maxCharacters: 180 });
     const exact = candidates.map((candidate) => candidate.exactText);
 
-    expect(exact).toContain("The Pine Coast Education Office closed Seabreeze School for two days");
+    expect(exact).toContain("The Pine Coast Education Office closed Seabreeze School for two days and moved the citywide English exam to August 9, 2026");
+    expect(exact).not.toContain("The Pine Coast Education Office closed Seabreeze School for two days");
+    expect(exact).not.toContain("moved the citywide English exam to August 9, 2026");
     expect(candidates.every((candidate) => source.slice(candidate.start, candidate.end) === candidate.exactText)).toBe(true);
   });
 
@@ -99,7 +102,7 @@ describe("constrained investigation span selection", () => {
     expect(exact).not.toContain("A printing error caused the recall");
   });
 
-  it("does not offer a shorter span when an accepted atomic span already contains it", () => {
+  it("does not offer a shorter span when an accepted complete span already contains it", () => {
     const source = "北灣保險監理處命令遠帆保險退還 2,400 張保單多收的行政費，每張上限新台幣 320 元。";
     const candidates = buildInvestigationSpanCandidates(source, { maxCandidates: 12, maxCharacters: 180 });
     const exact = candidates.map((candidate) => candidate.exactText);

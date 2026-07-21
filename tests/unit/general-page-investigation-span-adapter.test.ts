@@ -25,7 +25,7 @@ const preparedWire = {
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("General Page recommended exact-span selector v5", () => {
+describe("General Page recommended exact-span selector with schema v5", () => {
   it("lets the model select only ordered IDs while local code owns source text", () => {
     const result = parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify(preparedWire), candidates);
 
@@ -96,24 +96,24 @@ describe("General Page recommended exact-span selector v5", () => {
     });
 
     expect(system).toContain("Local code owns the exact claim");
-    expect(system).toContain("lacks its actor or object");
+    expect(system).toContain("Default to null");
     expect(system).toContain("two internal passes");
-    expect(system).toContain("Reject an entire candidate if any part");
-    expect(system).toContain("Then choose only the single strongest survivor");
-    expect(system).toContain("meta-statements about what the page cites");
-    expect(system).toContain("incidental details whose verification would not materially change");
-    expect(system).toContain("Attribution does not rescue");
-    expect(system).toContain("promoter calling a show the most unforgettable night");
-    expect(system).toContain("the company, the recall, 業者, 該產品");
+    expect(system).toContain("all three tests pass");
+    expect(system).toContain("complete standalone statement");
+    expect(system).toContain("source's subject or a key factual support");
+    expect(system).toContain("navigation or interface text");
+    expect(system).toContain("citations or authoring metadata");
+    expect(system).toContain("reject the whole span");
+    expect(system).toContain("describes the source, not the external world");
+    expect(system).toContain("Attribution rule");
+    expect(system).toContain("judge the embedded proposition");
+    expect(system).toContain("clearly the most useful statement");
+    expect(system).toContain("may not supply a missing actor");
     expect(system).toContain('"schemaVersion":5');
-    expect(system).toContain("single strongest survivor");
-    expect(system).toContain("For social posts");
     expect(system).toContain("Entertainment, sports, consumer");
-    expect(system).toContain("does not qualify merely because it is concrete");
-    expect(system).toContain("Public interest");
+    expect(system).toContain("public impact");
     expect(system).toContain("Return exactly one supplied candidateId or null");
-    expect(system).toContain("Good candidates include");
-    expect(system).toContain("adding a specific product or menu item");
+    expect(system).toContain("A named recall");
     expect(user).toContain('"id":"span:1"');
     expect(user).not.toContain("start");
     expect(user).not.toContain("end");

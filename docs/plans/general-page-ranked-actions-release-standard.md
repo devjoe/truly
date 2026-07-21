@@ -227,3 +227,13 @@ shipping extraction/advisor boundary. The adversarial decision recorded in
 reclassify that result or lower any threshold. It created the runtime-envelope
 candidate standard above and retained the old data only as a non-gating
 contamination observatory.
+
+The first runtime-envelope Gate B run also failed and consumed its 60-row
+development cohort. Its aggregate diagnosis found too many incomplete or
+secondary-quality selections and weak Focus handoffs. The next candidate keeps
+the schema-v5 one-ID wire and the frozen numeric gates, but simplifies the
+upstream boundary: local enumeration now offers complete sentences or complete
+list lines instead of manufacturing comma- or conjunction-split clauses, and
+the selector uses one burden-of-proof eligibility pass followed by one best-item
+comparison. This is candidate v6 behavior, not a release authorization; it must
+pass fresh A-D evidence without reopening either consumed cohort.

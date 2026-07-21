@@ -3,6 +3,7 @@
 .DS_Store
 AGENTS.md
 data/
+private-data/
 tmp/
 dist/
 dist-*/

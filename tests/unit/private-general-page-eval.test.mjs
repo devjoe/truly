@@ -113,7 +113,7 @@ function runtimeRow(scope, sourceClass, targetKind) {
       hasScreenshot: false,
     },
     adapter: {
-      endpoint: "http://gx10.local:8000/v1",
+      endpoint: "https://model-runtime.example.test/v1",
       model: "qwen3.6-35b",
       structuredOutputMode: "json_object",
       candidates: [{ id: "span:1", exactText: text, start: 0, end: text.length }],
