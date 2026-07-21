@@ -13,6 +13,7 @@ export async function reloadStaleExtensionWithFacebookRecovery({
   liveBuildId,
   targets,
   reloadExtension,
+  readExtensionBuildId,
   reloadFacebookTarget,
   settleAfterFacebookReload = async () => {},
 }) {
@@ -42,6 +43,14 @@ export async function reloadStaleExtensionWithFacebookRecovery({
 
   if (extensionStale) {
     await reloadExtension();
+    if (readExtensionBuildId) {
+      const reloadedBuildId = await readExtensionBuildId();
+      if (reloadedBuildId !== expectedBuildId) {
+        throw new Error(
+          `Extension reload still exposes build ${reloadedBuildId || "(missing)"}; expected ${expectedBuildId}. Check the unpacked extension path.`,
+        );
+      }
+    }
     report.extensionReloaded = true;
   }
 

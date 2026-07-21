@@ -725,6 +725,27 @@ async function reloadExtension(extensionId) {
   await sleep(1500);
 }
 
+async function readExtensionBuildId(extensionId) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const target = (await listTargets()).find((entry) =>
+      entry.type === "service_worker" &&
+      entry.url?.startsWith(`chrome-extension://${extensionId}/`) &&
+      entry.webSocketDebuggerUrl
+    );
+    if (target) {
+      const worker = connectCdp(target.webSocketDebuggerUrl);
+      try {
+        const buildId = await worker.evaluate("globalThis.__TRULY_BUILD_ID || null").catch(() => null);
+        if (buildId) return buildId;
+      } finally {
+        worker.close();
+      }
+    }
+    await sleep(100);
+  }
+  return null;
+}
+
 async function facebookTargetsWithContentScriptBuildIds(targets) {
   const annotated = [];
   for (const target of targets) {
@@ -4321,6 +4342,7 @@ try {
     liveBuildId: extension.meta.buildId,
     targets: runtimeTargets,
     reloadExtension: () => reloadExtension(extensionId),
+    readExtensionBuildId: () => readExtensionBuildId(extensionId),
     reloadFacebookTarget,
     settleAfterFacebookReload: () => sleep(3500),
   });

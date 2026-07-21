@@ -129,6 +129,18 @@ describe("General Page audit runtime reload", () => {
     });
   });
 
+  it("rejects a reload that still exposes the stale service-worker build", async () => {
+    await expect(reloadStaleExtensionWithFacebookRecovery({
+      autoReload: true,
+      expectedBuildId: "build-current",
+      liveBuildId: "build-stale",
+      targets: [],
+      reloadExtension: vi.fn(),
+      readExtensionBuildId: vi.fn(async () => "build-stale"),
+      reloadFacebookTarget: vi.fn(),
+    })).rejects.toThrow("still exposes build build-stale");
+  });
+
   it("recovers only stale Facebook content scripts when the extension is already fresh", async () => {
     const reloadExtension = vi.fn();
     const reloadFacebookTarget = vi.fn();
