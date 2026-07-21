@@ -59,6 +59,14 @@ new `grill-your-sub-agents` decision record.
 Run the fixed 30-case bilingual suite three times with `json_schema` and three
 times with `json_object` (180 one-shot calls total).
 
+This gate tests provider transport plus unambiguous hard semantic boundaries.
+A negative control must contain no reasonably actionable exact span: subjective
+or promotional judgment, an unidentifiable vague statement, or another clear
+abstention case. A page that mixes low-value but independently verifiable facts
+with promotional language is not a whole-page hard negative. Whether those
+facts deserve an action is measured by the fresh real-data precision and
+top-rank gates below.
+
 Required for every run:
 
 - 30/30 protocol-valid outputs;

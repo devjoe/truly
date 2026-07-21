@@ -76,7 +76,7 @@ const zhFixtures = [
   },
   {
     fixtureKind: "abstain",
-    groundingText: "晨星樂團週末將在河畔舞台演出，主辦人形容這會是夏天最難忘的夜晚。現場另有餐車與紀念品攤位。",
+    groundingText: "主辦人形容晨星樂團的演出會是夏天最難忘的夜晚，也宣稱現場氣氛必定勝過其他所有活動。",
     candidateClaim: {
       c: "晨星樂團的演出會是夏天最難忘的夜晚。",
       why: "屬於宣傳性評價。",
@@ -229,7 +229,7 @@ const enFixtures = [
   },
   {
     fixtureKind: "abstain",
-    groundingText: "The Morning Star Band will play at the riverside stage this weekend, and the promoter calls it the most unforgettable night of summer. Food trucks will also attend.",
+    groundingText: "The promoter calls the Morning Star Band show the most unforgettable night of summer and claims its atmosphere will be better than every other event.",
     candidateClaim: {
       c: "The Morning Star Band show will be the most unforgettable night of summer.",
       why: "This is promotional language.",
