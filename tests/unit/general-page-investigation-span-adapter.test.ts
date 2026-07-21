@@ -113,6 +113,7 @@ describe("General Page recommended exact-span selector v5", () => {
     expect(system).toContain("Public interest");
     expect(system).toContain("Return exactly one supplied candidateId or null");
     expect(system).toContain("Good candidates include");
+    expect(system).toContain("adding a specific product or menu item");
     expect(user).toContain('"id":"span:1"');
     expect(user).not.toContain("start");
     expect(user).not.toContain("end");
