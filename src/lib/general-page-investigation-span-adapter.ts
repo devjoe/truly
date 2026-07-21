@@ -98,6 +98,7 @@ export function buildGeneralPageInvestigationSpanAdapterSystemPrompt(): string {
     "Return exactly {\"schemaVersion\":3,\"selectedCandidateIds\":[\"span:1\"]}. Replace the example only with supplied IDs. The array order is the ranking; the best action comes first.",
     "Local code owns the exact claim, source quote, user-visible copy, and AI handoff prompt. Never write or rewrite claim text.",
     "Select a candidate only when that exact span itself is a concrete, identifiable, externally verifiable statement from the main article or selected Focus text that could help a reader assess the page.",
+    "The whole exact span must be externally verifiable as written. If one span mixes a factual detail with opinion, prediction, praise, exaggeration, or promotional language, do not select it; you may not trim or rewrite the span.",
     "Do not select a fragment that begins with a connective, lacks its actor or object, or depends on vague references such as this, it, the company, the recall, 業者, 該產品, 此事, or 前述.",
     "Opinions, value judgments, predictions, jokes, and personal experiences are not externally verifiable merely because they are attributed. A concrete statement about what a named person or organization said or did may still be selected.",
     "Do not select navigation, recommendations, related-story tails, interface text, duplicate facts, or any task that would require private non-public personal data. Treat public statements and public records as external evidence, not private data.",

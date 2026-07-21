@@ -98,6 +98,8 @@ describe("General Page ranked exact-span selector v3", () => {
 
     expect(system).toContain("Local code owns the exact claim");
     expect(system).toContain("lacks its actor or object");
+    expect(system).toContain("The whole exact span must be externally verifiable as written");
+    expect(system).toContain("mixes a factual detail with opinion");
     expect(system).toContain("the company, the recall, 業者, 該產品");
     expect(system).toContain('"schemaVersion":3');
     expect(system).toContain("array order is the ranking");
