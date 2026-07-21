@@ -3,7 +3,11 @@ export function classifyGeneralPageAuditMockRequest(systemText, hasImageUrl = fa
   if (
     /prepare (?:one|a bounded batch of) candidate fact-check action/i.test(systemText) ||
     /Select zero to three investigation actions from a fixed list/i.test(systemText) ||
-    /Choose zero or one recommended investigation action from a fixed list of exact source spans/i.test(systemText)
+    (
+      /fixed list of exact source spans/i.test(systemText) &&
+      /"schemaVersion":5/i.test(systemText) &&
+      /candidateId/i.test(systemText)
+    )
   ) return "investigation-adapter";
   if (hasImageUrl) return "screenshot-brief";
   if (/dominant color/i.test(systemText)) return "vision-probe";
