@@ -59,6 +59,11 @@ const STRONG_PAYWALL_OR_LOGIN_PATTERNS = [
   /付費.{0,24}(全文|完整|閱讀)/,
 ] as const;
 
+const TRUNCATED_CONTENT_PREVIEW_PATTERNS = [
+  /[（(]?全文未完[）)]?(?:[，,、；;:]|\s|$)/,
+  /全文及圖表請見.{0,32}(?:完整|當期|內容)/,
+] as const;
+
 const ACCESS_CHECKING_OR_PREVIEW_PATTERNS = [
   /\bchecking (?:your )?(?:access|subscription|membership)\b/i,
   /\bpreview (?:view|mode).{0,80}\b(?:checking|confirming|verifying).{0,80}\b(?:access|subscription|membership)\b/i,
@@ -81,8 +86,17 @@ const DYNAMIC_CONTENT_PARTIAL_PATTERNS = [
   /\bjavascript (?:is )?(?:disabled|required)\b/i,
   /\bthis (?:site|page|application).{0,80}\bjavascript\b/i,
   /\bloading (?:article|page|story|workspace)\b/i,
+  /\bunable to render the provided source\b/i,
   /請.{0,12}(?:啟用|開啟).{0,12}JavaScript/i,
   /JavaScript.{0,12}(?:停用|關閉|未啟用|未開啟)/i,
+] as const;
+
+const UNAVAILABLE_PAGE_PATTERNS = [
+  /\b(?:page|article|story) (?:was |is |does )?(?:not found|no longer exists|unavailable|removed)\b/i,
+  /\b(?:404|410)\b.{0,48}\b(?:not found|gone|error)\b/i,
+  /\b(?:not found|gone|error)\b.{0,48}\b(?:404|410)\b/i,
+  /(?:頁面|網頁|文章).{0,20}(?:已不存在|不存在|找不到|已移除|無法使用)/,
+  /您要找的頁面已不存在/,
 ] as const;
 
 const NON_READING_TEXT_SELECTORS = [
@@ -99,7 +113,15 @@ const NON_READING_BLOCK_SELECTORS = [
   "footer",
   "form",
   "button",
+  "label",
   "dialog",
+  "[hidden]",
+  "[inert]",
+  "[aria-hidden=\"true\"]",
+  "[style*=\"display: none\" i]",
+  "[style*=\"display:none\" i]",
+  "[style*=\"visibility: hidden\" i]",
+  "[style*=\"visibility:hidden\" i]",
   "[itemprop=\"author\"]",
   "[role=\"button\"]",
   "[role=\"navigation\"]",
@@ -137,6 +159,10 @@ const NON_READING_BLOCK_SELECTORS = [
   "[class*=\"sponsor\" i]",
   "[class*=\"trc_\" i]",
   "[class*=\"toolbar\" i]",
+  "[class*=\"hatnote\" i]",
+  "[class*=\"mw-editsection\" i]",
+  "[class*=\"navbox\" i]",
+  "[id*=\"also-ask\" i]",
   "[id*=\"breadcrumb\" i]",
   "[id*=\"cookie\" i]",
   "[id*=\"consent\" i]",
@@ -166,6 +192,12 @@ const NOISY_BLOCK_TEXT_PATTERNS = [
   /聽新聞\s*0:00\s*\/\s*0:00/,
   /^(?:Yahoo|媒體|網站)?提醒您[：:]?\s*(?:飲酒過量|未滿十八歲|禁止酒駕)[\s\S]{0,120}$/i,
   /^(?:飲酒過量，?害人害己。?\s*)?(?:未滿十八歲禁止飲酒。?|禁止酒駕。?)$/i,
+  /^請繼續往下閱讀(?:\.{3}|…)?$/,
+  /^不用抽\s*不用搶\s*現在用APP看新聞\s*保證天天中獎/i,
+  /^更多新聞請搜尋.{0,24}$/,
+  /^End of content$/i,
+  /^(?:暫無|尚無|沒有)留言$/,
+  /^No comments(?: yet)?$/i,
 ] as const;
 
 const NOISY_BLOCK_CANDIDATE_SELECTOR = [
@@ -183,9 +215,14 @@ const RECIRCULATION_TAIL_HEADING_SELECTOR = [
   "div",
   "p",
   "section",
+  "span",
+  "strong",
+  "b",
   "h2",
   "h3",
   "h4",
+  "h5",
+  "h6",
 ].join(",");
 
 const RECIRCULATION_TAIL_HEADING_PATTERNS = [
@@ -201,6 +238,11 @@ const RECIRCULATION_TAIL_HEADING_PATTERNS = [
   /^more from\b/i,
   /^related (?:articles|coverage|stories|reading)$/i,
   /^read more$/i,
+  /^(?:【|\[)?(?:(?:全球)?熱門(?:話題|新聞|文章)?|全球熱話題)(?:】|\])?$/,
+  /^更多.{0,24}(?:內幕|內容)[：:]?$/,
+  /^(?:references?|external links?|further reading|see also|footnotes?)(?:\s*\[?\s*edit\s*\]?)?$/i,
+  /^文章來源[：:]?(?:\s*#)*$/,
+  /^文章標籤$/,
 ] as const;
 
 const FALLBACK_CONTENT_CANDIDATE_SELECTOR = [
@@ -253,7 +295,7 @@ const FALLBACK_CONTENT_CANDIDATE_SELECTOR = [
 ].join(",");
 
 const FALLBACK_CONTENT_POSITIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:article|body|content|copy|detail|entry|feature|main|markdown|newsarticle|post|prose|story|text|本文|正文|文章)(?:$|[\s_-])/i;
-const FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:ad|advert|archive|card|carousel|category|comment|featured|footer|grid|latest|menu|most|nav|organic|partner|popular|promo|rank|rbox|reel|recommend|recirc|related|search|share|sidebar|sponsor|tag|teaser|trend|trc|widget|排行|推薦|熱門|相關|輪播|側欄|廣告|分類|搜尋|分享)(?:$|[\s_-])/i;
+const FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN = /(?:^|[\s_-])(?:ad|advert|archive|author|bibliography|card|carousel|category|citation|comments?|discuss|featured|footer|footnote|grid|latest|menu|most|nav|organic|partner|popular|promo|rank|rbox|reference|reflist|reel|recommend|recommended|recirc|related|search|share|sidebar|sponsor|story-list|tag|teaser|trend|trc|widget|排行|推薦|熱門|相關|輪播|側欄|廣告|分類|搜尋|分享)(?:$|[\s_-])/i;
 
 const NON_READING_LINK_TEXT_PATTERNS = [
   /^home$/i,
@@ -276,6 +318,7 @@ const NON_READING_LINK_TEXT_PATTERNS = [
   /(?:按讚|訂閱|追蹤).{0,20}(?:FB|Facebook|IG|Instagram|TG|Telegram|LINE)?/i,
   /^login$/i,
   /^sign in$/i,
+  /^edit(?: links?)?$/i,
   /^相關(?:文章|報導|閱讀)?$/i,
   /^延伸閱讀$/i,
   /^登入後即可張貼留言。?$/i,
@@ -359,6 +402,11 @@ export function extractGeneralPageSurface(
     method = "semantic-html";
     mainText = rootText;
     readingRoot = extractionRoot;
+  } else if (rootText && isUsefulShortSemanticReadingRoot(extractionRoot, rootText, minMainTextLength)) {
+    method = "semantic-html";
+    mainText = rootText;
+    readingRoot = extractionRoot;
+    warnings.push("very-short-content");
   } else if (fallbackRootText && fallbackRootText.length >= minMainTextLength) {
     method = "fallback";
     mainText = fallbackRootText;
@@ -393,6 +441,9 @@ export function extractGeneralPageSurface(
   if (!selectedTextIsUseful && titleAnchors.length > 0 && mainText)
     mainText = trimLeadingTextBeforeTitles(mainText, titleAnchors);
 
+  const truncatedContentPreview = looksTruncatedContentPreview(title, mainText);
+  mainText = finalizeGeneralPageReadingText(mainText);
+
   const extractionSignalRoot = readingRoot ?? extractionRoot ?? fallbackRoot;
 
   if (looksBlockedOrPaywalled(input.document, extractionSignalRoot, title, mainText, minMainTextLength)) {
@@ -401,6 +452,14 @@ export function extractGeneralPageSurface(
 
   if (looksDynamicContentPartial(title, mainText)) {
     warnings.push("dynamic-content-partial");
+  }
+
+  if (looksUnavailablePage(currentUrl, title, mainText)) {
+    warnings.push("unavailable-page");
+  }
+
+  if (truncatedContentPreview) {
+    warnings.push("truncated-content-preview");
   }
 
   if (!selectedTextIsUseful && mainText) {
@@ -421,6 +480,16 @@ export function extractGeneralPageSurface(
     warnings,
   })) {
     removeWarning(warnings, "no-main-content");
+    removeWarning(warnings, "large-navigation-noise");
+  }
+  if (shouldSuppressSemanticArticleNavigationNoise({
+    method,
+    document: input.document,
+    readingRoot,
+    mainText,
+    linkCount: links.length,
+    warnings,
+  })) {
     removeWarning(warnings, "large-navigation-noise");
   }
 
@@ -473,6 +542,38 @@ function shouldSuppressFallbackArticleNoise(input: {
     return false;
   const sentenceCount = (input.mainText.match(/[。！？.!?]/g) ?? []).length;
   return sentenceCount >= 6;
+}
+
+function shouldSuppressSemanticArticleNavigationNoise(input: {
+  method: ReadingSurfaceExtractionMethod;
+  document: Document;
+  readingRoot: Element | null;
+  mainText: string;
+  linkCount: number;
+  warnings: readonly ReadingExtractionWarning[];
+}): boolean {
+  if (input.method !== "semantic-html" || !input.readingRoot)
+    return false;
+  if (!input.warnings.includes("large-navigation-noise"))
+    return false;
+  if (input.warnings.some((warning) =>
+    warning === "no-main-content" ||
+    warning === "login-or-paywall-like" ||
+    warning === "dynamic-content-partial" ||
+    warning === "unavailable-page"
+  )) {
+    return false;
+  }
+  if (input.mainText.length < 150 || input.linkCount > 12)
+    return false;
+  if (input.document.querySelectorAll("article").length !== 1)
+    return false;
+  const root = input.readingRoot;
+  const semanticArticle = root.matches("article, [itemprop=\"articleBody\"]") || Boolean(root.closest("article"));
+  if (!semanticArticle)
+    return false;
+  const sentenceCount = (input.mainText.match(/[。！？.!?]/g) ?? []).length;
+  return sentenceCount >= 2;
 }
 
 function removeWarning(warnings: ReadingExtractionWarning[], warning: ReadingExtractionWarning): void {
@@ -571,6 +672,13 @@ function isWeakTitlelessSemanticArticleCard(
   if (isArticleBodyLikeElement(element, text, titleAnchors))
     return false;
   const paragraphCount = element.querySelectorAll("p").length;
+  if (
+    text.length >= 160 &&
+    paragraphCount >= 2 &&
+    hasStrongArticleContainerIdentity(elementIdentity(element))
+  ) {
+    return false;
+  }
   const hasTitleSignal = hasHeadingSimilarToAnyTitle(element, titleAnchors) ||
     textContainsComparableAnyTitle(text, titleAnchors);
   return !hasTitleSignal && (paragraphCount <= 2 || text.length < 900);
@@ -637,6 +745,16 @@ function shouldPreferFallbackRootOverSemanticRoot(
   const semanticLinkDensity = linkedTextLength(semanticRoot) / Math.max(semanticText.length, 1);
   const fallbackIsCleanBody = isConfidentFallbackReadingRoot(fallbackRoot, fallbackText, titleAnchors) ||
     isArticleBodyLikeElement(fallbackRoot, fallbackText, titleAnchors);
+  const fallbackHasContextTitle = hasHeadingSimilarToAnyTitle(fallbackRoot, titleAnchors) ||
+    hasAncestorHeadingSimilarToAnyTitle(fallbackRoot, titleAnchors);
+  if (
+    tagName === "article" &&
+    semanticText.length >= 160 &&
+    !containsElement(semanticRoot, fallbackRoot) &&
+    !fallbackHasContextTitle
+  ) {
+    return false;
+  }
   if (
     tagName === "article" &&
     !isArticleBodyLikeElement(fallbackRoot, fallbackText, titleAnchors) &&
@@ -652,8 +770,6 @@ function shouldPreferFallbackRootOverSemanticRoot(
   ) {
     return true;
   }
-  const fallbackHasContextTitle = hasHeadingSimilarToAnyTitle(fallbackRoot, titleAnchors) ||
-    hasAncestorHeadingSimilarToAnyTitle(fallbackRoot, titleAnchors);
   if (isBroadMain && containsElement(semanticRoot, fallbackRoot)) {
     const hasLayoutNoise = hasReadingLayoutNoise(semanticRoot);
     return hasLayoutNoise && fallbackText.length >= semanticText.length * (fallbackHasContextTitle ? 0.35 : 0.55);
@@ -863,7 +979,7 @@ function scoreFallbackContentCandidate(
   if (linkDensity > (hasContextTitleSignal ? 0.75 : 0.45))
     return null;
   const hasNegativeIdentity = FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN.test(identity);
-  if (hasNegativeIdentity && !hasTitleSignal && !isArticleBodyLikeElement(element, text, titleAnchors))
+  if (!isGeneralPageCandidateElementStructurallyEligible(element))
     return null;
 
   let score = Math.min(text.length, 3600) / 36;
@@ -1083,6 +1199,7 @@ function readableText(root: Element): string | undefined {
   }
   pruneNonReadingBlocks(clone);
   pruneNonReadingLinks(clone);
+  pruneStandaloneLinkedTextUtilities(clone);
   addBlockBoundaries(clone);
   return normalizeWhitespace(cleanCommonPageNoise(clone.textContent ?? ""));
 }
@@ -1092,7 +1209,24 @@ function readableText(root: Element): string | undefined {
 // reintroduce author cards, recirculation modules, and controls that the first
 // extraction already removed.
 export function extractGeneralPageCandidateElementText(root: Element): string {
-  return readableText(root) ?? "";
+  return finalizeGeneralPageReadingText(readableText(root) ?? "");
+}
+
+export function isGeneralPageCandidateElementStructurallyEligible(root: Element): boolean {
+  const identity = elementIdentity(root);
+  if (FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN.test(identity) && !hasExplicitArticleBodyIdentity(identity))
+    return false;
+  const tagName = root.tagName.toLowerCase();
+  if (tagName === "article" || tagName === "main" || hasExplicitArticleBodyIdentity(identity))
+    return true;
+  const nestedArticleBody = Array.from(root.querySelectorAll(FALLBACK_CONTENT_CANDIDATE_SELECTOR)).find((candidate) => {
+    const candidateIdentity = elementIdentity(candidate);
+    const candidateTagName = candidate.tagName.toLowerCase();
+    if (candidateTagName !== "article" && !hasStrongArticleContainerIdentity(candidateIdentity))
+      return false;
+    return extractGeneralPageCandidateElementText(candidate).length >= 120;
+  });
+  return !nestedArticleBody;
 }
 
 function clonePrunedReadingRoot(root: Element): Element {
@@ -1137,39 +1271,134 @@ function pruneLowProseUtilityBlocks(root: Element): void {
       continue;
 
     const text = normalizeWhitespace(element.textContent ?? "") ?? "";
-    if (!text || text.length > 760)
+    if (!text)
       continue;
 
     const paragraphCount = element.querySelectorAll("p, blockquote, pre, table, dl").length;
     const linkCount = element.querySelectorAll("a[href]").length;
     const controlCount = element.querySelectorAll("button, input, select, textarea, [role=\"button\"]").length;
     const linkDensity = linkedTextLength(element) / Math.max(text.length, 1);
-    if (paragraphCount === 0 && linkCount >= 2 && controlCount >= 1 && linkDensity >= 0.45)
+    const articleCount = element.querySelectorAll("article").length;
+    const headingCount = element.querySelectorAll("h2, h3, h4").length;
+    const listItemCount = element.querySelectorAll("li").length;
+    const sentenceCount = (text.match(/[。！？.!?]/g) ?? []).length;
+    const hasSubstantialUnlinkedProse = text.length >= 900 &&
+      paragraphCount >= 3 &&
+      sentenceCount >= 5 &&
+      linkDensity < 0.42;
+    const repeatedLinkedCards = articleCount >= 4 &&
+      linkCount >= 4 &&
+      linkDensity >= 0.18;
+    const denseLinkedDirectory = Math.max(headingCount, listItemCount) >= 4 &&
+      linkCount >= 4 &&
+      linkDensity >= 0.18 &&
+      !hasSubstantialUnlinkedProse;
+    const compactInteractiveCluster = text.length <= 760 &&
+      paragraphCount === 0 &&
+      linkCount >= 2 &&
+      controlCount >= 1 &&
+      linkDensity >= 0.45;
+    const compactControlCluster = text.length <= 160 &&
+      paragraphCount === 0 &&
+      controlCount >= 1;
+    if (repeatedLinkedCards || denseLinkedDirectory || compactInteractiveCluster || compactControlCluster)
+      element.remove();
+  }
+}
+
+function pruneStandaloneLinkedTextUtilities(root: Element): void {
+  for (const link of Array.from(root.querySelectorAll("a[href]"))) {
+    if (typeof link.closest === "function" && !link.closest("p, blockquote, li, td, figcaption"))
+      link.remove();
+  }
+  const elements = Array.from(root.querySelectorAll("section, div, ul, ol")).reverse();
+  for (const element of elements) {
+    const text = normalizeWhitespace(element.textContent ?? "") ?? "";
+    if (!text || text.length > 280)
+      continue;
+    const paragraphCount = element.querySelectorAll("p, blockquote, pre, table, dl").length;
+    const linkCount = element.querySelectorAll("a[href]").length;
+    const linkDensity = linkedTextLength(element) / Math.max(text.length, 1);
+    if (paragraphCount === 0 && linkCount >= 1 && linkDensity >= 0.72)
       element.remove();
   }
 }
 
 function pruneRecirculationTailBlocks(root: Element): void {
   for (const element of Array.from(root.querySelectorAll(RECIRCULATION_TAIL_HEADING_SELECTOR))) {
-    const text = normalizeWhitespace(element.textContent ?? "") ?? "";
+    if (!root.contains(element))
+      continue;
+    const text = directElementText(element) || normalizeWhitespace(element.textContent ?? "") || "";
     if (!text || text.length > 80)
       continue;
     if (!RECIRCULATION_TAIL_HEADING_PATTERNS.some((pattern) => pattern.test(text)))
       continue;
 
-    if (hasSubstantialReadingSiblingAfter(element)) {
-      removeInlineRecirculationCluster(element);
+    const boundary = compactRecirculationBoundaryElement(element, root);
+    if (hasSubstantialReadingSiblingAfter(boundary)) {
+      removeInlineRecirculationCluster(boundary);
       continue;
     }
 
-    let sibling = element.nextElementSibling;
+    let sibling = boundary.nextElementSibling;
     while (sibling) {
       const next = sibling.nextElementSibling;
       sibling.remove();
       sibling = next;
     }
-    element.remove();
+    boundary.remove();
   }
+}
+
+function directElementText(element: Element): string {
+  return normalizeWhitespace(Array.from(element.childNodes)
+    .filter((node) => node.nodeType === 3)
+    .map((node) => node.textContent ?? "")
+    .join(" ")) ?? "";
+}
+
+function compactRecirculationBoundaryElement(element: Element, root: Element): Element {
+  let boundary = element;
+  let parent = element.parentElement;
+  while (parent && parent !== root) {
+    const tagName = parent.tagName.toLowerCase();
+    if (tagName === "article" || tagName === "main" || parent.getAttribute("role") === "main")
+      break;
+    const text = normalizeWhitespace(parent.textContent ?? "") ?? "";
+    if (!text || text.length > 420)
+      break;
+    if (hasSubstantialReadingSiblingBefore(boundary))
+      break;
+    boundary = parent;
+    parent = parent.parentElement;
+  }
+  return boundary;
+}
+
+function hasSubstantialReadingSiblingBefore(element: Element): boolean {
+  let sibling = element.previousElementSibling;
+  let inspected = 0;
+  while (sibling && inspected < 8) {
+    inspected += 1;
+    const text = normalizeWhitespace(sibling.textContent ?? "") ?? "";
+    if (!text || FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN.test(elementIdentity(sibling))) {
+      sibling = sibling.previousElementSibling;
+      continue;
+    }
+    const tagName = sibling.tagName.toLowerCase();
+    const paragraphCount = sibling.querySelectorAll("p").length + (tagName === "p" ? 1 : 0);
+    const headingCount = sibling.querySelectorAll("h2, h3, h4").length + (/^h[2-4]$/.test(tagName) ? 1 : 0);
+    const linkDensity = linkedTextLength(sibling) / Math.max(text.length, 1);
+    if (
+      text.length >= 40 &&
+      linkDensity < 0.22 &&
+      (paragraphCount >= 1 || headingCount >= 1 || /[。.!?][\s\S]{40,}[。.!?]/.test(text))
+    ) {
+      return true;
+    }
+    sibling = sibling.previousElementSibling;
+  }
+  return false;
 }
 
 function hasSubstantialReadingSiblingAfter(element: Element): boolean {
@@ -1186,6 +1415,12 @@ function hasSubstantialReadingSiblingAfter(element: Element): boolean {
     const paragraphCount = sibling.querySelectorAll("p").length + (tagName === "p" ? 1 : 0);
     const headingCount = sibling.querySelectorAll("h2, h3, h4").length + (/^h[2-4]$/.test(tagName) ? 1 : 0);
     const linkDensity = linkedTextLength(sibling) / Math.max(text.length, 1);
+    if (RECIRCULATION_TAIL_HEADING_PATTERNS.some((pattern) => pattern.test(text)))
+      return false;
+    if (FALLBACK_CONTENT_NEGATIVE_TOKEN_PATTERN.test(elementIdentity(sibling))) {
+      sibling = sibling.nextElementSibling;
+      continue;
+    }
     if (
       text.length >= 40 &&
       linkDensity < 0.22 &&
@@ -1224,6 +1459,22 @@ function isShortSemanticRootFalseNegative(rootText: string, bodyText: string, mi
   if (/^(?:Advertising|Advertisement)$/i.test(rootText))
     return true;
   return bodyText.length >= Math.max(minMainTextLength, rootText.length * 8);
+}
+
+function isUsefulShortSemanticReadingRoot(
+  root: Element | null,
+  text: string,
+  minMainTextLength: number,
+): boolean {
+  if (!root || text.length < Math.max(160, Math.floor(minMainTextLength * 0.6)))
+    return false;
+  const identity = elementIdentity(root);
+  const semanticIdentity = root.tagName.toLowerCase() === "article" ||
+    root.getAttribute("itemprop") === "articleBody" ||
+    hasExplicitArticleBodyIdentity(identity);
+  if (!semanticIdentity)
+    return false;
+  return (text.match(/[。！？.!?]/g) ?? []).length >= 2;
 }
 
 function shouldKeepReadingLayoutBlock(element: Element): boolean {
@@ -1694,11 +1945,29 @@ function resolveExtractionStatus(
 ): ReadingExtractionStatus {
   if (!text)
     return warnings.includes("login-or-paywall-like") ? "blocked" : "empty";
+  if (warnings.includes("unavailable-page"))
+    return "blocked";
   if (warnings.includes("login-or-paywall-like") && text.length < minMainTextLength)
     return "blocked";
   if (warnings.length > 0)
     return "partial";
   return "complete";
+}
+
+function looksUnavailablePage(url: string, title: string | undefined, text: string): boolean {
+  if (text.length > 600)
+    return false;
+  try {
+    const parsed = new URL(url);
+    if (parsed.searchParams.get("err") === "404" || parsed.searchParams.get("error") === "404")
+      return true;
+    if (/\/(?:404|not-found)(?:\/|$)/i.test(parsed.pathname))
+      return true;
+  } catch {
+    // Fall back to the visible signals below for malformed URLs.
+  }
+  const signals = `${title ?? ""} ${text}`;
+  return UNAVAILABLE_PAGE_PATTERNS.some((pattern) => pattern.test(signals));
 }
 
 const MEMBER_TEASER_MAX_TEXT_LENGTH = 620;
@@ -1724,11 +1993,11 @@ function looksBlockedOrPaywalled(
     return true;
   if (looksGatedContinueReadingPage(documentRef, signals, text.length))
     return true;
+  if (STRONG_PAYWALL_OR_LOGIN_PATTERNS.some((pattern) => pattern.test(signals)))
+    return true;
   const weakMatch = WEAK_PAYWALL_OR_LOGIN_PATTERNS.some((pattern) => pattern.test(signals));
   if (!weakMatch)
     return false;
-  if (STRONG_PAYWALL_OR_LOGIN_PATTERNS.some((pattern) => pattern.test(signals)))
-    return true;
   if (text.length < minMainTextLength)
     return true;
   // P23-member-zone-teaser: a short body carrying explicit member-zone
@@ -1762,6 +2031,31 @@ function looksGatedContinueReadingPage(
 function looksDynamicContentPartial(title: string | undefined, text: string): boolean {
   const signals = `${title ?? ""} ${text}`;
   return DYNAMIC_CONTENT_PARTIAL_PATTERNS.some((pattern) => pattern.test(signals));
+}
+
+function looksTruncatedContentPreview(title: string | undefined, text: string): boolean {
+  const signals = `${title ?? ""} ${text}`;
+  return TRUNCATED_CONTENT_PREVIEW_PATTERNS.some((pattern) => pattern.test(signals));
+}
+
+function finalizeGeneralPageReadingText(text: string): string {
+  return trimTrailingRetrievalMetadata(trimTruncatedContentPreview(text));
+}
+
+function trimTruncatedContentPreview(text: string): string {
+  let boundary = text.length;
+  for (const pattern of TRUNCATED_CONTENT_PREVIEW_PATTERNS) {
+    const match = pattern.exec(text);
+    if (match?.index !== undefined)
+      boundary = Math.min(boundary, match.index);
+  }
+  return text.slice(0, boundary).trim();
+}
+
+function trimTrailingRetrievalMetadata(text: string): string {
+  return text
+    .replace(/\s*Retrieved from\s*(?:""|“”|''|$)\s*$/i, "")
+    .trim();
 }
 
 function buildExcerpt(text: string): string | undefined {

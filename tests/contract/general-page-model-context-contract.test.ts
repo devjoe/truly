@@ -164,6 +164,35 @@ describe("general page model context contract", () => {
     expect(context.mainText).toContain("Short article bodies can still be useful model context");
   });
 
+  it("allows a metadata-backed 157-character semantic news brief without lowering the general minimum", () => {
+    const mainText = "中央氣象署解除豪雨特報，指出降雨已趨緩，發生大雨或豪雨的機率降低。這則短訊包含發布機關、已採取的動作與直接原因，可作為完整而精簡的閱讀內容。地方政府提醒民眾仍應留意即時天氣資訊，並依最新預報調整行程與防災準備。後續警報若有變化，將由官方管道另行發布。該署表示，發布時間與適用縣市均已列在公告中，讀者可依正式來源確認細節與後續更新。".slice(0, 157);
+    expect(mainText).toHaveLength(157);
+
+    const context = buildGeneralPageModelContext({
+      id: "general:https://briefs.example.test/weather/update",
+      kind: "web-page",
+      source: "general",
+      url: "https://briefs.example.test/weather/update",
+      canonicalUrl: "https://briefs.example.test/weather/update",
+      title: "豪雨特報解除",
+      sourceName: "Weather Desk",
+      publishedAt: "2026-07-21T19:57:00+08:00",
+      mainText,
+      extraction: {
+        method: "semantic-html",
+        status: "partial",
+        warnings: ["very-short-content"],
+      },
+    });
+
+    expect(context).toMatchObject({
+      modelEligible: true,
+      modelReadiness: "caution",
+      ineligibilityReason: undefined,
+    });
+    expect(context.mainText.length).toBeLessThan(GENERAL_PAGE_MODEL_MIN_MAIN_TEXT_LENGTH);
+  });
+
   it("marks long fallback or partial extraction as caution instead of clean model-ready", () => {
     const url = "https://example.test/articles/clean-article";
     const surface = extractGeneralPageSurface({

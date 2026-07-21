@@ -10,6 +10,7 @@ import {
   buildGeneralPageParserAdvisorSystemPrompt,
   buildGeneralPageParserAdvisorUserPrompt,
   buildRuleBasedGeneralPageParserAdvice,
+  isGeneralPageParserAdvisorAdviceCompatible,
   parseGeneralPageParserAdvisorAdvice,
   resolveGeneralPageParserAdvisorRuntimePolicy,
   resolveGeneralPageParserEscalation,
@@ -325,7 +326,7 @@ describe("General Page Parser Advisor contract", () => {
     });
   });
 
-  it("keeps utility-dense articles as article/caution instead of page overview", () => {
+  it("keeps utility-dense articles as articles after structural pruning", () => {
     const dom = new JSDOM(`<!doctype html>
       <head>
         <title>Utility Dense Article</title>
@@ -362,12 +363,12 @@ describe("General Page Parser Advisor contract", () => {
     });
     const advice = buildRuleBasedGeneralPageParserAdvice(request);
 
-    expect(request.escalation.reasons).toContain("large_navigation_noise");
+    expect(request.escalation.reasons).not.toContain("large_navigation_noise");
     expect(request.escalation.reasons).not.toContain("index_or_feed");
     expect(advice).toMatchObject({
       pageType: "article",
       decision: "accept_current",
-      confidence: "medium",
+      confidence: "high",
     });
   });
 
@@ -410,6 +411,161 @@ describe("General Page Parser Advisor contract", () => {
       decision: "downgrade_to_index_or_feed",
       confidence: "high",
     });
+  });
+
+  it("does not let full-document card density override a clean article extraction", () => {
+    const context = buildGeneralPageModelContext({
+      id: "general:https://news.example.test/clean-report",
+      kind: "web-page",
+      source: "general",
+      url: "https://news.example.test/clean-report",
+      title: "Clean report",
+      mainText: Array.from({ length: 12 }, (_, index) => `Paragraph ${index + 1} contains coherent synthetic article prose and a complete sentence.`).join(" "),
+      extraction: {
+        method: "semantic-html",
+        status: "complete",
+        warnings: [],
+      },
+    });
+
+    const withArticleMeta = buildGeneralPageParserAdvisorRequest(context, {
+      document: {
+        articleCount: 22,
+        mainCount: 1,
+        roleMainCount: 0,
+        paragraphCount: 44,
+        linkCount: 298,
+        imageCount: 54,
+        formCount: 2,
+        hasArticleMeta: true,
+        hasOpenGraph: true,
+      },
+    });
+    const structuredMainWithoutArticleMeta = buildGeneralPageParserAdvisorRequest(context, {
+      document: {
+        articleCount: 0,
+        mainCount: 1,
+        roleMainCount: 0,
+        paragraphCount: 146,
+        linkCount: 4927,
+        imageCount: 79,
+        formCount: 2,
+        hasArticleMeta: false,
+        hasOpenGraph: true,
+      },
+    });
+
+    expect(withArticleMeta.escalation.reasons).not.toContain("index_or_feed");
+    expect(structuredMainWithoutArticleMeta.escalation.reasons).not.toContain("index_or_feed");
+  });
+
+  it("does not ask a model advisor to reclassify a metadata-backed compact article", () => {
+    const context = buildGeneralPageModelContext({
+      id: "general:https://wire.example.test/news/compact",
+      kind: "web-page",
+      source: "general",
+      url: "https://wire.example.test/news/compact",
+      canonicalUrl: "https://wire.example.test/news/compact",
+      title: "Compact report",
+      sourceName: "Wire Desk",
+      publishedAt: "2026-07-21T12:00:00Z",
+      mainText: "The agency issued a compact report that identifies the action, date, affected group, and stated reason. A second complete sentence provides enough context to analyze the report without reading the site's navigation shell.",
+      extraction: {
+        method: "semantic-html",
+        status: "partial",
+        warnings: ["very-short-content"],
+      },
+    });
+    const request = buildGeneralPageParserAdvisorRequest(context, {
+      document: {
+        articleCount: 1,
+        mainCount: 1,
+        roleMainCount: 0,
+        paragraphCount: 13,
+        linkCount: 379,
+        imageCount: 36,
+        formCount: 2,
+        hasArticleMeta: true,
+        hasOpenGraph: true,
+      },
+    });
+
+    expect(context.modelReadiness).toBe("caution");
+    expect(request.escalation).toMatchObject({
+      shouldAskModel: false,
+      reasons: [],
+    });
+  });
+
+  it("does not ask a model advisor to reclassify a clean metadata-backed fallback article", () => {
+    const context = buildGeneralPageModelContext({
+      id: "general:https://wire.example.test/news/fallback-report",
+      kind: "web-page",
+      source: "general",
+      url: "https://wire.example.test/news/fallback-report",
+      canonicalUrl: "https://wire.example.test/news/fallback-report",
+      title: "Fallback report",
+      authorName: "Wire Desk",
+      publishedAt: "2026-07-21T12:00:00Z",
+      mainText: Array.from({ length: 6 }, (_, index) => `Paragraph ${index + 1} contains complete synthetic report prose with a stated actor, action, reason, and outcome.`).join(" "),
+      extraction: {
+        method: "fallback",
+        status: "complete",
+        warnings: [],
+      },
+    });
+    const request = buildGeneralPageParserAdvisorRequest(context, {
+      document: {
+        articleCount: 0,
+        mainCount: 0,
+        roleMainCount: 0,
+        paragraphCount: 18,
+        linkCount: 194,
+        imageCount: 39,
+        formCount: 3,
+        hasArticleMeta: true,
+        hasOpenGraph: true,
+      },
+    });
+
+    expect(context).toMatchObject({
+      extractionMethod: "fallback",
+      extractionStatus: "complete",
+      modelReadiness: "ready",
+      qualityIssues: [],
+    });
+    expect(request.escalation).toMatchObject({
+      shouldAskModel: false,
+      reasons: [],
+    });
+  });
+
+  it("keeps dynamic-content failures fail-closed when the model proposes an overview", () => {
+    const context = buildGeneralPageModelContext({
+      id: "general:https://science.example.test/dynamic-shell",
+      kind: "web-page",
+      source: "general",
+      url: "https://science.example.test/dynamic-shell",
+      title: "Dynamic shell",
+      mainText: "Unable to render the provided source. A synthetic directory lists several unrelated research products while the intended article remains unavailable.",
+      extraction: {
+        method: "fallback",
+        status: "partial",
+        warnings: ["dynamic-content-partial"],
+      },
+    });
+    const request = buildGeneralPageParserAdvisorRequest(context);
+
+    expect(isGeneralPageParserAdvisorAdviceCompatible(request, {
+      schemaVersion: 1,
+      pageType: "index_or_feed",
+      decision: "downgrade_to_index_or_feed",
+      confidence: "high",
+      needsUserSelection: false,
+      needsScreenshot: false,
+      riskTags: ["dynamic_content"],
+      rationale: "The shell contains several modules.",
+    })).toBe(false);
   });
 
   it("keeps noisy fallback shells downgraded to page overview", () => {

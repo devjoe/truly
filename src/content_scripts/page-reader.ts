@@ -8,6 +8,7 @@ import {
   extractGeneralPageCandidateElementText,
   extractGeneralPageSurface,
   GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH,
+  isGeneralPageCandidateElementStructurallyEligible,
 } from "../lib/general-page-extraction";
 import type {
   GeneralPageCandidateBlockTextErrorMsg,
@@ -21,7 +22,10 @@ import type {
   TrulyMessage,
 } from "../lib/messages";
 import { isTrulyMessage } from "../lib/messages";
-import type { GeneralPageParserAdvisorCandidateBlock } from "../lib/general-page-parser-advisor";
+import type {
+  GeneralPageParserAdvisorCandidateBlock,
+  GeneralPageParserAdvisorDocumentSignals,
+} from "../lib/general-page-parser-advisor";
 import type { ReadingActivation } from "../lib/reading-action-types";
 import type { ReadingTarget, ReadingTargetRect } from "../lib/reading-target-types";
 import {
@@ -65,6 +69,28 @@ export function extractCurrentPageReadingSurface(
       url,
     }),
     candidateBlocks: collectGeneralPageCandidateBlocks(documentRef),
+    documentSignals: collectGeneralPageDocumentSignals(documentRef),
+  };
+}
+
+export function collectGeneralPageDocumentSignals(
+  documentRef: Document,
+): GeneralPageParserAdvisorDocumentSignals {
+  return {
+    articleCount: documentRef.querySelectorAll("article").length,
+    mainCount: documentRef.querySelectorAll("main").length,
+    roleMainCount: documentRef.querySelectorAll("[role=\"main\"]").length,
+    paragraphCount: documentRef.querySelectorAll("p").length,
+    linkCount: documentRef.querySelectorAll("a[href]").length,
+    imageCount: documentRef.querySelectorAll("img").length,
+    formCount: documentRef.querySelectorAll("form").length,
+    hasArticleMeta: Boolean(documentRef.querySelector([
+      "meta[property=\"article:published_time\"]",
+      "meta[property=\"article:modified_time\"]",
+      "meta[property=\"article:author\"]",
+      "meta[name=\"author\"]",
+    ].join(","))),
+    hasOpenGraph: Boolean(documentRef.querySelector("meta[property^=\"og:\"]")),
   };
 }
 
@@ -95,6 +121,8 @@ export function collectGeneralPageCandidateBlocks(
   const seenText = new Set<string>();
   let index = 0;
   for (const element of Array.from(documentRef.body?.querySelectorAll(CANDIDATE_SELECTOR) ?? [])) {
+    if (!isGeneralPageCandidateElementStructurallyEligible(element))
+      continue;
     const text = extractGeneralPageCandidateElementText(element);
     if (text.length < 120)
       continue;
@@ -123,6 +151,8 @@ function candidateBlockText(documentRef: Document, blockId: string): string | un
   const seenText = new Set<string>();
   let index = 0;
   for (const element of candidates) {
+    if (!isGeneralPageCandidateElementStructurallyEligible(element))
+      continue;
     const text = extractGeneralPageCandidateElementText(element);
     if (text.length < 120)
       continue;

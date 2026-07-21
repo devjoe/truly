@@ -2406,6 +2406,17 @@ describe("sidepanel page reading runtime", () => {
           type: "PAGE_READING_RESULT",
           tabId: 42,
           surface: weakSurface,
+          documentSignals: {
+            articleCount: 1,
+            mainCount: 1,
+            roleMainCount: 0,
+            paragraphCount: 4,
+            linkCount: 3,
+            imageCount: 1,
+            formCount: 0,
+            hasArticleMeta: true,
+            hasOpenGraph: true,
+          },
           candidateBlocks: [{
             id: "block-article",
             label: "article#body",
@@ -2469,6 +2480,16 @@ describe("sidepanel page reading runtime", () => {
     await flushMicrotasks();
     await flushMicrotasks();
 
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: "GENERAL_PAGE_PARSER_ADVISOR_REQUEST",
+      request: expect.objectContaining({
+        document: expect.objectContaining({
+          articleCount: 1,
+          mainCount: 1,
+          paragraphCount: 4,
+        }),
+      }),
+    }));
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST",
       tabId: 42,

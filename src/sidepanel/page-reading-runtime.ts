@@ -19,6 +19,7 @@ import {
   type GeneralPageEffectiveModelContextUse,
   type GeneralPageParserAdvisorAdvice,
   type GeneralPageParserAdvisorCandidateBlock,
+  type GeneralPageParserAdvisorDocumentSignals,
   type GeneralPageParserAdvisorRequest,
 } from "../lib/general-page-parser-advisor";
 import {
@@ -517,6 +518,8 @@ function extractionWarningLabel(
     "large-navigation-noise": "sidepanel.page.warning.largeNavigationNoise",
     "login-or-paywall-like": "sidepanel.page.warning.loginOrPaywall",
     "dynamic-content-partial": "sidepanel.page.warning.dynamicPartial",
+    "unavailable-page": "sidepanel.page.warning.unavailablePage",
+    "truncated-content-preview": "sidepanel.page.warning.truncatedPreview",
   };
   return tr(key[warning]);
 }
@@ -2578,6 +2581,7 @@ export function createSidepanelPageReadingRuntime({
     options: {
       target?: ReadingTarget;
       candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
+      document?: GeneralPageParserAdvisorDocumentSignals;
     } = {},
   ): void {
     const target = options.target;
@@ -2590,6 +2594,7 @@ export function createSidepanelPageReadingRuntime({
       : buildGeneralPageModelContext(surface, { targetKind: "page" });
     const request = buildGeneralPageParserAdvisorRequest(context, {
       candidateBlocks: target ? [] : options.candidateBlocks ?? [],
+      document: target ? undefined : options.document,
       allowScreenshot: getVisionSupported(),
     });
     const providerRuntime = resolveAdvisorProviderRuntime(
@@ -3007,6 +3012,7 @@ export function createSidepanelPageReadingRuntime({
     if (!preserveRecoveryState) {
       startParserAdvisor(tabId, message.surface, {
         candidateBlocks: message.candidateBlocks ?? [],
+        document: message.documentSignals,
       });
     } else {
       clearRereadTransaction(tabId, completion.session.requestId);

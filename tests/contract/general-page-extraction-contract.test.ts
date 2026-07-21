@@ -2,7 +2,11 @@ import fs from "node:fs";
 import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
-import { extractGeneralPageSurface } from "@src/lib/general-page-extraction";
+import {
+  extractGeneralPageCandidateElementText,
+  extractGeneralPageSurface,
+  isGeneralPageCandidateElementStructurallyEligible,
+} from "@src/lib/general-page-extraction";
 import { buildGeneralPageModelContext } from "@src/lib/general-page-model-context";
 import type { TrulyMessage } from "@src/lib/messages";
 import type { ReadingSurface } from "@src/lib/reading-surface-types";
@@ -512,6 +516,45 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.extraction.warnings).toContain("very-short-content");
   });
 
+  it("blocks unavailable error pages instead of summarizing their shell", () => {
+    const url = "https://tw.yahoo.test/?err=404&err_url=https%3A%2F%2Ftw.news.yahoo.test%2Fmissing";
+    const documentRef = new JSDOM(`<!doctype html>
+      <html><head><title>Yahoo</title></head><body><main>
+        <p>嗯....驚！您要找的頁面已不存在，請嘗試搜尋看看。</p>
+        <h2>焦點新聞</h2>
+      </main></body></html>`, { url }).window.document;
+
+    const surface = extractGeneralPageSurface({ document: documentRef, url });
+
+    expect(surface.extraction.status).toBe("blocked");
+    expect(surface.extraction.warnings).toContain("unavailable-page");
+    expect(buildGeneralPageModelContext(surface)).toMatchObject({
+      modelEligible: false,
+      modelReadiness: "blocked",
+      ineligibilityReason: "empty_or_blocked",
+    });
+  });
+
+  it("removes article control labels without trimming prose that follows them", () => {
+    const url = "https://reference.example.test/articles/control-labels";
+    const documentRef = new JSDOM(`<!doctype html>
+      <html><head><title>Reference article</title></head><body><main><article>
+        <h1>Reference article</h1>
+        <div class="switcher-container"><label>Show map of the current territory</label></div>
+        <p>This synthetic article paragraph contains enough grounded prose to remain part of the reading body after interface labels are removed. It describes one source, one event, and one outcome in complete sentences.</p>
+        <p>End of content</p>
+        <p>暫無留言</p>
+        <p>A second substantive paragraph follows the visual marker and must remain available to the reader because the marker is not a true article boundary.</p>
+      </article></main></body></html>`, { url }).window.document;
+
+    const surface = extractGeneralPageSurface({ document: documentRef, url });
+
+    expect(surface.mainText).not.toContain("Show map");
+    expect(surface.mainText).not.toContain("End of content");
+    expect(surface.mainText).not.toContain("暫無留言");
+    expect(surface.mainText).toContain("A second substantive paragraph follows");
+  });
+
   it("does not treat a normal newsletter CTA as a paywall", () => {
     const surface = extractGeneralPageSurface({
       document: jsdomFixtureDocument(
@@ -605,6 +648,374 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).toContain("fictional transit committee reviewed station access plans");
     expect(surface.mainText).not.toContain("Synthetic market update 08:10");
     expect(surface.mainText).not.toContain("Search this site");
+  });
+
+  it("removes hidden language and interface wrappers inside a semantic article root", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Hidden language wrapper fixture</title>
+      <article>
+        <div aria-hidden="true" class="language-switcher-neutral">
+          <a href="/en">English hidden option</a>
+          <a href="/fr">Français hidden option</a>
+          <a href="/ja">日本語 hidden option</a>
+        </div>
+        <div style="display: none">
+          Hidden interface text must not enter the authorized reading context.
+        </div>
+        <h1>Hidden language wrapper fixture</h1>
+        <p>The first synthetic paragraph describes a fictional civic archive and its publication schedule.</p>
+        <p>The second synthetic paragraph records a made-up review date and a public-safe document label.</p>
+        <p>The third synthetic paragraph keeps the article body long enough for a complete reading context.</p>
+      </article>
+    `, { url: "https://docs.example.test/hidden-language-wrapper" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("fictional civic archive");
+    expect(surface.mainText).not.toContain("English hidden option");
+    expect(surface.mainText).not.toContain("Hidden interface text");
+  });
+
+  it("removes a long structurally repeated recirculation tail without a site-specific label", () => {
+    const relatedCards = Array.from({ length: 8 }, (_, index) => `
+      <article>
+        <a href="/network/${index + 1}">
+          <h2>Unrelated synthetic network headline ${index + 1}</h2>
+          <p>This long fictional teaser belongs to a different story and exists only to make the neutral tail exceed the old utility length ceiling.</p>
+        </a>
+      </article>
+    `).join("");
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Primary synthetic report</title>
+      <article>
+        <h1>Primary synthetic report</h1>
+        <div class="copy-neutral">
+          <p>The primary report explains a fictional bridge inspection performed by a made-up municipal team.</p>
+          <p>Inspectors recorded an invented completion date and published a public-safe summary for local readers.</p>
+          <p>A final paragraph closes the same report before a structurally separate network module begins.</p>
+        </div>
+        <section class="module-neutral">${relatedCards}</section>
+      </article>
+    `, { url: "https://news.example.test/primary-report" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("fictional bridge inspection");
+    expect(surface.mainText).not.toContain("Unrelated synthetic network headline");
+    expect(surface.mainText).not.toContain("different story");
+  });
+
+  it("does not promote a recommendation stream over a short semantic article", () => {
+    const recommendationCards = Array.from({ length: 6 }, (_, index) => `
+      <section>
+        <a href="/recommended/${index + 1}">
+          <h2>Unrelated synthetic story ${index + 1}</h2>
+          <p>This separate fictional story has enough prose to look article-like when the whole stream is scored.</p>
+        </a>
+      </section>
+    `).join("");
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Unrelated synthetic story 1</title>
+      <article id="article-primary">
+        <h1>Short primary bulletin</h1>
+        <p>The primary bulletin is intentionally short but remains the only semantic article on this page.</p>
+      </article>
+      <div id="recommended-article-stream">${recommendationCards}</div>
+    `, { url: "https://news.example.test/short-primary" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.mainText).toContain("only semantic article");
+    expect(surface.mainText).not.toContain("Unrelated synthetic story");
+  });
+
+  it("removes compact standalone action links without stripping inline source links", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Standalone utility link fixture</title>
+      <article>
+        <h1>Standalone utility link fixture</h1>
+        <p>The first paragraph describes a fictional safety review and links to <a href="/source">the public source record</a>.</p>
+        <div class="neutral-action"><a href="/join">Join the publisher community for daily updates</a></div>
+        <div class="neutral-player"><button type="button">Play</button><span>Current Time Duration</span></div>
+        <p>The second paragraph records a made-up inspection date and keeps the same report moving forward.</p>
+        <p>The third paragraph closes the fictional report with a clear and complete outcome.</p>
+        <div class="neutral-next"><a href="/next-story">Unrelated synthetic celebrity headline</a></div>
+        <a href="/direct-next-story">Another unrelated standalone headline</a>
+      </article>
+    `, { url: "https://news.example.test/standalone-utility-link" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("the public source record");
+    expect(surface.mainText).not.toContain("Join the publisher community");
+    expect(surface.mainText).not.toContain("Current Time Duration");
+    expect(surface.mainText).not.toContain("Unrelated synthetic celebrity headline");
+    expect(surface.mainText).not.toContain("Another unrelated standalone headline");
+  });
+
+  it("marks generic source-rendering failures as dynamic partial content", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Research portal</title>
+      <main>
+        <p>Unable to render the provided source</p>
+        <p>This landing page lists several unrelated fictional research products and recent updates.</p>
+        <p>Another directory description keeps the shell long enough to pass the minimum text threshold.</p>
+        <p>A final navigation description confirms that no single complete article was rendered.</p>
+      </main>
+    `, { url: "https://science.example.test/research-portal" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("dynamic-content-partial");
+  });
+
+  it("stops article text before a generic hot-topic or reference directory", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Tail directory boundary fixture</title>
+      <article>
+        <h1>Tail directory boundary fixture</h1>
+        <p>The first paragraph describes a fictional public hearing and its published agenda.</p>
+        <p>The second paragraph records a made-up decision and keeps the same report coherent.</p>
+        <p>The third paragraph closes the report before a separate directory begins.</p>
+        <h5>熱門話題</h5>
+        <ul>
+          <li><a href="/other-one">Unrelated synthetic market headline</a></li>
+          <li><a href="/other-two">Unrelated synthetic celebrity headline</a></li>
+        </ul>
+        <h2>References <a href="#edit">edit</a></h2>
+        <div class="reflist">
+          <p>Reference publication one contains a long synthetic citation description without article prose.</p>
+          <p>Reference publication two contains another long synthetic citation description for the directory.</p>
+        </div>
+      </article>
+    `, { url: "https://news.example.test/tail-directory-boundary" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("third paragraph closes the report");
+    expect(surface.mainText).not.toContain("熱門話題");
+    expect(surface.mainText).not.toContain("Unrelated synthetic market headline");
+    expect(surface.mainText).not.toContain("References");
+    expect(surface.mainText).not.toContain("Reference publication one");
+  });
+
+  it("lifts nested recirculation labels to their compact tail container", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Nested tail boundary fixture</title>
+      <article>
+        <h1>Nested tail boundary fixture</h1>
+        <p>The first paragraph describes a fictional agency announcement and its public date.</p>
+        <p>The second paragraph records the stated reason and preserves enough coherent article prose.</p>
+        <p>The third paragraph closes the report before publisher navigation begins.</p>
+        <div class="hot-topic-module">
+          <div>【全球熱話題】</div>
+          <a href="/unrelated-one">Unrelated synthetic market headline</a>
+          <a href="/unrelated-two">Unrelated synthetic celebrity headline</a>
+        </div>
+        <section class="author-card"><p>Synthetic author biography outside the report.</p></section>
+      </article>
+    `, { url: "https://news.example.test/nested-tail-boundary" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("third paragraph closes the report");
+    expect(surface.mainText).not.toContain("全球熱話題");
+    expect(surface.mainText).not.toContain("Unrelated synthetic market headline");
+    expect(surface.mainText).not.toContain("Synthetic author biography");
+  });
+
+  it("prefers a useful short semantic article over a larger discussion wrapper", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Short report inside noisy wrapper</title>
+      <section class="article-content__wrapper">
+        <article class="article-content">
+          <p>A fictional agency published a short notice with a date and named location.</p>
+          <p>It explains the temporary change and gives one coherent reason.</p>
+          <p>The final sentence closes the report before the discussion board.</p>
+        </article>
+        <section class="discuss-board">
+          <p>Discussion rules require every participant to follow the community terms and avoid unrelated claims.</p>
+          <p>Moderators may remove posts, suspend accounts, and reject labels that do not follow the rules.</p>
+          <p>Additional repeated policy text makes this wrapper longer than the actual short report.</p>
+          <p>Another repeated moderation paragraph must never replace the semantic article body.</p>
+        </section>
+      </section>
+    `, { url: "https://news.example.test/short-report" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("fictional agency published a short notice");
+    expect(surface.mainText).not.toContain("Discussion rules require");
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.warnings).toContain("very-short-content");
+    const wrapper = dom.window.document.querySelector(".article-content__wrapper");
+    const article = dom.window.document.querySelector("article");
+    expect(wrapper).not.toBeNull();
+    expect(article).not.toBeNull();
+    expect(isGeneralPageCandidateElementStructurallyEligible(wrapper!)).toBe(false);
+    expect(isGeneralPageCandidateElementStructurallyEligible(article!)).toBe(true);
+  });
+
+  it("stops before a source or tag footer instead of retaining its siblings", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Source footer boundary fixture</title>
+      <article>
+        <h1>Source footer boundary fixture</h1>
+        <p>The first paragraph describes a fictional cultural event and its announced schedule.</p>
+        <p>The second paragraph quotes a made-up organizer and closes the coherent report.</p>
+        <p>The third paragraph provides enough prose for a stable article extraction result.</p>
+        <div class="article-source">文章來源：</div>
+        <div class="article-tags"><a href="/tag-one"># synthetic tag</a></div>
+        <section class="next-story"><a href="/next">Unrelated next article</a></section>
+      </article>
+    `, { url: "https://news.example.test/source-footer-boundary" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("third paragraph provides enough prose");
+    expect(surface.mainText).not.toContain("文章來源");
+    expect(surface.mainText).not.toContain("synthetic tag");
+    expect(surface.mainText).not.toContain("Unrelated next article");
+  });
+
+  it("does not mistake prose-like bibliography entries for article paragraphs", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Bibliography boundary fixture</title>
+      <article>
+        <h1>Bibliography boundary fixture</h1>
+        <p>The first paragraph describes a fictional technical standard and its publication date.</p>
+        <p>The second paragraph explains the stated compatibility change in coherent article prose.</p>
+        <p>The final paragraph closes the article before its reference directory.</p>
+        <h2>References <a href="#edit">edit</a></h2>
+        <div class="reflist">
+          <p>Reference publication one contains a long synthetic citation description without article prose.</p>
+          <p>Reference publication two contains another long synthetic citation description for the directory.</p>
+        </div>
+        <h2>External links</h2>
+        <p>A synthetic extension documentation link and a project archive listing.</p>
+      </article>
+    `, { url: "https://docs.example.test/bibliography-boundary" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("final paragraph closes the article");
+    expect(surface.mainText).not.toContain("Reference publication one");
+    expect(surface.mainText).not.toContain("External links");
+    expect(surface.mainText).not.toContain("extension documentation link");
+  });
+
+  it("removes inline continue-reading and app-prize controls from article prose", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Inline controls fixture</title>
+      <article>
+        <h1>Inline controls fixture</h1>
+        <p>The first paragraph describes a fictional public meeting and its announced agenda.</p>
+        <p class="before_ir">請繼續往下閱讀...</p>
+        <p>The second paragraph records the made-up decision after the inline control.</p>
+        <p>The final paragraph closes the coherent report before publisher promotions.</p>
+        <p class="appE1121">不用抽 不用搶 現在用APP看新聞 保證天天中獎 按我看活動辦法</p>
+      </article>
+    `, { url: "https://news.example.test/inline-controls" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("second paragraph records the made-up decision");
+    expect(surface.mainText).not.toContain("請繼續往下閱讀");
+    expect(surface.mainText).not.toContain("不用抽");
+    expect(surface.mainText).not.toContain("天天中獎");
+  });
+
+  it("marks an explicitly incomplete full-text preview as gated", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Incomplete preview fixture</title>
+      <article>
+        <h1>Incomplete preview fixture</h1>
+        <p>The first paragraph contains a fictional report preview and a public-safe date.</p>
+        <p>The second paragraph ends before the report reaches its stated conclusion.</p>
+        <p>The preview still contains enough article prose to summarize cautiously while preserving the explicit incomplete-content warning.</p>
+        <p>It names the fictional institution, describes the announced change, and explains why readers may want to inspect the complete issue.</p>
+        <p>全文未完，全文及圖表請見當期完整內容。</p>
+      </article>
+    `, { url: "https://magazine.example.test/incomplete-preview" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.extraction.status).toBe("partial");
+    expect(surface.extraction.warnings).toContain("truncated-content-preview");
+    expect(surface.extraction.warnings).not.toContain("login-or-paywall-like");
+    expect(surface.mainText).not.toContain("全文未完");
+    expect(surface.mainText).not.toContain("全文及圖表請見");
+  });
+
+  it("applies final tail cleanup to parser-advisor candidate text", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <article>
+        <p>A synthetic candidate contains enough coherent prose before a publication preview boundary.</p>
+        <p>The second paragraph is part of the visible report and should remain available.</p>
+        <p>The third paragraph closes the visible excerpt.（全文未完） 全文及圖表請見完整內容。</p>
+        <div>Retrieved from ""</div>
+      </article>
+    `, { url: "https://news.example.test/candidate-tail-cleanup" });
+
+    const article = dom.window.document.querySelector("article");
+    expect(article).not.toBeNull();
+    const text = extractGeneralPageCandidateElementText(article!);
+
+    expect(text).toContain("third paragraph closes the visible excerpt");
+    expect(text).not.toContain("全文未完");
+    expect(text).not.toContain("全文及圖表請見");
+    expect(text).not.toContain("Retrieved from");
   });
 
   it("selects app-shell entity body modules over visual lead cards", () => {
@@ -948,6 +1359,26 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.extraction.warnings).toEqual(["very-short-content"]);
     expect(surface.mainText).toContain("short semantic news brief fixture");
     expect(surface.mainText).toContain("Short article bodies can still be useful model context");
+  });
+
+  it("does not let a dense outer navigation shell taint a compact semantic article", () => {
+    const url = "https://wire.example.test/news/compact-report";
+    const navigation = Array.from({ length: 140 }, (_, index) => `<a href="/topic-${index}">Topic ${index}</a>`).join("");
+    const documentRef = new JSDOM(`<!doctype html><html><head>
+      <title>Compact report</title>
+      <meta property="article:published_time" content="2026-07-21T12:00:00Z">
+    </head><body><nav>${navigation}</nav><main><article>
+      <h1>Compact report</h1>
+      <p>The agency published a compact report with a concrete action and a stated reason. The prose remains the only intended reading target.</p>
+      <p>A second complete sentence confirms that the article body is distinct from the site's dense navigation shell.</p>
+    </article></main></body></html>`, { url }).window.document;
+
+    const surface = extractGeneralPageSurface({ document: documentRef, url });
+
+    expect(surface.extraction.method).toBe("semantic-html");
+    expect(surface.extraction.warnings).not.toContain("large-navigation-noise");
+    expect(surface.mainText).not.toContain("Topic 139");
+    expect(buildGeneralPageModelContext(surface).modelEligible).toBe(true);
   });
 
   it("downgrades dense semantic main card collections as index-like pages", () => {

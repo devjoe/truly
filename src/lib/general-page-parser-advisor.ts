@@ -287,7 +287,8 @@ export function resolveGeneralPageParserEscalation(
   const hasLargeNavigationNoise = issues.has("large_navigation_noise") || warnings.has("large-navigation-noise");
   if (hasLargeNavigationNoise)
     reasons.push("large_navigation_noise");
-  if (isDenseIndexLikeDocument(options.document) || isMultiArticleTeaserHub(options.document) || (hasLargeNavigationNoise && isLikelyIndexLikeNoisyDocument(options.document)))
+  const confidentArticleExtraction = hasConfidentArticleExtraction(context, options.document);
+  if (!confidentArticleExtraction && (isDenseIndexLikeDocument(options.document) || isMultiArticleTeaserHub(options.document) || (hasLargeNavigationNoise && isLikelyIndexLikeNoisyDocument(options.document))))
     reasons.push("index_or_feed");
   if (issues.has("no_main_content") || warnings.has("no-main-content"))
     reasons.push("no_main_content");
@@ -316,7 +317,7 @@ export function resolveGeneralPageParserEscalation(
     allowedDecisions.push("request_screenshot_region");
 
   return {
-    shouldAskModel: context.modelReadiness !== "ready" || uniqueReasons.length > 0,
+    shouldAskModel: !confidentArticleExtraction && (context.modelReadiness !== "ready" || uniqueReasons.length > 0),
     reasons: uniqueReasons,
     allowedDecisions: allowedDecisions,
   };
@@ -548,10 +549,19 @@ export function isGeneralPageParserAdvisorAdviceCompatible(
 ): boolean {
   const reasons = new Set(request.escalation.reasons);
   if (
+    (reasons.has("login_or_paywall") || reasons.has("dynamic_content")) &&
+    advisor.decision !== "mark_blocked_or_empty" &&
+    advisor.decision !== "request_user_selection" &&
+    advisor.decision !== "request_screenshot_region"
+  ) {
+    return false;
+  }
+  if (
     advisor.decision === "accept_current" &&
     request.targetKind === "page" &&
     (reasons.has("index_or_feed") ||
       reasons.has("login_or_paywall") ||
+      reasons.has("dynamic_content") ||
       reasons.has("no_main_content"))
   ) {
     return false;
@@ -695,6 +705,35 @@ function isDenseIndexLikeDocument(document: GeneralPageParserAdvisorDocumentSign
   if (document.articleCount !== 1 && document.linkCount >= 100 && document.imageCount >= 20)
     return true;
   return document.articleCount >= 3 && document.linkCount >= 40 && document.paragraphCount <= 20;
+}
+
+function hasConfidentArticleExtraction(
+  context: GeneralPageModelContext,
+  document: GeneralPageParserAdvisorDocumentSignals | undefined,
+): boolean {
+  if (!document || context.mainText.length < 150)
+    return false;
+  if (context.qualityIssues.some((issue) => issue === "large_navigation_noise" || issue === "no_main_content" || issue === "dynamic_content_partial"))
+    return false;
+  if (context.extractionWarnings.some((warning) => warning !== "very-short-content"))
+    return false;
+  if (context.modelReadiness === "blocked")
+    return false;
+  if (context.extractionMethod === "fallback") {
+    return context.extractionStatus === "complete" &&
+      context.mainText.length >= 240 &&
+      context.extractionWarnings.length === 0 &&
+      context.qualityIssues.length === 0 &&
+      document.hasArticleMeta;
+  }
+  if (context.extractionMethod !== "semantic-html")
+    return false;
+  if (document.hasArticleMeta)
+    return true;
+  if (context.mainText.length < 240)
+    return false;
+  const semanticMainCount = document.mainCount + document.roleMainCount;
+  return semanticMainCount > 0 && document.paragraphCount >= 8;
 }
 
 function isMultiArticleTeaserHub(document: GeneralPageParserAdvisorDocumentSignals | undefined): boolean {

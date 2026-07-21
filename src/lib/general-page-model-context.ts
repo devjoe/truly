@@ -177,7 +177,7 @@ function isUsefulShortSemanticArticle(
 ): boolean {
   if (surface.extraction.method !== "semantic-html")
     return false;
-  if (mainText.length < Math.max(160, Math.floor(minMainTextLength * 0.6)))
+  if (mainText.length < Math.max(150, Math.floor(minMainTextLength * 0.6)))
     return false;
   const warnings = surface.extraction.warnings;
   if (warnings.some((warning) => warning !== "very-short-content"))

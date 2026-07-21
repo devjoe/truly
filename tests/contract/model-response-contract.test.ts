@@ -235,6 +235,29 @@ describe("Tier B General Page parser advisor public contract", () => {
     expect(parsed.ok).toBe(true);
     expect(parsed.ok && isGeneralPageParserAdvisorAdviceCompatible(parserAdvisorRequest, parsed.value)).toBe(false);
   });
+
+  it("rejects model advice that accepts a deterministic dynamic-content failure", () => {
+    const dynamicRequest = {
+      ...parserAdvisorRequest,
+      escalation: {
+        ...parserAdvisorRequest.escalation,
+        reasons: ["dynamic_content" as const],
+      },
+    };
+    const parsed = parseGeneralPageParserAdvisorAdvice(JSON.stringify({
+      schemaVersion: 1,
+      pageType: "article",
+      decision: "accept_current",
+      confidence: "high",
+      needsUserSelection: false,
+      needsScreenshot: false,
+      riskTags: ["dynamic_content"],
+      rationale: "The model believes the partial shell is usable.",
+    }), dynamicRequest);
+
+    expect(parsed.ok).toBe(true);
+    expect(parsed.ok && isGeneralPageParserAdvisorAdviceCompatible(dynamicRequest, parsed.value)).toBe(false);
+  });
 });
 
 describe("Tier B General Page brief public contract", () => {

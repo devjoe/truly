@@ -30,6 +30,11 @@ describe("page-reader content script", () => {
 
     expect(result).toMatchObject({
       type: "PAGE_READING_RESULT",
+      documentSignals: {
+        articleCount: 1,
+        mainCount: 0,
+        roleMainCount: 0,
+      },
       surface: {
         kind: "web-page",
         source: "general",
@@ -124,6 +129,42 @@ describe("page-reader content script", () => {
     expect(handled).toMatchObject({
       type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT",
       text: expect.not.stringContaining("Another synthetic story headline"),
+    });
+  });
+
+  it("keeps recommendation streams out of parser-advisor candidates and block lookup", () => {
+    const url = "https://example.test/articles/recommendation-stream-candidate";
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Recommendation stream candidate fixture</title>
+      <div id="recommended-article-stream">
+        <p>Unrelated synthetic story one contains enough prose to become a candidate without structural filtering.</p>
+        <p>Unrelated synthetic story two belongs to a separate page and must never become the reading target.</p>
+      </div>
+      <article id="story-body">
+        <h1>Recommendation stream candidate fixture</h1>
+        <p>The first primary paragraph describes a fictional archive review and its public release schedule.</p>
+        <p>The second primary paragraph records a made-up decision and a traceable synthetic source.</p>
+        <p>The third primary paragraph closes the same report without unrelated navigation.</p>
+      </article>
+    `, { url });
+    const documentRef = dom.window.document;
+
+    const result = extractCurrentPageReadingSurface(documentRef, url);
+    expect(result.candidateBlocks.some((block) => block.label.includes("recommended-article-stream"))).toBe(false);
+    const articleBlock = result.candidateBlocks.find((block) => block.label.includes("#story-body"));
+    expect(articleBlock?.id).toBe("block-1");
+
+    const handled = articleBlock ? handleCandidateBlockTextMessage({
+      type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST",
+      tabId: 1,
+      surfaceId: result.surface.id,
+      blockId: articleBlock.id,
+    } satisfies TrulyMessage, documentRef, url) : undefined;
+    expect(handled).toMatchObject({
+      type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT",
+      blockId: "block-1",
+      text: expect.stringContaining("first primary paragraph"),
     });
   });
 

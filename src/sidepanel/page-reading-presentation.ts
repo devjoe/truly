@@ -63,6 +63,7 @@ function noteMatchesPageContext(
     "very-short-content": /(?:文字|內容).*(?:較少|過短)|(?:text|content).*(?:short|limited)/iu,
     "login-or-paywall-like": /登入|付費牆|login|paywall/iu,
     "dynamic-content-partial": /(?:動態|載入).*(?:不完整|尚未完成)|(?:dynamic|loading).*(?:partial|incomplete)/iu,
+    "truncated-content-preview": /(?:可見|目前).*(?:預覽|部分|不完整)|(?:visible|current).*(?:preview|partial|incomplete)/iu,
   };
   if (warnings.some((warning) => patterns[warning]?.test(note) === true)) return true;
   return allowedUse === "page_overview_only" && aggregationGuidance(note);
@@ -115,7 +116,9 @@ function contextPresentation(
     };
   }
   if (context?.modelReadiness === "blocked") {
-    const summary = warnings.includes("very-short-content")
+    const summary = warnings.includes("unavailable-page")
+      ? tr("sidepanel.page.context.summary.unavailable")
+      : warnings.includes("very-short-content")
       ? tr("sidepanel.page.context.summary.short")
       : warnings.includes("no-main-content")
       ? tr("sidepanel.page.context.summary.noMain")
@@ -127,6 +130,7 @@ function contextPresentation(
     };
   }
   if (warnings.includes("dynamic-content-partial")) return { tone: "caution", summary: tr("sidepanel.page.context.advisory.dynamic") };
+  if (warnings.includes("truncated-content-preview")) return { tone: "caution", summary: tr("sidepanel.page.context.advisory.truncatedPreview") };
   if (warnings.includes("large-navigation-noise")) return { tone: "caution", summary: tr("sidepanel.page.context.advisory.navigation") };
   if (warnings.includes("no-main-content")) return { tone: "caution", summary: tr("sidepanel.page.context.summary.noMain") };
   if (warnings.includes("very-short-content")) return { tone: "caution", summary: tr("sidepanel.page.context.summary.short") };

@@ -16,7 +16,9 @@ export type ReadingExtractionWarning =
   | "very-short-content"
   | "large-navigation-noise"
   | "login-or-paywall-like"
-  | "dynamic-content-partial";
+  | "dynamic-content-partial"
+  | "unavailable-page"
+  | "truncated-content-preview";
 
 export interface ReadingSurfaceLink {
   href: string;

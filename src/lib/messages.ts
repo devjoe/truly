@@ -43,6 +43,7 @@ import type {
   GeneralPageEffectiveModelContextUse,
   GeneralPageParserAdvisorAdvice,
   GeneralPageParserAdvisorCandidateBlock,
+  GeneralPageParserAdvisorDocumentSignals,
   GeneralPageParserAdvisorRequest,
 } from "./general-page-parser-advisor";
 
@@ -124,6 +125,7 @@ export interface PageReadingResultMsg {
   requestId?: string;
   surface: ReadingSurface;
   candidateBlocks?: GeneralPageParserAdvisorCandidateBlock[];
+  documentSignals?: GeneralPageParserAdvisorDocumentSignals;
   tabId?: number;
   elapsedMs?: number;
 }
