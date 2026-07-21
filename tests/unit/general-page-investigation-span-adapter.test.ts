@@ -110,6 +110,9 @@ describe("General Page ranked exact-span selector v3", () => {
     expect(system).toContain("does not qualify merely because it is concrete");
     expect(system).toContain("Public interest");
     expect(system).toContain("Do not fill a quota");
+    expect(system).toContain("Choose the smallest useful set");
+    expect(system).toContain("Usually return one action");
+    expect(system).toContain("first ID must be the single action");
     expect(user).toContain('"id":"span:1"');
     expect(user).not.toContain("start");
     expect(user).not.toContain("end");
@@ -124,8 +127,9 @@ describe("General Page ranked exact-span selector v3", () => {
     });
 
     expect(presentation.displayClaim).toBe("業者必須在七月三十一日前完成下架");
-    expect(presentation.evidenceHint).toBe("比對直接相關的第一手或可信來源");
+    expect(presentation.evidenceHint).toBe("優先比對直接相關的官方資料、當事人原始聲明或可信報導");
     expect(presentation.askAiPrompt).toContain("請查核以下原文陳述");
+    expect(presentation.askAiPrompt).toContain("請先辨識其中的人物、機構、事件、數字、日期");
     expect(presentation.askAiPrompt).toContain("若找不到直接證據");
     expect(presentation.askAiPrompt).toContain("來源中繼資料（不等於證據）");
     expect(presentation.askAiPrompt).toContain("https://example.com/article");

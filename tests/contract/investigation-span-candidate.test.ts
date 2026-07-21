@@ -47,6 +47,20 @@ describe("constrained investigation span selection", () => {
     expect(candidates.every((candidate) => source.slice(candidate.start, candidate.end) === candidate.exactText)).toBe(true);
   });
 
+  it("offers exact bullet lines when a social post uses layout instead of sentence punctuation", () => {
+    const source = [
+      "本週更新",
+      "• 海灣市衛生局公布 232 項下架產品名單",
+      "2. 遠帆公司將於 2026 年 8 月 9 日開始退款",
+    ].join("\n");
+    const candidates = buildInvestigationSpanCandidates(source, { maxCandidates: 12, maxCharacters: 180 });
+    const exact = candidates.map((candidate) => candidate.exactText);
+
+    expect(exact).toContain("海灣市衛生局公布 232 項下架產品名單");
+    expect(exact).toContain("遠帆公司將於 2026 年 8 月 9 日開始退款");
+    expect(candidates.every((candidate) => source.slice(candidate.start, candidate.end) === candidate.exactText)).toBe(true);
+  });
+
   it("does not treat thousands separators or date commas as clause boundaries", () => {
     const source = "The office ordered refunds on 2,400 policies on August 2, 2026, for a billing error.";
     const exact = buildInvestigationSpanCandidates(source, { maxCandidates: 12, maxCharacters: 180 })

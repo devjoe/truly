@@ -24,6 +24,7 @@ const DEPENDENT_EN_START = /^(?:and|but|or|also|then|however|therefore|each|it|t
 const DEPENDENT_EN_EVENT_REFERENCE = /\b(?:the|this|that) (?:recall|decision|announcement|program|plan|order|proposal)\b/iu;
 const PROMPT_CONTROL_DIRECTIVE = /(?:\b(?:ignore|disregard|override)\b.{0,40}\b(?:previous|prior|system|developer)\b.{0,24}\b(?:instruction|message|prompt)s?\b|忽略.{0,16}(?:先前|之前|系統|開發者).{0,16}(?:指令|訊息|提示)|(?:system prompt|developer message|系統提示|開發者訊息))/iu;
 const PRIVATE_DATA_DIRECTIVE = /(?:\b(?:find|reveal|publish|send|provide|give me|look up)\b.{0,48}\b(?:password|home address|private phone|social security number|personal data)\b|(?:找出|提供|揭露|公布|傳送).{0,32}(?:密碼|住址|私人電話|身分證|非公開個資))/iu;
+const LIST_MARKER = /^(?:(?:[-*•●▪◦‣]|\d{1,2}[.)、]|[（(]\d{1,2}[）)])\s*)+/u;
 
 function isContextIndependentSpan(text: string): boolean {
   const compact = text.replace(/\s+/gu, " ").trim();
@@ -54,6 +55,28 @@ function sentenceRanges(source: string): Array<{ start: number; end: number }> {
   return ranges;
 }
 
+function lineRanges(source: string): Array<{ start: number; end: number }> {
+  if (!/[\r\n]/u.test(source)) return [];
+  const ranges: Array<{ start: number; end: number }> = [];
+  let lineStart = 0;
+  for (let cursor = 0; cursor <= source.length; cursor += 1) {
+    if (cursor < source.length && source[cursor] !== "\n" && source[cursor] !== "\r") continue;
+    const trimmed = trimmedRange(source, lineStart, cursor);
+    if (trimmed) {
+      const text = source.slice(trimmed.start, trimmed.end);
+      const marker = text.match(LIST_MARKER);
+      const start = marker ? trimmed.start + marker[0].length : trimmed.start;
+      let end = trimmed.end;
+      while (end > start && /[。！？!?.]/u.test(source[end - 1])) end -= 1;
+      const withoutMarker = trimmedRange(source, start, end);
+      if (withoutMarker) ranges.push(withoutMarker);
+    }
+    if (cursor < source.length && source[cursor] === "\r" && source[cursor + 1] === "\n") cursor += 1;
+    lineStart = cursor + 1;
+  }
+  return ranges;
+}
+
 /** Exact local candidate enumeration; it selects no claim and adds no text. */
 export function buildInvestigationSpanCandidates(
   source: string,
@@ -64,7 +87,12 @@ export function buildInvestigationSpanCandidates(
     !Number.isInteger(options.maxCharacters) || options.maxCharacters < 20 || options.maxCharacters > 600 ||
     !Number.isInteger(minimum) || minimum < 3 || minimum > options.maxCharacters) throw new TypeError("invalid span candidate options");
   const ranges: Array<{ start: number; end: number }> = [];
-  for (const sentence of sentenceRanges(source)) {
+  for (const rawSentence of sentenceRanges(source)) {
+    if (/[\r\n]/u.test(source.slice(rawSentence.start, rawSentence.end))) continue;
+    let sentence = rawSentence;
+    const sentenceText = source.slice(sentence.start, sentence.end);
+    const marker = sentenceText.match(LIST_MARKER);
+    if (marker) sentence = { start: sentence.start + marker[0].length, end: sentence.end };
     const exact = source.slice(sentence.start, sentence.end);
     const compound = detectCompoundPropositionSignal(exact);
     const delimiters: Array<{ start: number; end: number }> = [];
@@ -94,6 +122,13 @@ export function buildInvestigationSpanCandidates(
       }
       clauseStart = delimiter.end;
     }
+  }
+  // Social posts often use line breaks instead of sentence punctuation. Offer each
+  // exact list line as an additional candidate while preserving source offsets.
+  for (const line of lineRanges(source)) {
+    const exact = source.slice(line.start, line.end);
+    if ([...exact].length >= minimum && [...exact].length <= options.maxCharacters &&
+      !detectCompoundPropositionSignal(exact) && isContextIndependentSpan(exact)) ranges.push(line);
   }
   const seen = new Set<string>();
   const unique = ranges.sort((left, right) => left.start - right.start || left.end - right.end).filter((range) => {

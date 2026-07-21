@@ -93,7 +93,7 @@ describe("background General Page investigation preparation", () => {
       status: "prepared",
       preparedActions: [{
         displayClaim: "衛生局命令遠帆公司在七月三十一日前完成下架",
-        evidenceHint: "比對直接相關的第一手或可信來源",
+        evidenceHint: "優先比對直接相關的官方資料、當事人原始聲明或可信報導",
         askAiPrompt: expect.stringContaining("原文陳述：衛生局命令遠帆公司在七月三十一日前完成下架"),
       }],
     });
@@ -146,7 +146,7 @@ describe("background General Page investigation preparation", () => {
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
       status: "prepared",
       preparedActions: [expect.objectContaining({
-        evidenceHint: "Compare with directly relevant primary or authoritative evidence",
+        evidenceHint: "Prioritize directly relevant official records, first-party statements, or reliable reporting",
         askAiPrompt: expect.stringContaining("Original claim: The agency ordered a refund for 2,400 policies"),
       })],
     }));
