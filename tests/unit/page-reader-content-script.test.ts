@@ -89,6 +89,44 @@ describe("page-reader content script", () => {
     });
   });
 
+  it("uses the same structural sanitizer for Page text and advisor candidate text", () => {
+    const url = "https://example.test/articles/neutral-utility-cluster";
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Neutral utility cluster fixture</title>
+      <article id="story-body">
+        <h1>Neutral utility cluster fixture</h1>
+        <p>The first synthetic paragraph explains a fictional public planning process with enough complete prose for a useful reading context.</p>
+        <p>The second synthetic paragraph records a fictional review outcome and keeps the body distinct from surrounding utility cards.</p>
+        <section class="module-42">
+          <a href="/other-one">Another synthetic story headline</a>
+          <a href="/other-two">Second unrelated synthetic story headline</a>
+          <button type="button">Open module</button>
+        </section>
+        <div itemprop="author">Synthetic author biography and profile navigation</div>
+      </article>
+    `, { url });
+    const documentRef = dom.window.document;
+
+    const result = extractCurrentPageReadingSurface(documentRef, url);
+    const articleBlock = result.candidateBlocks.find((block) => block.label.includes("#story-body"));
+    const handled = articleBlock ? handleCandidateBlockTextMessage({
+      type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_REQUEST",
+      tabId: 1,
+      surfaceId: result.surface.id,
+      blockId: articleBlock.id,
+    } satisfies TrulyMessage, documentRef, url) : undefined;
+
+    expect(result.surface.mainText).toContain("first synthetic paragraph");
+    expect(result.surface.mainText).not.toContain("Another synthetic story headline");
+    expect(result.surface.mainText).not.toContain("Synthetic author biography");
+    expect(articleBlock?.textPreview).not.toContain("Another synthetic story headline");
+    expect(handled).toMatchObject({
+      type: "GENERAL_PAGE_CANDIDATE_BLOCK_TEXT_RESULT",
+      text: expect.not.stringContaining("Another synthetic story headline"),
+    });
+  });
+
   it("responds only to page reading requests", () => {
     const url = "https://example.test/articles/clean-article";
     const documentRef = fixtureDocument("clean-article.html", url);

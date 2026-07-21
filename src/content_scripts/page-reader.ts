@@ -4,7 +4,11 @@
 // The first runtime slice proves the typed extraction responder without moving
 // third-party parsers into runtime or changing install-time permissions.
 
-import { extractGeneralPageSurface, GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH } from "../lib/general-page-extraction";
+import {
+  extractGeneralPageCandidateElementText,
+  extractGeneralPageSurface,
+  GENERAL_PAGE_MIN_SELECTED_TEXT_LENGTH,
+} from "../lib/general-page-extraction";
 import type {
   GeneralPageCandidateBlockTextErrorMsg,
   GeneralPageCandidateBlockTextResultMsg,
@@ -91,7 +95,7 @@ export function collectGeneralPageCandidateBlocks(
   const seenText = new Set<string>();
   let index = 0;
   for (const element of Array.from(documentRef.body?.querySelectorAll(CANDIDATE_SELECTOR) ?? [])) {
-    const text = cleanText(element.textContent ?? "");
+    const text = extractGeneralPageCandidateElementText(element);
     if (text.length < 120)
       continue;
     const textKey = text.slice(0, 160);
@@ -119,7 +123,7 @@ function candidateBlockText(documentRef: Document, blockId: string): string | un
   const seenText = new Set<string>();
   let index = 0;
   for (const element of candidates) {
-    const text = cleanText(element.textContent ?? "");
+    const text = extractGeneralPageCandidateElementText(element);
     if (text.length < 120)
       continue;
     const textKey = text.slice(0, 160);

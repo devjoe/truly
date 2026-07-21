@@ -38,6 +38,8 @@ export interface GeneralPageModelContext {
   sourceName?: string;
   publishedAt?: string;
   selectedText?: string;
+  extractionMethod: ReadingSurface["extraction"]["method"];
+  extractionStatus: ReadingSurface["extraction"]["status"];
   mainText: string;
   surroundingText?: string;
   links: GeneralPageModelSourceLink[];
@@ -89,7 +91,9 @@ export function buildGeneralPageModelContext(
     authorName: cleanOptional(surface.authorName),
     sourceName: cleanOptional(surface.sourceName),
     publishedAt: cleanOptional(surface.publishedAt),
-    selectedText: cleanOptional(surface.selectedText),
+    selectedText: cleanOptional(options.target?.kind === "selection" ? options.target.text : surface.selectedText),
+    extractionMethod: options.target?.extraction.method ?? surface.extraction.method,
+    extractionStatus: options.target?.extraction.status ?? surface.extraction.status,
     mainText,
     surroundingText: cleanOptional(options.target?.surroundingText),
     links: cleanLinks(surface.links, options.maxLinks ?? GENERAL_PAGE_MODEL_MAX_LINKS, surface.url),

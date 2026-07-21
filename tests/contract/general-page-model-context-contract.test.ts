@@ -37,6 +37,8 @@ describe("general page model context contract", () => {
       modelEligible: true,
       modelReadiness: "ready",
       qualityIssues: [],
+      extractionMethod: "semantic-html",
+      extractionStatus: "complete",
     });
     expect(context.mainText.length).toBeGreaterThanOrEqual(GENERAL_PAGE_MODEL_MIN_MAIN_TEXT_LENGTH);
     expect(context.links).toContainEqual({
@@ -260,6 +262,9 @@ describe("general page model context contract", () => {
     expect(pageContext.mainText).toContain("This synthetic article is available for whole-page extraction");
     expect(pageContext.mainText).not.toBe(target.text);
     expect(targetContext.targetKind).toBe("selection");
+    expect(targetContext.selectedText).toBe(target.text);
+    expect(targetContext.extractionMethod).toBe("selection");
+    expect(targetContext.extractionStatus).toBe("complete");
     expect(targetContext.mainText).toBe(target.text);
     expect(targetContext.surroundingText).toBe(target.surroundingText);
   });

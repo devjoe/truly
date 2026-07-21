@@ -100,6 +100,7 @@ const NON_READING_BLOCK_SELECTORS = [
   "form",
   "button",
   "dialog",
+  "[itemprop=\"author\"]",
   "[role=\"button\"]",
   "[role=\"navigation\"]",
   "[role=\"complementary\"]",
@@ -1086,6 +1087,14 @@ function readableText(root: Element): string | undefined {
   return normalizeWhitespace(cleanCommonPageNoise(clone.textContent ?? ""));
 }
 
+// Parser-advisor candidates must pass through the same structural cleanup as
+// the default Page extraction. Otherwise a model-selected candidate can
+// reintroduce author cards, recirculation modules, and controls that the first
+// extraction already removed.
+export function extractGeneralPageCandidateElementText(root: Element): string {
+  return readableText(root) ?? "";
+}
+
 function clonePrunedReadingRoot(root: Element): Element {
   const clone = root.cloneNode(true) as Element;
   for (const selector of NON_READING_TEXT_SELECTORS) {
@@ -1098,6 +1107,10 @@ function clonePrunedReadingRoot(root: Element): Element {
 }
 
 function pruneNonReadingBlocks(root: Element): void {
+  // Inspect utility clusters before individual controls are removed so the
+  // decision can use their original structure instead of inferred wording.
+  pruneLowProseUtilityBlocks(root);
+
   for (const selector of NON_READING_BLOCK_SELECTORS) {
     for (const element of Array.from(root.querySelectorAll(selector))) {
       if (shouldKeepReadingLayoutBlock(element))
@@ -1113,6 +1126,25 @@ function pruneNonReadingBlocks(root: Element): void {
     if (!text)
       continue;
     if (text.length <= 420 && NOISY_BLOCK_TEXT_PATTERNS.some((pattern) => pattern.test(text)))
+      element.remove();
+  }
+}
+
+function pruneLowProseUtilityBlocks(root: Element): void {
+  const elements = Array.from(root.querySelectorAll("section, div, ul, ol")).reverse();
+  for (const element of elements) {
+    if (element.matches("[role=\"doc-bibliography\"], [role=\"doc-endnotes\"], [role=\"doc-footnotes\"]"))
+      continue;
+
+    const text = normalizeWhitespace(element.textContent ?? "") ?? "";
+    if (!text || text.length > 760)
+      continue;
+
+    const paragraphCount = element.querySelectorAll("p, blockquote, pre, table, dl").length;
+    const linkCount = element.querySelectorAll("a[href]").length;
+    const controlCount = element.querySelectorAll("button, input, select, textarea, [role=\"button\"]").length;
+    const linkDensity = linkedTextLength(element) / Math.max(text.length, 1);
+    if (paragraphCount === 0 && linkCount >= 2 && controlCount >= 1 && linkDensity >= 0.45)
       element.remove();
   }
 }

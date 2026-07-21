@@ -67,11 +67,11 @@ export async function findInvestigationServiceWorker(targets, connect = connectC
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  if (!isPrivateCaptureOutputPath(args.output)) {
+  if (!args.reset && !isPrivateCaptureOutputPath(args.output)) {
     throw new Error("--output must stay under repo tmp/, the system temp directory, or /private/tmp");
   }
-  const outputPath = path.resolve(args.output);
-  if (fs.existsSync(outputPath)) throw new Error("--output already exists; use a fresh path");
+  const outputPath = args.output ? path.resolve(args.output) : undefined;
+  if (outputPath && fs.existsSync(outputPath)) throw new Error("--output already exists; use a fresh path");
 
   const targets = await fetch(`${args.endpoint}/json`).then((response) => {
     if (!response.ok) throw new Error(`CDP target listing failed: ${response.status}`);
@@ -83,6 +83,20 @@ async function main() {
   const client = connectCdp(target.webSocketDebuggerUrl, { commandTimeoutMs: 10_000 });
   let armed = false;
   try {
+    if (args.reset) {
+      const reset = await client.evaluate(`(() => {
+        const capture = globalThis.__trulyGeneralPageInvestigationCapture;
+        if (!capture || !Array.isArray(capture.items)) return false;
+        capture.enabled = false;
+        capture.consumerDone = false;
+        capture.items.splice(0, capture.items.length);
+        return true;
+      })()`);
+      if (!reset) throw new Error("runtime-envelope capture is unavailable");
+      console.log(JSON.stringify({ result: "reset", targetActivated: false, browserFocusRequested: false }, null, 2));
+      return;
+    }
+
     const state = await client.evaluate(`(() => {
       const capture = globalThis.__trulyGeneralPageInvestigationCapture;
       if (!capture || !Array.isArray(capture.items)) return { available: false };
@@ -95,6 +109,7 @@ async function main() {
     await client.evaluate(`(() => {
       const capture = globalThis.__trulyGeneralPageInvestigationCapture;
       capture.items.splice(0, capture.items.length);
+      capture.consumerDone = false;
       capture.enabled = true;
       return true;
     })()`);
@@ -105,7 +120,11 @@ async function main() {
     while (Date.now() < deadline) {
       captures = await client.evaluate(`(() => {
         const capture = globalThis.__trulyGeneralPageInvestigationCapture;
-        return capture ? JSON.parse(JSON.stringify(capture.items)) : [];
+        const items = capture ? capture.items : [];
+        const selected = ${JSON.stringify(args.scope)}
+          ? items.filter((item) => item?.analysis?.scope === ${JSON.stringify(args.scope)})
+          : items;
+        return JSON.parse(JSON.stringify(selected));
       })()`);
       if (captures.length >= args.count) break;
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
@@ -120,9 +139,18 @@ async function main() {
       cdpEndpoint: new URL(args.endpoint).origin,
       targetUrl: target.url,
       requestedCount: args.count,
+      requestedScope: args.scope,
       complete: selected.length >= args.count,
       captures: selected,
     }, null, 2)}\n`, { flag: "wx", mode: 0o600 });
+    if (selected.length >= args.count && args.consumerTimeoutMs > 0) {
+      const consumerDeadline = Date.now() + args.consumerTimeoutMs;
+      while (Date.now() < consumerDeadline) {
+        const consumerDone = await client.evaluate("Boolean(globalThis.__trulyGeneralPageInvestigationCapture?.consumerDone)");
+        if (consumerDone) break;
+        await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+      }
+    }
     console.log(JSON.stringify({
       result: selected.length >= args.count ? "pass" : "partial",
       output: privatePathLabel(outputPath),
@@ -135,10 +163,11 @@ async function main() {
   } finally {
     if (armed) {
       await client.evaluate(`(() => {
-        const capture = globalThis.__trulyGeneralPageInvestigationCapture;
-        if (!capture) return false;
-        capture.enabled = false;
-        capture.items.splice(0, capture.items.length);
+      const capture = globalThis.__trulyGeneralPageInvestigationCapture;
+      if (!capture) return false;
+      capture.enabled = false;
+      capture.consumerDone = false;
+      capture.items.splice(0, capture.items.length);
         return true;
       })()`).catch(() => undefined);
     }
@@ -147,15 +176,22 @@ async function main() {
 }
 
 function parseArgs(argv) {
+  const reset = argv.includes("--reset");
   const output = stringArg(argv, "--output");
-  if (!output) {
-    throw new Error("Usage: node scripts/collect-general-page-runtime-envelopes-cdp.mjs --output tmp/private-capture.json [--count 60] [--timeout-ms 900000]");
+  if (!reset && !output) {
+    throw new Error("Usage: node scripts/collect-general-page-runtime-envelopes-cdp.mjs --output tmp/private-capture.json [--count 60] [--scope page|focus] [--timeout-ms 900000] [--consumer-timeout-ms 0] | --reset");
   }
+  if (reset && output) throw new Error("--reset cannot be combined with --output");
+  const scope = stringArg(argv, "--scope");
+  if (scope !== undefined && scope !== "page" && scope !== "focus") throw new Error("--scope must be page or focus");
   return {
     output,
     endpoint: stringArg(argv, "--endpoint") ?? DEFAULT_CDP_ENDPOINT,
     count: integerArg(argv, "--count", DEFAULT_COUNT, 1, 90),
     timeoutMs: integerArg(argv, "--timeout-ms", DEFAULT_TIMEOUT_MS, 1_000, 60 * 60_000),
+    consumerTimeoutMs: integerArg(argv, "--consumer-timeout-ms", 0, 0, 5 * 60_000),
+    scope,
+    reset,
   };
 }
 
