@@ -102,6 +102,8 @@ describe("General Page recommended exact-span selector v5", () => {
     expect(system).toContain("Then choose only the single strongest survivor");
     expect(system).toContain("meta-statements about what the page cites");
     expect(system).toContain("incidental details whose verification would not materially change");
+    expect(system).toContain("Attribution does not rescue");
+    expect(system).toContain("promoter calling a show the most unforgettable night");
     expect(system).toContain("the company, the recall, 業者, 該產品");
     expect(system).toContain('"schemaVersion":5');
     expect(system).toContain("single strongest survivor");
