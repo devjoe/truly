@@ -1,6 +1,6 @@
 # General Page Ranked Actions Release Standard
 
-Status: frozen single-recommendation runtime-envelope candidate standard, revised 2026-07-21
+Status: frozen single-recommendation runtime-envelope candidate standard, revised 2026-07-23
 
 This standard governs the General Page Reader's user-facing `待確認事項` /
 `Check these items` actions. It replaces the previous policy in which a local
@@ -25,6 +25,13 @@ The selected action is the product recommendation. The UI reveals it only
 after the one-shot selector settles; abstention reveals no investigation
 action. This intentionally avoids publishing weaker alternatives merely to
 increase visible coverage.
+
+Open-web extraction is not required to be textually pristine. Local code owns
+high-confidence structural boundaries; the Edge AI selector owns relative
+usefulness among the remaining exact spans and may abstain. This tolerance does
+not relax authorization: wrong-page, cross-scope, stale, or Focus-surrounding
+text remains forbidden, and a visible action derived from publisher residue is
+a release failure.
 
 Entertainment, sport, consumer, product, celebrity, and routine factual
 statements are eligible. Health, safety, money, rights, law, and public impact
@@ -108,12 +115,13 @@ must originate on Facebook and at least 15 on non-Facebook web pages. Page
 rows include at least 15 news/article pages and at least 15 non-news general
 web pages.
 
-Whole Facebook feed-card text, raw `document.body.innerText`, link-preview
-mixtures, unpruned related/recirculation rails, screenshots,
+Whole Facebook feed-card text, raw `document.body.innerText`, cross-document
+link-preview mixtures, secondary rails that replace or obscure the intended
+body, screenshots,
 `page_overview_only`, stale/cross-scope state, and rows for which the selector
 would not be scheduled are not eligible selector inputs. Every exclusion is
 reported by reason; a reachable shipping extraction or advisor error is not
-an exclusion and fails the separate scope-fidelity requirement.
+an exclusion and remains visible in the source-quality labels below.
 
 Before revealing model output, each row binds its Page/Focus authorized-scope
 hash, final `mainText` hash and length, target kind, allowed use, extraction
@@ -125,8 +133,14 @@ Required:
 
 - zero hard-unacceptable actions;
 - zero `user_unacceptable` displayed actions;
-- 100% scope fidelity: the bound effective context is the authorized Page body
-  or Focus target that the shipping runtime was allowed to analyze;
+- 100% `authorizationScopeFidelity`: Page belongs to the intended loaded
+  document and Focus contains exactly the user-authorized target, with no
+  wrong-page, cross-scope, stale, extension-instruction, or surrounding-target
+  leakage;
+- zero `samePageResidueDerived` displayed actions: the selected exact span is
+  not publisher chrome, navigation/interface text, caption/byline/media
+  metadata, footer/source utility text, related/recirculation content, or
+  another secondary same-document role;
 - at least 85% of returned first actions are `recommended` overall and at
   least 80% in Page and Focus separately, with at least ten returned first
   actions in each scope;
@@ -138,6 +152,22 @@ Required:
 - 100% exact-span and at-most-one compliance;
 - at least 95% of generated Gemini handoffs are usable and language-consistent;
 - no public search or external action is opened by the audit.
+
+Source-only reviewers also label Page extraction residue without treating it
+as an authorization breach:
+
+- `none`: no identifiable secondary same-document publisher role;
+- `bounded`: a compact leading or trailing publisher role is present, while
+  the intended body remains clear and dominant;
+- `substantial`: secondary roles are interleaved, repeated, or large enough to
+  compete with the intended body.
+
+Focus rows use `none` because the selected text is itself the authorized
+target. The residue label is diagnostic rather than a standalone pass/fail
+threshold. Indirect harm still fails the unchanged positive-row recall and
+top-rank gates; direct harm fails the zero-residue-derived and zero-unacceptable
+gates. `expectedAction` is true only when at least one supplied exact candidate
+comes from the intended Page body or Focus target, not from a secondary role.
 
 Report every denominator. A scope metric is invalid when its denominator is
 smaller than ten. Platform, language, content category, extraction method, and
@@ -155,7 +185,8 @@ Required:
 
 - zero hard-unacceptable actions;
 - zero `user_unacceptable` displayed actions;
-- 100% scope fidelity;
+- 100% `authorizationScopeFidelity`;
+- zero `samePageResidueDerived` displayed actions;
 - at least 85% of returned first actions are `recommended` overall and at
   least 75% in Page and Focus separately, with at least eight returned first
   actions in each scope;
@@ -178,12 +209,14 @@ counts, and selected-span provenance (`primary`, `shared_or_quoted`,
 `unknown`). It has no pass/fail threshold and cannot rescue or reject Gate B
 or C.
 
-If the observatory proves that the same contaminated input is reachable in the
-shipping runtime, that is a scope-fidelity failure. If it motivates any prompt,
-extractor, advisor, selector, or hard-boundary change, the change creates a new
-candidate and requires a fresh runtime-envelope cohort. Raw text, row-level
-reviews, and provenance labels remain private; only anonymous aggregates may
-be committed publicly.
+If the observatory proves that wrong-page, cross-scope, stale, or Focus-
+surrounding text reaches the shipping runtime, that is an authorization-scope
+failure. Reachable same-document publisher residue is reported with the Page
+taxonomy above and must never produce a visible action. If either finding
+motivates any prompt, extractor, advisor, selector, rubric, or hard-boundary
+change, the change creates a new candidate and requires a fresh runtime-envelope
+cohort. Raw text, row-level reviews, and provenance labels remain private; only
+anonymous aggregates may be committed publicly.
 
 ### D. Runtime and release readiness
 
@@ -237,3 +270,19 @@ list lines instead of manufacturing comma- or conjunction-split clauses, and
 the selector uses one burden-of-proof eligibility pass followed by one best-item
 comparison. This is candidate v6 behavior, not a release authorization; it must
 pass fresh A-D evidence without reopening either consumed cohort.
+
+The v9 source-only audit was sealed before model output after 54/60 rows passed
+the former monolithic scope-fidelity label. All six failures were Page-news
+publisher residue: audio/latest controls, source/reference or recirculation
+tails, a most-viewed label, or leading article/media metadata. No Focus
+authorization failure was recorded. The model output and holdout remained
+unopened, so v9 stays rejected under its preregistered standard.
+
+The adversarial decision at
+`tmp/grill-reports/gpr-authorized-scope-residue-boundary-2026-07-23.html`
+accepted a v10 responsibility split: keep authorization fidelity at 100%,
+record same-document extraction residue separately, block every visible action
+derived from residue, and leave all numerical selector-quality thresholds
+unchanged. Local cleanup is limited to high-confidence whole-Page structural
+boundaries and must not rewrite an authorized Focus or region target. Candidate
+v10 requires fresh A-D evidence; this revision does not reclassify or reuse v9.

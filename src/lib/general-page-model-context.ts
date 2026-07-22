@@ -72,7 +72,9 @@ export function buildGeneralPageModelContext(
     ? targetKindForReadingTarget(options.target)
     : options.targetKind ?? (surface.selectedText ? "selection" : "page");
   const mainTextSource = options.target?.text || surface.selectedText || surface.mainText;
-  const cleanedMainTextSource = cleanCommonPageNoise(mainTextSource);
+  const cleanedMainTextSource = targetKind === "page"
+    ? trimStrongPublisherTailBoundary(cleanCommonPageNoise(mainTextSource))
+    : mainTextSource;
   const mainText = clampText(cleanedMainTextSource, maxMainTextLength);
   const ineligibilityReason = resolveIneligibilityReason(surface, mainText, minMainTextLength);
   const qualityIssues = resolveQualityIssues(surface);
@@ -229,6 +231,14 @@ function cleanCommonPageNoise(value: string | undefined): string {
     .replace(/請至\s*(?:Edge|Fire\s*Fox|Firefox|Google|Chrome|Microsoft\s*Edge)[^。.!?]*(?:下載|download)[^。.!?]*(?:[。.!?]|$)/gi, " ")
     .replace(/For best viewing[^.!?]*(?:Chrome|Firefox|Edge)[^.!?]*(?:browser|download)[^.!?]*(?:[.!?]|$)/gi, " ")
     .replace(/\s+/g, " ")
+    .trim();
+}
+
+function trimStrongPublisherTailBoundary(value: string): string {
+  return value
+    .replace(/\s+Enditem\/[\p{L}\p{N}_-]{1,24}(?:\s+\d{1,2}:\d{2}\s*\/\s*\d{1,2}:\d{2})?\s+Latest\s*$/iu, "")
+    .replace(/\s+Story Source:\s[\s\S]{0,1800}\s+Explore More from\s+[\s\S]{1,120}$/iu, "")
+    .replace(/\s+最多點閱\s*$/u, "")
     .trim();
 }
 

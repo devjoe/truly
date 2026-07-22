@@ -88,6 +88,107 @@ describe("general page model context contract", () => {
     expect(context.mainText).not.toContain("Google 官網下載");
   });
 
+  it("trims strong publisher tail boundaries from whole-page model context", () => {
+    const articleBody = [
+      "A fictional public agency published a complete operational update with a dated measurement and a named program.",
+      "The article explains the method, the affected population, and the remaining uncertainty in ordinary prose.",
+      "A final paragraph gives readers enough context to distinguish the report from publisher controls and related links.",
+    ].join(" ");
+    const surface = {
+      id: "general:https://news.example.test/reports/update",
+      kind: "web-page" as const,
+      source: "general" as const,
+      url: "https://news.example.test/reports/update",
+      canonicalUrl: "https://news.example.test/reports/update",
+      title: "Synthetic operational update",
+      sourceName: "Example News",
+      mainText: articleBody,
+      extraction: {
+        method: "semantic-html" as const,
+        status: "complete" as const,
+        warnings: [],
+      },
+    };
+
+    const wireContext = buildGeneralPageModelContext({
+      ...surface,
+      mainText: `${articleBody} (By Example Reporter) Enditem/EX 0:00 / 0:00 Latest`,
+    });
+    const researchContext = buildGeneralPageModelContext({
+      ...surface,
+      mainText: `${articleBody} Story Source: Materials provided by Example Institute. Journal Reference: Example Study. Explore More from Example Research`,
+    });
+    const recirculationContext = buildGeneralPageModelContext({
+      ...surface,
+      mainText: `${articleBody} 最多點閱`,
+    });
+
+    expect(wireContext.mainText).toBe(`${articleBody} (By Example Reporter)`);
+    expect(researchContext.mainText).toBe(articleBody);
+    expect(recirculationContext.mainText).toBe(articleBody);
+  });
+
+  it("preserves publisher-like words inside an explicit Focus selection", () => {
+    const selectedText = "The selected paragraph literally discusses an Enditem marker, a Latest label, and an Explore More section as evidence in the user's chosen text.";
+    const surface = {
+      id: "general:https://example.test/reports/selection",
+      kind: "web-page" as const,
+      source: "general" as const,
+      url: "https://example.test/reports/selection",
+      canonicalUrl: "https://example.test/reports/selection",
+      title: "Synthetic selection boundary",
+      mainText: "This synthetic whole-page body remains separate from the explicit target and is long enough for ordinary analysis. ".repeat(3),
+      extraction: {
+        method: "semantic-html" as const,
+        status: "complete" as const,
+        warnings: [],
+      },
+    };
+    const target: ReadingTarget = {
+      id: "target:publisher-words",
+      surfaceId: surface.id,
+      kind: "selection",
+      text: selectedText,
+      extraction: {
+        method: "selection",
+        status: "complete",
+        warnings: [],
+      },
+    };
+
+    expect(buildGeneralPageModelContext(surface, { target }).mainText).toBe(selectedText);
+  });
+
+  it("does not apply whole-page browser-noise cleanup to an explicit Focus selection", () => {
+    const selectedText = "作者逐字引用：為達最佳瀏覽效果，建議使用 Chrome、Firefox 或 Microsoft Edge 的瀏覽器。這段話本身就是使用者選取並要求分析的證據。";
+    const surface = {
+      id: "general:https://example.test/reports/selected-browser-copy",
+      kind: "web-page" as const,
+      source: "general" as const,
+      url: "https://example.test/reports/selected-browser-copy",
+      title: "Synthetic selected browser copy",
+      mainText: "The whole-page article remains separate from the selected quotation. ".repeat(4),
+      extraction: {
+        method: "semantic-html" as const,
+        status: "complete" as const,
+        warnings: [],
+      },
+    };
+    const target: ReadingTarget = {
+      id: "target:selected-browser-copy",
+      surfaceId: surface.id,
+      kind: "selection",
+      text: selectedText,
+      extraction: {
+        method: "selection",
+        status: "complete",
+        warnings: [],
+      },
+    };
+
+    expect(buildGeneralPageModelContext(surface, { target }).mainText).toBe(selectedText);
+  });
+
   it("filters article utility links out of model source context", () => {
     const url = "https://news.example.test/research/source-link-noise";
     const surface = extractGeneralPageSurface({
