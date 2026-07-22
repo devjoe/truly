@@ -86,7 +86,19 @@ and visible product quality.
 ### A. Synthetic provider compatibility
 
 Run the fixed 30-case bilingual suite three times with `json_schema` and three
-times with `json_object` (180 one-shot calls total).
+times with `json_object` (180 one-shot calls total). The six formal processes
+run one at a time and may not overlap; bounded concurrency remains `2` inside
+each run. This matches the product scheduler's one-request-at-a-time contract
+for a shared provider/endpoint/model resource while still exercising bounded
+provider concurrency more aggressively than normal runtime.
+
+After all six runs, a local validator must emit one aggregate ceremony receipt
+that binds the clean candidate commit and every source receipt by SHA-256,
+checks three runs per lowering, proves that their recorded time intervals do
+not overlap, and confirms every run passed. Individual receipts are not formal
+Gate A evidence without this aggregate receipt. A deliberately overlapping run
+is a separate, non-gating shared-server load diagnostic: it cannot rescue or
+reject the compatibility candidate.
 
 This gate tests provider transport plus unambiguous hard semantic boundaries.
 A negative control must contain no reasonably actionable exact span: subjective
@@ -102,7 +114,8 @@ Required for every run:
 - an exact known ID or null, with at most one action;
 - every positive control selected and every negative control abstained;
 - no hard-boundary leak, repair, retry, public search, or opened action;
-- deterministic localized Gemini handoff generated from local data.
+- deterministic localized Gemini handoff generated from local data;
+- `model.concurrency === 2` and a valid, non-overlapping time interval.
 
 ### B. Fresh runtime-envelope development audit
 
