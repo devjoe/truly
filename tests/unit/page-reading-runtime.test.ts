@@ -1140,6 +1140,7 @@ describe("sidepanel page reading runtime", () => {
       }),
     });
 
+    expect(pagePaneEl.querySelector(".page-reader-focus-panel")).not.toBeNull();
     runtime.setWorkspace("page");
     expect(pagePaneEl.textContent).toContain("Third late result excerpt.");
     expect(pagePaneEl.textContent).not.toContain("First saved excerpt.");
@@ -1750,6 +1751,50 @@ describe("sidepanel page reading runtime", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it("does not let a background status update steal the selected Focus workspace", async () => {
+    const pagePaneEl = setupDom();
+    let onUpdated: ((
+      tabId: number,
+      changeInfo: { url?: string; status?: string },
+      tab: { id: number; url: string; title: string },
+    ) => void) | undefined;
+    const tab = {
+      id: 42,
+      url: "https://example.test/article",
+      title: "Runtime Fixture",
+    };
+    let runtime: ReturnType<typeof createSidepanelPageReadingRuntime>;
+    const activateTab = vi.fn((nextTab: TabId) => {
+      runtime?.setWorkspace(nextTab === "focus" ? "focus" : "page");
+    });
+    runtime = createSidepanelPageReadingRuntime({
+      pagePaneEl,
+      runtime: { sendMessage: vi.fn() },
+      tabs: {
+        query: vi.fn(async () => [tab]),
+        onUpdated: {
+          addListener(listener) {
+            onUpdated = listener;
+          },
+        },
+      },
+      activateTab,
+      getLang: () => "zh-TW",
+      now: () => 1_000,
+      hasAllSitesPermission: vi.fn(async () => false),
+    });
+
+    runtime.install();
+    await flushMicrotasks();
+    runtime.setWorkspace("focus");
+    activateTab.mockClear();
+
+    onUpdated?.(42, { status: "complete" }, tab);
+
+    expect(activateTab).not.toHaveBeenCalled();
+    expect(pagePaneEl.querySelector(".page-reader-focus-panel")).not.toBeNull();
   });
 
   it("shows neutral loading instead of stale guidance while an all-sites reread is debounced", async () => {

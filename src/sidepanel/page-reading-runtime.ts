@@ -2972,7 +2972,7 @@ export function createSidepanelPageReadingRuntime({
     if (typeof tabId !== "number") return;
     const existing = sessions.get(tabId);
     if (message.requestId && message.requestId !== existing?.requestId) return;
-    const preservePendingFocus = pageWorkspace === "focus" && existing?.status === "loading";
+    const preserveSelectedFocus = pageWorkspace === "focus";
     const duplicateReadySurface = existing?.status === "ready" &&
       existing.surface?.id === message.surface.id &&
       isMeaningfullySamePage(existing.identity, message.surface.url) &&
@@ -3002,7 +3002,7 @@ export function createSidepanelPageReadingRuntime({
     const revealIncoming = shouldRevealIncomingPageRead(tabId);
     copyState = "idle";
     downloadState = "idle";
-    if (!preservePendingFocus && (revealIncoming || tabId === activeTabId || tabId === displayTabId)) {
+    if (!preserveSelectedFocus && (revealIncoming || tabId === activeTabId || tabId === displayTabId)) {
       pageWorkspace = "page";
     }
     sessions.set(tabId, completion.session);
@@ -3156,7 +3156,9 @@ export function createSidepanelPageReadingRuntime({
       if (changeInfo.url) markTabSessionStale(tabId, tab);
       if (tabId !== activeTabId) return;
       if (!changeInfo.url && changeInfo.status !== "complete") return;
-      setActiveTab(tab, true, "status-update");
+      // A background load/status completion may refresh the Page session, but
+      // it must not override the workspace the user is currently reading.
+      setActiveTab(tab, false, "status-update");
     });
     tabs.onRemoved?.addListener((tabId) => {
       const wasDisplayed = tabId === displayTabId;
