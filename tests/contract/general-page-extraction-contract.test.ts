@@ -1145,8 +1145,58 @@ describe("General Page Reader extraction contract", () => {
 
     expect(surface.mainText).toContain("second paragraph records the made-up decision");
     expect(surface.mainText).not.toContain("請繼續往下閱讀");
+    expect(surface.mainText).not.toContain(" ... ");
     expect(surface.mainText).not.toContain("不用抽");
     expect(surface.mainText).not.toContain("天天中獎");
+  });
+
+  it("removes publisher utility residue without trimming the article body", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Publisher utility residue fixture</title>
+      <article>
+        <h1>Publisher utility residue fixture</h1>
+        <p>第一段說明虛構主管機關公布一項新措施，並交代發布日期與適用對象。</p>
+        <p>[廣告] 請繼續往下閱讀 ...</p>
+        <p>第二段保留措施內容、執行方式與後續查詢管道，作為完整正文的一部分。</p>
+        <p>第三段說明虛構機關將於下月公布追蹤報告，讓讀者知道事件仍在發展。</p>
+        <p>（相關報導：另一則不相關的合成旅遊新聞 ｜ 更多文章）第四段在推薦連結之後繼續說明正文結論。</p>
+        <p>投資想更上手？請加測試 LINE 社群。</p>
+        <p># # # #</p>
+      </article>
+    `, { url: "https://news.example.test/publisher-utility-residue" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("第三段說明虛構機關將於下月公布追蹤報告");
+    expect(surface.mainText).toContain("第四段在推薦連結之後繼續說明正文結論");
+    expect(surface.mainText).not.toContain("請繼續往下閱讀");
+    expect(surface.mainText).not.toContain("不相關的合成旅遊新聞");
+    expect(surface.mainText).not.toContain("LINE 社群");
+    expect(surface.mainText).not.toMatch(/#\s+#/);
+  });
+
+  it("trims a compact sharing and copyright footer from candidate text", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <article>
+        <p>The first synthetic paragraph states an identifiable event and its date.</p>
+        <p>The second paragraph adds enough context to remain useful for reading.</p>
+        <p>The final paragraph closes the report before publisher controls.</p>
+        <div>Daily快訊 分享給朋友： 追蹤我們： ※本文版權所有，非經授權，不得轉載。 著作權聲明</div>
+      </article>
+    `, { url: "https://news.example.test/publisher-footer" });
+
+    const article = dom.window.document.querySelector("article");
+    expect(article).not.toBeNull();
+    const text = extractGeneralPageCandidateElementText(article!);
+
+    expect(text).toContain("final paragraph closes the report");
+    expect(text).not.toContain("分享給朋友");
+    expect(text).not.toContain("著作權聲明");
   });
 
   it("marks an explicitly incomplete full-text preview as gated", () => {

@@ -202,7 +202,13 @@ const NOISY_BLOCK_TEXT_PATTERNS = [
   /聽新聞\s*0:00\s*\/\s*0:00/,
   /^(?:Yahoo|媒體|網站)?提醒您[：:]?\s*(?:飲酒過量|未滿十八歲|禁止酒駕)[\s\S]{0,120}$/i,
   /^(?:飲酒過量，?害人害己。?\s*)?(?:未滿十八歲禁止飲酒。?|禁止酒駕。?)$/i,
-  /^請繼續往下閱讀(?:\.{3}|…)?$/,
+  /^請繼續往下閱讀\s*(?:\.{3}|…)?$/,
+  /^(?:[【\[]\s*廣告\s*[】\]]\s*)?請繼續往下閱讀\s*(?:\.{3}|…)?$/,
+  /^（?相關報導[：:][\s\S]{0,320}(?:更多文章|更多報導)\s*）?$/,
+  /^(?:\S{0,24}快訊\s+)?分享給朋友[：:][\s\S]{0,240}(?:版權所有|著作權聲明)[\s\S]*$/,
+  /^(?:投資|閱讀|新聞|資訊)[\s\S]{0,32}(?:LINE|社群|訂閱|追蹤)[\s\S]{0,80}$/i,
+  /^(?:一手|立即)?掌握.{0,24}(?:脈動|資訊|新聞)$/,
+  /^(?:#\s*){3,}$/,
   /^不用抽\s*不用搶\s*現在用APP看新聞\s*保證天天中獎/i,
   /^更多新聞請搜尋.{0,24}$/,
   /^End of content$/i,
@@ -2057,7 +2063,16 @@ function looksTruncatedContentPreview(title: string | undefined, text: string): 
 }
 
 function finalizeGeneralPageReadingText(text: string): string {
-  return trimTrailingRetrievalMetadata(trimTruncatedContentPreview(text));
+  return trimTrailingPublisherUtilityText(trimTrailingRetrievalMetadata(trimTruncatedContentPreview(text)));
+}
+
+function trimTrailingPublisherUtilityText(text: string): string {
+  return text
+    .replace(/\s+(?:\S{0,24}快訊\s+)?分享給朋友[：:][\s\S]{0,320}(?:版權所有|著作權聲明)[\s\S]*$/i, "")
+    .replace(/\s+(?:投資|閱讀|新聞|資訊)[\s\S]{0,40}(?:LINE|社群|訂閱|追蹤)[\s\S]{0,100}$/i, "")
+    .replace(/\s+(?:一手|立即)?掌握.{0,24}(?:脈動|資訊|新聞)$/i, "")
+    .replace(/\s+(?:#\s*){3,}$/, "")
+    .trim();
 }
 
 function trimTruncatedContentPreview(text: string): string {
@@ -2096,6 +2111,8 @@ function cleanCommonPageNoise(value: string): string {
     .replace(/為達最佳瀏覽效果，?\s*建議使用\s*Chrome、?\s*Firefox\s*或\s*Microsoft\s*Edge\s*的瀏覽器。?/gi, " ")
     .replace(/請至\s*(?:Edge|Fire\s*Fox|Firefox|Google|Chrome|Microsoft\s*Edge)[^。.!?]*(?:下載|download)[^。.!?]*(?:[。.!?]|$)/gi, " ")
     .replace(/For best viewing[^.!?]*(?:Chrome|Firefox|Edge)[^.!?]*(?:browser|download)[^.!?]*(?:[.!?]|$)/gi, " ")
+    .replace(/(?:[【\[]\s*廣告\s*[】\]]\s*)?請繼續往下閱讀\s*(?:\.{3}|…)?/gi, " ")
+    .replace(/（\s*相關報導[：:][^（）]{0,360}(?:更多文章|更多報導)\s*）/gi, " ")
     .replace(/■\s*(?:按讚|訂閱|追蹤|點擊)[\s\S]*$/g, " ")
     .replace(/\s+/g, " ")
     .trim();
