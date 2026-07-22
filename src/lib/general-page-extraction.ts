@@ -1306,6 +1306,11 @@ function pruneLowProseUtilityBlocks(root: Element): void {
       linkCount >= 4 &&
       linkDensity >= 0.18 &&
       !hasSubstantialUnlinkedProse;
+    const compactLinkedCardSection = text.length <= 760 &&
+      paragraphCount === 0 &&
+      headingCount >= 1 &&
+      linkCount >= 3 &&
+      linkDensity >= 0.18;
     const compactInteractiveCluster = text.length <= 760 &&
       paragraphCount === 0 &&
       linkCount >= 2 &&
@@ -1314,7 +1319,7 @@ function pruneLowProseUtilityBlocks(root: Element): void {
     const compactControlCluster = text.length <= 160 &&
       paragraphCount === 0 &&
       controlCount >= 1;
-    if (repeatedLinkedCards || denseLinkedDirectory || compactInteractiveCluster || compactControlCluster)
+    if (repeatedLinkedCards || denseLinkedDirectory || compactLinkedCardSection || compactInteractiveCluster || compactControlCluster)
       element.remove();
   }
 }

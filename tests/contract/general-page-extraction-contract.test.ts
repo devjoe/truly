@@ -694,6 +694,43 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).toContain("keep exploring how these interface choices");
   });
 
+  it("removes a compact three-card cross-topic resource cluster from a reading body", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Synthetic healthy growth guidance</title>
+      <main>
+        <h1>Synthetic healthy growth guidance</h1>
+        <div class="reading-body-neutral">
+          <section>
+            <h2>Why it matters</h2>
+            <p>The guidance explains how regular meals, physical activity, and sleep can support healthy growth.</p>
+            <p>A second paragraph gives public-safe advice about maintaining routines over time.</p>
+            <p>A final paragraph closes the effective guidance before a separate resource-card cluster begins.</p>
+          </section>
+          <section class="section-neutral">
+            <h2>Adopt healthy habits</h2>
+            <div class="links-neutral">
+              <div><a href="/immunity">Synthetic immunity guide</a><div>Separate vaccination advice belongs to another topic.</div></div>
+              <div><a href="/travel">Synthetic holiday travel guide</a><div>Separate travel advice belongs to another topic.</div></div>
+              <div><a href="/celebrations">Synthetic celebration guide</a><div>Separate holiday advice belongs to another topic.</div></div>
+            </div>
+          </section>
+        </div>
+      </main>
+    `, { url: "https://health.example.test/healthy-growth" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("regular meals, physical activity, and sleep");
+    expect(surface.mainText).not.toContain("Adopt healthy habits");
+    expect(surface.mainText).not.toContain("Separate vaccination advice");
+    expect(surface.mainText).not.toContain("Separate travel advice");
+    expect(surface.mainText).not.toContain("Separate holiday advice");
+  });
+
   it("removes maintenance and retrieval wrappers without deleting article prose", () => {
     const dom = new JSDOM(`
       <!doctype html>
