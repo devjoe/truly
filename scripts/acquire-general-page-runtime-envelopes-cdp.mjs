@@ -59,6 +59,19 @@ export function hashAcquisitionText(value) {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
+export function acquisitionUrlsMatch(left, right) {
+  try {
+    const normalized = (value) => {
+      const url = new URL(value);
+      url.hash = "";
+      return url.href;
+    };
+    return normalized(left) === normalized(right);
+  } catch {
+    return false;
+  }
+}
+
 export function selectFacebookMessageInDocument(
   documentRef,
   selection,
@@ -203,6 +216,10 @@ async function main() {
     const samples = [];
     try {
       await waitForDocument(sideClient, args.timeoutMs);
+      if (!args.resume) {
+        await sleep(750);
+        await clearCaptureBuffer(worker);
+      }
       if (args.mode === "facebook-focus") {
         const source = await openSource(worker, args.endpoint, inputUrls[0], args.timeoutMs);
         openedTabIds.push(source.tab.id);
@@ -228,13 +245,10 @@ async function main() {
             stage = "read-capture-count";
             const expectedScope = args.mode === "page" ? "page" : "focus";
             const before = await captureCount(worker, expectedScope);
-            const pageBefore = args.mode === "focus" ? await captureCount(worker, "page") : before;
             let selection = null;
             stage = "activate-background-tab";
             await activateTabWithoutWindowFocus(worker, source.tab.id);
             if (args.mode === "focus") {
-              stage = "wait-page-prewarm";
-              await waitForPageAutoRead(worker, pageBefore, args.timeoutMs);
               stage = "select-focus-text";
               selection = await selectGeneralPageText(source.client);
             }
@@ -242,7 +256,7 @@ async function main() {
             await selectWorkspace(sideClient, args.mode === "page" ? "page" : "focus");
             stage = "trigger-or-wait";
             if (args.mode === "focus") await clickFocusAction(sideClient, args.timeoutMs);
-            else await waitForPageAutoRead(worker, before, args.timeoutMs);
+            else await waitForPageAutoRead(worker, before, args.timeoutMs, source.tab.url);
             stage = "read-capture-metadata";
             const capture = await waitForSingleCapture(worker, before, args.mode, args.timeoutMs);
             assertSelectionCaptureMatch(capture, selection);
@@ -395,6 +409,11 @@ async function resetCaptureConsumerHandshake(worker) {
   if (!reset) throw new Error("collector handshake became unavailable before acquisition started");
 }
 
+async function clearCaptureBuffer(worker) {
+  const cleared = await worker.evaluate("(() => { const capture = globalThis.__trulyGeneralPageInvestigationCapture; if (!capture?.enabled || !Array.isArray(capture.items)) return false; capture.items.splice(0, capture.items.length); capture.consumerDone = false; return true; })()");
+  if (!cleared) throw new Error("collector buffer became unavailable before acquisition started");
+}
+
 async function captureCount(worker, scope) {
   return worker.evaluate(`(() => {
     const items = globalThis.__trulyGeneralPageInvestigationCapture?.items;
@@ -436,6 +455,7 @@ async function captureMetadata(worker, scope, index) {
       mainTextHash: mainText ? hash(mainText) : null,
       selectedTextLength: selectedText.length,
       selectedTextHash: selectedText ? hash(selectedText) : null,
+      contextUrl: context.canonicalUrl || context.url || null,
       candidateCount: candidates.length,
       candidateTextLength: candidates.reduce((sum, candidate) => sum + (typeof candidate?.exactText === "string" ? candidate.exactText.length : 0), 0),
     };
@@ -459,6 +479,22 @@ async function waitForSingleCapture(worker, before, expectedMode, timeoutMs) {
   throw new Error(`timed out waiting for ${expectedMode} runtime envelope`);
 }
 
+async function removeScopeCaptures(worker, scope, scopeIndices) {
+  if (!scopeIndices.length) return;
+  const removed = await worker.evaluate(`(() => {
+    const items = globalThis.__trulyGeneralPageInvestigationCapture?.items;
+    if (!Array.isArray(items)) return false;
+    const scopeIndexes = [];
+    items.forEach((item, rawIndex) => {
+      if (item?.analysis?.scope === ${JSON.stringify(scope)}) scopeIndexes.push(rawIndex);
+    });
+    const rawIndexes = ${JSON.stringify(scopeIndices)}.map((index) => scopeIndexes[index]).filter(Number.isInteger).sort((a, b) => b - a);
+    rawIndexes.forEach((rawIndex) => items.splice(rawIndex, 1));
+    return rawIndexes.length;
+  })()`);
+  if (removed !== scopeIndices.length) throw new Error("unable to remove unexpected runtime capture");
+}
+
 async function selectWorkspace(sideClient, workspace) {
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const ok = await sideClient.evaluate(`(() => { const button = document.querySelector('.tab[data-tab=${JSON.stringify(workspace)}]'); if (!button || button.getAttribute('aria-disabled') === 'true') return false; button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true; })()`);
@@ -480,10 +516,21 @@ async function clickFocusAction(sideClient, timeoutMs) {
   throw new Error("Focus action did not become available");
 }
 
-async function waitForPageAutoRead(worker, before, timeoutMs) {
+async function waitForPageAutoRead(worker, before, timeoutMs, expectedUrl) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (await captureCount(worker, "page") > before) return;
+    const count = await captureCount(worker, "page");
+    if (count > before) {
+      const captured = [];
+      for (let index = before; index < count; index += 1) {
+        captured.push({ index, metadata: await captureMetadata(worker, "page", index) });
+      }
+      const matches = captured.filter(({ metadata }) => acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl));
+      const unexpected = captured.filter(({ metadata }) => !acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl));
+      if (matches.length > 1) throw new Error("Web workspace produced duplicate captures for the active page");
+      if (unexpected.length) await removeScopeCaptures(worker, "page", unexpected.map(({ index }) => index));
+      if (matches.length === 1) return;
+    }
     await sleep(POLL_MS);
   }
   throw new Error("Web workspace did not auto-read the active page");

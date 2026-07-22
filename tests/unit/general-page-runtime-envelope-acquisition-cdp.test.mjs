@@ -3,6 +3,7 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 
 import {
+  acquisitionUrlsMatch,
   acquisitionUrlsFromCapturePacket,
   assertSelectionCaptureMatch,
   FACEBOOK_MESSAGE_SELECTORS,
@@ -36,6 +37,17 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
         { analysis: { context: { url: "https://two.example.test/" } } },
       ],
     }, 1)).toEqual(["https://two.example.test/"]);
+  });
+
+  it("matches the active source after removing only the private audit hash", () => {
+    expect(acquisitionUrlsMatch(
+      "https://example.test/article#truly-gpr-123",
+      "https://example.test/article",
+    )).toBe(true);
+    expect(acquisitionUrlsMatch(
+      "https://example.test/other",
+      "https://example.test/article",
+    )).toBe(false);
   });
 
   it("uses precise Facebook message-body selectors", () => {
@@ -156,16 +168,23 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(source).toContain("/^https?:\\/\\//");
   });
 
-  it("waits for general-page prewarm before requesting a Focus target", () => {
+  it("does not require a Page investigation action before requesting a Focus target", () => {
     const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
-    const prewarm = source.indexOf('stage = "wait-page-prewarm"');
-    const focusSelection = source.indexOf('stage = "select-focus-text"', prewarm);
+    const focusSelection = source.indexOf('stage = "select-focus-text"');
     const focusWorkspace = source.indexOf('stage = "select-workspace"', focusSelection);
     const focusAction = source.indexOf("clickFocusAction", focusWorkspace);
-    expect(prewarm).toBeGreaterThan(0);
-    expect(focusSelection).toBeGreaterThan(prewarm);
+    expect(source).not.toContain('stage = "wait-page-prewarm"');
+    expect(focusSelection).toBeGreaterThan(0);
     expect(focusWorkspace).toBeGreaterThan(focusSelection);
     expect(focusAction).toBeGreaterThan(focusWorkspace);
+  });
+
+  it("clears late pre-cohort captures and rejects captures from another URL", () => {
+    const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
+    expect(source).toContain("await clearCaptureBuffer(worker)");
+    expect(source).toContain("acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl)");
+    expect(source).toContain("await removeScopeCaptures(worker");
+    expect(source).toContain("waitForPageAutoRead(worker, before, args.timeoutMs, source.tab.url)");
   });
 
   it("requires an explicit resume flag before accepting a non-empty armed buffer", () => {
