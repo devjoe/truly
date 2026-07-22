@@ -127,4 +127,32 @@ describe("constrained investigation span selection", () => {
     expect(exact.some((value) => /忽略先前/u.test(value))).toBe(false);
     expect(exact).toContain("The regulator reported that leaked passwords affected 4,200 accounts in June 2026");
   });
+
+  it("rejects source spans whose opening boundary contains an unmatched wrapper or code closer", () => {
+    const source = [
+      "檔案照片） （海灣社記者林真報導）北港市政府宣布 2026 年 8 月 9 日封橋檢修。",
+      "} Overview You can use the storage API to save application data.",
+      "北港市交通局將 18 路公車改道至海岸路。",
+    ].join(" ");
+    const exact = buildInvestigationSpanCandidates(source, { maxCandidates: 12, maxCharacters: 180 })
+      .map((candidate) => candidate.exactText);
+
+    expect(exact.some((value) => value.startsWith("檔案照片）"))).toBe(false);
+    expect(exact.some((value) => value.startsWith("}"))).toBe(false);
+    expect(exact).toContain("北港市交通局將 18 路公車改道至海岸路");
+  });
+
+  it("rejects demonstrative-led spans that cannot identify their referent by themselves", () => {
+    const source = [
+      "這兩個條文規定地方先執行，中央必要時介入。",
+      "This program changes the filing deadline.",
+      "北港市議會通過第 18 號預算修正案。",
+    ].join(" ");
+    const exact = buildInvestigationSpanCandidates(source, { maxCandidates: 12, maxCharacters: 180 })
+      .map((candidate) => candidate.exactText);
+
+    expect(exact).not.toContain("這兩個條文規定地方先執行，中央必要時介入");
+    expect(exact).not.toContain("This program changes the filing deadline");
+    expect(exact).toContain("北港市議會通過第 18 號預算修正案");
+  });
 });

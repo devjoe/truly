@@ -1089,6 +1089,25 @@ next candidate gate closed; no fresh holdout should be created yet.
   admitted to evaluation only after an adversarial `grill-your-sub-agents`
   decision, without lowering the numerical quality gates.
 
+### 2026-07-23 Candidate v9 boundary and rank refinement
+
+- The preceding runtime-envelope development cohort passed scope fidelity,
+  recall, exact-span ownership, protocol, network, and overall handoff gates,
+  but failed the frozen visible-action quality and top-rank gates. Gate C stayed
+  sealed and every numerical threshold remains unchanged.
+- The successor keeps the schema-v5 one-ID wire and deterministic local
+  presentation. Candidate enumeration now rejects only two additional generic
+  incomplete-boundary classes: an unmatched leading wrapper/code closer, and a
+  demonstrative-led sentence that cannot name its referent by itself.
+- Ranking remains prompt-first. The selector must prefer a specific bounded
+  action, constraint, date, count, decision, measurement, or named event over a
+  broad overview or definition; it must reject weak unnamed speculative
+  attribution and abstain when the survivors would only be secondary context.
+  No new local topic classifier or semantic scoring regex was added.
+- This is a new candidate, not release authorization. It requires the unchanged
+  synthetic Gate A and a wholly fresh runtime-envelope Gate B cohort; the
+  consumed v8 rows cannot be replayed as candidate evidence.
+
 ## Verification Gates
 
 Each implementation slice should pass:

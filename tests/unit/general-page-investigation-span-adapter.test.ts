@@ -103,10 +103,16 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("source's subject or a key factual support");
     expect(system).toContain("navigation or interface text");
     expect(system).toContain("citations or authoring metadata");
+    expect(system).toContain("locate its exactText in the ordered source");
+    expect(system).toContain("nearest section or line label");
     expect(system).toContain("reject the whole span");
     expect(system).toContain("describes the source, not the external world");
     expect(system).toContain("Attribution rule");
     expect(system).toContain("judge the embedded proposition");
+    expect(system).toContain("unnamed analysts");
+    expect(system).toContain("broad definition");
+    expect(system).toContain("secondary context");
+    expect(system).toContain("best alternative");
     expect(system).toContain("clearly the most useful statement");
     expect(system).toContain("may not supply a missing actor");
     expect(system).toContain('"schemaVersion":5');
