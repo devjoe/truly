@@ -214,12 +214,12 @@ async function main() {
     console.error(`capture armed; acquiring ${args.count} ${args.mode} envelopes without requesting window focus${args.resume ? ` (resume from ${armState.count} buffered rows)` : ""}`);
 
     const sideUrl = `chrome-extension://${extensionId}/sidepanel/sidepanel.html`;
-    sideTarget = (await listTargets(args.endpoint)).find((entry) => entry.webSocketDebuggerUrl && entry.url?.startsWith(sideUrl));
-    if (!sideTarget) {
-      const side = await createInactiveTab(worker, `${sideUrl}?runtimeEnvelopeAcquisition=${Date.now()}`);
-      openedTabIds.push(side.id);
-      sideTarget = await waitForTabTarget(args.endpoint, side.id, side.url, args.timeoutMs);
-    }
+    // A globally discovered side panel can belong to a different Chrome window
+    // than the inactive source tabs created below. Keep the audit isolated from
+    // the user's visible panel and give it a dedicated background tab instead.
+    const side = await createInactiveTab(worker, `${sideUrl}?runtimeEnvelopeAcquisition=${Date.now()}`);
+    openedTabIds.push(side.id);
+    sideTarget = await waitForTabTarget(args.endpoint, side.id, side.url, args.timeoutMs);
     const sideClient = connectCdp(sideTarget.webSocketDebuggerUrl, { commandTimeoutMs: 10_000 });
     const samples = [];
     try {

@@ -168,10 +168,11 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(source).not.toMatch(/focused\s*:\s*true/);
   });
 
-  it("reuses an existing side panel before creating an inactive audit instance", () => {
+  it("uses a dedicated inactive side panel instead of touching the user's panel", () => {
     const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
-    expect(source).toContain("entry.url?.startsWith(sideUrl)");
-    expect(source).toContain("if (!sideTarget)");
+    expect(source).toContain("const side = await createInactiveTab(worker");
+    expect(source).not.toContain("entry.url?.startsWith(sideUrl)");
+    expect(source).not.toContain("if (!sideTarget)");
   });
 
   it("uniquely marks background source URLs and waits past about:blank", () => {
