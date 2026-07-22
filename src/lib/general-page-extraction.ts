@@ -2068,6 +2068,7 @@ function finalizeGeneralPageReadingText(text: string): string {
 
 function trimTrailingPublisherUtilityText(text: string): string {
   return text
+    .replace(/\s+相關新聞(?:請見[：:]?)?\s*[\s\S]{1,320}$/i, "")
     .replace(/\s+(?:\S{0,24}快訊\s+)?分享給朋友[：:][\s\S]{0,320}(?:版權所有|著作權聲明)[\s\S]*$/i, "")
     .replace(/\s+(?:投資|閱讀|新聞|資訊)[\s\S]{0,40}(?:LINE|社群|訂閱|追蹤)[\s\S]{0,100}$/i, "")
     .replace(/\s+(?:一手|立即)?掌握.{0,24}(?:脈動|資訊|新聞)$/i, "")
@@ -2112,6 +2113,7 @@ function cleanCommonPageNoise(value: string): string {
     .replace(/請至\s*(?:Edge|Fire\s*Fox|Firefox|Google|Chrome|Microsoft\s*Edge)[^。.!?]*(?:下載|download)[^。.!?]*(?:[。.!?]|$)/gi, " ")
     .replace(/For best viewing[^.!?]*(?:Chrome|Firefox|Edge)[^.!?]*(?:browser|download)[^.!?]*(?:[.!?]|$)/gi, " ")
     .replace(/(?:[【\[]\s*廣告\s*[】\]]\s*)?請繼續往下閱讀\s*(?:\.{3}|…)?/gi, " ")
+    .replace(/透過集合功能整理內容\s*你可以依據偏好儲存及分類內容[。．]?/gi, " ")
     .replace(/（\s*相關報導[：:][^（）]{0,360}(?:更多文章|更多報導)\s*）/gi, " ")
     .replace(/■\s*(?:按讚|訂閱|追蹤|點擊)[\s\S]*$/g, " ")
     .replace(/\s+/g, " ")

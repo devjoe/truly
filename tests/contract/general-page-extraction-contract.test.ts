@@ -1199,6 +1199,53 @@ describe("General Page Reader extraction contract", () => {
     expect(text).not.toContain("著作權聲明");
   });
 
+  it("trims a compact related-news recirculation tail", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Related news tail fixture</title>
+      <article>
+        <h1>Related news tail fixture</h1>
+        <p>第一段說明虛構機關於週一公布新方案，並列出適用對象與施行日期。</p>
+        <p>第二段保留完整執行方式，讓讀者能理解本篇報導的主要內容。</p>
+        <p>第三段交代後續將發布公開報告，作為文章的自然結尾。</p>
+        <p>相關新聞請見：另一篇不屬於本文的合成標題！測試媒體</p>
+      </article>
+    `, { url: "https://news.example.test/related-news-tail" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("第三段交代後續將發布公開報告");
+    expect(surface.mainText).not.toContain("相關新聞請見");
+    expect(surface.mainText).not.toContain("不屬於本文的合成標題");
+  });
+
+  it("removes collection-control copy without dropping documentation content", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Synthetic API documentation</title>
+      <main>
+        <h1>synthetic.runtime</h1>
+        <p>透過集合功能整理內容 你可以依據偏好儲存及分類內容。</p>
+        <h2>說明</h2>
+        <p>這個合成 API 可讀取套件資訊，並監聽擴充功能生命週期事件。</p>
+        <p>使用這個 API 前，開發者應檢查文件列出的權限與版本限制。</p>
+      </main>
+    `, { url: "https://docs.example.test/api/runtime" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("這個合成 API 可讀取套件資訊");
+    expect(surface.mainText).toContain("權限與版本限制");
+    expect(surface.mainText).not.toContain("透過集合功能整理內容");
+    expect(surface.mainText).not.toContain("依據偏好儲存及分類內容");
+  });
+
   it("marks an explicitly incomplete full-text preview as gated", () => {
     const dom = new JSDOM(`
       <!doctype html>
