@@ -160,10 +160,20 @@ const NON_READING_BLOCK_SELECTORS = [
   "[class*=\"trc_\" i]",
   "[class*=\"toolbar\" i]",
   "[class*=\"hatnote\" i]",
+  "[class*=\"ambox\" i]",
+  "[class*=\"appDownload\" i]",
+  "[class*=\"articlekeyword\" i]",
+  "[class*=\"btnGroup\" i]",
+  "[class*=\"gmailNews\" i]",
+  "[class*=\"moreArticle\" i]",
   "[class*=\"mw-editsection\" i]",
   "[class*=\"navbox\" i]",
+  "[class*=\"printfooter\" i]",
+  "[class*=\"TemasBlock\" i]",
+  "[class*=\"wp-block-nasa-blocks-news-automated\" i]",
   "[id*=\"also-ask\" i]",
   "[id*=\"breadcrumb\" i]",
+  "[id*=\"catlinks\" i]",
   "[id*=\"cookie\" i]",
   "[id*=\"consent\" i]",
   "[id*=\"google_ads_iframe\" i]",
@@ -238,6 +248,9 @@ const RECIRCULATION_TAIL_HEADING_PATTERNS = [
   /^more from\b/i,
   /^related (?:articles|coverage|stories|reading)$/i,
   /^read more$/i,
+  /^keep exploring$/i,
+  /^discover more topics from\b/i,
+  /^請繼續(?:往下|下滑)閱讀(?:\.{3}|…)?$/,
   /^(?:【|\[)?(?:(?:全球)?熱門(?:話題|新聞|文章)?|全球熱話題)(?:】|\])?$/,
   /^更多.{0,24}(?:內幕|內容)[：:]?$/,
   /^(?:references?|external links?|further reading|see also|footnotes?)(?:\s*\[?\s*edit\s*\]?)?$/i,
@@ -2054,7 +2067,7 @@ function trimTruncatedContentPreview(text: string): string {
 
 function trimTrailingRetrievalMetadata(text: string): string {
   return text
-    .replace(/\s*Retrieved from\s*(?:""|“”|''|$)\s*$/i, "")
+    .replace(/\s*Retrieved from(?:\s*(?:""|“”|''))?\s*(?::\s*)?(?:Hidden categories:?\s*)?$/i, "")
     .trim();
 }
 

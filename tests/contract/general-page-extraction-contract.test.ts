@@ -632,6 +632,147 @@ describe("General Page Reader extraction contract", () => {
     expect(surface.mainText).not.toContain("聽新聞 0:00 / 0:00");
   });
 
+  it("removes high-confidence utility modules embedded in a semantic news article", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>虛構公共建設計畫完成審查</title>
+      <article class="article">
+        <div class="jsBlueBlock TemasBlock">新聞專題 1/33</div>
+        <h1>虛構公共建設計畫完成審查</h1>
+        <div class="timeBox">2026/7/22 08:00</div>
+        <div class="btnGroup"><div class="hiddenCont">請同意我們的隱私權規範，才能啟用聽新聞的功能。</div></div>
+        <figure><figcaption>虛構工程示意圖，由測試單位提供。</figcaption></figure>
+        <div class="paragraph">
+          <p>虛構審查委員會完成公共建設計畫的初步審查，並要求主辦單位公開預算與施工期程。</p>
+          <p>主辦單位表示，第一階段將整理交通影響資料，第二階段則會公布環境監測方法與更新頻率。</p>
+          <p>這些合成正文提供足夠的連續文章內容，用來確認 utility 模組不會進入最終閱讀脈絡。</p>
+        </div>
+        <div class="gmailNews"><a href="/follow">透過 Google News 追蹤測試新聞</a></div>
+        <div class="articlekeywordGroup">#虛構計畫 #公共建設</div>
+        <div class="paragraph moreArticle"><a href="/other">另一篇不相關的合成報導</a></div>
+        <div class="paragraph appDownload">支持測試媒體 下載測試 APP 本網站內容未經授權不得轉載</div>
+        <div class="jsNextLine nextline"><div>請繼續下滑閱讀</div><a href="/next">下一篇不相關報導</a></div>
+      </article>
+    `, { url: "https://news.example.test/story/utility-modules" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("虛構審查委員會完成公共建設計畫");
+    expect(surface.mainText).toContain("虛構工程示意圖");
+    expect(surface.mainText).not.toContain("新聞專題 1/33");
+    expect(surface.mainText).not.toContain("請同意我們的隱私權規範");
+    expect(surface.mainText).not.toContain("Google News");
+    expect(surface.mainText).not.toContain("#虛構計畫");
+    expect(surface.mainText).not.toContain("另一篇不相關");
+    expect(surface.mainText).not.toContain("下載測試 APP");
+    expect(surface.mainText).not.toContain("請繼續下滑閱讀");
+  });
+
+  it("keeps prose that merely discusses utility-like terms", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Utility wording in genuine prose</title>
+      <article>
+        <h1>Utility wording in genuine prose</h1>
+        <p>The report explains why a publisher chose Google News as one distribution channel for its public-interest journalism.</p>
+        <p>It also discusses app downloads, copyright notices, consent design, and related articles as subjects of the research.</p>
+        <p>The conclusion asks readers to keep exploring how these interface choices affect access to reliable information.</p>
+        <p>This final paragraph keeps the synthetic article comfortably above the minimum complete-reading threshold.</p>
+      </article>
+    `, { url: "https://research.example.test/utility-language" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("Google News");
+    expect(surface.mainText).toContain("app downloads, copyright notices, consent design");
+    expect(surface.mainText).toContain("keep exploring how these interface choices");
+  });
+
+  it("removes maintenance and retrieval wrappers without deleting article prose", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Synthetic reference article</title>
+      <article>
+        <h1>Synthetic reference article</h1>
+        <table class="ambox"><tbody><tr><td>This article needs additional citations.</td></tr></tbody></table>
+        <p>The first synthetic paragraph defines a fictional archival method and identifies its intended research use.</p>
+        <p>The second paragraph records a made-up publication date and describes how readers can compare source provenance.</p>
+        <p>The third paragraph provides enough continuous prose to represent the effective article context.</p>
+        <div class="printfooter">Retrieved from ""</div>
+        <div id="catlinks">Hidden categories:</div>
+      </article>
+    `, { url: "https://reference.example.test/synthetic-method" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("fictional archival method");
+    expect(surface.mainText).not.toContain("needs additional citations");
+    expect(surface.mainText).not.toContain("Retrieved from");
+    expect(surface.mainText).not.toContain("Hidden categories");
+  });
+
+  it("uses existing structural safeguards when pruning an exploration tail", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Synthetic science feature</title>
+      <article>
+        <h1>Synthetic science feature</h1>
+        <p>The feature introduces a fictional observatory and explains the instruments used during its first survey.</p>
+        <p>A second paragraph describes the made-up measurements and the limits reported by the research team.</p>
+        <p>A third paragraph closes the main finding before an unrelated discovery module begins.</p>
+        <div>Keep Exploring</div>
+        <div class="discovery-card"><a href="/other-topic">An unrelated synthetic topic card</a></div>
+        <h2>Discover More Topics From Example Science</h2>
+      </article>
+    `, { url: "https://science.example.test/features/synthetic-observatory" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("third paragraph closes the main finding");
+    expect(surface.mainText).not.toContain("Keep Exploring");
+    expect(surface.mainText).not.toContain("unrelated synthetic topic card");
+    expect(surface.mainText).not.toContain("Discover More Topics");
+  });
+
+  it("removes an embedded automated news module without treating news prose as utility text", () => {
+    const dom = new JSDOM(`
+      <!doctype html>
+      <title>Synthetic black-hole feature</title>
+      <article>
+        <h1>Synthetic black-hole feature</h1>
+        <p>The first paragraph explains a fictional observation and notes that science news may provide useful context.</p>
+        <p>The second paragraph describes the made-up measurements and the limitations reported by the research team.</p>
+        <p>The final paragraph closes the feature before the publisher's automated discovery module.</p>
+        <div class="nasa-gb-align-full wp-block-nasa-blocks-news-automated">
+          <h2>Black Hole News</h2>
+          <a href="/unrelated-story">Explore All Black Hole News</a>
+        </div>
+      </article>
+    `, { url: "https://science.example.test/features/synthetic-black-holes" });
+
+    const surface = extractGeneralPageSurface({
+      document: dom.window.document,
+      url: dom.window.location.href,
+    });
+
+    expect(surface.mainText).toContain("science news may provide useful context");
+    expect(surface.mainText).toContain("final paragraph closes the feature");
+    expect(surface.mainText).not.toContain("Black Hole News");
+    expect(surface.mainText).not.toContain("Explore All");
+  });
+
   it("downgrades article roots dominated by utility links and controls", () => {
     const surface = extractGeneralPageSurface({
       document: jsdomFixtureDocument(
