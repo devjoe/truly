@@ -138,15 +138,37 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     }, selection)).toThrow(/lacks selection provenance/);
   });
 
+  it("matches Focus captures by tab and exact Selection hash instead of arrival order", () => {
+    const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
+    expect(source).toContain("metadata?.tabId === expected.tabId");
+    expect(source).toContain("metadata?.mainTextHash === expected.selection?.hash");
+    expect(source).toContain("metadata?.selectedTextHash === expected.selection?.hash");
+    expect(source).toContain("rejectedFocusCaptures");
+  });
+
   it("activates the Facebook source before selecting message bodies", () => {
     const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
     const branch = source.indexOf('args.mode === "facebook-focus"');
     const activation = source.indexOf("activateTabWithoutWindowFocus(worker, source.tab.id)", branch);
+    const documentReady = source.indexOf("waitForFacebookDocumentComplete(source.client", activation);
     const sideReload = source.indexOf("sideClient.reload()", activation);
     const acquisition = source.indexOf("acquireFacebookFocus", sideReload);
     expect(activation).toBeGreaterThan(branch);
+    expect(documentReady).toBeGreaterThan(activation);
+    expect(sideReload).toBeGreaterThan(documentReady);
     expect(sideReload).toBeGreaterThan(activation);
     expect(acquisition).toBeGreaterThan(sideReload);
+  });
+
+  it("can reuse the active Facebook tab without owning or focusing it", () => {
+    const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
+    expect(source).toContain('argv.includes("--facebook-existing-tab")');
+    expect(source).toContain("openExistingFacebookSource");
+    expect(source).toContain("if (!source.existing || !source.wasActive) await activateTabWithoutWindowFocus");
+    expect(source).toContain("chrome.windows.getLastFocused");
+    expect(source).toContain("source.previousActiveTabId");
+    expect(source).toContain("window.getSelection()?.removeAllRanges()");
+    expect(source).toContain("window.scrollTo(0,");
   });
 
   it("verifies that a workspace remains selected after asynchronous tab updates", () => {
