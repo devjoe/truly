@@ -543,6 +543,7 @@ async function waitForPageAutoReadOrReread(
 ) {
   const deadline = Date.now() + timeoutMs;
   let rereadTriggered = false;
+  let sawExpectedPageBusy = false;
   while (Date.now() < deadline) {
     const count = await captureCount(worker, "page");
     if (count > before) {
@@ -561,13 +562,16 @@ async function waitForPageAutoReadOrReread(
         const button = document.querySelector('#pageReadCurrent');
         return {
           title: document.querySelector('.page-reader-card h2')?.textContent || '',
+          isBusy: Boolean(button) && button.getAttribute('aria-busy') === 'true',
           canReread: Boolean(button) &&
             button.getAttribute('aria-disabled') !== 'true' &&
             button.getAttribute('aria-busy') !== 'true' &&
             !button.disabled,
         };
-      })()`).catch(() => ({ title: "", canReread: false }));
-      if (surface.canReread && pageSurfaceMatchesSourceTitle(surface.title, expectedTitle)) {
+      })()`).catch(() => ({ title: "", isBusy: false, canReread: false }));
+      const titleMatches = pageSurfaceMatchesSourceTitle(surface.title, expectedTitle);
+      if (titleMatches && surface.isBusy) sawExpectedPageBusy = true;
+      if (!sawExpectedPageBusy && surface.canReread && titleMatches) {
         rereadTriggered = await sideClient.evaluate(`(() => {
           const button = document.querySelector('#pageReadCurrent');
           if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return false;

@@ -202,6 +202,8 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(source).toContain("await removeScopeCaptures(worker");
     expect(source).toContain("waitForPageAutoReadOrReread(");
     expect(source).toContain("pageSurfaceMatchesSourceTitle(surface.title, expectedTitle)");
+    expect(source).toContain("sawExpectedPageBusy");
+    expect(source).toContain("if (!sawExpectedPageBusy && surface.canReread && titleMatches)");
     expect(source).toContain("#pageReadCurrent");
   });
 
