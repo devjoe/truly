@@ -9,6 +9,7 @@ import {
   FACEBOOK_MESSAGE_SELECTORS,
   hashAcquisitionText,
   isMetadataReportPath,
+  pageSurfaceMatchesSourceTitle,
   selectFacebookMessageInDocument,
   validateAcquisitionUrls,
 } from "../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs";
@@ -48,6 +49,18 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
       "https://example.test/other",
       "https://example.test/article",
     )).toBe(false);
+  });
+
+  it("recognizes a restored Page surface before explicitly re-reading it", () => {
+    expect(pageSurfaceMatchesSourceTitle(
+      "A useful article title",
+      "A useful article title - Example News",
+    )).toBe(true);
+    expect(pageSurfaceMatchesSourceTitle(
+      "A different article",
+      "A useful article title - Example News",
+    )).toBe(false);
+    expect(pageSurfaceMatchesSourceTitle("", "A useful article title")).toBe(false);
   });
 
   it("uses precise Facebook message-body selectors", () => {
@@ -166,6 +179,8 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(source).toContain("truly-gpr-${Date.now()}");
     expect(source).toContain("waitForHttpLocation");
     expect(source).toContain("/^https?:\\/\\//");
+    expect(source).toContain("link[rel=\\\"canonical\\\"]");
+    expect(source).toContain("source.matchUrl");
   });
 
   it("does not require a Page investigation action before requesting a Focus target", () => {
@@ -184,7 +199,9 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(source).toContain("await clearCaptureBuffer(worker)");
     expect(source).toContain("acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl)");
     expect(source).toContain("await removeScopeCaptures(worker");
-    expect(source).toContain("waitForPageAutoRead(worker, before, args.timeoutMs, source.tab.url)");
+    expect(source).toContain("waitForPageAutoReadOrReread(");
+    expect(source).toContain("pageSurfaceMatchesSourceTitle(surface.title, expectedTitle)");
+    expect(source).toContain("#pageReadCurrent");
   });
 
   it("requires an explicit resume flag before accepting a non-empty armed buffer", () => {

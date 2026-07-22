@@ -72,6 +72,14 @@ export function acquisitionUrlsMatch(left, right) {
   }
 }
 
+export function pageSurfaceMatchesSourceTitle(cardTitle, sourceTitle) {
+  const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
+  const card = clean(cardTitle);
+  const source = clean(sourceTitle);
+  if (card.length < 5 || source.length < 5) return false;
+  return card === source || source.startsWith(card) || card.startsWith(source);
+}
+
 export function selectFacebookMessageInDocument(
   documentRef,
   selection,
@@ -256,7 +264,14 @@ async function main() {
             await selectWorkspace(sideClient, args.mode === "page" ? "page" : "focus");
             stage = "trigger-or-wait";
             if (args.mode === "focus") await clickFocusAction(sideClient, args.timeoutMs);
-            else await waitForPageAutoRead(worker, before, args.timeoutMs, source.tab.url);
+            else await waitForPageAutoReadOrReread(
+              worker,
+              sideClient,
+              before,
+              args.timeoutMs,
+              source.matchUrl,
+              source.title,
+            );
             stage = "read-capture-metadata";
             const capture = await waitForSingleCapture(worker, before, args.mode, args.timeoutMs);
             assertSelectionCaptureMatch(capture, selection);
@@ -329,7 +344,9 @@ async function openSource(worker, endpoint, url, timeoutMs) {
   await waitForHttpLocation(client, timeoutMs);
   await sleep(750);
   const finalUrl = await client.evaluate("location.href");
-  return { tab: { ...tab, url: finalUrl }, target, client };
+  const title = await client.evaluate("document.title");
+  const matchUrl = await client.evaluate("document.querySelector('link[rel=\"canonical\"]')?.href || location.href");
+  return { tab: { ...tab, url: finalUrl }, target, client, title, matchUrl };
 }
 
 function withAuditMarker(value) {
@@ -516,8 +533,16 @@ async function clickFocusAction(sideClient, timeoutMs) {
   throw new Error("Focus action did not become available");
 }
 
-async function waitForPageAutoRead(worker, before, timeoutMs, expectedUrl) {
+async function waitForPageAutoReadOrReread(
+  worker,
+  sideClient,
+  before,
+  timeoutMs,
+  expectedUrl,
+  expectedTitle,
+) {
   const deadline = Date.now() + timeoutMs;
+  let rereadTriggered = false;
   while (Date.now() < deadline) {
     const count = await captureCount(worker, "page");
     if (count > before) {
@@ -531,9 +556,29 @@ async function waitForPageAutoRead(worker, before, timeoutMs, expectedUrl) {
       if (unexpected.length) await removeScopeCaptures(worker, "page", unexpected.map(({ index }) => index));
       if (matches.length === 1) return;
     }
+    if (!rereadTriggered) {
+      const surface = await sideClient.evaluate(`(() => {
+        const button = document.querySelector('#pageReadCurrent');
+        return {
+          title: document.querySelector('.page-reader-card h2')?.textContent || '',
+          canReread: Boolean(button) &&
+            button.getAttribute('aria-disabled') !== 'true' &&
+            button.getAttribute('aria-busy') !== 'true' &&
+            !button.disabled,
+        };
+      })()`).catch(() => ({ title: "", canReread: false }));
+      if (surface.canReread && pageSurfaceMatchesSourceTitle(surface.title, expectedTitle)) {
+        rereadTriggered = await sideClient.evaluate(`(() => {
+          const button = document.querySelector('#pageReadCurrent');
+          if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return false;
+          button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          return true;
+        })()`).catch(() => false);
+      }
+    }
     await sleep(POLL_MS);
   }
-  throw new Error("Web workspace did not auto-read the active page");
+  throw new Error(`Web workspace did not ${rereadTriggered ? "re-read" : "auto-read"} the active page`);
 }
 
 async function selectGeneralPageText(client) {
