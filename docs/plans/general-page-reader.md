@@ -1087,7 +1087,7 @@ next candidate gate closed; no fresh holdout should be created yet.
   v2-v4 evidence is historical and does not authorize the v5 runtime. The v4
   primary-plus-secondary candidate failed its fresh development gate; v5 was
   admitted to evaluation only after an adversarial `grill-your-sub-agents`
-  decision, without lowering the numerical quality gates.
+  decision.
 
 ### 2026-07-23 Candidate v9 boundary and rank refinement
 
@@ -1107,6 +1107,26 @@ next candidate gate closed; no fresh holdout should be created yet.
 - This is a new candidate, not release authorization. It requires the unchanged
   synthetic Gate A and a wholly fresh runtime-envelope Gate B cohort; the
   consumed v8 rows cannot be replayed as candidate evidence.
+
+### 2026-07-23 Prospective utility and non-regression gate
+
+- Runtime-envelope v10 remains a consumed failure. It is not rescored under the
+  successor standard and its unopened holdout remains sealed.
+- A `grill-your-sub-agents` decision found that absolute-best ranking is too
+  preference-sensitive to be the sole release blocker, while an
+  acceptable-only gate could conceal gradual selector degradation.
+- The successor therefore has two independent hard gates. Product utility
+  requires zero unsafe or user-unacceptable actions, exact Page/Focus scope,
+  complete handoffs, and useful positive-row recall. Selector non-regression
+  requires a blinded randomized A/B comparison against a preregistered frozen
+  reference on the same fresh cohort.
+- Primary recommendation rate, top-rank rate, and reviewer ranking disagreement
+  remain reported diagnostics. They do not rescue a utility or non-regression
+  failure.
+- The failed but frozen `c262eb8` selector is the initial diagnostic reference
+  only. It cannot establish release fitness. The new candidate must pass the
+  absolute product-utility gate and the relative non-regression gate before a
+  holdout can be opened.
 
 ## Verification Gates
 

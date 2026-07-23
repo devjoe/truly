@@ -1,6 +1,7 @@
 # General Page Ranked Actions Release Standard
 
-Status: frozen single-recommendation runtime-envelope candidate standard, revised 2026-07-23
+Status: prospective product-utility plus selector-non-regression standard,
+revised 2026-07-23
 
 This standard governs the General Page Reader's user-facing `待確認事項` /
 `Check these items` actions. It replaces the previous policy in which a local
@@ -66,22 +67,23 @@ gates. Any prompt, schema, renderer, hard boundary, metric definition, or
 threshold change creates a new candidate; changing this standard requires a
 new `grill-your-sub-agents` decision record.
 
-The 2026-07-21 decision review retains three explicit reviewer tiers so the
-single selected action can be distinguished from a merely tolerable but weak
-recommendation:
+The output review retains three explicit reviewer tiers so the single selected
+action can be distinguished from a stronger alternative:
 
 - `recommended`: strong enough to lead the reader's action list;
 - `acceptable_secondary`: exact, self-contained, externally checkable, and
-  potentially useful, but not strong enough to be the sole visible
-  recommendation;
+  useful as a first verification step, but not the reviewer's strongest
+  alternative;
 - `user_unacceptable`: confusing, filler-like, redundant, materially
   contextless, not externally resolvable, misleading, or otherwise unsuitable
   to show as a reader action.
 
 `hard_unacceptable` remains an independent strict subset for unsafe, private,
 leaking, ungrounded, stale, or cross-scope output. No runtime regex tries to
-reproduce the reviewer tiers. They are release measurements of model ranking
-and visible product quality.
+reproduce the reviewer tiers. Product utility and selector non-regression are
+independent hard release gates. Absolute recommendation and top-rank rates
+remain diagnostics because two useful first actions may differ only by
+reviewer preference.
 
 ### A. Synthetic provider compatibility
 
@@ -154,17 +156,30 @@ Required:
   not publisher chrome, navigation/interface text, caption/byline/media
   metadata, footer/source utility text, related/recirculation content, or
   another secondary same-document role;
-- at least 85% of returned first actions are `recommended` overall and at
-  least 80% in Page and Focus separately, with at least ten returned first
-  actions in each scope;
-- at least 75% recall of positive rows overall and at least 65% in Page and
-  Focus separately;
-- the first action is best or tied-best on at least 75% of rows with any
-  reviewer-acceptable action; this denominator excludes abstentions instead of
-  counting recall failure twice;
+- at least 85% useful positive-row recall overall and at least 80% in Page and
+  Focus separately, with at least ten positive rows in each scope. A positive
+  row is recovered only when the displayed first action is `recommended` or
+  `acceptable_secondary`; abstention and `user_unacceptable` both fail
+  recovery;
+- a blinded, randomized A/B comparison against the preregistered frozen
+  reference selector on the same cohort. Reviewers see only source context,
+  rendered first actions, and handoffs; they do not see candidate, provider,
+  model, or version identity. `Tie` is required when the options differ only
+  by wording preference;
+- reference-materially-better outcomes on at most 10% of comparable rows;
+  `(reference wins - candidate wins) / comparable rows` at most 5 percentage
+  points overall and at most 10 points in Page and Focus separately, with at
+  least ten comparable rows per scope;
 - 100% exact-span and at-most-one compliance;
-- at least 95% of generated Gemini handoffs are usable and language-consistent;
+- 100% of generated Gemini handoffs are usable and language-consistent;
 - no public search or external action is opened by the audit.
+
+Until a selector passes this standard, the failed but frozen `c262eb8`
+implementation is only a diagnostic reference. It can detect regression but
+cannot establish release fitness. The candidate must independently pass every
+product-utility gate above. Pairwise review uses two independent reviewers;
+only disagreements go to a distinct adjudicator, and an adjudicator may not
+override reviewer agreement.
 
 Source-only reviewers also label Page extraction residue without treating it
 as an authorization breach:
@@ -177,10 +192,11 @@ as an authorization breach:
 
 Focus rows use `none` because the selected text is itself the authorized
 target. The residue label is diagnostic rather than a standalone pass/fail
-threshold. Indirect harm still fails the unchanged positive-row recall and
-top-rank gates; direct harm fails the zero-residue-derived and zero-unacceptable
-gates. `expectedAction` is true only when at least one supplied exact candidate
-comes from the intended Page body or Focus target, not from a secondary role.
+threshold. Indirect harm still fails useful positive-row recall and selector
+non-regression; direct harm fails the zero-residue-derived and
+zero-unacceptable gates. `expectedAction` is true only when at least one
+supplied exact candidate comes from the intended Page body or Focus target,
+not from a secondary role.
 
 Report every denominator. A scope metric is invalid when its denominator is
 smaller than ten. Platform, language, content category, extraction method, and
@@ -200,14 +216,12 @@ Required:
 - zero `user_unacceptable` displayed actions;
 - 100% `authorizationScopeFidelity`;
 - zero `samePageResidueDerived` displayed actions;
-- at least 85% of returned first actions are `recommended` overall and at
-  least 75% in Page and Focus separately, with at least eight returned first
-  actions in each scope;
-- at least 70% positive-row recall overall and at least 60% in Page and Focus
-  separately;
-- first action best or tied-best on at least 70% of eligible rows;
+- at least 85% useful positive-row recall overall and at least 80% in Page and
+  Focus separately, with at least ten positive rows per scope;
+- the same blinded selector-non-regression limits used by Gate B, with at least
+  ten comparable rows per scope;
 - 100% exact-span and at-most-one compliance;
-- at least 95% usable, language-consistent Gemini handoffs.
+- 100% usable, language-consistent Gemini handoffs.
 
 Any failure rejects the candidate. The holdout cannot be reused for tuning.
 
@@ -299,3 +313,13 @@ derived from residue, and leave all numerical selector-quality thresholds
 unchanged. Local cleanup is limited to high-confidence whole-Page structural
 boundaries and must not rewrite an authorized Focus or region target. Candidate
 v10 requires fresh A-D evidence; this revision does not reclassify or reuse v9.
+
+The v10 runtime-envelope audit then failed and was consumed: it produced 56
+actions from 60 rows, including three user-unacceptable actions and four false
+abstentions. Its two output reviewers also disagreed on absolute ranking for
+22 of 60 rows. A later adversarial review did not reclassify v10. It replaced
+the preference-sensitive absolute recommendation blockers prospectively with
+the dual hard gate above: independently prove useful, acceptable actions and
+also prove that the selector does not materially regress against a frozen
+reference. v10 remains terminal, no holdout was opened, and only a wholly
+fresh preregistered cohort may evaluate the successor.
