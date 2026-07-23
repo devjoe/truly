@@ -33,10 +33,10 @@ const DELIMITER_PAIRS = new Map([
 ]);
 const OPEN_DELIMITERS = new Set(DELIMITER_PAIRS.values());
 
-/** Reject a span whose opening boundary already lost a wrapper or code token. */
-function hasUnmatchedLeadingCloser(text: string): boolean {
+/** Reject a span whose boundary lost part of a wrapper, citation, or code token. */
+function hasUnmatchedDelimiter(text: string): boolean {
   const stack: string[] = [];
-  for (const character of [...text.trimStart()].slice(0, 80)) {
+  for (const character of text.trim()) {
     if (OPEN_DELIMITERS.has(character)) {
       stack.push(character);
       continue;
@@ -46,7 +46,7 @@ function hasUnmatchedLeadingCloser(text: string): boolean {
     if (stack.at(-1) !== expected) return true;
     stack.pop();
   }
-  return false;
+  return stack.length > 0;
 }
 
 function isContextIndependentSpan(text: string): boolean {
@@ -54,7 +54,7 @@ function isContextIndependentSpan(text: string): boolean {
   return !DEPENDENT_ZH_START.test(compact) &&
     !DEPENDENT_EN_START.test(compact) &&
     !DEPENDENT_EN_EVENT_REFERENCE.test(compact) &&
-    !hasUnmatchedLeadingCloser(compact) &&
+    !hasUnmatchedDelimiter(compact) &&
     !PROMPT_CONTROL_DIRECTIVE.test(compact) &&
     !PRIVATE_DATA_DIRECTIVE.test(compact);
 }

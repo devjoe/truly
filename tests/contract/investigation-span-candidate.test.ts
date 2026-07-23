@@ -128,10 +128,11 @@ describe("constrained investigation span selection", () => {
     expect(exact).toContain("The regulator reported that leaked passwords affected 4,200 accounts in June 2026");
   });
 
-  it("rejects source spans whose opening boundary contains an unmatched wrapper or code closer", () => {
+  it("rejects source spans whose boundary contains an unmatched wrapper, citation, or code delimiter", () => {
     const source = [
       "檔案照片） （海灣社記者林真報導）北港市政府宣布 2026 年 8 月 9 日封橋檢修。",
       "} Overview You can use the storage API to save application data.",
+      "Game programs have tested AI techniques since the 1950s.[",
       "北港市交通局將 18 路公車改道至海岸路。",
     ].join(" ");
     const exact = buildInvestigationSpanCandidates(source, { maxCandidates: 12, maxCharacters: 180 })
@@ -139,6 +140,7 @@ describe("constrained investigation span selection", () => {
 
     expect(exact.some((value) => value.startsWith("檔案照片）"))).toBe(false);
     expect(exact.some((value) => value.startsWith("}"))).toBe(false);
+    expect(exact.some((value) => value.endsWith(".["))).toBe(false);
     expect(exact).toContain("北港市交通局將 18 路公車改道至海岸路");
   });
 

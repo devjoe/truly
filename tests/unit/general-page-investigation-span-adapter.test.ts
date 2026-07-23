@@ -105,6 +105,8 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("citations or authoring metadata");
     expect(system).toContain("candidate list as source order");
     expect(system).toContain("immediate neighboring candidates");
+    expect(system).toContain("categorical wording");
+    expect(system).toContain("exception or scope limit");
     expect(system).toContain("reject the whole span");
     expect(system).toContain("describes the source, not the external world");
     expect(system).toContain("Attribution rule");
@@ -112,6 +114,8 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("unnamed analysts");
     expect(system).toContain("broad definition");
     expect(system).toContain("ranking signal");
+    expect(system).toContain("one bounded proposition");
+    expect(system).toContain("bundles independent statistics");
     expect(system).toContain("best alternative");
     expect(system).toContain("If survivors are tied");
     expect(system).toContain("tie alone is not a reason to abstain");
