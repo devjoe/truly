@@ -80,6 +80,12 @@ export function pageSurfaceMatchesSourceTitle(cardTitle, sourceTitle) {
   return card === source || source.startsWith(card) || card.startsWith(source);
 }
 
+export async function emulateBackgroundPageVisibility(client) {
+  await client.send("Page.enable").catch(() => undefined);
+  await client.send("Emulation.setFocusEmulationEnabled", { enabled: true });
+  await client.send("Page.setWebLifecycleState", { state: "active" }).catch(() => undefined);
+}
+
 export function selectFacebookMessageInDocument(
   documentRef,
   selection,
@@ -169,7 +175,7 @@ export function selectFacebookMessageInDocument(
       selection.removeAllRanges();
       continue;
     }
-    return { length: selectedText.length, hash: valueHash };
+    return { length: selectedText.length, hash: valueHash, text: selectedText };
   }
   return null;
 }
@@ -335,6 +341,7 @@ async function acquireFacebookFocus({ worker, sideClient, source, count, timeout
   const initialUsedCount = used.size;
   let stalledScrolls = 0;
   while (samples.length < count) {
+    await selectWorkspace(sideClient, "focus");
     const selection = await selectFacebookMessage(source.client, [...used]);
     if (!selection) {
       if (stalledScrolls >= 12) throw new Error(`Facebook supplied only ${used.size - initialUsedCount} unique eligible message bodies`);
@@ -344,17 +351,32 @@ async function acquireFacebookFocus({ worker, sideClient, source, count, timeout
       continue;
     }
     stalledScrolls = 0;
-    used.add(selection.hash);
     const before = await captureCount(worker, "focus");
-    await selectWorkspace(sideClient, "focus");
+    if (!await facebookSelectionMatches(source.client, selection.hash))
+      continue;
     await clickFocusAction(sideClient, timeoutMs);
     const capture = await waitForSingleCapture(worker, before, "focus", timeoutMs, {
       selection,
       tabId: source.tab.id,
+      sideClient,
+      selectionText: selection.text,
     });
+    if (!capture) {
+      used.add(selection.hash);
+      continue;
+    }
     assertSelectionCaptureMatch(capture, selection);
+    used.add(selection.hash);
     samples.push(sampleMetadata(source.tab.url, capture, selection));
   }
+}
+
+async function facebookSelectionMatches(client, expectedHash) {
+  const hashSource = hashAcquisitionText.toString();
+  return client.evaluate(`(() => {
+    const hash = ${hashSource};
+    return hash(window.getSelection()?.toString() || "") === ${JSON.stringify(expectedHash)};
+  })()`).catch(() => false);
 }
 
 async function waitForFacebookDocumentComplete(client, timeoutMs) {
@@ -377,6 +399,9 @@ async function openSource(worker, endpoint, url, timeoutMs) {
   const tab = await createInactiveTab(worker, auditUrl);
   const target = await waitForTabTarget(endpoint, tab.id, auditUrl, timeoutMs);
   const client = connectCdp(target.webSocketDebuggerUrl, { commandTimeoutMs: 10_000 });
+  if (/^https?:\/\/(?:www\.)?facebook\.com\//.test(url)) {
+    await emulateBackgroundPageVisibility(client);
+  }
   await waitForDocument(client, timeoutMs);
   await waitForHttpLocation(client, timeoutMs);
   await sleep(750);
@@ -406,6 +431,7 @@ async function openExistingFacebookSource(worker, endpoint, timeoutMs) {
   }
   const target = await waitForTabTarget(endpoint, tab.id, tab.url, timeoutMs);
   const client = connectCdp(target.webSocketDebuggerUrl, { commandTimeoutMs: 10_000 });
+  await emulateBackgroundPageVisibility(client);
   await waitForDocument(client, timeoutMs);
   return {
     tab,
@@ -581,9 +607,25 @@ async function waitForSingleCapture(worker, before, expectedMode, timeoutMs, exp
       if (!metadata.mainTextLength || !metadata.candidateCount) throw new Error("captured envelope lacks main text or candidate spans");
       return metadata;
     }
+    if (expectedScope === "focus" &&
+        expected.sideClient &&
+        expected.selectionText &&
+        await facebookAnalysisSettled(expected.sideClient, expected.selectionText)) {
+      return null;
+    }
     await sleep(POLL_MS);
   }
   throw new Error(`timed out waiting for ${expectedMode} runtime envelope${rejectedFocusCaptures ? ` after rejecting ${rejectedFocusCaptures} mismatched capture(s)` : ""}`);
+}
+
+async function facebookAnalysisSettled(sideClient, selectionText) {
+  return sideClient.evaluate(`(() => {
+    const clean = (value) => String(value || "").replace(/\\s+/g, " ").trim();
+    const fullText = clean(document.querySelector(".page-reader-focus-fulltext")?.textContent);
+    const analysis = document.querySelector(".page-reader-focus-analysis .page-reader-analysis");
+    return fullText === ${JSON.stringify(selectionText)} &&
+      Boolean(analysis?.classList.contains("is-ready") || analysis?.classList.contains("is-error"));
+  })()`).catch(() => false);
 }
 
 async function removeScopeCaptures(worker, scope, scopeIndices) {

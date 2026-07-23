@@ -6,6 +6,7 @@ import {
   acquisitionUrlsMatch,
   acquisitionUrlsFromCapturePacket,
   assertSelectionCaptureMatch,
+  emulateBackgroundPageVisibility,
   FACEBOOK_MESSAGE_SELECTORS,
   hashAcquisitionText,
   isMetadataReportPath,
@@ -84,6 +85,7 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     const result = selectFacebookMessageInDocument(dom.window.document, selection);
 
     expect(result?.length).toBeGreaterThanOrEqual(80);
+    expect(result?.text).toBe(selection?.toString());
     expect(selection?.toString()).toContain("inline topic link");
     expect(selection?.toString()).not.toContain("Hidden implementation text");
     expect(selection?.toString()).not.toContain("See more and source controls");
@@ -160,6 +162,32 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(acquisition).toBeGreaterThan(sideReload);
   });
 
+  it("stabilizes Focus before selecting Facebook text and consumes the hash only after capture", () => {
+    const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
+    const acquisition = source.indexOf("async function acquireFacebookFocus");
+    const workspace = source.indexOf('selectWorkspace(sideClient, "focus")', acquisition);
+    const selection = source.indexOf("selectFacebookMessage(source.client", workspace);
+    const recheck = source.indexOf("facebookSelectionMatches(source.client", selection);
+    const click = source.indexOf("clickFocusAction(sideClient", recheck);
+    const capture = source.indexOf("waitForSingleCapture(worker", click);
+    const consume = source.indexOf("used.add(selection.hash)", capture);
+    expect(workspace).toBeGreaterThan(acquisition);
+    expect(selection).toBeGreaterThan(workspace);
+    expect(recheck).toBeGreaterThan(selection);
+    expect(click).toBeGreaterThan(recheck);
+    expect(capture).toBeGreaterThan(click);
+    expect(consume).toBeGreaterThan(capture);
+  });
+
+  it("skips a settled Facebook brief that produced no investigation envelope", () => {
+    const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
+    expect(source).toContain("await facebookAnalysisSettled(expected.sideClient, expected.selectionText)");
+    expect(source).toContain('document.querySelector(".page-reader-focus-fulltext")');
+    expect(source).toContain('analysis?.classList.contains("is-ready")');
+    expect(source).toContain("if (!capture)");
+    expect(source).toContain("used.add(selection.hash)");
+  });
+
   it("can reuse the active Facebook tab without owning or focusing it", () => {
     const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
     expect(source).toContain('argv.includes("--facebook-existing-tab")');
@@ -188,6 +216,35 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(source).not.toContain("Target.activateTarget");
     expect(source).not.toContain("chrome.windows.update");
     expect(source).not.toMatch(/focused\s*:\s*true/);
+  });
+
+  it("emulates Facebook visibility without bringing the browser window forward", async () => {
+    const calls = [];
+    const client = {
+      send: async (method, params) => {
+        calls.push({ method, params });
+      },
+      evaluate: async (expression) => {
+        calls.push({ method: "Runtime.evaluate", expression });
+      },
+    };
+
+    await emulateBackgroundPageVisibility(client);
+
+    expect(calls).toContainEqual({
+      method: "Emulation.setFocusEmulationEnabled",
+      params: { enabled: true },
+    });
+    expect(calls).toContainEqual({
+      method: "Page.setWebLifecycleState",
+      params: { state: "active" },
+    });
+    expect(calls.some((call) => call.method === "Page.bringToFront")).toBe(false);
+    expect(
+      calls.some((call) =>
+        call.method === "Runtime.evaluate" &&
+        call.expression.includes("window.focus")),
+    ).toBe(false);
   });
 
   it("uses a dedicated inactive side panel instead of touching the user's panel", () => {
@@ -263,7 +320,7 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
   it("fingerprints the actual Selection API text instead of DOM textContent", () => {
     const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
     expect(source.match(/const selectedText = clean\(selection\.toString\(\)\)/g)).toHaveLength(2);
-    expect(source).toContain("return { length: selectedText.length, hash: valueHash }");
+    expect(source).toContain("return { length: selectedText.length, hash: valueHash, text: selectedText }");
     expect(source).toContain("return { length: selectedText.length, hash: hash(selectedText) }");
   });
 });
