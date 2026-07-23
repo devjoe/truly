@@ -111,6 +111,8 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("describes the source, not the external world");
     expect(system).toContain("Attribution rule");
     expect(system).toContain("judge the embedded proposition");
+    expect(system).toContain("attribution as a loophole");
+    expect(system).toContain("organizer's promotional superlative");
     expect(system).toContain("unnamed analysts");
     expect(system).toContain("broad definition");
     expect(system).toContain("ranking signal");
