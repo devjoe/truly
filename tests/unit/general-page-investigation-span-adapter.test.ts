@@ -108,12 +108,11 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("categorical wording");
     expect(system).toContain("exception or scope limit");
     expect(system).toContain("reject the whole span");
-    expect(system).toContain("describes the source, not the external world");
-    expect(system).toContain("Attribution rule");
-    expect(system).toContain("judge the embedded proposition");
-    expect(system).toContain("attribution as a loophole");
-    expect(system).toContain("organizer's promotional superlative");
-    expect(system).toContain("unnamed analysts");
+    expect(system).toContain("Strip every source-reporting and attribution wrapper");
+    expect(system).toContain("words were said, cited, or omitted never makes an action eligible");
+    expect(system).toContain("remaining external-world proposition");
+    expect(system).toContain("resolvable subject and specific event or property");
+    expect(system).toContain("promotion, or a superlative");
     expect(system).toContain("broad definition");
     expect(system).toContain("ranking signal");
     expect(system).toContain("one bounded proposition");
