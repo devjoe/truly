@@ -100,7 +100,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("two internal passes");
     expect(system).toContain("all three tests pass");
     expect(system).toContain("complete standalone statement");
-    expect(system).toContain("source's subject or a key factual support");
+    expect(system).toContain("ordinary reader useful information");
     expect(system).toContain("navigation or interface text");
     expect(system).toContain("citations or authoring metadata");
     expect(system).toContain("candidate list as source order");
@@ -115,8 +115,13 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("promotion, or a superlative");
     expect(system).toContain("Hard abstention prototypes");
     expect(system).toContain("no survey is provided");
+    expect(system).toContain("private first-person results");
+    expect(system).toContain("merely explains how a language, API, framework, or tool works");
+    expect(system).toContain("trailing ellipsis");
     expect(system).toContain("broad definition");
-    expect(system).toContain("ranking signal");
+    expect(system).toContain("basic reference definition");
+    expect(system).toContain("ordinary tutorial instruction");
+    expect(system).toContain("concrete limit");
     expect(system).toContain("one bounded proposition");
     expect(system).toContain("bundles independent statistics");
     expect(system).toContain("best alternative");
