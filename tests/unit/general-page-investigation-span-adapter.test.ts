@@ -113,6 +113,8 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("remaining external-world proposition");
     expect(system).toContain("resolvable subject and specific event or property");
     expect(system).toContain("promotion, or a superlative");
+    expect(system).toContain("Hard abstention prototypes");
+    expect(system).toContain("no survey is provided");
     expect(system).toContain("broad definition");
     expect(system).toContain("ranking signal");
     expect(system).toContain("one bounded proposition");
