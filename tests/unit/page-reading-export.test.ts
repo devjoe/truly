@@ -111,7 +111,7 @@ describe("page reading exports", () => {
       }],
     }));
 
-    expect(text).toContain("待確認事項\n• 食藥署公布232項產品名單（建議比對官方公告）");
+    expect(text).toContain("待確認事項\n• 原文主張：「食藥署公布232項產品名單」（建議比對官方公告）");
     expect(text).not.toContain("session-only handoff");
   });
 });

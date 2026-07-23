@@ -1986,12 +1986,14 @@ async function observeClaimInvestigation(side, preparingState = null) {
       available: true,
       ready: true,
       taskId: card?.getAttribute('data-task-id') || '',
-      question: card?.querySelector('.page-claim-investigation-question')?.textContent?.trim() || '',
+      question: card?.querySelector('.page-claim-exact')?.textContent?.trim() || '',
       rowCount: cards.length,
       bulletList: Boolean(list) && getComputedStyle(list).listStyleType === 'disc' &&
         cards.every((item) => getComputedStyle(item.closest('.page-claim-row')).display === 'list-item'),
       sourceClaimsPresent: cards.every((item) =>
-        Boolean(item.querySelector('.page-claim-investigation-question')?.textContent?.trim())),
+        Boolean(item.querySelector('.page-claim-exact')?.textContent?.trim())),
+      sourceFramingPresent: cards.every((item) =>
+        /原文主張|Source claim/.test(item.querySelector('.page-claim-source-label')?.textContent?.trim() || '')),
       actionsBelowQuestion: cards.every((item) => {
         const questionRect = item.querySelector('.page-claim-investigation-question')?.getBoundingClientRect();
         const actionRect = item.querySelector('.page-claim-investigation-actions')?.getBoundingClientRect();
@@ -2169,7 +2171,7 @@ async function auditClaimFallbackStates(side) {
   const envelope = await side.evaluateJson(`(() => {
     const state = globalThis.__trulyPageReadingRuntime?.auditState?.() || {};
     const preparedActions = [...document.querySelectorAll('#page-pane .page-claim-investigation')].map((card) => ({
-      displayClaim: card.querySelector('.page-claim-investigation-question')?.textContent?.trim() || '',
+      displayClaim: card.querySelector('.page-claim-exact')?.textContent?.trim() || '',
       evidenceHint: card.querySelector('.page-claim-investigation-need')?.textContent?.trim() || '',
       askAiPrompt: (() => {
         const href = card.querySelector('.reading-brief-google-link')?.href || '';
@@ -2202,7 +2204,7 @@ async function auditClaimFallbackStates(side) {
   const observe = () => side.evaluateJson(`(() => {
     const rows = [...document.querySelectorAll('#page-pane .page-claim-row')];
     const runtimeState = globalThis.__trulyPageReadingRuntime?.auditState?.().displayedSession || {};
-    const questions = rows.map((row) => row.querySelector('.page-claim-investigation-question')?.textContent?.trim() || '');
+    const questions = rows.map((row) => row.querySelector('.page-claim-exact')?.textContent?.trim() || '');
     return {
       rowCount: rows.length,
       compactRowCount: rows.filter((row) => row.querySelector('.page-claim-investigation')).length,
@@ -3721,6 +3723,7 @@ function qaMatrixRows(result) {
         result.success.claimInvestigation?.rowCount === EXPECTED_INVESTIGATION_ACTION_COUNT &&
         result.success.claimInvestigation?.bulletList === true &&
         result.success.claimInvestigation?.sourceClaimsPresent === true &&
+        result.success.claimInvestigation?.sourceFramingPresent === true &&
         result.success.claimInvestigation?.actionsBelowQuestion === true &&
         result.success.claimInvestigation?.compactActionProximity === true &&
         result.success.claimInvestigation?.manualStartPresent === false &&
@@ -4234,6 +4237,7 @@ function assertUiOnlyAudit(result) {
     success?.claimInvestigation?.rowCount !== EXPECTED_INVESTIGATION_ACTION_COUNT ||
     success?.claimInvestigation?.bulletList !== true ||
     success?.claimInvestigation?.sourceClaimsPresent !== true ||
+    success?.claimInvestigation?.sourceFramingPresent !== true ||
     success?.claimInvestigation?.actionsBelowQuestion !== true ||
     success?.claimInvestigation?.compactActionProximity !== true ||
     success?.claimInvestigation?.manualStartPresent !== false ||

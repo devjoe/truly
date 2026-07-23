@@ -1093,11 +1093,12 @@ function investigationActionHtml({
   const geminiLabel = tr("sidepanel.dynamic.readingBrief.askGemini");
   const copyAriaLabel = tr("sidepanel.page.investigation.copyAria");
   const evidenceLabel = tr("sidepanel.page.investigation.showNeed");
+  const sourceClaimLabel = tr("sidepanel.page.investigation.sourceClaim");
   const needId = `page-claim-need-${actionIndex}`;
   return `
     <section class="page-claim-investigation">
       <div class="page-claim-investigation-main">
-        <p class="page-claim-investigation-question">${primary ? `<span class="page-claim-priority-label">${escapeHtml(tr("sidepanel.page.investigation.priority"))}</span>` : ""}${escapeHtml(action.displayClaim)}</p>
+        <p class="page-claim-investigation-question">${primary ? `<span class="page-claim-priority-label">${escapeHtml(tr("sidepanel.page.investigation.priority"))}</span>` : ""}<span class="page-claim-source-label">${escapeHtml(sourceClaimLabel)}</span><q class="page-claim-exact">${escapeHtml(action.displayClaim)}</q></p>
         <button class="page-claim-evidence-toggle" type="button" aria-expanded="false" aria-controls="${needId}" aria-label="${escapeHtml(evidenceLabel)}">${INFO_ICON_SVG}</button>
       </div>
       <p id="${needId}" class="page-claim-investigation-need" role="tooltip" aria-hidden="true">${escapeHtml(action.evidenceHint)}</p>

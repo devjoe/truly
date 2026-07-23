@@ -82,6 +82,14 @@ function modelNotice(packet: PageReadingExportPacket): string {
   return t("sidepanel.page.export.aiNotice", packet.lang, { model });
 }
 
+function sourceClaimLine(claim: string, lang: Lang): string {
+  const label = t("sidepanel.page.investigation.sourceClaim", lang);
+  const exact = clean(claim);
+  return lang === "zh-TW"
+    ? `${label}：「${exact}」`
+    : `${label}: “${exact}”`;
+}
+
 function metadataLines(packet: PageReadingExportPacket): string[] {
   const separator = packet.lang === "zh-TW" ? "：" : ": ";
   const rows: Array<[string, string | undefined]> = [
@@ -105,7 +113,7 @@ function briefTextSections(packet: PageReadingExportPacket): string[] {
   if (packet.investigationActions?.length) {
     sections.push("", t("sidepanel.dynamic.readingBrief.verify", lang));
     for (const action of packet.investigationActions) {
-      sections.push(`• ${clean(action.displayClaim)}（${clean(action.evidenceHint)}）`);
+      sections.push(`• ${sourceClaimLine(action.displayClaim, lang)}（${clean(action.evidenceHint)}）`);
     }
   } else if (brief.claims?.length) {
     sections.push("", t("sidepanel.dynamic.readingBrief.verify", lang));
@@ -165,7 +173,7 @@ export function formatFullPageReadingMarkdown(packet: PageReadingExportPacket): 
   if (packet.investigationActions?.length) {
     lines.push("", `### ${markdownText(t("sidepanel.dynamic.readingBrief.verify", lang))}`, "");
     for (const action of packet.investigationActions) {
-      lines.push(`- ${markdownText(action.displayClaim)}（${markdownText(action.evidenceHint)}）`);
+      lines.push(`- ${markdownText(sourceClaimLine(action.displayClaim, lang))}（${markdownText(action.evidenceHint)}）`);
     }
   } else if (brief.claims?.length) {
     lines.push("", `### ${markdownText(t("sidepanel.dynamic.readingBrief.verify", lang))}`, "");

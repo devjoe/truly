@@ -3556,6 +3556,9 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelectorAll(".page-claim-row")).toHaveLength(2);
     expect(pagePaneEl.querySelectorAll(".page-claim-priority-label")).toHaveLength(1);
     expect(readyCard?.textContent).not.toContain("查核問題");
+    expect(readyCard?.querySelector(".page-claim-source-label")?.textContent).toBe("原文主張");
+    expect(readyCard?.querySelector(".page-claim-exact")?.textContent)
+      .toBe("Runtime fixture reports one synthetic claim.");
     expect(readyCard?.textContent).toContain("Runtime fixture reports one synthetic claim.");
     expect(pagePaneEl.querySelector(".page-claim-section-loading")).toBeNull();
     expect(animateInvestigationState).not.toHaveBeenCalled();
