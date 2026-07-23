@@ -6,12 +6,16 @@ import {
   acquisitionUrlsMatch,
   acquisitionUrlsFromCapturePacket,
   assertSelectionCaptureMatch,
+  canContinueAfterSourceFailure,
   emulateBackgroundPageVisibility,
+  equivalentPageCaptureMetadata,
   FACEBOOK_MESSAGE_SELECTORS,
   hashAcquisitionText,
   isMetadataReportPath,
+  PAGE_AUTO_READ_GRACE_MS,
   pageSurfaceMatchesSourceTitle,
   selectFacebookMessageInDocument,
+  shouldTriggerPageReread,
   validateAcquisitionUrls,
 } from "../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs";
 
@@ -52,6 +56,29 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     )).toBe(false);
   });
 
+  it("coalesces only identical duplicate Page capture metadata", () => {
+    const base = {
+      tabId: 42,
+      scope: "page",
+      targetKind: "general_web",
+      extractionMethod: "semantic-html",
+      extractionStatus: "complete",
+      mainTextLength: 1200,
+      mainTextHash: "1234abcd",
+      contextUrl: "https://example.test/article#first",
+      candidateCount: 12,
+      candidateTextLength: 800,
+    };
+    expect(equivalentPageCaptureMetadata(base, {
+      ...base,
+      contextUrl: "https://example.test/article#second",
+    })).toBe(true);
+    expect(equivalentPageCaptureMetadata(base, {
+      ...base,
+      mainTextHash: "different",
+    })).toBe(false);
+  });
+
   it("recognizes a restored Page surface before explicitly re-reading it", () => {
     expect(pageSurfaceMatchesSourceTitle(
       "A useful article title",
@@ -62,6 +89,34 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
       "A useful article title - Example News",
     )).toBe(false);
     expect(pageSurfaceMatchesSourceTitle("", "A useful article title")).toBe(false);
+  });
+
+  it("gives Page auto-read a grace period before explicitly re-reading", () => {
+    expect(shouldTriggerPageReread({
+      elapsedMs: PAGE_AUTO_READ_GRACE_MS - 1,
+      sawPageBusy: false,
+      canReread: true,
+      titleMatches: true,
+    })).toBe(false);
+    expect(shouldTriggerPageReread({
+      elapsedMs: PAGE_AUTO_READ_GRACE_MS,
+      sawPageBusy: false,
+      canReread: true,
+      titleMatches: true,
+    })).toBe(true);
+    expect(shouldTriggerPageReread({
+      elapsedMs: PAGE_AUTO_READ_GRACE_MS,
+      sawPageBusy: true,
+      canReread: true,
+      titleMatches: true,
+    })).toBe(false);
+  });
+
+  it("continues only within the explicit per-batch source failure budget", () => {
+    expect(canContinueAfterSourceFailure(0, 2)).toBe(true);
+    expect(canContinueAfterSourceFailure(1, 2)).toBe(true);
+    expect(canContinueAfterSourceFailure(2, 2)).toBe(false);
+    expect(canContinueAfterSourceFailure(-1, 2)).toBe(false);
   });
 
   it("uses precise Facebook message-body selectors", () => {
@@ -179,6 +234,13 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(consume).toBeGreaterThan(capture);
   });
 
+  it("can advance a Facebook feed in the background before acquisition", () => {
+    const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
+    expect(source).toContain("advanceFacebookFeed(source.client, args.facebookStartScrolls)");
+    expect(source).toContain('"--facebook-start-scrolls"');
+    expect(source).toContain("window.scrollBy(0, Math.max(innerHeight * 0.9, 650))");
+  });
+
   it("skips a settled Facebook brief that produced no investigation envelope", () => {
     const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
     expect(source).toContain("await facebookAnalysisSettled(expected.sideClient, expected.selectionText)");
@@ -279,11 +341,16 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(source).toContain("await clearCaptureBuffer(worker)");
     expect(source).toContain("acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl)");
     expect(source).toContain("await removeScopeCaptures(worker");
+    expect(source).toContain("equivalentPageCaptureMetadata(first.metadata, metadata)");
+    expect(source).toContain("divergent duplicate captures");
+    expect(source).toContain("removeCapturesForTab(worker, source.tab.id)");
+    expect(source).toContain("sourceFailures");
     expect(source).toContain("waitForPageAutoReadOrReread(");
     expect(source).toContain("pageSurfaceMatchesSourceTitle(surface.title, expectedTitle)");
     expect(source).toContain("sawPageBusy");
     expect(source).toContain("if (surface.isBusy) sawPageBusy = true");
-    expect(source).toContain("if (!sawPageBusy && surface.canReread && titleMatches)");
+    expect(source).toContain("shouldTriggerPageReread({");
+    expect(source).toContain("Date.now() - startedAt");
     expect(source).toContain("#pageReadCurrent");
   });
 

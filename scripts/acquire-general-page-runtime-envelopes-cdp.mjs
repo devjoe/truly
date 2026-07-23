@@ -9,6 +9,7 @@ import { findInvestigationServiceWorker, isPrivateCaptureOutputPath } from "./co
 const DEFAULT_ENDPOINT = "http://127.0.0.1:9222";
 const DEFAULT_TIMEOUT_MS = 120_000;
 const POLL_MS = 200;
+export const PAGE_AUTO_READ_GRACE_MS = 4_000;
 export const FACEBOOK_MESSAGE_SELECTORS = [
   "[data-ad-rendering-role='story_message']",
   "[data-ad-preview='message']",
@@ -72,12 +73,47 @@ export function acquisitionUrlsMatch(left, right) {
   }
 }
 
+export function equivalentPageCaptureMetadata(left, right) {
+  if (!left || !right)
+    return false;
+  return left.tabId === right.tabId &&
+    left.scope === right.scope &&
+    left.targetKind === right.targetKind &&
+    left.extractionMethod === right.extractionMethod &&
+    left.extractionStatus === right.extractionStatus &&
+    left.mainTextLength === right.mainTextLength &&
+    left.mainTextHash === right.mainTextHash &&
+    left.candidateCount === right.candidateCount &&
+    left.candidateTextLength === right.candidateTextLength &&
+    acquisitionUrlsMatch(left.contextUrl, right.contextUrl);
+}
+
 export function pageSurfaceMatchesSourceTitle(cardTitle, sourceTitle) {
   const clean = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
   const card = clean(cardTitle);
   const source = clean(sourceTitle);
   if (card.length < 5 || source.length < 5) return false;
   return card === source || source.startsWith(card) || card.startsWith(source);
+}
+
+export function shouldTriggerPageReread({
+  elapsedMs,
+  sawPageBusy,
+  canReread,
+  titleMatches,
+}) {
+  return elapsedMs >= PAGE_AUTO_READ_GRACE_MS &&
+    !sawPageBusy &&
+    canReread &&
+    titleMatches;
+}
+
+export function canContinueAfterSourceFailure(failureCount, maximumFailures) {
+  return Number.isInteger(failureCount) &&
+    failureCount >= 0 &&
+    Number.isInteger(maximumFailures) &&
+    maximumFailures >= 0 &&
+    failureCount < maximumFailures;
 }
 
 export async function emulateBackgroundPageVisibility(client) {
@@ -228,6 +264,7 @@ async function main() {
     sideTarget = await waitForTabTarget(args.endpoint, side.id, side.url, args.timeoutMs);
     const sideClient = connectCdp(sideTarget.webSocketDebuggerUrl, { commandTimeoutMs: 10_000 });
     const samples = [];
+    const sourceFailures = [];
     try {
       await waitForDocument(sideClient, args.timeoutMs);
       if (!args.resume) {
@@ -245,6 +282,7 @@ async function main() {
         try {
           if (!source.existing || !source.wasActive) await activateTabWithoutWindowFocus(worker, source.tab.id);
           await waitForFacebookDocumentComplete(source.client, args.timeoutMs);
+          await advanceFacebookFeed(source.client, args.facebookStartScrolls);
           await sideClient.reload();
           await waitForDocument(sideClient, args.timeoutMs);
           await sleep(750);
@@ -265,13 +303,14 @@ async function main() {
           source.client.close();
         }
       } else {
-        for (const url of inputUrls.slice(0, args.count)) {
+        for (const url of inputUrls) {
+          if (samples.length >= args.count)
+            break;
           let stage = "open-source";
-          const source = await openSource(worker, args.endpoint, url, args.timeoutMs).catch((error) => {
-            throw acquisitionError(stage, url, error);
-          });
-          openedTabIds.push(source.tab.id);
+          let source = null;
           try {
+            source = await openSource(worker, args.endpoint, url, args.timeoutMs);
+            openedTabIds.push(source.tab.id);
             stage = "read-capture-count";
             const expectedScope = args.mode === "page" ? "page" : "focus";
             const before = await captureCount(worker, expectedScope);
@@ -302,12 +341,25 @@ async function main() {
             assertSelectionCaptureMatch(capture, selection);
             samples.push(sampleMetadata(url, capture, selection));
           } catch (error) {
-            throw acquisitionError(stage, url, error);
+            if (source) await removeCapturesForTab(worker, source.tab.id);
+            if (!canContinueAfterSourceFailure(sourceFailures.length, args.maxSourceFailures)) {
+              throw acquisitionError(stage, url, error);
+            }
+            sourceFailures.push({
+              origin: new URL(url).origin,
+              stage,
+              message: error instanceof Error ? error.message : String(error),
+            });
           } finally {
-            source.client.close();
-            await removeTab(worker, source.tab.id);
-            openedTabIds.splice(openedTabIds.indexOf(source.tab.id), 1);
+            source?.client.close();
+            if (source) {
+              await removeTab(worker, source.tab.id);
+              openedTabIds.splice(openedTabIds.indexOf(source.tab.id), 1);
+            }
           }
+        }
+        if (samples.length < args.count) {
+          throw new Error(`input sources produced only ${samples.length} of ${args.count} required captures after ${sourceFailures.length} tolerated failure(s)`);
         }
       }
     } finally {
@@ -326,6 +378,7 @@ async function main() {
       buildId,
       targetActivated: false,
       browserFocusRequested: false,
+      sourceFailures,
       containsPageText: false,
       samples,
     }, null, 2)}\n`, { flag: "wx", mode: 0o600 });
@@ -392,6 +445,13 @@ async function waitForFacebookDocumentComplete(client, timeoutMs) {
     await sleep(POLL_MS);
   }
   throw new Error("Facebook did not finish rendering an eligible authored message in time");
+}
+
+async function advanceFacebookFeed(client, scrolls) {
+  for (let index = 0; index < scrolls; index += 1) {
+    await client.evaluate("window.scrollBy(0, Math.max(innerHeight * 0.9, 650)); true");
+    await sleep(900);
+  }
 }
 
 async function openSource(worker, endpoint, url, timeoutMs) {
@@ -644,6 +704,22 @@ async function removeScopeCaptures(worker, scope, scopeIndices) {
   if (removed !== scopeIndices.length) throw new Error("unable to remove unexpected runtime capture");
 }
 
+async function removeCapturesForTab(worker, tabId) {
+  const removed = await worker.evaluate(`(() => {
+    const items = globalThis.__trulyGeneralPageInvestigationCapture?.items;
+    if (!Array.isArray(items)) return 0;
+    let removed = 0;
+    for (let index = items.length - 1; index >= 0; index -= 1) {
+      if (items[index]?.analysis?.tabId === ${Number(tabId)}) {
+        items.splice(index, 1);
+        removed += 1;
+      }
+    }
+    return removed;
+  })()`);
+  if (!Number.isInteger(removed)) throw new Error("unable to clean failed source captures");
+}
+
 async function selectWorkspace(sideClient, workspace) {
   for (let attempt = 0; attempt < 12; attempt += 1) {
     const ok = await sideClient.evaluate(`(() => { const button = document.querySelector('.tab[data-tab=${JSON.stringify(workspace)}]'); if (!button || button.getAttribute('aria-disabled') === 'true') return false; button.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true })); return true; })()`);
@@ -673,6 +749,7 @@ async function waitForPageAutoReadOrReread(
   expectedUrl,
   expectedTitle,
 ) {
+  const startedAt = Date.now();
   const deadline = Date.now() + timeoutMs;
   let rereadTriggered = false;
   let sawPageBusy = false;
@@ -685,8 +762,15 @@ async function waitForPageAutoReadOrReread(
       }
       const matches = captured.filter(({ metadata }) => acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl));
       const unexpected = captured.filter(({ metadata }) => !acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl));
-      if (matches.length > 1) throw new Error("Web workspace produced duplicate captures for the active page");
       if (unexpected.length) await removeScopeCaptures(worker, "page", unexpected.map(({ index }) => index));
+      if (matches.length > 1) {
+        const [first, ...duplicates] = matches;
+        if (!duplicates.every(({ metadata }) => equivalentPageCaptureMetadata(first.metadata, metadata))) {
+          throw new Error("Web workspace produced divergent duplicate captures for the active page");
+        }
+        await removeScopeCaptures(worker, "page", duplicates.map(({ index }) => index));
+        return;
+      }
       if (matches.length === 1) return;
     }
     if (!rereadTriggered) {
@@ -703,7 +787,12 @@ async function waitForPageAutoReadOrReread(
       })()`).catch(() => ({ title: "", isBusy: false, canReread: false }));
       const titleMatches = pageSurfaceMatchesSourceTitle(surface.title, expectedTitle);
       if (surface.isBusy) sawPageBusy = true;
-      if (!sawPageBusy && surface.canReread && titleMatches) {
+      if (shouldTriggerPageReread({
+        elapsedMs: Date.now() - startedAt,
+        sawPageBusy,
+        canReread: surface.canReread,
+        titleMatches,
+      })) {
         rereadTriggered = await sideClient.evaluate(`(() => {
           const button = document.querySelector('#pageReadCurrent');
           if (!button || button.disabled || button.getAttribute('aria-disabled') === 'true') return false;
@@ -775,7 +864,7 @@ async function listTargets(endpoint) {
 function parseArgs(argv) {
   const mode = stringArg(argv, "--mode");
   const report = stringArg(argv, "--report");
-  if (!new Set(["page", "focus", "facebook-focus"]).has(mode) || !report) throw new Error("Usage: --mode page|focus|facebook-focus --report tmp/report.json [--input urls.json | --facebook-url URL] [--count 15]");
+  if (!new Set(["page", "focus", "facebook-focus"]).has(mode) || !report) throw new Error("Usage: --mode page|focus|facebook-focus --report tmp/report.json [--input urls.json | --facebook-url URL] [--count 15] [--max-source-failures 0]");
   const input = stringArg(argv, "--input");
   const facebookUrl = stringArg(argv, "--facebook-url");
   const inputCapture = stringArg(argv, "--input-capture");
@@ -787,6 +876,12 @@ function parseArgs(argv) {
       ? "--facebook-url is required"
       : "exactly one of --input or --input-capture is required");
   }
+  if (mode === "facebook-focus" && integerArg(argv, "--max-source-failures", 0, 0, 30) !== 0) {
+    throw new Error("--max-source-failures is only supported for Page and general Focus URL batches");
+  }
+  if (mode !== "facebook-focus" && integerArg(argv, "--facebook-start-scrolls", 0, 0, 100) !== 0) {
+    throw new Error("--facebook-start-scrolls is only supported for Facebook Focus");
+  }
   return {
     mode,
     report,
@@ -795,8 +890,10 @@ function parseArgs(argv) {
     inputOffset,
     facebookUrl,
     facebookExistingTab: argv.includes("--facebook-existing-tab"),
+    facebookStartScrolls: integerArg(argv, "--facebook-start-scrolls", 0, 0, 100),
     endpoint: stringArg(argv, "--endpoint") ?? DEFAULT_ENDPOINT,
     count: integerArg(argv, "--count", 15, 1, 30),
+    maxSourceFailures: integerArg(argv, "--max-source-failures", 0, 0, 30),
     timeoutMs: integerArg(argv, "--timeout-ms", DEFAULT_TIMEOUT_MS, 5_000, 10 * 60_000),
     resume: argv.includes("--resume"),
   };
