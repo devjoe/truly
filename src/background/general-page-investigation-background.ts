@@ -70,7 +70,8 @@ export function scheduleGeneralPageInvestigationPreparation(
   options: ScheduleGeneralPageInvestigationPreparationOptions,
 ): boolean {
   const { request } = options;
-  if (request.allowedUse === "page_overview_only" || request.screenshotDataUrl) return false;
+  if (request.scope !== "page" || request.context.targetKind !== "page" ||
+    request.allowedUse === "page_overview_only" || request.screenshotDataUrl) return false;
   const candidates = buildInvestigationSpanCandidates(request.context.mainText, {
     maxCandidates: MAX_SPAN_CANDIDATES,
     maxCharacters: MAX_SPAN_CHARACTERS,
@@ -92,6 +93,7 @@ export function scheduleGeneralPageInvestigationPreparation(
     apiKey: options.apiKey,
     candidates,
     targetKind: request.context.targetKind,
+    authorizedSourceContext: request.context.mainText,
     source,
     sourceLang: investigationSourceLanguage(request.context.mainText, request.outputLang),
     outputLang: request.outputLang,

@@ -123,6 +123,9 @@ export function privateRuntimeEnvelopeInputErrors(rows, expectedCount, declaredC
       errors.push(`${label}: invalid captured analysis scope`);
       continue;
     }
+    if (analysis.scope !== "page") {
+      errors.push(`${label}: Focus selector envelopes are not eligible for the Page-only release audit`);
+    }
     actual.add(`${analysis.scope}-${row.sourceClass}`);
     if (analysis.allowedUse !== "article_or_selection_analysis" || analysis.hasScreenshot !== false) {
       errors.push(`${label}: capture is outside the investigation runtime boundary`);
@@ -140,6 +143,9 @@ export function privateRuntimeEnvelopeInputErrors(rows, expectedCount, declaredC
     if (adapter.targetKind !== analysis.context?.targetKind || adapter.outputLang !== analysis.outputLang ||
         !["zh-TW", "en"].includes(adapter.sourceLang) || !["zh-TW", "en"].includes(adapter.outputLang)) {
       errors.push(`${label}: adapter metadata drifted from captured analysis`);
+    }
+    if (adapter.authorizedSourceContext !== text) {
+      errors.push(`${label}: authorized Page context drifted from captured mainText`);
     }
     if (!Array.isArray(adapter.candidates) || adapter.candidates.length < 1 || adapter.candidates.length > 48) {
       errors.push(`${label}: invalid captured candidates`);

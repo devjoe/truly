@@ -60,6 +60,7 @@ interface RuntimeEnvelopeInputRow {
     adapter: {
       candidates: Array<{ id: `span:${number}`; exactText: string; start: number; end: number }>;
       targetKind: "page" | "selection" | "current-region";
+      authorizedSourceContext: string;
       source?: InputRow["sourceContext"];
       sourceLang?: Lang;
       outputLang?: Lang;
@@ -220,6 +221,7 @@ const protocolBody = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
   structuredOutputMode,
   candidates: firstProtocolSample.candidates,
   targetKind: firstProtocolSample.targetKind,
+  authorizedSourceContext: firstProtocolSample.text,
   source: firstProtocolSample.sourceContext,
   sourceLang: firstProtocolSample.language,
   outputLang: firstProtocolSample.outputLang,
@@ -280,6 +282,7 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
     apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
     candidates,
     targetKind: row.targetKind,
+    authorizedSourceContext: row.text,
     source: row.sourceContext,
     sourceLang: row.language,
     outputLang: row.outputLang,

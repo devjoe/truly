@@ -77,6 +77,7 @@ describe("background General Page investigation preparation", () => {
     expect(callAdapter).toHaveBeenCalledTimes(1);
     expect(callAdapter).toHaveBeenCalledWith(expect.objectContaining({
       targetKind: "page",
+      authorizedSourceContext: request.context.mainText,
       structuredOutputMode: "json_schema",
       outputLang: "zh-TW",
       sourceLang: "zh-TW",
@@ -154,6 +155,7 @@ describe("background General Page investigation preparation", () => {
         endpoint: "http://127.0.0.1:8000/v1",
         model: "fixture-model",
         targetKind: "page",
+        authorizedSourceContext: request.context.mainText,
         candidates: expect.arrayContaining([
           expect.objectContaining({ exactText: "食藥署公布232項產品名單" }),
         ]),
@@ -162,7 +164,7 @@ describe("background General Page investigation preparation", () => {
     expect(capture.items[0].adapter).not.toHaveProperty("apiKey");
   });
 
-  it("preserves Focus as the only target and uses the interface language for local presentation", async () => {
+  it("does not schedule ranked-action work for Focus", () => {
     const focusRequest: GeneralPageAnalysisRequestMsg = {
       ...request,
       scope: "focus",
@@ -173,21 +175,9 @@ describe("background General Page investigation preparation", () => {
         mainText: "The agency ordered a refund for 2,400 policies.",
       },
     };
-    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const scheduler = { enqueue: vi.fn() };
     const sendMessage = vi.fn();
-    const callAdapter = vi.fn(async (input: any) => ({
-      ok: true,
-      attempts: 1 as const,
-      value: {
-        schemaVersion: 5 as const,
-        selections: [{
-          ...input.candidates[0],
-          candidateId: input.candidates[0].id,
-          exactClaim: input.candidates[0].exactText,
-          sourceQuote: input.candidates[0].exactText,
-        }],
-      },
-    }));
+    const callAdapter = vi.fn();
 
     expect(scheduleGeneralPageInvestigationPreparation({
       scheduler: scheduler as never,
@@ -198,21 +188,10 @@ describe("background General Page investigation preparation", () => {
       resourceKey: "gx10|fixture-model",
       callAdapter,
       sendMessage,
-    })).toBe(true);
-    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
-
-    expect(callAdapter).toHaveBeenCalledWith(expect.objectContaining({
-      targetKind: "selection",
-      sourceLang: "en",
-      outputLang: "en",
-    }));
-    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
-      status: "prepared",
-      preparedActions: [expect.objectContaining({
-        evidenceHint: "Prioritize directly relevant official records, first-party statements, or reliable reporting",
-        askAiPrompt: expect.stringContaining("Original claim: The agency ordered a refund for 2,400 policies"),
-      })],
-    }));
+    })).toBe(false);
+    expect(scheduler.enqueue).not.toHaveBeenCalled();
+    expect(callAdapter).not.toHaveBeenCalled();
+    expect(sendMessage).not.toHaveBeenCalled();
   });
 
   it("settles abstention and malformed provider output without a repair request", async () => {
@@ -243,7 +222,7 @@ describe("background General Page investigation preparation", () => {
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ status: "ineligible" }));
   });
 
-  it("does not schedule overview, screenshot, or text without local candidates", () => {
+  it("does not schedule Focus, overview, screenshot, or text without local candidates", () => {
     const scheduler = { enqueue: vi.fn() };
     const base = {
       scheduler: scheduler as never,
@@ -257,6 +236,14 @@ describe("background General Page investigation preparation", () => {
     expect(scheduleGeneralPageInvestigationPreparation({
       ...base,
       request: { ...request, allowedUse: "page_overview_only" },
+    })).toBe(false);
+    expect(scheduleGeneralPageInvestigationPreparation({
+      ...base,
+      request: {
+        ...request,
+        scope: "focus",
+        context: { ...request.context, targetKind: "selection" },
+      },
     })).toBe(false);
     expect(scheduleGeneralPageInvestigationPreparation({
       ...base,

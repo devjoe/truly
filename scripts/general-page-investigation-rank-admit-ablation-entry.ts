@@ -87,6 +87,7 @@ try {
       structuredOutputMode,
       candidates,
       targetKind: "page",
+      authorizedSourceContext: fixture.groundingText,
       source: { title: fixture.title, sourceName: "Synthetic source" },
       sourceLang: fixture.language,
       outputLang: fixture.language,

@@ -95,6 +95,20 @@ describe("private general page eval boundary", () => {
     const row = runtimeRow("focus", "facebook", "page");
     expect(privateRuntimeEnvelopeInputErrors([row], 1, "focus-facebook").join(" ")).toMatch(/targetKind=selection/);
   });
+
+  it("rejects even an exact Focus envelope from the Page-only selector audit", () => {
+    const row = runtimeRow("focus", "facebook", "selection");
+    expect(privateRuntimeEnvelopeInputErrors([row], 1, "focus-facebook").join(" "))
+      .toMatch(/Focus selector envelopes are not eligible/);
+  });
+
+  it("rejects selector judgment context that drifts from the authorized Page text", () => {
+    const row = runtimeRow("page", "general_web", "page");
+    row.capture.adapter.authorizedSourceContext = "different source text";
+    row.captureSha256 = crypto.createHash("sha256").update(JSON.stringify(row.capture)).digest("hex");
+    expect(privateRuntimeEnvelopeInputErrors([row], 1, "page-general_web").join(" "))
+      .toMatch(/authorized Page context drifted/);
+  });
 });
 
 function runtimeRow(scope, sourceClass, targetKind) {
@@ -118,6 +132,7 @@ function runtimeRow(scope, sourceClass, targetKind) {
       structuredOutputMode: "json_object",
       candidates: [{ id: "span:1", exactText: text, start: 0, end: text.length }],
       targetKind,
+      authorizedSourceContext: text,
       sourceLang: "en",
       outputLang: "en",
     },

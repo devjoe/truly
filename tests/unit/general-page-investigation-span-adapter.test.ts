@@ -17,6 +17,10 @@ const candidates: InvestigationSpanCandidate[] = [
   { id: "span:1", exactText: "食藥署公布232項產品名單", start: 0, end: 14 },
   { id: "span:2", exactText: "業者必須在七月三十一日前完成下架", start: 20, end: 38 },
 ];
+const authorizedSourceContext = [
+  "食藥署公布232項產品名單。",
+  "衛生局命令遠帆公司在七月三十一日前完成下架。",
+].join("\n");
 
 const preparedWire = {
   schemaVersion: 5,
@@ -90,6 +94,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     const user = buildGeneralPageInvestigationSpanAdapterPrompt({
       candidates,
       targetKind: "page",
+      authorizedSourceContext,
       sourceLang: "zh-TW",
       outputLang: "en",
       source: { title: "Synthetic article", url: "https://example.com/article" },
@@ -135,9 +140,39 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("public impact");
     expect(system).toContain("Return exactly one supplied candidateId or null");
     expect(system).toContain("A named recall");
+    expect(system).toContain("judgment context");
+    expect(system).toContain("sole claim-identity boundary");
     expect(user).toContain('"id":"span:1"');
-    expect(user).not.toContain("start");
-    expect(user).not.toContain("end");
+    expect(user).toContain("## Authorized Page context — judgment context only");
+    expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
+    expect(user).toContain("## Final decision gate");
+    expect(user).toContain("Public verifiability alone is insufficient");
+    expect(user).toContain("hypothetical response");
+    expect(user).toContain("unsupported generalization about a broad group");
+    expect(user).toContain("promotional price/value copy");
+    expect(user).toContain("concrete version or compatibility boundary");
+    expect(user).toContain("useful information beyond reading the page itself");
+    expect(user).toContain("otherwise abstain");
+    expect(user).toMatch(/Return only \{"schemaVersion":5,"candidateId":"span:N"\} using one supplied ID, or \{"schemaVersion":5,"candidateId":null\}\.$/u);
+    expect(user).not.toMatch(/"start":|"end":/u);
+  });
+
+  it("requires one bounded authorized Page context", () => {
+    expect(() => buildGeneralPageInvestigationSpanAdapterPrompt({
+      candidates,
+      targetKind: "page",
+      authorizedSourceContext: "",
+    })).toThrow("invalid authorized Page context");
+    expect(() => buildGeneralPageInvestigationSpanAdapterPrompt({
+      candidates,
+      targetKind: "page",
+      authorizedSourceContext: "x".repeat(8193),
+    })).toThrow("invalid authorized Page context");
+    expect(() => buildGeneralPageInvestigationSpanAdapterPrompt({
+      candidates,
+      targetKind: "selection",
+      authorizedSourceContext,
+    })).toThrow("Page-only investigation selector");
   });
 
   it("builds a deterministic localized generic evidence handoff from local data", () => {
@@ -164,6 +199,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
       structuredOutputMode: "json_schema",
       candidates,
       targetKind: "page",
+      authorizedSourceContext,
       outputLang: "zh-TW",
       sourceLang: "zh-TW",
     });
@@ -196,6 +232,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
       structuredOutputMode: "json_schema",
       candidates,
       targetKind: "page",
+      authorizedSourceContext,
       outputLang: "zh-TW",
       sourceLang: "zh-TW",
     })).resolves.toMatchObject({
@@ -223,6 +260,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
       structuredOutputMode: "json_object",
       candidates,
       targetKind: "page",
+      authorizedSourceContext,
       outputLang: "zh-TW",
       sourceLang: "zh-TW",
     })).resolves.toMatchObject({
@@ -252,6 +290,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
       structuredOutputMode: "json_object",
       candidates,
       targetKind: "page",
+      authorizedSourceContext,
     })).resolves.toMatchObject({
       ok: true,
       attempts: 2,
@@ -271,6 +310,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
       structuredOutputMode: "json_object",
       candidates,
       targetKind: "page",
+      authorizedSourceContext,
     })).resolves.toMatchObject({
       ok: false,
       attempts: 1,
@@ -291,6 +331,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
       structuredOutputMode: "json_object",
       candidates,
       targetKind: "page",
+      authorizedSourceContext,
     })).resolves.toMatchObject({
       ok: false,
       attempts: 2,
@@ -307,6 +348,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
       structuredOutputMode: "json_object",
       candidates,
       targetKind: "page",
+      authorizedSourceContext,
       maxProtocolAttempts: 1,
     })).resolves.toMatchObject({ ok: false, attempts: 1 });
     expect(oneShotFetch).toHaveBeenCalledTimes(1);

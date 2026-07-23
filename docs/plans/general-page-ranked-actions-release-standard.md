@@ -1,7 +1,7 @@
 # General Page Ranked Actions Release Standard
 
-Status: prospective product-utility plus selector-non-regression standard,
-revised 2026-07-23
+Status: prospective Page-only product-utility plus selector-non-regression
+standard, revised 2026-07-24
 
 This standard governs the General Page Reader's user-facing `待確認事項` /
 `Check these items` actions. It replaces the previous policy in which a local
@@ -10,8 +10,8 @@ It does not authorize release by itself.
 
 ## Product contract
 
-The selector receives a bounded list of exact spans produced locally from the
-current Page or Focus text. In one model call it returns only:
+For Page reading, the selector receives a bounded list of exact spans produced
+locally from the current loaded document. In one model call it returns only:
 
 ```json
 {"schemaVersion":5,"candidateId":"span:4"}
@@ -22,17 +22,24 @@ owns the exact displayed text, copy action, localized Gemini handoff, source
 metadata, and Page/Focus session boundary. There is no repair call, second
 ranker, model-authored query, evidence-family guess, or local semantic rewrite.
 
-The selected action is the product recommendation. The UI reveals it only
+The selected action is the Page product recommendation. The UI reveals it only
 after the one-shot selector settles; abstention reveals no investigation
 action. This intentionally avoids publishing weaker alternatives merely to
 increase visible coverage.
 
+Focus remains a supported reading scope, but this release does not schedule an
+automatic ranked-action selector for Focus and does not render a preparing,
+empty, or unavailable investigation section there. Focus keeps its
+selected-content analysis, follow-up questions, copy action, and user-triggered
+Gemini handoff. Automatic Focus ranked actions require a separate future
+candidate and fresh release evidence.
+
 Open-web extraction is not required to be textually pristine. Local code owns
 high-confidence structural boundaries; the Edge AI selector owns relative
 usefulness among the remaining exact spans and may abstain. This tolerance does
-not relax authorization: wrong-page, cross-scope, stale, or Focus-surrounding
-text remains forbidden, and a visible action derived from publisher residue is
-a release failure.
+not relax authorization: wrong-page, cross-scope, or stale text remains
+forbidden, and a visible action derived from publisher residue is a release
+failure.
 
 Entertainment, sport, consumer, product, celebrity, and routine factual
 statements are eligible. Health, safety, money, rights, law, and public impact
@@ -44,10 +51,11 @@ relative to the current page; it does not fill a quota.
 Local code rejects only failures a user should not receive:
 
 - malformed, truncated, unknown, duplicate, or over-limit IDs;
-- text that is not an exact span of the authorized Page or Focus scope;
+- text that is not an exact span of the authorized Page scope;
 - unsafe instructions, private-data requests, or prompt/data leakage;
 - an incomplete span that cannot identify what is being checked;
-- stale or cross-scope results, overview-only output, unconfirmed screenshots,
+- stale or cross-scope results, Focus output, overview-only output,
+  unconfirmed screenshots,
   or content/history persistence outside the existing ephemeral session.
 
 Topic importance, public-interest consequence, preferred evidence family, and
@@ -121,25 +129,22 @@ Required for every run:
 
 ### B. Fresh runtime-envelope development audit
 
-Preregister a new 60-row private development slice at the production
-`GENERAL_PAGE_ANALYSIS_REQUEST` boundary: 30 Page and 30 Focus rows,
-source-diverse, not used by earlier candidate tuning. Page rows use the final
-effective context produced by the bound extraction and parser-advisor build.
-Focus rows use the exact authorized selection text. At least 15 Focus rows
-must originate on Facebook and at least 15 on non-Facebook web pages. Page
-rows include at least 15 news/article pages and at least 15 non-news general
-web pages.
+Preregister a new 60-row private Page development slice at the production
+`GENERAL_PAGE_ANALYSIS_REQUEST` boundary, source-diverse and not used by
+earlier candidate tuning. The slice contains exactly 30 news/article pages and
+30 non-news general-web pages. Every row uses the final effective Page context
+produced by the bound extraction and parser-advisor build.
 
 Whole Facebook feed-card text, raw `document.body.innerText`, cross-document
 link-preview mixtures, secondary rails that replace or obscure the intended
-body, screenshots,
+body, screenshots, Focus selections,
 `page_overview_only`, stale/cross-scope state, and rows for which the selector
 would not be scheduled are not eligible selector inputs. Every exclusion is
 reported by reason; a reachable shipping extraction or advisor error is not
 an exclusion and remains visible in the source-quality labels below.
 
-Before revealing model output, each row binds its Page/Focus authorized-scope
-hash, final `mainText` hash and length, target kind, allowed use, extraction
+Before revealing model output, each row binds its Page authorized-scope hash,
+final `mainText` hash and length, target kind, allowed use, extraction
 method/status/warnings, source platform/domain, candidate-set hash and count,
 candidate commit/build, and the extractor/advisor/context/candidate-builder
 hashes. Review eligibility only from that exact runtime-visible envelope.
@@ -149,18 +154,17 @@ Required:
 - zero hard-unacceptable actions;
 - zero `user_unacceptable` displayed actions;
 - 100% `authorizationScopeFidelity`: Page belongs to the intended loaded
-  document and Focus contains exactly the user-authorized target, with no
-  wrong-page, cross-scope, stale, extension-instruction, or surrounding-target
+  document, with no wrong-page, cross-scope, stale, or extension-instruction
   leakage;
 - zero `samePageResidueDerived` displayed actions: the selected exact span is
   not publisher chrome, navigation/interface text, caption/byline/media
   metadata, footer/source utility text, related/recirculation content, or
   another secondary same-document role;
-- at least 85% useful positive-row recall overall and at least 80% in Page and
-  Focus separately, with at least ten positive rows in each scope. A positive
-  row is recovered only when the displayed first action is `recommended` or
-  `acceptable_secondary`; abstention and `user_unacceptable` both fail
-  recovery;
+- at least 85% useful positive-row recall overall and at least 80% in news and
+  non-news separately, with at least ten positive rows in each category. A
+  positive row is recovered only when the displayed first action is
+  `recommended` or `acceptable_secondary`; abstention and
+  `user_unacceptable` both fail recovery;
 - a blinded, randomized A/B comparison against the preregistered frozen
   reference selector on the same cohort. Reviewers see only source context,
   rendered first actions, and handoffs; they do not see candidate, provider,
@@ -168,8 +172,8 @@ Required:
   by wording preference;
 - reference-materially-better outcomes on at most 10% of comparable rows;
   `(reference wins - candidate wins) / comparable rows` at most 5 percentage
-  points overall and at most 10 points in Page and Focus separately, with at
-  least ten comparable rows per scope;
+  points overall and at most 10 points in news and non-news separately, with
+  at least ten comparable rows per category;
 - 100% exact-span and at-most-one compliance;
 - 100% of generated Gemini handoffs are usable and language-consistent;
 - no public search or external action is opened by the audit.
@@ -190,25 +194,30 @@ as an authorization breach:
 - `substantial`: secondary roles are interleaved, repeated, or large enough to
   compete with the intended body.
 
-Focus rows use `none` because the selected text is itself the authorized
-target. The residue label is diagnostic rather than a standalone pass/fail
-threshold. Indirect harm still fails useful positive-row recall and selector
+The residue label is diagnostic rather than a standalone pass/fail threshold.
+Indirect harm still fails useful positive-row recall and selector
 non-regression; direct harm fails the zero-residue-derived and
 zero-unacceptable gates. `expectedAction` is true only when at least one
-supplied exact candidate comes from the intended Page body or Focus target,
-not from a secondary role.
+supplied exact candidate comes from the intended Page body
+and is useful, concrete, externally verifiable, and suitable as a first
+investigation action. Intended-body provenance is necessary but not
+sufficient: when every candidate is opinion, promotion, trivial detail,
+context-dependent, fragmentary, privately unverifiable, or otherwise not
+useful enough to show, `expectedAction` is false. This source-only label is
+adjudicated before selector output is revealed; it does not reuse the
+candidate's output-review tier.
 
-Report every denominator. A scope metric is invalid when its denominator is
-smaller than ten. Platform, language, content category, extraction method, and
-readiness are diagnostic slices and do not receive lower thresholds. This gate
-is development evidence, not a holdout.
+Report every denominator. A category metric is invalid when its denominator is
+smaller than ten. Platform, language, domain, extraction method, and readiness
+remain diagnostic slices and do not receive lower thresholds. This gate is
+development evidence, not a holdout.
 
 ### C. Fresh untouched holdout
 
 After B passes and the candidate is frozen, preregister a new 30-row private
-holdout at the same request boundary: 15 Page and 15 Focus rows. At least 8
-Focus rows originate on Facebook; Page remains source-diverse across news and
-non-news general web. Do not inspect or tune on it before the run.
+Page holdout at the same request boundary: exactly 15 news/article pages and
+15 non-news general-web pages. Keep both categories source-diverse. Do not
+inspect or tune on it before the run.
 
 Required:
 
@@ -216,10 +225,10 @@ Required:
 - zero `user_unacceptable` displayed actions;
 - 100% `authorizationScopeFidelity`;
 - zero `samePageResidueDerived` displayed actions;
-- at least 85% useful positive-row recall overall and at least 80% in Page and
-  Focus separately, with at least ten positive rows per scope;
+- at least 85% useful positive-row recall overall and at least 80% in news and
+  non-news separately when each category has at least ten positive rows;
 - the same blinded selector-non-regression limits used by Gate B, with at least
-  ten comparable rows per scope;
+  ten comparable rows per category;
 - 100% exact-span and at-most-one compliance;
 - 100% usable, language-consistent Gemini handoffs.
 
@@ -248,11 +257,14 @@ anonymous aggregates may be committed publicly.
 ### D. Runtime and release readiness
 
 On a clean development build, the focus-safe 430 px CDP audit must cover Page
-and Focus continuity, preparing/ready/abstain/unavailable states, atomic batch
-reveal, stale-result suppression, screenshot consent, and ephemeral-session
-behavior. The derived selector must remain lower priority than primary reading
-work, must not starve the Feed queue, and must settle or leave the bounded UI
-state without exposing a partial result. Typecheck, focused GPR tests, full
+preparing/ready/abstain/unavailable states, atomic reveal, stale-result
+suppression, screenshot consent, and ephemeral-session behavior. It must also
+prove that Focus schedules no ranked-action work and shows no investigation
+spinner or empty section while Focus reading, follow-up questions, copy,
+Gemini handoff, Web/Focus state separation, and continuity still work. The
+derived Page selector must remain lower priority than primary reading work,
+must not starve the Feed queue, and must settle or leave the bounded UI state
+without exposing a partial result. Typecheck, focused GPR tests, full
 verification, build freshness, privacy policy, and Chrome Web Store readiness
 must all pass.
 
@@ -262,6 +274,8 @@ This candidate does not perform its own web retrieval, verdict generation, or
 automatic fact-check. `問 Gemini` remains a user-triggered handoff. Evidence
 source-family routing belongs to a later retrieval system that can inspect
 actual results; it is not guessed by this selector.
+
+Automatic Focus ranked actions are also a non-goal for this candidate.
 
 ## Candidate history
 
@@ -323,3 +337,31 @@ the dual hard gate above: independently prove useful, acceptable actions and
 also prove that the selector does not materially regress against a frozen
 reference. v10 remains terminal, no holdout was opened, and only a wholly
 fresh preregistered cohort may evaluate the successor.
+
+Later consumed-data diagnostics found that adding authorized Page text as
+judgment-only context could preserve useful Page recall while blocking both
+known Page U00 sentinels, but Focus continued to publish weak actions across
+Facebook and general web. A full-context admission critic and a classified
+selector both failed their preregistered consumed-data falsification tests and
+were rejected without changing runtime.
+
+The adversarial decision at
+`tmp/grill-reports/gpr-page-only-ranked-actions-2026-07-24.html` therefore
+accepted a Page-only first release with modifications. Focus keeps reading and
+user-triggered tools but schedules no automatic ranked action. The dissent's
+category-coverage concern is binding: fresh Gate B and C evidence must be
+balanced across news and non-news Page content, and Gate B applies independent
+category recall and non-regression floors. Safety and overall utility
+thresholds are unchanged. This decision is a prospective scope correction,
+not release authorization.
+
+The resulting runtime prompt passed a final consumed-data Page diagnostic
+before any fresh cohort was opened: 30/30 protocol-valid rows, 26 recovered
+useful positives, zero selected source-negative rows, two false abstentions,
+and two correct abstentions. Useful-positive recall was 92.9% overall, 100% for
+news, and 84.6% for non-news general web; both known Page U00 sentinels
+abstained. One false abstention was a tutorial page whose supplied spans were
+mostly definitions and ordinary guidance; the other was a concrete React
+Strict Mode behavior and remains a genuine technical-document miss. These
+consumed results authorize a fresh Gate B attempt only. They are not release
+evidence and cannot rescue a failed fresh cohort.
