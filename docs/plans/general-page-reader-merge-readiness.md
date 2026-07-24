@@ -417,6 +417,12 @@ Results:
 
 ## Non-Blocking Follow-Ups
 
+- An automatic-analysis level setting (off / brief only / brief plus
+  verification suggestion) is deferred to the next Preview (maintainer
+  decision, 2026-07-29). This Preview ships the automatic Page pipeline
+  always-on when all-sites access is enabled; both automatic model calls are
+  covered by the current disclosures, and users who want zero automatic calls
+  can keep all-sites access off and use toolbar or single-domain reads.
 - Durable Page/Web history remains deferred to a separate privacy and storage review.
 - In-page selected-text buttons, context-menu entries, and click-hold current-region gestures remain separate UI and permission decisions.
 - Third-party parser runtime adoption remains gated by bundle size, MV3 CSP behavior, execution context, license notices, sanitized rendering, and release-bundle audits.
