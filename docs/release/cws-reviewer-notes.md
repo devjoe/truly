@@ -1,6 +1,6 @@
 # Chrome Web Store Reviewer Notes
 
-Last updated: 2026-07-09
+Last updated: 2026-07-29
 
 Status: Preview 12 reviewer-notes reference
 
@@ -198,7 +198,9 @@ should request access only when a configured endpoint requires that origin.
 General Page all-sites access uses the same optional permission surface only
 after an explicit Settings opt-in; it reads the current active page while the
 Side Panel is open, may send suitable compact-reading context to the configured
-model endpoint, and does not enable background crawling or persistent page
+model endpoint, which may also pick one page sentence as a verification
+suggestion (the suggestion text is always quoted from the page; the model
+cannot author it), and does not enable background crawling or persistent page
 history.
 
 ### Does Page/Web capture screenshots automatically?

@@ -103,13 +103,17 @@ npm run cws:package:local-smoke
 - CWS preview metadata was bumped from `0.1.1 Preview 11` to `0.1.2 Preview 12` after advisory review flagged that reusing the numeric `0.1.1` package version would risk a dashboard collision with the earlier Preview 9 submission.
 - `docs/release/cws-submission-checklist.md` now includes a manual dashboard gate for already published, in-review, or otherwise occupied packages for the current numeric `manifest.version`.
 - `docs/release/cws-listing-copy.md`, `docs/release/cws-reviewer-notes.md`, `docs/release/permission-justification.md`, and `docs/release/privacy-policy.md` now all disclose Page/Web screenshot-assisted recovery as user-confirmed, vision-gated, session-only, and not stored in `chrome.storage`.
+- The four CWS disclosure documents and `cws:preflight` now also disclose the automatic ranked verification suggestion (2026-07-29): suitable pages may ask the configured model endpoint to pick one page sentence as a verification suggestion; the suggestion text is always quoted from the page itself and abstention renders nothing. The hosted privacy policy source received the same wording; its push and cache-busted live verification are pending.
 - The hosted privacy policy source in the `trulyreader.org` repository has been updated with the same Page/Web screenshot-assisted recovery disclosure and pushed at commit `ee84ac5`. The canonical live URL `https://trulyreader.org/privacy/` was verified on 2026-07-04 with `curl` and contained the 2026-07-04 Page/Web screenshot-assisted recovery, vision-input, confirmation, session-only, and `chrome.storage` disclosure text.
-- `codex/general-page-reader-contract` is pushed and tracks
-  `origin/codex/general-page-reader-contract`. A formal uploadable
-  `npm run cws:package` still requires the release tag
-  `v0.1.2-preview.12` to exist locally and point at HEAD. The Chrome Web Store
-  dashboard state for the earlier `0.1.1 Preview 9` submission has been
-  confirmed as published/unlisted.
+- The active release branch is now `codex/general-page-reader-ranked-actions`
+  (it contains and supersedes `codex/general-page-reader-contract`; historical
+  evidence entries below that reference the contract branch describe runs from
+  before this handover). Reviewer validation, release tagging, and formal
+  packaging happen from the ranked-actions branch after it is pushed and
+  tracks its origin upstream. A formal uploadable `npm run cws:package` still
+  requires the release tag `v0.1.2-preview.12` to exist locally and point at
+  HEAD. The Chrome Web Store dashboard state for the earlier `0.1.1 Preview 9`
+  submission has been confirmed as published/unlisted.
 - `npm run cws:package:local-smoke`: available for pre-push ZIP creation, package-boundary audit, and `cws:preflight`. Its artifacts live under `artifacts/cws-local-smoke/`, are explicitly non-uploadable, and do not satisfy the upstream-sync or release-tag upload gates.
 - Formal `npm run cws:package` now also refuses to build an uploadable package
   unless the package commit is caught up with `origin/main`. Local-smoke reports

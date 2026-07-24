@@ -1,7 +1,7 @@
 # Chrome Web Store Listing Copy
 
 Status: Preview 12 listing reference
-Last updated: 2026-07-04
+Last updated: 2026-07-29
 
 This copy is used for the Preview 12 Unlisted Chrome Web Store submission. It
 should stay aligned with `README.md`,
@@ -190,7 +190,8 @@ facts intact:
   only. If the user explicitly enables General Page all-sites access in
   Settings, the side panel can read the current page on ordinary HTTP/HTTPS
   sites while the Side Panel is open; suitable pages may send compact-reading
-  context to the configured model endpoint, but this does not enable background
+  context to the configured model endpoint, which may also pick one page
+  sentence as a verification suggestion, but this does not enable background
   crawling or persistent full-page history.
 - Page/Web screenshot-assisted recovery can process a visible-tab screenshot
   only when text extraction is insufficient, the selected model source supports

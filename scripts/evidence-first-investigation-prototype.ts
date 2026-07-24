@@ -3,7 +3,7 @@ import path from "node:path";
 
 import fixture from "../tests/fixtures/claim-investigation/food-recall-contract.json";
 import type { InvestigationBundle } from "../src/lib/claim-investigation-contract";
-import { evidenceFirstInvestigationHtml } from "../src/sidepanel/evidence-first-investigation-renderer";
+import { evidenceFirstInvestigationHtml } from "./lib/evidence-first-investigation-renderer";
 
 const output = path.resolve(process.argv[2] ?? "tmp/evidence-first-investigation-prototype.html");
 if (!output.startsWith(`${path.resolve("tmp")}${path.sep}`)) throw new Error("Prototype output must stay under tmp/");

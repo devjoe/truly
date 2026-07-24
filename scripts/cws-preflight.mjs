@@ -53,6 +53,7 @@ const contractDocs = [
       "not written to extension storage or logs",
       "authorize-domain action",
       "authorizes a single domain from the Page/Web side panel",
+      "pick one page sentence as a verification",
     ],
   },
   {
@@ -64,7 +65,9 @@ const contractDocs = [
       "durable page history",
       "automatically while the Side Panel is",
       "authorize a single domain",
-      "Closing the side panel stops these",
+      "Closing the side",
+      "select one verification suggestion",
+      "quoted from the page itself",
     ],
   },
   {
@@ -76,6 +79,7 @@ const contractDocs = [
       "single-domain grant",
       "authorize-domain action",
       "while the Side Panel is open",
+      "pick one page sentence as a verification suggestion",
     ],
   },
   {
@@ -101,6 +105,7 @@ const contractDocs = [
       "sponsorship signals",
       "authorizes a single domain",
       "while the Side Panel is open",
+      "sentence as a verification suggestion",
     ],
   },
 ];

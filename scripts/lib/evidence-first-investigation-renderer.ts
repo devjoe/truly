@@ -1,6 +1,6 @@
-import type { InvestigationBundle } from "../lib/claim-investigation-contract";
-import { buildEvidenceFirstInvestigationPresentation } from "../lib/claim-investigation-presentation";
-import type { Lang } from "../lib/types";
+import type { InvestigationBundle } from "../../src/lib/claim-investigation-contract";
+import { buildEvidenceFirstInvestigationPresentation } from "../../src/lib/claim-investigation-presentation";
+import type { Lang } from "../../src/lib/types";
 
 function escapeHtml(value: string): string {
   return value.replace(/[&<>'"]/g, (char) => ({

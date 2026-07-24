@@ -1,6 +1,6 @@
 # Permission And Host Permission Justification
 
-Last updated: 2026-07-09
+Last updated: 2026-07-29
 
 This document explains why Truly requests each Chrome permission and host
 permission. It should stay aligned with `src/manifest.json`.
@@ -27,8 +27,8 @@ permission. It should stay aligned with `src/manifest.json`.
 
 | Optional host permission | Why Truly may request it | Boundary |
 |---|---|---|
-| `http://*/*` | Support a user-configured HTTP model endpoint outside the default localhost hosts, and optionally let General Page Reader read HTTP pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send compact-reading context to the configured model endpoint. |
-| `https://*/*` | Support a user-configured HTTPS model endpoint outside the default localhost hosts, and optionally let General Page Reader read HTTPS pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send compact-reading context to the configured model endpoint. |
+| `http://*/*` | Support a user-configured HTTP model endpoint outside the default localhost hosts, and optionally let General Page Reader read HTTP pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send compact-reading context to the configured model endpoint, which may also pick one page sentence as a verification suggestion. |
+| `https://*/*` | Support a user-configured HTTPS model endpoint outside the default localhost hosts, and optionally let General Page Reader read HTTPS pages directly from the Side Panel after the user enables all-sites access. | Requested only from an explicit user action. General Page access reads the current active page while the Side Panel is open; suitable pages may send compact-reading context to the configured model endpoint, which may also pick one page sentence as a verification suggestion. |
 
 Truly should request optional endpoint permissions at save/test time for the
 specific user-configured endpoint. The Page/Web side panel can also request a

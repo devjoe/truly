@@ -2,7 +2,7 @@ import { JSDOM } from "jsdom";
 import { describe, expect, it } from "vitest";
 import fixture from "../fixtures/claim-investigation/food-recall-contract.json";
 import type { InvestigationBundle } from "../../src/lib/claim-investigation-contract";
-import { evidenceFirstInvestigationHtml } from "../../src/sidepanel/evidence-first-investigation-renderer";
+import { evidenceFirstInvestigationHtml } from "../../scripts/lib/evidence-first-investigation-renderer";
 
 describe("evidence-first investigation renderer", () => {
   it("renders excerpts before sufficiency and the bounded synthesis", () => {

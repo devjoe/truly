@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-07-09
+Last updated: 2026-07-29
 
 Canonical URL: https://trulyreader.org/privacy/
 
@@ -59,10 +59,12 @@ authorize a single domain; that grant gives persistent read access to that one s
 and reading still happens only while you are using the side panel. If you
 explicitly enable General Page all-sites access in Settings, Truly can read the
 current page on ordinary HTTP/HTTPS sites automatically while the Side Panel is
-open, and suitable pages may automatically produce a short reading brief
-through the model source you configured. Closing the side panel stops these
-reads. None of these options enable background crawling or persistent
-full-page history.
+open, and suitable pages may automatically produce a short reading brief and
+select one verification suggestion through the model source you configured.
+The suggestion is always a sentence quoted from the page itself; the model
+only picks which page sentence to suggest and may decline. Closing the side
+panel stops these reads. None of these options enable background crawling or
+persistent full-page history.
 
 Page/Web screenshot-assisted recovery is off by default and not automatic. If
 Truly cannot build enough reading context from visible page text, it may offer a
