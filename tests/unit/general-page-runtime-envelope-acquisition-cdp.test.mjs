@@ -203,6 +203,15 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(source).toContain("rejectedFocusCaptures");
   });
 
+  it("records the capture baseline before opening a fast Page source", () => {
+    const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
+    const loop = source.indexOf("for (const url of inputUrls)");
+    const baseline = source.indexOf("const before = await captureCount(worker, expectedScope)", loop);
+    const open = source.indexOf("source = await openSource(worker", loop);
+    expect(baseline).toBeGreaterThan(loop);
+    expect(open).toBeGreaterThan(baseline);
+  });
+
   it("activates the Facebook source before selecting message bodies", () => {
     const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
     const branch = source.indexOf('args.mode === "facebook-focus"');

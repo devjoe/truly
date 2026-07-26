@@ -306,14 +306,13 @@ async function main() {
         for (const url of inputUrls) {
           if (samples.length >= args.count)
             break;
+          const expectedScope = args.mode === "page" ? "page" : "focus";
+          const before = await captureCount(worker, expectedScope);
           let stage = "open-source";
           let source = null;
           try {
             source = await openSource(worker, args.endpoint, url, args.timeoutMs);
             openedTabIds.push(source.tab.id);
-            stage = "read-capture-count";
-            const expectedScope = args.mode === "page" ? "page" : "focus";
-            const before = await captureCount(worker, expectedScope);
             let selection = null;
             stage = "activate-background-tab";
             await activateTabWithoutWindowFocus(worker, source.tab.id);
