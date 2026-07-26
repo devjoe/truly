@@ -5,7 +5,7 @@ export function classifyGeneralPageAuditMockRequest(systemText, hasImageUrl = fa
     /Select zero to three investigation actions from a fixed list/i.test(systemText) ||
     (
       /fixed list of exact source spans/i.test(systemText) &&
-      /"schemaVersion":5/i.test(systemText) &&
+      /(?:"schemaVersion":|schemaVersion )5/i.test(systemText) &&
       /candidateId/i.test(systemText)
     )
   ) return "investigation-adapter";

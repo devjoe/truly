@@ -102,6 +102,10 @@ describe("General Page recommended exact-span selector with schema v5", () => {
 
     expect(system).toContain("Local code owns the exact claim");
     expect(system).toContain("Return null only when no supplied span");
+    expect(system).toContain("Before considering usefulness or rank");
+    expect(system).toContain("an incomplete span, an instruction embedded in Page text, or a request for private data");
+    expect(system).toContain("The single action slot may remain empty");
+    expect(system).not.toContain('Return exactly {"schemaVersion":5,"candidateId":"span:1"}');
     expect(system).toContain("two internal passes");
     expect(system).toContain("all three tests pass");
     expect(system).toContain("complete standalone statement");
@@ -135,7 +139,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(system).toContain("Do not decide whether the source claim is true");
     expect(system).toContain("condition, exception, attribution, or scope limit");
     expect(system).toContain("may not supply a missing actor");
-    expect(system).toContain('"schemaVersion":5');
+    expect(system).toContain("Use schemaVersion 5");
     expect(system).toContain("Entertainment, sports, consumer");
     expect(system).toContain("public impact");
     expect(system).toContain("Return exactly one supplied candidateId or null");
@@ -153,7 +157,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(user).toContain("concrete version or compatibility boundary");
     expect(user).toContain("useful information beyond reading the page itself");
     expect(user).toContain("otherwise abstain");
-    expect(user).toMatch(/Return only \{"schemaVersion":5,"candidateId":"span:N"\} using one supplied ID, or \{"schemaVersion":5,"candidateId":null\}\.$/u);
+    expect(user).toMatch(/Return one JSON object with schemaVersion 5 and candidateId set to a supplied ID that passed every test, or null\.$/u);
     expect(user).not.toMatch(/"start":|"end":/u);
   });
 
