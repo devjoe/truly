@@ -103,7 +103,7 @@ npm run cws:package:local-smoke
 - CWS preview metadata was bumped from `0.1.1 Preview 11` to `0.1.2 Preview 12` after advisory review flagged that reusing the numeric `0.1.1` package version would risk a dashboard collision with the earlier Preview 9 submission.
 - `docs/release/cws-submission-checklist.md` now includes a manual dashboard gate for already published, in-review, or otherwise occupied packages for the current numeric `manifest.version`.
 - `docs/release/cws-listing-copy.md`, `docs/release/cws-reviewer-notes.md`, `docs/release/permission-justification.md`, and `docs/release/privacy-policy.md` now all disclose Page/Web screenshot-assisted recovery as user-confirmed, vision-gated, session-only, and not stored in `chrome.storage`.
-- The four CWS disclosure documents and `cws:preflight` now also disclose the automatic ranked verification suggestion (2026-07-29): suitable pages may ask the configured model endpoint to pick one page sentence as a verification suggestion; the suggestion text is always quoted from the page itself and abstention renders nothing. The hosted privacy policy source received the same wording; its push and cache-busted live verification are pending.
+- The four CWS disclosure documents and `cws:preflight` now also disclose the automatic ranked verification suggestion (2026-07-24): suitable pages may ask the configured model endpoint to pick one page sentence as a verification suggestion; the suggestion text is always quoted from the page itself and abstention renders nothing. The hosted privacy policy source received the same wording; its push and cache-busted live verification are pending.
 - The hosted privacy policy source in the `trulyreader.org` repository has been updated with the same Page/Web screenshot-assisted recovery disclosure and pushed at commit `ee84ac5`. The canonical live URL `https://trulyreader.org/privacy/` was verified on 2026-07-04 with `curl` and contained the 2026-07-04 Page/Web screenshot-assisted recovery, vision-input, confirmation, session-only, and `chrome.storage` disclosure text.
 - The active release branch is now `codex/general-page-reader-ranked-actions`
   (it contains and supersedes `codex/general-page-reader-contract`; historical
@@ -419,7 +419,7 @@ Results:
 
 - An automatic-analysis level setting (off / brief only / brief plus
   verification suggestion) is deferred to the next Preview (maintainer
-  decision, 2026-07-29). This Preview ships the automatic Page pipeline
+  decision, 2026-07-24). This Preview ships the automatic Page pipeline
   always-on when all-sites access is enabled; both automatic model calls are
   covered by the current disclosures, and users who want zero automatic calls
   can keep all-sites access off and use toolbar or single-domain reads.

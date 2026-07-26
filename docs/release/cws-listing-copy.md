@@ -1,7 +1,7 @@
 # Chrome Web Store Listing Copy
 
 Status: Preview 12 listing reference
-Last updated: 2026-07-29
+Last updated: 2026-07-24
 
 This copy is used for the Preview 12 Unlisted Chrome Web Store submission. It
 should stay aligned with `README.md`,

@@ -1,6 +1,6 @@
 # Permission And Host Permission Justification
 
-Last updated: 2026-07-29
+Last updated: 2026-07-24
 
 This document explains why Truly requests each Chrome permission and host
 permission. It should stay aligned with `src/manifest.json`.

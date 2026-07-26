@@ -1,6 +1,6 @@
 # Chrome Web Store Reviewer Notes
 
-Last updated: 2026-07-29
+Last updated: 2026-07-24
 
 Status: Preview 12 reviewer-notes reference
 

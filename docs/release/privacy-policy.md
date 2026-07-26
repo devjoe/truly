@@ -1,6 +1,6 @@
 # Privacy Policy
 
-Last updated: 2026-07-29
+Last updated: 2026-07-24
 
 Canonical URL: https://trulyreader.org/privacy/
 
