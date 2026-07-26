@@ -18,15 +18,24 @@ import {
 } from "../../scripts/lib/private-general-page-investigation-adapter-smoke.mjs";
 
 describe("private General Page Investigation Adapter protocol smoke", () => {
-  it("uses exactly 30 fixed synthetic-only fixtures with balanced languages and risk shapes", () => {
+  it("uses 30 balanced fixtures with positive capability, soft diagnostics, and hard sentinels", () => {
     const fixtures = buildInvestigationAdapterProtocolSmokeFixtures();
 
     expect(fixtures).toHaveLength(INVESTIGATION_ADAPTER_PROTOCOL_SMOKE_SAMPLE_COUNT);
     expect(fixtures.filter((fixture) => fixture.language === "zh-TW")).toHaveLength(15);
     expect(fixtures.filter((fixture) => fixture.language === "en")).toHaveLength(15);
-    for (const fixtureKind of ["prepared", "abstain", "attributed", "compound", "routine-fact"]) {
-      expect(fixtures.filter((fixture) => fixture.fixtureKind === fixtureKind)).toHaveLength(6);
+    for (const language of ["zh-TW", "en"]) {
+      const languageFixtures = fixtures.filter((fixture) => fixture.language === language);
+      expect(languageFixtures.filter((fixture) => fixture.gateRole === "positive_control")).toHaveLength(10);
+      expect(languageFixtures.filter((fixture) => fixture.gateRole === "soft_negative")).toHaveLength(2);
+      expect(languageFixtures.filter((fixture) => fixture.gateRole === "hard_boundary_sentinel")).toHaveLength(3);
     }
+    expect(fixtures.filter((fixture) => fixture.gateRole === "positive_control")).toHaveLength(20);
+    expect(fixtures.filter((fixture) => fixture.gateRole === "soft_negative")).toHaveLength(4);
+    expect(fixtures.filter((fixture) => fixture.gateRole === "hard_boundary_sentinel")).toHaveLength(6);
+    expect(fixtures.filter((fixture) => fixture.hardBoundaryKind === "incomplete_span")).toHaveLength(2);
+    expect(fixtures.filter((fixture) => fixture.hardBoundaryKind === "untrusted_instruction")).toHaveLength(2);
+    expect(fixtures.filter((fixture) => fixture.hardBoundaryKind === "private_data_request")).toHaveLength(2);
     expect(new Set(fixtures.map((fixture) => fixture.sampleId))).toHaveLength(30);
     expect(fixtures.every((fixture) => fixture.dataCategory === "synthetic-only")).toBe(true);
     expect(fixtures.every((fixture) => new URL(fixture.source.url).hostname === "synthetic.example.test"))
@@ -127,6 +136,16 @@ describe("private General Page Investigation Adapter protocol smoke", () => {
         syntheticOnly: true,
         sampleCount: 30,
         declaredCategories: ["synthetic-only"],
+        gateRoleCounts: {
+          positive_control: 20,
+          soft_negative: 4,
+          hard_boundary_sentinel: 6,
+        },
+        hardBoundaryCounts: {
+          incomplete_span: 2,
+          untrusted_instruction: 2,
+          private_data_request: 2,
+        },
       },
       counts: {
         protocolSucceeded: 30,

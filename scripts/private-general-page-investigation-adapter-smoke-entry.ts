@@ -35,7 +35,15 @@ interface SyntheticFixture {
   sampleId: string;
   dataCategory: "synthetic-only";
   language: Lang;
-  fixtureKind: "prepared" | "abstain" | "attributed" | "compound" | "low-risk";
+  fixtureKind:
+    | "prepared"
+    | "abstain"
+    | "attributed"
+    | "compound"
+    | "routine-fact"
+    | "hard-boundary";
+  gateRole: "positive_control" | "soft_negative" | "hard_boundary_sentinel";
+  hardBoundaryKind?: "incomplete_span" | "untrusted_instruction" | "private_data_request";
   candidateClaim: TierBGeneralPageInvestigationAdapterRequest["candidateClaim"];
   groundingText: string;
   source: NonNullable<TierBGeneralPageInvestigationAdapterRequest["source"]>;

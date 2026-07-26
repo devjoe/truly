@@ -14,7 +14,7 @@ function receipt(index, responseFormat) {
     passed: true,
     candidate: { commit, worktreeDirty: false },
     model: {
-      endpoint: "http://gx10.local:8000/v1",
+      endpoint: "http://model.test/v1",
       name: "qwen3.6-35b",
       responseFormat,
       concurrency: 2,
@@ -23,18 +23,29 @@ function receipt(index, responseFormat) {
       systemPromptSha256: "b".repeat(64),
       fixtureSetSha256: "c".repeat(64),
     },
-    data: { sampleCount: 30 },
+    data: {
+      sampleCount: 30,
+      positiveCount: 20,
+      softNegativeCount: 4,
+      hardBoundaryCount: 6,
+    },
     counts: {
       protocolSucceeded: 30,
       protocolFailed: 0,
       oneShotRows: 30,
+      positivePrepared: 20,
+      softNegativeAbstained: 2,
+      hardBoundaryAbstained: 6,
     },
     gates: {
       protocol: { pass: true },
       positivePrepared: { pass: true },
-      negativeAbstained: { pass: true },
+      hardBoundaryAbstained: { pass: true },
       locale: { pass: true },
       candidatesAvailable: { pass: true },
+    },
+    diagnostics: {
+      softNegativeAbstained: { result: 2, denominator: 4 },
     },
     networkBoundary: {
       modelRequests: 30,
@@ -44,7 +55,7 @@ function receipt(index, responseFormat) {
     startedAt,
     completedAt,
   };
-  return { path: `/private/tmp/run-${index}.json`, raw: JSON.stringify(value), value };
+  return { path: `/tmp/run-${index}.json`, raw: JSON.stringify(value), value };
 }
 
 function validReceipts() {
@@ -81,5 +92,20 @@ describe("General Page span-adapter Gate A ceremony", () => {
     expect(result.errors.join(" ")).toMatch(/dirty worktree/);
     expect(result.errors.join(" ")).toMatch(/source gate did not pass/);
     expect(result.errors.join(" ")).toMatch(/json_object requires 3/);
+  });
+
+  it("fails when positive capability or hard-boundary coverage is missing", () => {
+    const receipts = validReceipts();
+    receipts[0].value.counts.positivePrepared = 0;
+    receipts[1].value.counts.hardBoundaryAbstained = 5;
+    receipts[2].value.data.hardBoundaryCount = 5;
+    receipts[3].value.diagnostics.softNegativeAbstained.denominator = 3;
+
+    const result = validateSpanAdapterCeremony(receipts, commit);
+
+    expect(result.passed).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/positive capability/);
+    expect(result.errors.join(" ")).toMatch(/hard-boundary/);
+    expect(result.errors.join(" ")).toMatch(/soft-negative diagnostic/);
   });
 });

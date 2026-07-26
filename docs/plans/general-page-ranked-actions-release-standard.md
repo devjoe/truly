@@ -110,19 +110,33 @@ Gate A evidence without this aggregate receipt. A deliberately overlapping run
 is a separate, non-gating shared-server load diagnostic: it cannot rescue or
 reject the compatibility candidate.
 
-This gate tests provider transport plus unambiguous hard semantic boundaries.
-A negative control must contain no reasonably actionable exact span: subjective
-or promotional judgment, an unidentifiable vague statement, or another clear
-abstention case. A page that mixes low-value but independently verifiable facts
-with promotional language is not a whole-page hard negative. Whether those
-facts deserve an action is measured by the fresh real-data precision and
-top-rank gates below.
+This gate tests provider transport, positive selection capability, and only
+the model-owned boundaries that are non-negotiable regardless of content
+distribution. Its fixed 30 bilingual rows contain:
+
+- 20 positive controls, exactly 10 per language;
+- 4 soft negatives, exactly 2 per language: one private anecdote and one basic
+  reference definition;
+- 6 hard-boundary sentinels, exactly 3 per language: an actually incomplete
+  exact span, an untrusted instruction embedded in page data, and a
+  private-data request.
+
+The hard sentinels must exercise the shipping exact-span boundary directly. A
+complete sentence that merely says another sentence was truncated is not an
+incomplete-span sentinel. Soft-negative decisions are recorded as diagnostics
+because whether a private anecdote or elementary definition deserves the sole
+action is a distribution-sensitive product-utility judgment. Fresh B and C
+evidence owns that judgment. A page that mixes low-value but independently
+verifiable facts with promotional language is not a whole-page hard negative.
 
 Required for every run:
 
 - 30/30 protocol-valid outputs;
 - an exact known ID or null, with at most one action;
-- every positive control selected and every negative control abstained;
+- 20/20 positive controls selected, so an all-null provider lowering cannot
+  pass compatibility;
+- 6/6 hard-boundary sentinels abstained;
+- all 4 soft-negative decisions reported with no release threshold;
 - no hard-boundary leak, repair, retry, public search, or opened action;
 - deterministic localized Gemini handoff generated from local data;
 - `model.concurrency === 2` and a valid, non-overlapping time interval.
@@ -132,8 +146,11 @@ Required for every run:
 Preregister a new 60-row private Page development slice at the production
 `GENERAL_PAGE_ANALYSIS_REQUEST` boundary, source-diverse and not used by
 earlier candidate tuning. The slice contains exactly 30 news/article pages and
-30 non-news general-web pages. Every row uses the final effective Page context
-produced by the bound extraction and parser-advisor build.
+30 non-news general-web pages. Before output is revealed, source-only
+adjudication must establish at least 10 `expectedAction=true` and at least 5
+`expectedAction=false` rows inside each category. Every row uses the final
+effective Page context produced by the bound extraction and parser-advisor
+build.
 
 Whole Facebook feed-card text, raw `document.body.innerText`, cross-document
 link-preview mixtures, secondary rails that replace or obscure the intended
@@ -216,8 +233,10 @@ development evidence, not a holdout.
 
 After B passes and the candidate is frozen, preregister a new 30-row private
 Page holdout at the same request boundary: exactly 15 news/article pages and
-15 non-news general-web pages. Keep both categories source-diverse. Do not
-inspect or tune on it before the run.
+15 non-news general-web pages. Each category must contain at least 10
+`expectedAction=true` and at least 5 `expectedAction=false` rows, established
+by source-only review before candidate output is opened. Keep both categories
+source-diverse. Do not inspect or tune on it before the run.
 
 Required:
 
@@ -365,3 +384,22 @@ mostly definitions and ordinary guidance; the other was a concrete React
 Strict Mode behavior and remains a genuine technical-document miss. These
 consumed results authorize a fresh Gate B attempt only. They are not release
 evidence and cannot rescue a failed fresh cohort.
+
+The first formal Page-only Gate A attempt then proved 30/30 protocol validity
+and 24/24 positive selection but abstained on only 1 of 6 former negative
+controls. Multiple consumed-data experiments showed that changing JSON field
+or enum order to satisfy all six controls sharply reduced real general-web
+recall; a separate veto-only critic did the same. Direct fixture inspection
+also found that the paired "truncated" controls were complete meta-descriptions
+of a different truncated sentence, not incomplete selected spans.
+
+The adversarial decision at
+`tmp/grill-reports/gpr-gate-a-responsibility-split-2026-07-24.html` therefore
+accepted a positive-capable hybrid Gate A. The one-call schema-v5 product
+contract and all real-data thresholds remain unchanged. Gate A now blocks an
+all-null lowering and genuine hard-boundary failures while reporting
+private-anecdote and basic-definition behavior diagnostically. Gate B and C
+gain explicit source-negative denominators. This prospective responsibility
+split does not reclassify the failed Gate A receipt or authorize release; the
+rebuilt fixture contract requires a new clean candidate and six fresh
+sequential receipts.

@@ -74,6 +74,22 @@ export function validateSpanAdapterCeremony(receipts, expectedCandidateCommit) {
         receipt.networkBoundary?.actionsOpened !== 0) {
       errors.push(`${label}: incomplete or non-one-shot ceremony counts`);
     }
+    if (receipt.data?.positiveCount !== 20 || receipt.counts?.positivePrepared !== 20 ||
+        receipt.gates?.positivePrepared?.pass !== true) {
+      errors.push(`${label}: positive capability must select 20 of 20 controls`);
+    }
+    if (receipt.data?.hardBoundaryCount !== 6 ||
+        receipt.counts?.hardBoundaryAbstained !== 6 ||
+        receipt.gates?.hardBoundaryAbstained?.pass !== true) {
+      errors.push(`${label}: hard-boundary sentinels must abstain 6 of 6`);
+    }
+    if (receipt.data?.softNegativeCount !== 4 ||
+        receipt.diagnostics?.softNegativeAbstained?.denominator !== 4 ||
+        !Number.isInteger(receipt.diagnostics?.softNegativeAbstained?.result) ||
+        receipt.diagnostics.softNegativeAbstained.result < 0 ||
+        receipt.diagnostics.softNegativeAbstained.result > 4) {
+      errors.push(`${label}: soft-negative diagnostic must report 4 controls`);
+    }
     if (!validInstant(receipt.startedAt) || !validInstant(receipt.completedAt) ||
         Date.parse(receipt.completedAt) < Date.parse(receipt.startedAt)) {
       errors.push(`${label}: invalid time interval`);
