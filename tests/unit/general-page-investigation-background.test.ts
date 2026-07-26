@@ -47,7 +47,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 5 as const,
+        schemaVersion: 6 as const,
         selections: [{
           candidateId: input.candidates[1].id,
           exactClaim: input.candidates[1].exactText,
@@ -56,6 +56,10 @@ describe("background General Page investigation preparation", () => {
           end: input.candidates[1].end,
         }],
       },
+    }));
+    const callAdmission = vi.fn(async () => ({
+      ok: true,
+      value: { schemaVersion: 1 as const, decision: "admit" as const },
     }));
 
     expect(scheduleGeneralPageInvestigationPreparation({
@@ -66,6 +70,7 @@ describe("background General Page investigation preparation", () => {
       structuredOutputMode: "json_schema",
       resourceKey: "gx10|fixture-model",
       callAdapter,
+      callAdmission,
       sendMessage,
     })).toBe(true);
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
@@ -75,6 +80,14 @@ describe("background General Page investigation preparation", () => {
       supersedeKey: "general-page-investigation:42:page",
     });
     expect(callAdapter).toHaveBeenCalledTimes(1);
+    expect(callAdmission).toHaveBeenCalledTimes(1);
+    expect(callAdmission).toHaveBeenCalledWith(expect.objectContaining({
+      authorizedSourceContext: request.context.mainText,
+      structuredOutputMode: "json_schema",
+      selection: expect.objectContaining({
+        exactClaim: "衛生局命令遠帆公司在七月三十一日前完成下架",
+      }),
+    }));
     expect(callAdapter).toHaveBeenCalledWith(expect.objectContaining({
       targetKind: "page",
       authorizedSourceContext: request.context.mainText,
@@ -107,7 +120,7 @@ describe("background General Page investigation preparation", () => {
     const callAdapter = vi.fn(async () => ({
       ok: true,
       attempts: 1 as const,
-      value: { schemaVersion: 5 as const, selections: [] },
+      value: { schemaVersion: 6 as const, selections: [] },
     }));
 
     scheduleGeneralPageInvestigationPreparation({
@@ -201,7 +214,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 5 as const,
+        schemaVersion: 6 as const,
         selections: [],
       },
     }));
@@ -220,6 +233,51 @@ describe("background General Page investigation preparation", () => {
 
     expect(callAdapter).toHaveBeenCalledTimes(1);
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ status: "ineligible" }));
+  });
+
+  it("publishes nothing when the second stage rejects or is unavailable", async () => {
+    const selection = {
+      candidateId: "span:1",
+      exactClaim: "食藥署公布232項產品名單",
+      sourceQuote: "食藥署公布232項產品名單",
+      start: 0,
+      end: 14,
+    };
+    const callAdapter = vi.fn(async () => ({
+      ok: true,
+      attempts: 1 as const,
+      value: { schemaVersion: 6 as const, selections: [selection] },
+    }));
+
+    for (const admissionResult of [
+      { ok: true, value: { schemaVersion: 1 as const, decision: "reject" as const } },
+      { ok: false, value: null, error: "investigation_action_admission_invalid_json" as const },
+    ]) {
+      const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+      const sendMessage = vi.fn();
+      const callAdmission = vi.fn(async () => admissionResult);
+      scheduleGeneralPageInvestigationPreparation({
+        scheduler: scheduler as never,
+        request: { ...request, analysisKey: `page:${admissionResult.ok ? "reject" : "failure"}` },
+        endpoint: "http://127.0.0.1:8000/v1",
+        model: "fixture-model",
+        structuredOutputMode: "json_schema",
+        resourceKey: "gx10|fixture-model",
+        callAdapter,
+        callAdmission,
+        sendMessage,
+      });
+      await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+      expect(scheduler.enqueue).toHaveBeenCalledTimes(1);
+      expect(callAdmission).toHaveBeenCalledTimes(1);
+      expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+        status: admissionResult.ok ? "ineligible" : "unavailable",
+      }));
+      expect(sendMessage).not.toHaveBeenCalledWith(expect.objectContaining({
+        status: "prepared",
+      }));
+    }
   });
 
   it("does not schedule Focus, overview, screenshot, or text without local candidates", () => {

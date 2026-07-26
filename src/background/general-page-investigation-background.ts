@@ -8,7 +8,10 @@ import {
 } from "../lib/general-page-investigation-span-adapter";
 import { buildInvestigationSpanCandidates } from "../lib/investigation-span-candidate";
 import {
+  callTierBGeneralPageInvestigationActionAdmission,
   callTierBGeneralPageInvestigationSpanAdapter,
+  type TierBGeneralPageInvestigationActionAdmissionRequest,
+  type TierBGeneralPageInvestigationActionAdmissionResult,
   type TierBGeneralPageInvestigationSpanAdapterRequest,
   type TierBGeneralPageInvestigationSpanAdapterResult,
 } from "../lib/tier-b-client";
@@ -36,6 +39,9 @@ export interface ScheduleGeneralPageInvestigationPreparationOptions {
   callAdapter?: (
     request: TierBGeneralPageInvestigationSpanAdapterRequest,
   ) => Promise<TierBGeneralPageInvestigationSpanAdapterResult>;
+  callAdmission?: (
+    request: TierBGeneralPageInvestigationActionAdmissionRequest,
+  ) => Promise<TierBGeneralPageInvestigationActionAdmissionResult>;
   sendMessage(message: GeneralPageInvestigationResultMsg): unknown;
 }
 
@@ -63,8 +69,9 @@ function investigationSourceLanguage(text: string, fallback?: Lang): Lang | unde
 }
 
 /**
- * Starts one low-priority selector job. Reading-model claims are deliberately
- * ignored: local exact spans are the only identity boundary for actions.
+ * Starts one low-priority two-stage job. The first model call proposes one
+ * locally owned exact span; the second only admits or rejects that selection.
+ * Reading-model claims remain outside the action identity boundary.
  */
 export function scheduleGeneralPageInvestigationPreparation(
   options: ScheduleGeneralPageInvestigationPreparationOptions,
@@ -79,6 +86,8 @@ export function scheduleGeneralPageInvestigationPreparation(
   if (candidates.length === 0) return false;
 
   const callAdapter = options.callAdapter ?? callTierBGeneralPageInvestigationSpanAdapter;
+  const callAdmission =
+    options.callAdmission ?? callTierBGeneralPageInvestigationActionAdmission;
   const source = {
     title: request.context.title,
     authorName: request.context.authorName,
@@ -106,11 +115,36 @@ export function scheduleGeneralPageInvestigationPreparation(
     priority: "derived",
     dedupeKey: id,
     supersedeKey: `general-page-investigation:${request.tabId}:${request.scope}`,
-    run: () => callAdapter(adapterRequest),
+    run: async () => {
+      const selectionResult = await callAdapter(adapterRequest);
+      if (!selectionResult.ok || !selectionResult.value) {
+        return { status: "unavailable" as const };
+      }
+      const selection = selectionResult.value.selections[0];
+      if (!selection) {
+        return { status: "ineligible" as const };
+      }
+      const admissionResult = await callAdmission({
+        endpoint: options.endpoint,
+        model: options.model,
+        structuredOutputMode: options.structuredOutputMode,
+        apiKey: options.apiKey,
+        selection,
+        authorizedSourceContext: request.context.mainText,
+        source,
+      });
+      if (!admissionResult.ok || !admissionResult.value) {
+        return { status: "unavailable" as const };
+      }
+      if (admissionResult.value.decision === "reject") {
+        return { status: "ineligible" as const };
+      }
+      return { status: "prepared" as const, selection };
+    },
   });
 
   void work.then((result) => {
-    if (!result.ok || !result.value) {
+    if (result.status === "unavailable") {
       sendSafely(options.sendMessage, {
         type: "GENERAL_PAGE_INVESTIGATION_RESULT",
         tabId: request.tabId,
@@ -120,7 +154,7 @@ export function scheduleGeneralPageInvestigationPreparation(
       });
       return;
     }
-    if (result.value.selections.length === 0) {
+    if (result.status === "ineligible") {
       sendSafely(options.sendMessage, {
         type: "GENERAL_PAGE_INVESTIGATION_RESULT",
         tabId: request.tabId,
@@ -130,11 +164,12 @@ export function scheduleGeneralPageInvestigationPreparation(
       });
       return;
     }
-    const preparedActions = result.value.selections.map((selection) =>
-      buildGeneralPageInvestigationActionPresentation(selection, {
+    const preparedActions = [
+      buildGeneralPageInvestigationActionPresentation(result.selection, {
         outputLang: request.outputLang,
         source,
-      }));
+      }),
+    ];
     sendSafely(options.sendMessage, {
       type: "GENERAL_PAGE_INVESTIGATION_RESULT",
       tabId: request.tabId,

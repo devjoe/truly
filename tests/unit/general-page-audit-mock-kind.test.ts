@@ -1,13 +1,17 @@
 import { describe, expect, it } from "vitest";
 
+import { buildGeneralPageInvestigationActionAdmissionSystemPrompt } from "@src/lib/general-page-investigation-action-admission";
 import { buildGeneralPageInvestigationSpanAdapterSystemPrompt } from "@src/lib/general-page-investigation-span-adapter";
 import { classifyGeneralPageAuditMockRequest } from "../../scripts/lib/general-page-audit-mock-kind.mjs";
 
 describe("General Page audit mock routing", () => {
-  it("recognizes the frozen v5 selector prompt as an investigation adapter request", () => {
+  it("keeps the v6 selector and v1 admission critic distinct", () => {
     expect(classifyGeneralPageAuditMockRequest(
       buildGeneralPageInvestigationSpanAdapterSystemPrompt(),
     )).toBe("investigation-adapter");
+    expect(classifyGeneralPageAuditMockRequest(
+      buildGeneralPageInvestigationActionAdmissionSystemPrompt(),
+    )).toBe("investigation-admission");
   });
 
   it("keeps parser, screenshot, vision, and ordinary brief requests distinct", () => {

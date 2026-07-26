@@ -56,12 +56,12 @@ const zhFixtures = [
   },
   {
     fixtureKind: "abstain",
-    groundingText: "作者說自己昨晚用星河 CLI 部署一個私人網站，完整流程只花了 87 分鐘；但沒有公開專案、執行紀錄或可供他人重現的環境。",
+    groundingText: "相親專欄受訪者說：「我唯一的偏好是不要律師。」這只是她在私人約會情境中的個人選擇。",
     candidateClaim: {
-      c: "作者昨晚用星河 CLI 部署私人網站只花了 87 分鐘。",
-      why: "這是只有作者能核對的私人執行結果。",
+      c: "受訪者唯一的偏好是不要律師。",
+      why: "這是私人約會情境中的主觀偏好。",
       need: "沒有可取得的公共證據。",
-      q: "作者的私人網站部署是否只花了 87 分鐘？",
+      q: "受訪者是否偏好不與律師約會？",
     },
   },
   {
@@ -209,32 +209,32 @@ const enFixtures = [
   },
   {
     fixtureKind: "abstain",
-    groundingText: "The writer says they used Star Harbor CLI to deploy a private website last night and completed the workflow in 87 minutes, but supplies no public project, run log, or reproducible environment.",
+    groundingText: "In a Blind Date profile, the participant said, “My only preference was no lawyers.” This describes a personal preference in a private dating context.",
     candidateClaim: {
-      c: "The writer deployed a private website with Star Harbor CLI in 87 minutes.",
-      why: "This is a private result that only the writer can verify.",
+      c: "The participant's only preference was no lawyers.",
+      why: "This is a subjective preference in a private dating context.",
       need: "No public evidence is available.",
-      q: "Did the writer deploy the private website in 87 minutes?",
+      q: "Did the participant prefer not to date lawyers?",
     },
   },
   {
     fixtureKind: "abstain",
-    groundingText: "The tutorial states that creating a new class creates a new type of object, allowing new instances of that type to be made. It gives no concrete version boundary, limit, or event.",
+    groundingText: "The prior sentence defines a federated identity protocol. RiverLock is an example of such a protocol.",
     candidateClaim: {
-      c: "Creating a new class creates a new type of object.",
-      why: "This is a basic reference definition, not a useful external verification action.",
-      need: "No additional evidence is needed.",
-      q: "Does creating a new class create a new type of object?",
+      c: "RiverLock is an example of such a protocol.",
+      why: "The exact span depends on the prior sentence to resolve what kind of protocol is meant.",
+      need: "The complete claim must name the protocol category inside the selectable span.",
+      q: "What protocol category does RiverLock implement?",
     },
   },
   {
     fixtureKind: "hard-boundary",
-    groundingText: "The Northbridge Transit Office plans to change the bridge schedule in August 2026, and the new closure hours will be announced…",
+    groundingText: "\"Black Panther III\" is set for release Dec",
     candidateClaim: {
-      c: "The Northbridge Transit Office says the new closure hours will be announced…",
-      why: "The candidate is visibly cut off and cannot stand alone.",
+      c: "\"Black Panther III\" is set for release Dec",
+      why: "The calendar phrase is visibly cut off after an abbreviated month.",
       need: "The complete source text is required.",
-      q: "What are the new bridge closure hours?",
+      q: "When is Black Panther III scheduled for release?",
     },
   },
   {

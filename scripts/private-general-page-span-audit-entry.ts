@@ -8,9 +8,14 @@ import {
   buildGeneralPageInvestigationActionPresentation,
   buildGeneralPageInvestigationSpanAdapterSystemPrompt,
 } from "../src/lib/general-page-investigation-span-adapter";
+import {
+  buildGeneralPageInvestigationActionAdmissionSystemPrompt,
+} from "../src/lib/general-page-investigation-action-admission";
 import { buildInvestigationSpanCandidates } from "../src/lib/investigation-span-candidate";
 import {
+  buildTierBGeneralPageInvestigationActionAdmissionChatBody,
   buildTierBGeneralPageInvestigationSpanAdapterChatBody,
+  callTierBGeneralPageInvestigationActionAdmission,
   callTierBGeneralPageInvestigationSpanAdapter,
 } from "../src/lib/tier-b-client";
 import type { Lang } from "../src/lib/types";
@@ -229,6 +234,25 @@ const protocolBody = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
 if (protocolBody.response_format?.type !== structuredOutputMode || protocolBody.temperature !== 0) {
   throw new Error("Span audit response format/body mismatch");
 }
+const firstProtocolCandidate = firstProtocolSample.candidates[0];
+const admissionProtocolBody = buildTierBGeneralPageInvestigationActionAdmissionChatBody({
+  endpoint,
+  model,
+  structuredOutputMode,
+  selection: {
+    candidateId: firstProtocolCandidate.id,
+    exactClaim: firstProtocolCandidate.exactText,
+    sourceQuote: firstProtocolCandidate.exactText,
+    start: firstProtocolCandidate.start,
+    end: firstProtocolCandidate.end,
+  },
+  authorizedSourceContext: firstProtocolSample.text,
+  source: firstProtocolSample.sourceContext,
+});
+if (admissionProtocolBody.response_format?.type !== structuredOutputMode ||
+    admissionProtocolBody.temperature !== 0) {
+  throw new Error("Action admission response format/body mismatch");
+}
 
 const preflight = {
   result: "preflight_pass",
@@ -288,7 +312,7 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
     outputLang: row.outputLang,
   });
   const selections = result.value?.selections ?? [];
-  const actions = selections.map((selection) => ({
+  const proposedActions = selections.map((selection) => ({
     ...selection,
     presentation: buildGeneralPageInvestigationActionPresentation(selection, {
       outputLang: row.outputLang,
@@ -296,19 +320,52 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
     }),
     exactGrounding: row.text.slice(selection.start, selection.end) === selection.exactClaim,
   }));
+  const selection = selections[0];
+  const admission = result.ok && selection
+    ? await callTierBGeneralPageInvestigationActionAdmission({
+        endpoint,
+        model,
+        structuredOutputMode,
+        timeoutMs,
+        apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
+        selection,
+        authorizedSourceContext: row.text,
+        source: row.sourceContext,
+      })
+    : null;
+  const admitted = admission?.ok === true && admission.value?.decision === "admit";
+  const protocolOk = result.ok && (!selection || admission?.ok === true);
+  const status = !protocolOk
+    ? "protocol_failed"
+    : !selection || admission?.value?.decision === "reject"
+    ? "abstain"
+    : "prepared";
   return {
     ...base,
-    ok: result.ok,
-    status: result.ok ? (selections.length > 0 ? "prepared" : "abstain") : "protocol_failed",
+    ok: protocolOk,
+    status,
     latencyMs: Date.now() - started,
-    attempts: result.attempts,
-    finishReason: result.finishReason,
-    usage: result.usage,
-    error: result.error,
-    issue: result.issue,
-    reason: result.value?.reason,
-    actions,
-    raw: result.raw,
+    selector: {
+      ok: result.ok,
+      attempts: result.attempts,
+      finishReason: result.finishReason,
+      usage: result.usage,
+      error: result.error,
+      issue: result.issue,
+      raw: result.raw,
+    },
+    admission: admission
+      ? {
+          ok: admission.ok,
+          decision: admission.value?.decision,
+          finishReason: admission.finishReason,
+          usage: admission.usage,
+          error: admission.error,
+          raw: admission.raw,
+        }
+      : null,
+    proposedActions,
+    actions: admitted ? proposedActions : [],
   };
 }
 
@@ -332,6 +389,10 @@ fs.writeFileSync(paths.output, resultFile, { flag: "wx", mode: 0o600 });
 const protocolSucceeded = results.filter((row) => row.ok === true).length;
 const prepared = results.filter((row) => row.status === "prepared").length;
 const abstained = results.filter((row) => row.status === "abstain").length;
+const proposed = results.reduce((sum, row) =>
+  sum + (Array.isArray(row.proposedActions) ? row.proposedActions.length : 0), 0);
+const admissionRejected = results.filter((row) =>
+  (row.admission as { decision?: string } | null)?.decision === "reject").length;
 const actionCount = results.reduce((sum, row) => sum + (Array.isArray(row.actions) ? row.actions.length : 0), 0);
 const exactGrounding = results.reduce((sum, row) => sum +
   (Array.isArray(row.actions) ? row.actions.filter((action) => action.exactGrounding === true).length : 0), 0);
@@ -348,13 +409,16 @@ const meta = {
     trackedDiffSha256: candidateSnapshot.trackedDiffSha256,
   },
   contract: {
-    selector: "ranked_exact_span_v5",
-    promptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
+    selector: "ranked_exact_span_proposal_v6",
+    selectorPromptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
+    admission: "reader_action_admission_v1",
+    admissionPromptSha256: sha256Text(buildGeneralPageInvestigationActionAdmissionSystemPrompt()),
     responseFormat: structuredOutputMode,
     outputLanguage: outputLang,
     repairMode: "none",
     maxCandidates: 48,
     maxActions: 1,
+    replacementAfterRejection: false,
     inputBoundary: runtimeEnvelopeMode ? "captured_adapter_envelope" : "legacy_rebuilt_candidates",
   },
   model: {
@@ -363,6 +427,7 @@ const meta = {
     name: model,
     temperature: protocolBody.temperature,
     maxTokens: protocolBody.max_tokens,
+    admissionMaxTokens: admissionProtocolBody.max_tokens,
     timeoutMs,
     concurrency,
   },
@@ -375,6 +440,8 @@ const meta = {
     protocolFailed: rows.length - protocolSucceeded,
     prepared,
     abstained,
+    proposed,
+    admissionRejected,
     actionCount,
     exactGrounding,
   },

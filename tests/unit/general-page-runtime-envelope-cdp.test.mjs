@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   findInvestigationServiceWorker,
   isPrivateCaptureOutputPath,
+  runtimeCaptureIsComplete,
   selectInvestigationServiceWorker,
 } from "../../scripts/collect-general-page-runtime-envelopes-cdp.mjs";
 import fs from "node:fs";
@@ -46,6 +47,13 @@ describe("General Page runtime-envelope CDP collector", () => {
     expect(source).toContain("item?.analysis?.scope");
     expect(source).toContain("capture.consumerDone = false");
     expect(source).not.toContain("capture.consumerDone = true");
+  });
+
+  it("does not finalize a consumer-coordinated packet before source validation", () => {
+    const captures = [{ analysis: { scope: "page" } }];
+    expect(runtimeCaptureIsComplete(captures, 1, false, 30_000)).toBe(false);
+    expect(runtimeCaptureIsComplete(captures, 1, true, 30_000)).toBe(true);
+    expect(runtimeCaptureIsComplete(captures, 1, false, 0)).toBe(true);
   });
 
   it("provides a no-focus recovery path for interrupted collectors", () => {

@@ -73,6 +73,12 @@ export function acquisitionUrlsMatch(left, right) {
   }
 }
 
+export function pageCaptureMatchesSource(metadata, expectedUrl, expectedTabId) {
+  return Number.isInteger(expectedTabId) &&
+    metadata?.tabId === expectedTabId &&
+    acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl);
+}
+
 export function publisherRedirectPending(inputValue, currentValue) {
   try {
     const input = new URL(inputValue);
@@ -343,6 +349,7 @@ async function main() {
               args.timeoutMs,
               source.matchUrl,
               source.title,
+              source.tab.id,
             );
             stage = "read-capture-metadata";
             const capture = await waitForSingleCapture(worker, before, args.mode, args.timeoutMs, {
@@ -691,6 +698,9 @@ async function waitForSingleCapture(worker, before, expectedMode, timeoutMs, exp
     } else if (count === before + 1) {
       const metadata = await captureMetadata(worker, expectedScope, before);
       if (metadata?.scope !== expectedScope) throw new Error(`expected ${expectedScope} capture, received ${metadata?.scope || "unknown"}`);
+      if (Number.isInteger(expected.tabId) && metadata?.tabId !== expected.tabId) {
+        throw new Error(`captured ${expectedScope} envelope belongs to tab ${metadata?.tabId ?? "unknown"}, expected ${expected.tabId}`);
+      }
       if (!metadata.mainTextLength || !metadata.candidateCount) throw new Error("captured envelope lacks main text or candidate spans");
       return metadata;
     }
@@ -775,6 +785,7 @@ async function waitForPageAutoReadOrReread(
   timeoutMs,
   expectedUrl,
   expectedTitle,
+  expectedTabId,
 ) {
   const startedAt = Date.now();
   const deadline = Date.now() + timeoutMs;
@@ -787,8 +798,10 @@ async function waitForPageAutoReadOrReread(
       for (let index = before; index < count; index += 1) {
         captured.push({ index, metadata: await captureMetadata(worker, "page", index) });
       }
-      const matches = captured.filter(({ metadata }) => acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl));
-      const unexpected = captured.filter(({ metadata }) => !acquisitionUrlsMatch(metadata?.contextUrl, expectedUrl));
+      const matches = captured.filter(({ metadata }) =>
+        pageCaptureMatchesSource(metadata, expectedUrl, expectedTabId));
+      const unexpected = captured.filter(({ metadata }) =>
+        !pageCaptureMatchesSource(metadata, expectedUrl, expectedTabId));
       if (unexpected.length) await removeScopeCaptures(worker, "page", unexpected.map(({ index }) => index));
       if (matches.length > 1) {
         const [first, ...duplicates] = matches;

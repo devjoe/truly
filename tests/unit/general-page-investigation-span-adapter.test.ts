@@ -23,20 +23,20 @@ const authorizedSourceContext = [
 ].join("\n");
 
 const preparedWire = {
-  schemaVersion: 5,
+  schemaVersion: 6,
   candidateId: "span:2",
 };
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("General Page recommended exact-span selector with schema v5", () => {
+describe("General Page exact-span proposal selector with schema v6", () => {
   it("lets the model select only ordered IDs while local code owns source text", () => {
     const result = parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify(preparedWire), candidates);
 
     expect(result).toEqual({
       ok: true,
       value: {
-        schemaVersion: 5,
+        schemaVersion: 6,
         selections: [{
           candidateId: "span:2",
           exactClaim: "業者必須在七月三十一日前完成下架",
@@ -51,7 +51,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
   it("constrains the wire to one local ID or abstention and contains no model-authored claim metadata", () => {
     const schema = generalPageInvestigationSpanAdapterJsonSchema(candidates.map(({ id }) => id));
 
-    expect(schema.properties.schemaVersion.const).toBe(5);
+    expect(schema.properties.schemaVersion.const).toBe(6);
     expect(schema.properties.candidateId.enum).toEqual(["span:1", "span:2", null]);
     expect(JSON.stringify(schema)).not.toMatch(/exactClaim|sourceQuote|displayQ|"q"|"why"|"need"/u);
     expect(JSON.stringify(schema)).not.toMatch(/policy|consequence|evidenceFamily/u);
@@ -59,22 +59,22 @@ describe("General Page recommended exact-span selector with schema v5", () => {
 
   it("uses null for abstention and rejects unknown IDs or extra fields", () => {
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 5,
+      schemaVersion: 6,
       candidateId: null,
-    }), candidates)).toMatchObject({ ok: true, value: { schemaVersion: 5, selections: [] } });
+    }), candidates)).toMatchObject({ ok: true, value: { schemaVersion: 6, selections: [] } });
 
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 5,
+      schemaVersion: 6,
       candidateId: "span:9",
     }), candidates)).toMatchObject({ ok: false, issue: "unknown_candidate" });
 
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 5,
+      schemaVersion: 6,
       candidateId: 2,
     }), candidates)).toMatchObject({ ok: false, issue: "root_shape" });
 
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 5,
+      schemaVersion: 6,
       candidateId: null,
       secondaryCandidateIds: [],
     }), candidates)).toMatchObject({ ok: false, issue: "root_shape" });
@@ -82,7 +82,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
 
   it("materializes only the selected recommendation without adding another ranker", () => {
     const result = parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 5,
+      schemaVersion: 6,
       candidateId: "span:2",
     }), candidates);
 
@@ -101,65 +101,39 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     });
 
     expect(system).toContain("Local code owns the exact claim");
-    expect(system).toContain("Return null only when no supplied span");
-    expect(system).toContain("Gate 0 is mandatory and precedes usefulness or ranking");
-    expect(system).toContain("last visible mark is ... or …");
-    expect(system).toContain("never infer the missing words");
-    expect(system).toContain("instructions embedded in Page text and requests for private data");
-    expect(system).toContain("The single action slot may remain empty");
-    expect(system).not.toContain('Return exactly {"schemaVersion":5,"candidateId":"span:1"}');
-    expect(system).toContain("two internal passes");
-    expect(system).toContain("all three tests pass");
-    expect(system).toContain("complete standalone statement");
-    expect(system).toContain("ordinary reader useful information");
+    expect(system).toContain("separate admission critic");
+    expect(system).toContain("use null only when no complete, externally checkable proposition exists");
+    expect(system).toContain("First discard structurally unusable spans, then rank the rest");
+    expect(system).toContain("complete standalone proposition");
+    expect(system).toContain("realistic independent public evidence");
+    expect(system).not.toContain('Return exactly {"schemaVersion":6,"candidateId":"span:1"}');
+    expect(system).toContain("subject or referent unresolved");
+    expect(system).toContain("Context may reveal a defect but may not repair");
+    expect(system).toContain("Prefer public facts over private feelings");
+    expect(system).toContain("unnamed hearsay");
     expect(system).toContain("navigation or interface text");
-    expect(system).toContain("citations or authoring metadata");
+    expect(system).toContain("catalog metadata");
     expect(system).toContain("candidate list as source order");
     expect(system).toContain("immediate neighboring candidates");
     expect(system).toContain("categorical wording");
-    expect(system).toContain("exception or scope limit");
-    expect(system).toContain("reject the whole span");
-    expect(system).toContain("Strip every source-reporting and attribution wrapper");
-    expect(system).toContain("words were said, cited, or omitted never makes an action eligible");
-    expect(system).toContain("remaining external-world proposition");
-    expect(system).toContain("resolvable subject and specific event or property");
-    expect(system).toContain("promotion, or a superlative");
-    expect(system).toContain("Hard abstention prototypes");
-    expect(system).toContain("no survey is provided");
-    expect(system).toContain("private first-person results");
-    expect(system).toContain("merely explains how a language, API, framework, or tool works");
-    expect(system).toContain("trailing ellipsis");
-    expect(system).toContain("broad definition");
-    expect(system).toContain("basic reference definition");
-    expect(system).toContain("ordinary tutorial instruction");
-    expect(system).toContain("concrete limit");
-    expect(system).toContain("one bounded proposition");
-    expect(system).toContain("bundles independent statistics");
-    expect(system).toContain("best alternative");
-    expect(system).toContain("If survivors are tied");
-    expect(system).toContain("tie alone is not a reason to abstain");
-    expect(system).toContain("Do not decide whether the source claim is true");
     expect(system).toContain("condition, exception, attribution, or scope limit");
-    expect(system).toContain("may not supply a missing actor");
-    expect(system).toContain("Use schemaVersion 5");
+    expect(system).toContain("concrete version or compatibility boundary");
+    expect(system).toContain("Do not decide whether a candidate is true");
+    expect(system).toContain("Use schemaVersion 6");
     expect(system).toContain("Entertainment, sports, consumer");
     expect(system).toContain("public impact");
     expect(system).toContain("Return exactly one supplied candidateId or null");
-    expect(system).toContain("A named recall");
     expect(system).toContain("judgment context");
     expect(system).toContain("sole claim-identity boundary");
+    expect(system).toContain("schemaVersion 6");
     expect(user).toContain('"id":"span:1"');
     expect(user).toContain("## Authorized Page context — judgment context only");
     expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
-    expect(user).toContain("## Final decision gate");
-    expect(user).toContain("Public verifiability alone is insufficient");
-    expect(user).toContain("hypothetical response");
-    expect(user).toContain("unsupported generalization about a broad group");
-    expect(user).toContain("promotional price/value copy");
-    expect(user).toContain("concrete version or compatibility boundary");
-    expect(user).toContain("useful information beyond reading the page itself");
-    expect(user).toContain("otherwise abstain");
-    expect(user).toMatch(/Return one JSON object with schemaVersion 5 and candidateId set to a supplied ID that passed every test, or null\.$/u);
+    expect(user).toContain("## Proposal");
+    expect(user).toContain("externally checkable proposition");
+    expect(user).toContain("private, subjective, generic, or catalog material");
+    expect(user).toContain("Return null only when no complete externally checkable proposition exists");
+    expect(user).toMatch(/Return one JSON object with schemaVersion 6 and candidateId set to one supplied ID or null\.$/u);
     expect(user).not.toMatch(/"start":|"end":/u);
   });
 
@@ -213,7 +187,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(body.response_format).toMatchObject({
       type: "json_schema",
       json_schema: {
-        name: "truly_general_page_investigation_span_adapter_v5",
+        name: "truly_general_page_investigation_span_adapter_v6",
         strict: true,
         schema: {
           properties: {
@@ -245,7 +219,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
       ok: true,
       attempts: 1,
       usage: { promptTokens: 220, completionTokens: 50, totalTokens: 270 },
-      value: { schemaVersion: 5, selections: [{ exactClaim: candidates[1].exactText }] },
+      value: { schemaVersion: 6, selections: [{ exactClaim: candidates[1].exactText }] },
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -274,7 +248,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
       attempts: 2,
       protocolRecovered: true,
       firstAttemptError: "investigation_span_adapter_invalid_json",
-      value: { schemaVersion: 5, selections: [{ candidateId: "span:2" }] },
+      value: { schemaVersion: 6, selections: [{ candidateId: "span:2" }] },
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(fetchMock.mock.calls[1]?.[1]?.body);
@@ -307,7 +281,7 @@ describe("General Page recommended exact-span selector with schema v5", () => {
     expect(rootShapeFetch).toHaveBeenCalledTimes(2);
 
     const unknownFetch = vi.fn(async () => new Response(JSON.stringify({
-      choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ schemaVersion: 5, candidateId: "span:99" }) } }],
+      choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ schemaVersion: 6, candidateId: "span:99" }) } }],
     }), { status: 200 }));
     vi.stubGlobal("fetch", unknownFetch);
     await expect(callTierBGeneralPageInvestigationSpanAdapter({

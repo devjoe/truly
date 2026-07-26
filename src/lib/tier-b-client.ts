@@ -20,6 +20,14 @@ import {
 } from "./general-page-analysis";
 import { buildGeneralPageModelUserPrompt } from "./general-page-model-context";
 import {
+  GENERAL_PAGE_INVESTIGATION_ACTION_ADMISSION_JSON_SCHEMA,
+  buildGeneralPageInvestigationActionAdmissionPrompt,
+  buildGeneralPageInvestigationActionAdmissionSystemPrompt,
+  parseGeneralPageInvestigationActionAdmissionContent,
+  type GeneralPageInvestigationActionAdmissionInput,
+  type GeneralPageInvestigationActionAdmissionValue,
+} from "./general-page-investigation-action-admission";
+import {
   GENERAL_PAGE_INVESTIGATION_ADAPTER_BATCH_RESPONSE_SCHEMA,
   GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA,
   buildGeneralPageInvestigationAdapterBatchPrompt,
@@ -579,6 +587,15 @@ export interface TierBGeneralPageInvestigationSpanAdapterRequest
   maxProtocolAttempts?: 1 | 2;
 }
 
+export interface TierBGeneralPageInvestigationActionAdmissionRequest
+  extends GeneralPageInvestigationActionAdmissionInput {
+  endpoint: string;
+  model: string;
+  structuredOutputMode: "json_schema" | "json_object";
+  apiKey?: string;
+  timeoutMs?: number;
+}
+
 export interface TierBGeneralPageInvestigationAdapterResult {
   ok: boolean;
   value: GeneralPageInvestigationAdapterValue | null;
@@ -620,6 +637,21 @@ export interface TierBGeneralPageInvestigationSpanAdapterResult {
     | "investigation_span_adapter_invalid_schema";
 }
 
+export interface TierBGeneralPageInvestigationActionAdmissionResult {
+  ok: boolean;
+  value: GeneralPageInvestigationActionAdmissionValue | null;
+  raw?: string;
+  finishReason?: string;
+  usage?: TierBGeneralPageBriefResult["usage"];
+  error?:
+    | "investigation_action_admission_network_error"
+    | "investigation_action_admission_timeout"
+    | "investigation_action_admission_http_error"
+    | "investigation_action_admission_truncated"
+    | "investigation_action_admission_invalid_json"
+    | "investigation_action_admission_invalid_schema";
+}
+
 export interface TierBGeneralPageParserAdvisorResult {
   ok: boolean;
   advice: GeneralPageParserAdvisorAdvice | null;
@@ -656,6 +688,7 @@ export interface TierBChatBody {
             typeof GENERAL_PAGE_BRIEF_COMPACT_CARDINALITY_WIRE_SCHEMA |
             typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_RESPONSE_SCHEMA |
             typeof GENERAL_PAGE_INVESTIGATION_ADAPTER_BATCH_RESPONSE_SCHEMA |
+            typeof GENERAL_PAGE_INVESTIGATION_ACTION_ADMISSION_JSON_SCHEMA |
             ReturnType<typeof generalPageInvestigationSpanAdapterJsonSchema>;
         };
       };
@@ -1076,11 +1109,49 @@ export function buildTierBGeneralPageInvestigationSpanAdapterChatBody(
       ? {
           type: "json_schema",
           json_schema: {
-            name: "truly_general_page_investigation_span_adapter_v5",
+            name: "truly_general_page_investigation_span_adapter_v6",
             strict: true,
             schema: generalPageInvestigationSpanAdapterJsonSchema(
               req.candidates.map(({ id }) => id),
             ),
+          },
+        }
+      : { type: "json_object" },
+    truncate_prompt_tokens: TIER_B_CONTEXT_LIMIT_TOKENS,
+    chat_template_kwargs: { enable_thinking: false },
+  };
+  if (shouldRequestOpenAICompatNoThinking(req.endpoint, req.model)) body.reasoning_effort = "none";
+  return body;
+}
+
+export function buildTierBGeneralPageInvestigationActionAdmissionChatBody(
+  req: TierBGeneralPageInvestigationActionAdmissionRequest,
+): TierBChatBody {
+  if (req.structuredOutputMode !== "json_schema" && req.structuredOutputMode !== "json_object") {
+    throw new Error("investigation_action_admission_structured_output_mode_required");
+  }
+  const constrained = req.structuredOutputMode === "json_schema";
+  const body: TierBChatBody = {
+    model: req.model,
+    messages: [
+      {
+        role: "system",
+        content: buildGeneralPageInvestigationActionAdmissionSystemPrompt(),
+      },
+      {
+        role: "user",
+        content: buildGeneralPageInvestigationActionAdmissionPrompt(req),
+      },
+    ],
+    temperature: 0,
+    max_tokens: 32,
+    response_format: constrained
+      ? {
+          type: "json_schema",
+          json_schema: {
+            name: "truly_general_page_investigation_action_admission_v1",
+            strict: true,
+            schema: GENERAL_PAGE_INVESTIGATION_ACTION_ADMISSION_JSON_SCHEMA,
           },
         }
       : { type: "json_object" },
@@ -1604,6 +1675,83 @@ export async function callTierBGeneralPageInvestigationSpanAdapter(
       protocolRecovered: second.ok,
       firstAttemptError: first.error as NonNullable<TierBGeneralPageInvestigationSpanAdapterResult["firstAttemptError"]>,
       ...(first.issue === "root_shape" ? { firstAttemptIssue: first.issue } : {}),
+    };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export async function callTierBGeneralPageInvestigationActionAdmission(
+  req: TierBGeneralPageInvestigationActionAdmissionRequest,
+): Promise<TierBGeneralPageInvestigationActionAdmissionResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(
+    () => ctrl.abort(),
+    req.timeoutMs ?? TIER_B_GENERAL_PAGE_INVESTIGATION_ADAPTER_TIMEOUT_MS,
+  );
+  try {
+    const resp = await fetch(tierBCompletionsUrl(req.endpoint), {
+      method: "POST",
+      headers: jsonRequestHeaders(req.apiKey),
+      body: JSON.stringify(buildTierBGeneralPageInvestigationActionAdmissionChatBody(req)),
+      signal: ctrl.signal,
+    });
+    if (!resp.ok) {
+      return { ok: false, value: null, error: "investigation_action_admission_http_error" };
+    }
+    let data: any;
+    try {
+      data = await resp.json();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        return { ok: false, value: null, error: "investigation_action_admission_timeout" };
+      }
+      if (error instanceof SyntaxError) {
+        return { ok: false, value: null, error: "investigation_action_admission_invalid_json" };
+      }
+      throw error;
+    }
+    const choice = data?.choices?.[0];
+    const finishReason = typeof choice?.finish_reason === "string" ? choice.finish_reason : undefined;
+    const usage = normalizeTierBTokenUsage(data?.usage);
+    const raw = String(choice?.message?.content || "").trim();
+    if (finishReason === "length") {
+      return {
+        ok: false,
+        value: null,
+        raw,
+        finishReason,
+        ...(usage ? { usage } : {}),
+        error: "investigation_action_admission_truncated",
+      };
+    }
+    const parsed = parseGeneralPageInvestigationActionAdmissionContent(raw);
+    if (!parsed.ok || !parsed.value) {
+      return {
+        ok: false,
+        value: null,
+        raw,
+        ...(finishReason ? { finishReason } : {}),
+        ...(usage ? { usage } : {}),
+        error: parsed.error === "invalid_schema"
+          ? "investigation_action_admission_invalid_schema"
+          : "investigation_action_admission_invalid_json",
+      };
+    }
+    return {
+      ok: true,
+      value: parsed.value,
+      raw,
+      ...(finishReason ? { finishReason } : {}),
+      ...(usage ? { usage } : {}),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      value: null,
+      error: error instanceof DOMException && error.name === "AbortError"
+        ? "investigation_action_admission_timeout"
+        : "investigation_action_admission_network_error",
     };
   } finally {
     clearTimeout(timer);

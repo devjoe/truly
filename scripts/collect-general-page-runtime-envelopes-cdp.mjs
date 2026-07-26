@@ -28,6 +28,17 @@ export function isPrivateCaptureOutputPath(value, cwd = process.cwd()) {
   return roots.some((root) => resolved === root || resolved.startsWith(`${root}${path.sep}`));
 }
 
+export function runtimeCaptureIsComplete(
+  captures,
+  requestedCount,
+  consumerDone,
+  consumerTimeoutMs,
+) {
+  return Array.isArray(captures) &&
+    captures.length >= requestedCount &&
+    (consumerTimeoutMs === 0 || consumerDone === true);
+}
+
 export function selectInvestigationServiceWorker(targets) {
   return targets.find((target) =>
     target?.type === "service_worker" &&
@@ -117,20 +128,36 @@ async function main() {
 
     const deadline = Date.now() + args.timeoutMs;
     let captures = [];
-    while (Date.now() < deadline) {
-      captures = await client.evaluate(`(() => {
+    let consumerDone = args.consumerTimeoutMs === 0;
+    let consumerDeadline = null;
+    while (Date.now() < (consumerDeadline ?? deadline)) {
+      const snapshot = await client.evaluate(`(() => {
         const capture = globalThis.__trulyGeneralPageInvestigationCapture;
         const items = capture ? capture.items : [];
         const selected = ${JSON.stringify(args.scope)}
           ? items.filter((item) => item?.analysis?.scope === ${JSON.stringify(args.scope)})
           : items;
-        return JSON.parse(JSON.stringify(selected));
+        return {
+          captures: JSON.parse(JSON.stringify(selected)),
+          consumerDone: Boolean(capture?.consumerDone),
+        };
       })()`);
-      if (captures.length >= args.count) break;
+      captures = snapshot.captures;
+      consumerDone = args.consumerTimeoutMs === 0 || snapshot.consumerDone;
+      if (captures.length >= args.count) {
+        if (consumerDone) break;
+        consumerDeadline ??= Date.now() + args.consumerTimeoutMs;
+      }
       await new Promise((resolve) => setTimeout(resolve, POLL_MS));
     }
 
     const selected = captures.slice(0, args.count);
+    const complete = runtimeCaptureIsComplete(
+      selected,
+      args.count,
+      consumerDone,
+      args.consumerTimeoutMs,
+    );
     fs.mkdirSync(path.dirname(outputPath), { recursive: true, mode: 0o700 });
     fs.writeFileSync(outputPath, `${JSON.stringify({
       schemaVersion: 1,
@@ -140,26 +167,19 @@ async function main() {
       targetUrl: target.url,
       requestedCount: args.count,
       requestedScope: args.scope,
-      complete: selected.length >= args.count,
+      complete,
       captures: selected,
     }, null, 2)}\n`, { flag: "wx", mode: 0o600 });
-    if (selected.length >= args.count && args.consumerTimeoutMs > 0) {
-      const consumerDeadline = Date.now() + args.consumerTimeoutMs;
-      while (Date.now() < consumerDeadline) {
-        const consumerDone = await client.evaluate("Boolean(globalThis.__trulyGeneralPageInvestigationCapture?.consumerDone)");
-        if (consumerDone) break;
-        await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-      }
-    }
     console.log(JSON.stringify({
-      result: selected.length >= args.count ? "pass" : "partial",
+      result: complete ? "pass" : "partial",
       output: privatePathLabel(outputPath),
       captured: selected.length,
       requested: args.count,
+      consumerDone,
       targetActivated: false,
       browserFocusRequested: false,
     }, null, 2));
-    if (selected.length < args.count) process.exitCode = 1;
+    if (!complete) process.exitCode = 1;
   } finally {
     if (armed) {
       await client.evaluate(`(() => {

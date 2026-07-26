@@ -13,6 +13,7 @@ import {
   hashAcquisitionText,
   isMetadataReportPath,
   PAGE_AUTO_READ_GRACE_MS,
+  pageCaptureMatchesSource,
   pageSurfaceMatchesSourceTitle,
   publisherRedirectPending,
   selectFacebookMessageInDocument,
@@ -54,6 +55,28 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(acquisitionUrlsMatch(
       "https://example.test/other",
       "https://example.test/article",
+    )).toBe(false);
+  });
+
+  it("accepts a Page capture only from the expected tab and URL", () => {
+    const metadata = {
+      tabId: 42,
+      contextUrl: "https://example.test/article#truly-gpr-123",
+    };
+    expect(pageCaptureMatchesSource(
+      metadata,
+      "https://example.test/article",
+      42,
+    )).toBe(true);
+    expect(pageCaptureMatchesSource(
+      metadata,
+      "https://example.test/article",
+      7,
+    )).toBe(false);
+    expect(pageCaptureMatchesSource(
+      metadata,
+      "https://other.example.test/article",
+      42,
     )).toBe(false);
   });
 

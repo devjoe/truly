@@ -379,13 +379,19 @@ async function startMockOpenAiEndpoint() {
         /^(?:The analyzed content is synthetic|The fixture uses no real website content|The audit runs against a local test page)$/u.test(exactText));
       content = selected.length > 0
         ? JSON.stringify({
-            schemaVersion: 5,
+            schemaVersion: 6,
             candidateId: selected[0].id,
           })
         : JSON.stringify({
-            schemaVersion: 5,
+            schemaVersion: 6,
             candidateId: null,
           });
+    } else if (kind === "investigation-admission") {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+      content = JSON.stringify({
+        schemaVersion: 1,
+        decision: "admit",
+      });
     } else {
       // Keep the ordinary reading-analysis state observable as a distinct UX
       // phase instead of letting the deterministic mock resolve in one frame.
