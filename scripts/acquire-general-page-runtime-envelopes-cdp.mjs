@@ -73,6 +73,18 @@ export function acquisitionUrlsMatch(left, right) {
   }
 }
 
+export function publisherRedirectPending(inputValue, currentValue) {
+  try {
+    const input = new URL(inputValue);
+    const current = new URL(currentValue);
+    return input.hostname === "news.google.com" &&
+      input.pathname.startsWith("/read/") &&
+      current.hostname === "news.google.com";
+  } catch {
+    return false;
+  }
+}
+
 export function equivalentPageCaptureMetadata(left, right) {
   if (!left || !right)
     return false;
@@ -463,11 +475,27 @@ async function openSource(worker, endpoint, url, timeoutMs) {
   }
   await waitForDocument(client, timeoutMs);
   await waitForHttpLocation(client, timeoutMs);
+  await waitForPublisherRedirect(client, url, timeoutMs);
+  await waitForDocument(client, timeoutMs);
   await sleep(750);
   const finalUrl = await client.evaluate("location.href");
   const title = await client.evaluate("document.title");
   const matchUrl = await client.evaluate("document.querySelector('link[rel=\"canonical\"]')?.href || location.href");
   return { tab: { ...tab, url: finalUrl }, target, client, title, matchUrl };
+}
+
+async function waitForPublisherRedirect(client, inputUrl, timeoutMs) {
+  let currentUrl = await client.evaluate("location.href").catch(() => "");
+  if (!publisherRedirectPending(inputUrl, currentUrl))
+    return;
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    await sleep(POLL_MS);
+    currentUrl = await client.evaluate("location.href").catch(() => "");
+    if (!publisherRedirectPending(inputUrl, currentUrl))
+      return;
+  }
+  throw new Error("Google News read link did not redirect to a publisher");
 }
 
 async function openExistingFacebookSource(worker, endpoint, timeoutMs) {

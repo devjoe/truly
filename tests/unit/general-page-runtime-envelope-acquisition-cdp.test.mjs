@@ -14,6 +14,7 @@ import {
   isMetadataReportPath,
   PAGE_AUTO_READ_GRACE_MS,
   pageSurfaceMatchesSourceTitle,
+  publisherRedirectPending,
   selectFacebookMessageInDocument,
   shouldTriggerPageReread,
   validateAcquisitionUrls,
@@ -52,6 +53,26 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     )).toBe(true);
     expect(acquisitionUrlsMatch(
       "https://example.test/other",
+      "https://example.test/article",
+    )).toBe(false);
+  });
+
+  it("waits for Google News read links to leave the aggregator before reading", () => {
+    const input = "https://news.google.com/read/example?hl=zh-TW";
+    expect(publisherRedirectPending(
+      input,
+      "https://news.google.com/home?hl=zh-TW",
+    )).toBe(true);
+    expect(publisherRedirectPending(
+      input,
+      "https://publisher.example.test/article",
+    )).toBe(false);
+    expect(publisherRedirectPending(
+      "https://news.google.com/home?hl=zh-TW",
+      "https://news.google.com/home?hl=zh-TW",
+    )).toBe(false);
+    expect(publisherRedirectPending(
+      "https://example.test/article",
       "https://example.test/article",
     )).toBe(false);
   });
