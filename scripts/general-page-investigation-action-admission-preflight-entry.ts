@@ -128,6 +128,22 @@ const fixtures: Fixture[] = [
     selectedText: "The Northbridge Prosecutor's Office accused Harbor Corp of filing false invoices in a July 20, 2026 statement.",
   },
   {
+    sampleId: "admit-zh-public-biography",
+    language: "zh-TW",
+    expectedDecision: "admit",
+    title: "演員公開聲明",
+    context: "演員林夏在 2026 年 7 月 10 日的公開聲明中宣布已與導演何川離婚。雙方表示不再回應私人細節。",
+    selectedText: "演員林夏在 2026 年 7 月 10 日的公開聲明中宣布已與導演何川離婚。",
+  },
+  {
+    sampleId: "admit-en-public-biography",
+    language: "en",
+    expectedDecision: "admit",
+    title: "Actor's public statement",
+    context: "Actor Lin Xia announced in a July 10, 2026 public statement that she had divorced director He Chuan. Both said they would not discuss private details.",
+    selectedText: "Actor Lin Xia announced in a July 10, 2026 public statement that she had divorced director He Chuan.",
+  },
+  {
     sampleId: "reject-zh-basic-definition",
     language: "zh-TW",
     expectedDecision: "reject",
@@ -190,6 +206,22 @@ const fixtures: Fixture[] = [
     title: "Film review",
     context: "Reviewer Lin Hai said Far Shore was the best film of the year. The article then introduces the cast.",
     selectedText: "Reviewer Lin Hai said Far Shore was the best film of the year.",
+  },
+  {
+    sampleId: "reject-zh-private-anecdote",
+    language: "zh-TW",
+    expectedDecision: "reject",
+    title: "匿名約會訪談",
+    context: "匿名受訪者說：「我第一次約會時唯一要求是不跟律師交往。」這是私人約會偏好的描述。",
+    selectedText: "匿名受訪者說：「我第一次約會時唯一要求是不跟律師交往。」",
+  },
+  {
+    sampleId: "reject-en-private-anecdote",
+    language: "en",
+    expectedDecision: "reject",
+    title: "Anonymous dating interview",
+    context: "An anonymous participant said, \"My only rule on a first date was no lawyers.\" This describes a private dating preference.",
+    selectedText: "An anonymous participant said, \"My only rule on a first date was no lawyers.\"",
   },
 ];
 
