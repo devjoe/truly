@@ -190,6 +190,76 @@ describe("background General Page investigation preparation", () => {
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ status: "prepared" }));
   });
 
+  it("admits after the bounded foreground burst instead of starving behind the Feed queue", async () => {
+    const scheduler = new ModelWorkScheduler({ foregroundBurstLimit: 3 });
+    let releaseSelection!: () => void;
+    const selectionBlocked = new Promise<void>((resolve) => {
+      releaseSelection = resolve;
+    });
+    const order: string[] = [];
+    const sendMessage = vi.fn();
+    const callAdapter = vi.fn(async (input: any) => {
+      order.push("select");
+      await selectionBlocked;
+      return {
+        ok: true,
+        attempts: 1 as const,
+        value: {
+          schemaVersion: 6 as const,
+          selections: [{
+            candidateId: input.candidates[0].id,
+            exactClaim: input.candidates[0].exactText,
+            sourceQuote: input.candidates[0].exactText,
+            start: input.candidates[0].start,
+            end: input.candidates[0].end,
+          }],
+        },
+      };
+    });
+    const callAdmission = vi.fn(async () => {
+      order.push("admit");
+      return {
+        ok: true,
+        value: { schemaVersion: 1 as const, decision: "admit" as const },
+      };
+    });
+
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler,
+      request,
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_schema",
+      resourceKey: "gx10|fixture-model",
+      callAdapter,
+      callAdmission,
+      sendMessage,
+    });
+    await vi.waitFor(() => expect(order).toEqual(["select"]));
+
+    const feedJobs = [1, 2, 3, 4].map((index) => scheduler.enqueue({
+      id: `feed-${index}`,
+      resourceKey: "gx10|fixture-model",
+      priority: "foreground" as const,
+      run: async () => {
+        order.push(`feed-${index}`);
+        return index;
+      },
+    }));
+    releaseSelection();
+
+    await Promise.all(feedJobs);
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(order).toEqual([
+      "select",
+      "feed-1",
+      "feed-2",
+      "feed-3",
+      "admit",
+      "feed-4",
+    ]);
+  });
+
   it("captures the exact selector envelope only when the volatile audit buffer is enabled", async () => {
     const capture = createGeneralPageInvestigationCaptureBuffer(1);
     const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };

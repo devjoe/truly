@@ -5,9 +5,16 @@ import process from "node:process";
 import { execFileSync } from "node:child_process";
 
 import { buildInvestigationSpanCandidates } from "../src/lib/investigation-span-candidate";
-import { buildGeneralPageInvestigationActionPresentation } from "../src/lib/general-page-investigation-span-adapter";
 import {
+  buildGeneralPageInvestigationActionPresentation,
+} from "../src/lib/general-page-investigation-span-adapter";
+import {
+  buildGeneralPageInvestigationActionAdmissionSystemPrompt,
+} from "../src/lib/general-page-investigation-action-admission";
+import {
+  buildTierBGeneralPageInvestigationActionAdmissionChatBody,
   buildTierBGeneralPageInvestigationSpanAdapterChatBody,
+  callTierBGeneralPageInvestigationActionAdmission,
   callTierBGeneralPageInvestigationSpanAdapter,
 } from "../src/lib/tier-b-client";
 import type { Lang } from "../src/lib/types";
@@ -94,6 +101,8 @@ const endpoint = required("--endpoint");
 const model = required("--model");
 const concurrency = boundedInteger("--concurrency", 2, 1, 4);
 const timeoutMs = boundedInteger("--timeout-ms", 60_000, 5_000, 120_000);
+const withAdmission = process.argv.includes("--with-admission");
+const admissionTimeoutMs = boundedInteger("--admission-timeout-ms", 10_000, 5_000, 30_000);
 const responseFormat = structuredOutputMode();
 if (!outputPath.includes(`${path.sep}tmp${path.sep}private-data${path.sep}runs${path.sep}`)) {
   throw new Error("Synthetic span Adapter preflight output must stay under tmp/private-data/runs");
@@ -117,6 +126,7 @@ globalThis.fetch = (async (input, init) => {
 }) as typeof fetch;
 
 async function evaluate(fixture: SyntheticFixture, index: number) {
+  const started = Date.now();
   const outputLang = outputLanguageFor(fixture, index);
   const candidates = buildInvestigationSpanCandidates(fixture.groundingText, {
     maxCandidates: 48,
@@ -138,12 +148,33 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     // verified separately and must never turn a failed first response green.
     maxProtocolAttempts: 1 as const,
   };
+  const selectorStarted = Date.now();
   const result = await callTierBGeneralPageInvestigationSpanAdapter(request);
+  const selectorLatencyMs = Date.now() - selectorStarted;
   const expected = expectedDecision(fixture);
   const selections = result.value?.selections ?? [];
-  const decision = selections.length > 0 ? "prepared" : "abstain";
-  const presentations = selections.map((selection) =>
-    buildGeneralPageInvestigationActionPresentation(selection, {
+  const selection = selections[0];
+  const admissionStarted = Date.now();
+  const admission = withAdmission && result.ok && selection
+    ? await callTierBGeneralPageInvestigationActionAdmission({
+        endpoint,
+        model,
+        structuredOutputMode: responseFormat,
+        apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
+        timeoutMs: admissionTimeoutMs,
+        selection,
+        authorizedSourceContext: fixture.groundingText,
+        source: fixture.source,
+      })
+    : null;
+  const admissionLatencyMs = admission ? Date.now() - admissionStarted : 0;
+  const protocolOk = result.ok && (!withAdmission || !selection || admission?.ok === true);
+  const admittedSelections = !withAdmission || admission?.value?.decision === "admit"
+    ? selections
+    : [];
+  const decision = admittedSelections.length > 0 ? "prepared" : "abstain";
+  const presentations = admittedSelections.map((selected) =>
+    buildGeneralPageInvestigationActionPresentation(selected, {
       outputLang,
       source: fixture.source,
     }));
@@ -160,7 +191,7 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     outputLang,
     expectedDecision: expected,
     candidateCount: candidates.length,
-    protocolOk: result.ok,
+    protocolOk,
     decision,
     decisionCorrect: decision === expected,
     localeCorrect,
@@ -170,8 +201,21 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     error: result.error,
     issue: result.issue,
     attempts: result.attempts,
+    selectorLatencyMs,
+    admissionLatencyMs,
+    latencyMs: Date.now() - started,
     raw: result.raw,
     value: result.value,
+    admission: admission
+      ? {
+          ok: admission.ok,
+          decision: admission.value?.decision,
+          finishReason: admission.finishReason,
+          usage: admission.usage,
+          error: admission.error,
+          raw: admission.raw,
+        }
+      : null,
     presentations,
   };
 }
@@ -200,6 +244,11 @@ const softNegativeAbstained = softNegativeRows.filter((row) => row.decision === 
 const hardBoundaryAbstained = hardBoundaryRows.filter((row) => row.decision === "abstain").length;
 const localeEligible = results.filter((row) => row.protocolOk && row.decision === "prepared");
 const localeCorrect = localeEligible.filter((row) => row.localeCorrect).length;
+const latencyValues = results.map((row) => row.latencyMs).toSorted((left, right) => left - right);
+const latencyPercentile = (percentile: number) =>
+  latencyValues[Math.max(0, Math.ceil(latencyValues.length * percentile) - 1)] ?? 0;
+const admissionRequested = results.filter((row) => row.admission).length;
+const admissionProtocolSucceeded = results.filter((row) => row.admission?.ok === true).length;
 const gates = {
   protocol: { result: protocolSucceeded, required: fixtures.length, pass: protocolSucceeded === fixtures.length },
   positivePrepared: {
@@ -225,6 +274,17 @@ const gates = {
     required: fixtures.length,
     pass: results.every((row) => row.candidateCount > 0),
   },
+  ...(withAdmission
+    ? {
+        composedLatency: {
+          p95Ms: latencyPercentile(0.95),
+          maxMs: latencyValues.at(-1) ?? 0,
+          requiredP95Ms: 20_000,
+          requiredMaxMs: 40_000,
+          pass: latencyPercentile(0.95) <= 20_000 && (latencyValues.at(-1) ?? 0) <= 40_000,
+        },
+      }
+    : {}),
 };
 const diagnostics = {
   softNegativeAbstained: {
@@ -258,9 +318,28 @@ const body = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
   sourceLang: representative.language,
   outputLang: outputLanguageFor(representative, 0),
 });
+const representativeSelection = {
+  candidateId: representativeCandidates[0].id,
+  exactClaim: representativeCandidates[0].exactText,
+  sourceQuote: representativeCandidates[0].exactText,
+  start: representativeCandidates[0].start,
+  end: representativeCandidates[0].end,
+};
+const admissionBody = withAdmission
+  ? buildTierBGeneralPageInvestigationActionAdmissionChatBody({
+      endpoint,
+      model,
+      structuredOutputMode: responseFormat,
+      selection: representativeSelection,
+      authorizedSourceContext: representative.groundingText,
+      source: representative.source,
+    })
+  : undefined;
 const artifact = {
   schemaVersion: 1,
-  task: "general_page_investigation_span_adapter_synthetic_preflight",
+  task: withAdmission
+    ? "general_page_investigation_two_stage_synthetic_preflight"
+    : "general_page_investigation_span_adapter_synthetic_preflight",
   split: "synthetic-dev",
   passed,
   candidate: {
@@ -275,6 +354,10 @@ const artifact = {
     responseFormat,
     temperature: body.temperature,
     maxTokens: body.max_tokens,
+    ...(withAdmission ? {
+      admissionMaxTokens: admissionBody?.max_tokens,
+      admissionTimeoutMs,
+    } : {}),
     timeoutMs,
     concurrency,
   },
@@ -283,9 +366,14 @@ const artifact = {
       ? sha256CanonicalJson(body.response_format.json_schema.schema)
       : undefined,
     systemPromptSha256: sha256Text(String(body.messages[0]?.content ?? "")),
+    ...(withAdmission ? {
+      admissionSystemPromptSha256: sha256Text(
+        buildGeneralPageInvestigationActionAdmissionSystemPrompt(),
+      ),
+    } : {}),
     fixtureSetSha256: sha256CanonicalJson(fixtures),
     sourceOwnership: "local_exact_span",
-    modelAuthoredFields: ["candidateId"],
+    modelAuthoredFields: withAdmission ? ["candidateId", "decision"] : ["candidateId"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
     repairPolicy: "none_one_shot",
     protocolRetryPolicy: "disabled_for_release_gate",
@@ -312,6 +400,16 @@ const artifact = {
     localeCorrect,
     localeEligible: localeEligible.length,
     oneShotRows: results.filter((row) => row.attempts === 1).length,
+    ...(withAdmission ? {
+      admissionRequested,
+      admissionProtocolSucceeded,
+      admissionProtocolFailed: admissionRequested - admissionProtocolSucceeded,
+      admissionAdmitted: results.filter((row) => row.admission?.decision === "admit").length,
+      admissionRejected: results.filter((row) => row.admission?.decision === "reject").length,
+      latencyP50Ms: latencyPercentile(0.5),
+      latencyP95Ms: latencyPercentile(0.95),
+      latencyMaxMs: latencyValues.at(-1) ?? 0,
+    } : {}),
   },
   gates,
   diagnostics,
