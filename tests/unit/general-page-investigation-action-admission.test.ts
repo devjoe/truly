@@ -70,6 +70,7 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("said, accused, alleged, announced, or issued");
     expect(system).toContain("do not assume the underlying allegation is true");
     expect(system).toContain("only content is an opinion, prediction, recommendation, or subjective ranking");
+    expect(system).toContain("Reviewer Lin said Far Shore was the best film of the year");
     expect(system).toContain("concrete public record, event, or attributed public statement");
     expect(system).not.toContain("appropriately established through public evidence");
     expect(system).toContain("generic definition, feature overview");
