@@ -1,7 +1,7 @@
 # General Page Ranked Actions Release Standard
 
 Status: prospective Page-only product-utility plus selector-non-regression
-standard, revised 2026-07-24
+standard, revised 2026-07-27
 
 This standard governs the General Page Reader's user-facing `待確認事項` /
 `Check these items` actions. It replaces the previous policy in which a local
@@ -10,22 +10,37 @@ It does not authorize release by itself.
 
 ## Product contract
 
-For Page reading, the selector receives a bounded list of exact spans produced
-locally from the current loaded document. In one model call it returns only:
+For Page reading, the Selector receives a bounded list of exact spans produced
+locally from the current loaded document. In the first model job it returns
+only:
 
 ```json
-{"schemaVersion":5,"candidateId":"span:4"}
+{"schemaVersion":6,"candidateId":"span:4"}
 ```
 
-`candidateId` is the single recommendation; `null` is abstention. Local code
-owns the exact displayed text, copy action, localized Gemini handoff, source
-metadata, and Page/Focus session boundary. There is no repair call, second
-ranker, model-authored query, evidence-family guess, or local semantic rewrite.
+`candidateId` is the single proposal; `null` is abstention. If one exact span
+is proposed, a separately scheduled Admission critic receives that same
+locally owned span and authorized same-Page context. It returns only:
 
-The selected action is the Page product recommendation. The UI reveals it only
-after the one-shot selector settles; abstention reveals no investigation
-action. This intentionally avoids publishing weaker alternatives merely to
-increase visible coverage.
+```json
+{"schemaVersion":1,"decision":"admit"}
+```
+
+`reject`, timeout, malformed output, stale scope, or either job's failure
+produces no action. Admission cannot select another span, rewrite text, explain
+its decision, judge truth, or rescue missing words from context. Selector and
+Admission are separate low-priority jobs so user-blocking and bounded Feed work
+may run between them. The panel receives only one final atomic result.
+
+Local code owns the exact displayed text, copy action, localized Gemini
+handoff, source metadata, Page/Focus session boundary, and both stages'
+identity checks. There is no repair call, alternate fallback, second ranker,
+model-authored query, evidence-family guess, or local semantic rewrite.
+
+The admitted action is the Page product recommendation. The UI reveals it only
+after both jobs settle; Selector abstention or Admission rejection reveals no
+investigation action. This intentionally avoids publishing weaker alternatives
+merely to increase visible coverage.
 
 Focus remains a supported reading scope, but this release does not schedule an
 automatic ranked-action selector for Focus and does not render a preparing,
@@ -60,9 +75,14 @@ Local code rejects only failures a user should not receive:
 
 Topic importance, public-interest consequence, preferred evidence family, and
 stylistic atomicity are ranking signals, not local rejection reasons. The
-model may return no actions rather than choose the best of a bad candidate set.
-The one-ID wire also removes duplicate and ordering ambiguity without relying
-on provider-specific JSON Schema features.
+Selector may return no proposal rather than choose the best of a bad candidate
+set. Admission may veto a selected span only when its exact proposition is
+private or subjective-only, structurally unsuitable, generic reference or
+workflow material, ordinary page/catalog/release residue, or otherwise outside
+the proposition-shape contract above. Public interest, consequence,
+controversy, and materiality are not Admission prerequisites. The one-ID plus
+binary-decision wires remove duplicate, ordering, and rewrite ambiguity without
+requiring provider-specific JSON Schema support.
 
 ## Frozen release gates
 
@@ -95,24 +115,33 @@ reviewer preference.
 
 ### A. Synthetic provider compatibility
 
-Run the fixed 30-case bilingual suite three times with `json_schema` and three
-times with `json_object` (180 one-shot calls total). The six formal processes
-run one at a time and may not overlap; bounded concurrency remains `2` inside
-each run. This matches the product scheduler's one-request-at-a-time contract
-for a shared provider/endpoint/model resource while still exercising bounded
-provider concurrency more aggressively than normal runtime.
+Run two fixed bilingual suites:
 
-After all six runs, a local validator must emit one aggregate ceremony receipt
-that binds the clean candidate commit and every source receipt by SHA-256,
-checks three runs per lowering, proves that their recorded time intervals do
-not overlap, and confirms every run passed. Individual receipts are not formal
-Gate A evidence without this aggregate receipt. A deliberately overlapping run
-is a separate, non-gating shared-server load diagnostic: it cannot rescue or
-reject the compatibility candidate.
+- the 30-case end-to-end Selector to Admission suite, three times with
+  `json_schema` and three times with `json_object`;
+- the 24-case direct Admission suite, three times with `json_schema` and three
+  times with `json_object`.
 
-This gate tests provider transport, positive selection capability, and only
-the model-owned boundaries that are non-negotiable regardless of content
-distribution. Its fixed 30 bilingual rows contain:
+The twelve formal processes run one at a time and may not overlap; bounded
+concurrency remains `2` inside each run. This matches the product scheduler's
+one-resource-at-a-time contract while testing both provider lowerings and the
+Admission boundary independently from Selector behavior.
+
+After all twelve runs, a local validator must emit one aggregate ceremony
+receipt that binds the clean candidate commit and every source receipt by
+SHA-256, checks three runs per task and lowering, proves that all recorded time
+intervals are non-overlapping, confirms task-specific prompt and fixture hashes
+do not drift, and confirms every run passed. The direct Admission prompt hash
+must equal the Admission prompt hash embedded in every composed receipt.
+Individual receipts and preliminary diagnostics are not formal Gate A evidence
+without this aggregate receipt. A deliberately overlapping run is a separate,
+non-gating shared-server load diagnostic: it cannot rescue or reject the
+compatibility candidate.
+
+This gate tests provider transport, positive selection capability, binary
+Admission behavior, and only the model-owned boundaries that are
+non-negotiable regardless of content distribution. The fixed 30-row composed
+suite contains:
 
 - 20 positive controls, exactly 10 per language;
 - 4 soft negatives, exactly 2 per language: one private anecdote and one basic
@@ -120,6 +149,17 @@ distribution. Its fixed 30 bilingual rows contain:
 - 6 hard-boundary sentinels, exactly 3 per language: an actually incomplete
   exact span, an untrusted instruction embedded in page data, and a
   private-data request.
+
+The 20 composed positives include broad routine product/menu facts and a
+concrete public-biography statement so Selector cannot silently narrow the
+product contract before Admission runs.
+
+The fixed 24-row direct Admission suite contains exactly 12 rows per language:
+
+- 14 admit controls covering official actions, technical boundaries, routine
+  product/menu facts, attributed accusations, and public biography;
+- 10 reject controls covering basic definitions, incidental release dates,
+  catalog metadata, attributed subjective rankings, and private anecdotes.
 
 The hard sentinels must exercise the shipping exact-span boundary directly. A
 complete sentence that merely says another sentence was truncated is not an
@@ -131,12 +171,14 @@ verifiable facts with promotional language is not a whole-page hard negative.
 
 Required for every run:
 
-- 30/30 protocol-valid outputs;
+- the expected task contract and clean candidate commit;
+- protocol-valid output for every row;
 - an exact known ID or null, with at most one action;
-- 20/20 positive controls selected, so an all-null provider lowering cannot
-  pass compatibility;
-- 6/6 hard-boundary sentinels abstained;
-- all 4 soft-negative decisions reported with no release threshold;
+- for composed runs, 20/20 positive controls admitted, 6/6 hard-boundary
+  sentinels abstained, and all 4 soft-negative decisions reported with no
+  release threshold;
+- for direct Admission runs, 24/24 correct binary decisions, including 14/14
+  admits and 10/10 rejects;
 - no hard-boundary leak, repair, retry, public search, or opened action;
 - deterministic localized Gemini handoff generated from local data;
 - `model.concurrency === 2` and a valid, non-overlapping time interval.

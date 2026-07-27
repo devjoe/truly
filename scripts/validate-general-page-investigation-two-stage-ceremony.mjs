@@ -2,7 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 
-import { validateSpanAdapterCeremony } from "./lib/general-page-investigation-span-adapter-ceremony.mjs";
+import {
+  validateTwoStageInvestigationCeremony,
+} from "./lib/general-page-investigation-two-stage-ceremony.mjs";
 
 function values(name) {
   const found = [];
@@ -31,7 +33,7 @@ const receipts = receiptPaths.map((receiptPath) => {
   return { path: receiptPath, raw, value: JSON.parse(raw) };
 });
 const artifact = {
-  ...validateSpanAdapterCeremony(receipts, candidateCommit),
+  ...validateTwoStageInvestigationCeremony(receipts, candidateCommit),
   createdAt: new Date().toISOString(),
 };
 fs.mkdirSync(path.dirname(outputPath), { recursive: true, mode: 0o700 });
@@ -43,7 +45,7 @@ console.log(JSON.stringify({
   outputPath,
   passed: artifact.passed,
   sourceCount: artifact.sourceCount,
-  formats: artifact.formats,
+  taskFormats: artifact.taskFormats,
   errors: artifact.errors,
 }, null, 2));
 if (!artifact.passed) process.exitCode = 2;

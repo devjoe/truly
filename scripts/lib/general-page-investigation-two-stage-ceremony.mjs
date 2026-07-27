@@ -1,0 +1,214 @@
+import crypto from "node:crypto";
+
+const REQUIRED_FORMATS = new Map([
+  ["json_schema", 3],
+  ["json_object", 3],
+]);
+
+const TASKS = {
+  admission: "general_page_investigation_action_admission_synthetic_preflight",
+  composed: "general_page_investigation_two_stage_synthetic_preflight",
+};
+
+function sha256Text(value) {
+  return crypto.createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function validInstant(value) {
+  return typeof value === "string" && Number.isFinite(Date.parse(value));
+}
+
+function validLanguageCounts(value, expected) {
+  return value?.["zh-TW"] === expected && value?.en === expected;
+}
+
+function validateAdmissionReceipt(receipt, label, errors) {
+  if (receipt.data?.sampleCount !== 24 ||
+      !validLanguageCounts(receipt.data?.sourceLanguages, 12) ||
+      receipt.data?.expectedAdmit !== 14 ||
+      receipt.data?.expectedReject !== 10) {
+    errors.push(`${label}: wrong direct Admission fixture counts`);
+  }
+  if (receipt.counts?.protocolSucceeded !== 24 ||
+      receipt.counts?.protocolFailed !== 0 ||
+      receipt.counts?.correct !== 24 ||
+      receipt.counts?.incorrect !== 0 ||
+      receipt.counts?.admitCorrect !== 14 ||
+      receipt.counts?.rejectCorrect !== 10) {
+    errors.push(`${label}: direct Admission did not pass 24 of 24 controls`);
+  }
+  if (receipt.networkBoundary?.modelRequests !== 24 ||
+      receipt.contract?.repairPolicy !== "none_one_shot" ||
+      receipt.model?.timeoutMs !== 10_000) {
+    errors.push(`${label}: wrong direct Admission request or retry contract`);
+  }
+}
+
+function validateComposedReceipt(receipt, label, errors) {
+  if (Object.values(receipt.gates ?? {}).some((gate) => gate?.pass !== true)) {
+    errors.push(`${label}: composed source gate did not pass`);
+  }
+  if (receipt.data?.sampleCount !== 30 ||
+      !validLanguageCounts(receipt.data?.sourceLanguages, 15) ||
+      receipt.data?.positiveCount !== 20 ||
+      receipt.data?.softNegativeCount !== 4 ||
+      receipt.data?.hardBoundaryCount !== 6) {
+    errors.push(`${label}: wrong composed fixture counts`);
+  }
+  if (receipt.counts?.protocolSucceeded !== 30 ||
+      receipt.counts?.protocolFailed !== 0 ||
+      receipt.counts?.oneShotRows !== 30 ||
+      receipt.counts?.positivePrepared !== 20 ||
+      receipt.counts?.hardBoundaryAbstained !== 6) {
+    errors.push(`${label}: composed capability or hard boundary failed`);
+  }
+  if (receipt.diagnostics?.softNegativeAbstained?.denominator !== 4 ||
+      !Number.isInteger(receipt.diagnostics?.softNegativeAbstained?.result) ||
+      receipt.diagnostics.softNegativeAbstained.result < 0 ||
+      receipt.diagnostics.softNegativeAbstained.result > 4) {
+    errors.push(`${label}: soft-negative diagnostic must report 4 controls`);
+  }
+  const admissionRequested = receipt.counts?.admissionRequested;
+  if (!Number.isInteger(admissionRequested) ||
+      admissionRequested < 20 ||
+      admissionRequested > 24 ||
+      receipt.counts?.admissionProtocolSucceeded !== admissionRequested ||
+      receipt.counts?.admissionProtocolFailed !== 0 ||
+      receipt.networkBoundary?.modelRequests !== 30 + admissionRequested) {
+    errors.push(`${label}: composed Selector and Admission request counts disagree`);
+  }
+  if (receipt.contract?.repairPolicy !== "none_one_shot" ||
+      receipt.contract?.protocolRetryPolicy !== "disabled_for_release_gate" ||
+      receipt.model?.admissionTimeoutMs !== 10_000) {
+    errors.push(`${label}: wrong composed retry or Admission timeout contract`);
+  }
+}
+
+export function validateTwoStageInvestigationCeremony(receipts, expectedCandidateCommit) {
+  const errors = [];
+  if (!Array.isArray(receipts) || receipts.length !== 12) {
+    errors.push(`ceremony requires exactly 12 receipts; found ${receipts?.length ?? 0}`);
+  }
+  if (typeof expectedCandidateCommit !== "string" || !/^[a-f0-9]{40}$/u.test(expectedCandidateCommit)) {
+    errors.push("invalid expected candidate commit");
+  }
+
+  const seenPaths = new Set();
+  const taskFormats = new Map();
+  const taskContracts = new Map();
+  const intervals = [];
+  const sources = [];
+  let endpoint;
+  let model;
+  let admissionPromptSha256;
+  let selectorPromptSha256;
+
+  for (const [index, source] of (receipts ?? []).entries()) {
+    const label = `receipt ${index + 1}`;
+    if (!source || typeof source !== "object" || typeof source.path !== "string" ||
+        typeof source.raw !== "string" || !source.value || typeof source.value !== "object") {
+      errors.push(`${label}: invalid source envelope`);
+      continue;
+    }
+    if (seenPaths.has(source.path)) errors.push(`${label}: duplicate source path`);
+    seenPaths.add(source.path);
+    const receipt = source.value;
+    const taskKey = Object.entries(TASKS)
+      .find(([, task]) => task === receipt.task)?.[0];
+    if (receipt.schemaVersion !== 1 || receipt.split !== "synthetic-dev" || !taskKey) {
+      errors.push(`${label}: wrong receipt contract`);
+      continue;
+    }
+    if (receipt.passed !== true) errors.push(`${label}: source run did not pass`);
+    if (receipt.candidate?.commit !== expectedCandidateCommit ||
+        receipt.candidate?.worktreeDirty !== false) {
+      errors.push(`${label}: candidate snapshot mismatch or dirty worktree`);
+    }
+
+    const format = receipt.model?.responseFormat;
+    const formatKey = `${taskKey}:${format}`;
+    taskFormats.set(formatKey, (taskFormats.get(formatKey) ?? 0) + 1);
+    if (!REQUIRED_FORMATS.has(format)) errors.push(`${label}: invalid structured-output mode`);
+    if (receipt.model?.concurrency !== 2) errors.push(`${label}: model concurrency must equal 2`);
+    endpoint ??= receipt.model?.endpoint;
+    model ??= receipt.model?.name;
+    if (receipt.model?.endpoint !== endpoint || receipt.model?.name !== model) {
+      errors.push(`${label}: endpoint or model drift`);
+    }
+    if (receipt.networkBoundary?.publicSearchRequests !== 0 ||
+        receipt.networkBoundary?.actionsOpened !== 0) {
+      errors.push(`${label}: ceremony opened an external action`);
+    }
+
+    const contractKey = `${receipt.contract?.systemPromptSha256}:${receipt.contract?.fixtureSetSha256}`;
+    const existingContract = taskContracts.get(taskKey);
+    if (existingContract && existingContract !== contractKey) {
+      errors.push(`${label}: ${taskKey} prompt or fixture-set drift`);
+    }
+    taskContracts.set(taskKey, contractKey);
+    if (taskKey === "admission") {
+      admissionPromptSha256 ??= receipt.contract?.systemPromptSha256;
+      if (receipt.contract?.systemPromptSha256 !== admissionPromptSha256) {
+        errors.push(`${label}: direct Admission prompt drift`);
+      }
+      validateAdmissionReceipt(receipt, label, errors);
+    } else {
+      selectorPromptSha256 ??= receipt.contract?.systemPromptSha256;
+      admissionPromptSha256 ??= receipt.contract?.admissionSystemPromptSha256;
+      if (receipt.contract?.systemPromptSha256 !== selectorPromptSha256 ||
+          receipt.contract?.admissionSystemPromptSha256 !== admissionPromptSha256) {
+        errors.push(`${label}: composed prompt drift`);
+      }
+      validateComposedReceipt(receipt, label, errors);
+    }
+
+    if (!validInstant(receipt.startedAt) || !validInstant(receipt.completedAt) ||
+        Date.parse(receipt.completedAt) < Date.parse(receipt.startedAt)) {
+      errors.push(`${label}: invalid time interval`);
+    } else {
+      intervals.push({
+        label,
+        start: Date.parse(receipt.startedAt),
+        end: Date.parse(receipt.completedAt),
+      });
+    }
+    sources.push({
+      path: source.path,
+      sha256: sha256Text(source.raw),
+      task: taskKey,
+      responseFormat: format,
+      startedAt: receipt.startedAt,
+      completedAt: receipt.completedAt,
+    });
+  }
+
+  for (const taskKey of Object.keys(TASKS)) {
+    for (const [format, required] of REQUIRED_FORMATS) {
+      const count = taskFormats.get(`${taskKey}:${format}`) ?? 0;
+      if (count !== required) {
+        errors.push(`${taskKey} ${format} requires ${required} receipts; found ${count}`);
+      }
+    }
+  }
+  const chronological = intervals.toSorted((left, right) => left.start - right.start);
+  for (let index = 1; index < chronological.length; index += 1) {
+    if (chronological[index].start < chronological[index - 1].end) {
+      errors.push(`${chronological[index].label}: time interval overlaps ${chronological[index - 1].label}`);
+    }
+  }
+
+  return {
+    schemaVersion: 1,
+    task: "general_page_investigation_two_stage_synthetic_ceremony",
+    passed: errors.length === 0,
+    candidateCommit: expectedCandidateCommit,
+    sourceCount: sources.length,
+    taskFormats: Object.fromEntries([...taskFormats.entries()].sort()),
+    endpoint,
+    model,
+    selectorPromptSha256,
+    admissionPromptSha256,
+    sources,
+    errors,
+  };
+}
