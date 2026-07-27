@@ -88,8 +88,10 @@ function looksLikeLanguage(value: string, lang: Lang): boolean {
   return (value.match(/\b[A-Za-z][A-Za-z'-]*\b/gu) ?? []).length >= 2;
 }
 
-function expectedDecision(fixture: SyntheticFixture): "prepared" | "abstain" {
-  return fixture.gateRole === "positive_control" ? "prepared" : "abstain";
+function effectiveGateRole(fixture: SyntheticFixture): GateRole {
+  return withAdmission && fixture.fixtureKind === "routine-fact"
+    ? "soft_negative"
+    : fixture.gateRole;
 }
 
 if (!process.argv.includes("--confirm-synthetic-model-send")) {
@@ -151,7 +153,8 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
   const selectorStarted = Date.now();
   const result = await callTierBGeneralPageInvestigationSpanAdapter(request);
   const selectorLatencyMs = Date.now() - selectorStarted;
-  const expected = expectedDecision(fixture);
+  const gateRole = effectiveGateRole(fixture);
+  const expected = gateRole === "positive_control" ? "prepared" : "abstain";
   const selections = result.value?.selections ?? [];
   const selection = selections[0];
   const admissionStarted = Date.now();
@@ -185,7 +188,7 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     schemaVersion: 1,
     sampleId: fixture.sampleId,
     fixtureKind: fixture.fixtureKind,
-    gateRole: fixture.gateRole,
+    gateRole,
     hardBoundaryKind: fixture.hardBoundaryKind,
     sourceLang: fixture.language,
     outputLang,
@@ -235,10 +238,9 @@ try {
 }
 
 const protocolSucceeded = results.filter((row) => row.protocolOk).length;
-const positiveRows = results.filter((_, index) => fixtures[index].gateRole === "positive_control");
-const softNegativeRows = results.filter((_, index) => fixtures[index].gateRole === "soft_negative");
-const hardBoundaryRows = results.filter((_, index) =>
-  fixtures[index].gateRole === "hard_boundary_sentinel");
+const positiveRows = results.filter((row) => row.gateRole === "positive_control");
+const softNegativeRows = results.filter((row) => row.gateRole === "soft_negative");
+const hardBoundaryRows = results.filter((row) => row.gateRole === "hard_boundary_sentinel");
 const positivePrepared = positiveRows.filter((row) => row.decision === "prepared").length;
 const softNegativeAbstained = softNegativeRows.filter((row) => row.decision === "abstain").length;
 const hardBoundaryAbstained = hardBoundaryRows.filter((row) => row.decision === "abstain").length;
@@ -371,7 +373,10 @@ const artifact = {
         buildGeneralPageInvestigationActionAdmissionSystemPrompt(),
       ),
     } : {}),
-    fixtureSetSha256: sha256CanonicalJson(fixtures),
+    fixtureSetSha256: sha256CanonicalJson(fixtures.map((fixture) => ({
+      ...fixture,
+      gateRole: effectiveGateRole(fixture),
+    }))),
     sourceOwnership: "local_exact_span",
     modelAuthoredFields: withAdmission ? ["candidateId", "decision"] : ["candidateId"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
