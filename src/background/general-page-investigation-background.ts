@@ -69,8 +69,10 @@ function investigationSourceLanguage(text: string, fallback?: Lang): Lang | unde
 }
 
 /**
- * Starts one low-priority two-stage job. The first model call proposes one
- * locally owned exact span; the second only admits or rejects that selection.
+ * Starts two low-priority stages. The first model call proposes one locally
+ * owned exact span; the second only admits or rejects that selection. Keeping
+ * the stages as separate scheduler jobs lets already-queued user work run
+ * between them, while the panel still receives only one final atomic result.
  * Reading-model claims remain outside the action identity boundary.
  */
 export function scheduleGeneralPageInvestigationPreparation(
@@ -109,22 +111,30 @@ export function scheduleGeneralPageInvestigationPreparation(
   };
   maybeCaptureGeneralPageInvestigation(options.capture, request, adapterRequest);
   const id = `general-page-investigation:${request.tabId}:${request.scope}:${request.analysisKey}`;
-  const work = options.scheduler.enqueue({
-    id,
+  const selectionWork = options.scheduler.enqueue({
+    id: `${id}:select`,
     resourceKey: options.resourceKey,
     priority: "derived",
-    dedupeKey: id,
-    supersedeKey: `general-page-investigation:${request.tabId}:${request.scope}`,
-    run: async () => {
-      const selectionResult = await callAdapter(adapterRequest);
-      if (!selectionResult.ok || !selectionResult.value) {
-        return { status: "unavailable" as const };
-      }
-      const selection = selectionResult.value.selections[0];
-      if (!selection) {
-        return { status: "ineligible" as const };
-      }
-      const admissionResult = await callAdmission({
+    dedupeKey: `${id}:select`,
+    supersedeKey: `general-page-investigation:${request.tabId}:${request.scope}:select`,
+    run: () => callAdapter(adapterRequest),
+  });
+
+  void selectionWork.then(async (selectionResult) => {
+    if (!selectionResult.ok || !selectionResult.value) {
+      return { status: "unavailable" as const };
+    }
+    const selection = selectionResult.value.selections[0];
+    if (!selection) {
+      return { status: "ineligible" as const };
+    }
+    const admissionResult = await options.scheduler.enqueue({
+      id: `${id}:admit`,
+      resourceKey: options.resourceKey,
+      priority: "derived",
+      dedupeKey: `${id}:admit`,
+      supersedeKey: `general-page-investigation:${request.tabId}:${request.scope}:admit`,
+      run: () => callAdmission({
         endpoint: options.endpoint,
         model: options.model,
         structuredOutputMode: options.structuredOutputMode,
@@ -132,18 +142,16 @@ export function scheduleGeneralPageInvestigationPreparation(
         selection,
         authorizedSourceContext: request.context.mainText,
         source,
-      });
-      if (!admissionResult.ok || !admissionResult.value) {
-        return { status: "unavailable" as const };
-      }
-      if (admissionResult.value.decision === "reject") {
-        return { status: "ineligible" as const };
-      }
-      return { status: "prepared" as const, selection };
-    },
-  });
-
-  void work.then((result) => {
+      }),
+    });
+    if (!admissionResult.ok || !admissionResult.value) {
+      return { status: "unavailable" as const };
+    }
+    if (admissionResult.value.decision === "reject") {
+      return { status: "ineligible" as const };
+    }
+    return { status: "prepared" as const, selection };
+  }).then((result) => {
     if (result.status === "unavailable") {
       sendSafely(options.sendMessage, {
         type: "GENERAL_PAGE_INVESTIGATION_RESULT",

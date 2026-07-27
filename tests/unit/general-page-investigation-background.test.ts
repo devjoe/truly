@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { scheduleGeneralPageInvestigationPreparation } from "@src/background/general-page-investigation-background";
+import { ModelWorkScheduler } from "@src/background/model-work-scheduler";
 import { createGeneralPageInvestigationCaptureBuffer } from "@src/background/general-page-investigation-capture";
 import type { GeneralPageAnalysisRequestMsg } from "@src/lib/messages";
 
@@ -34,11 +35,11 @@ const request: GeneralPageAnalysisRequestMsg = {
 };
 
 describe("background General Page investigation preparation", () => {
-  it("runs one derived span-selection job and reveals the locally owned batch atomically", async () => {
-    let capturedJob: any;
+  it("runs two derived stages and reveals the locally owned action atomically", async () => {
+    const capturedJobs: any[] = [];
     const scheduler = {
       enqueue: vi.fn(async (job: any) => {
-        capturedJob = job;
+        capturedJobs.push(job);
         return job.run();
       }),
     };
@@ -75,10 +76,20 @@ describe("background General Page investigation preparation", () => {
     })).toBe(true);
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
 
-    expect(capturedJob).toMatchObject({
-      priority: "derived",
-      supersedeKey: "general-page-investigation:42:page",
-    });
+    expect(capturedJobs).toHaveLength(2);
+    expect(capturedJobs.map((job) => ({
+      priority: job.priority,
+      supersedeKey: job.supersedeKey,
+    }))).toEqual([
+      {
+        priority: "derived",
+        supersedeKey: "general-page-investigation:42:page:select",
+      },
+      {
+        priority: "derived",
+        supersedeKey: "general-page-investigation:42:page:admit",
+      },
+    ]);
     expect(callAdapter).toHaveBeenCalledTimes(1);
     expect(callAdmission).toHaveBeenCalledTimes(1);
     expect(callAdmission).toHaveBeenCalledWith(expect.objectContaining({
@@ -112,6 +123,70 @@ describe("background General Page investigation preparation", () => {
         askAiPrompt: expect.stringContaining("原文陳述：衛生局命令遠帆公司在七月三十一日前完成下架"),
       }],
     });
+  });
+
+  it("lets queued user-blocking work run between selection and admission", async () => {
+    const scheduler = new ModelWorkScheduler();
+    let releaseSelection!: () => void;
+    const selectionBlocked = new Promise<void>((resolve) => {
+      releaseSelection = resolve;
+    });
+    const order: string[] = [];
+    const sendMessage = vi.fn();
+    const callAdapter = vi.fn(async (input: any) => {
+      order.push("select");
+      await selectionBlocked;
+      return {
+        ok: true,
+        attempts: 1 as const,
+        value: {
+          schemaVersion: 6 as const,
+          selections: [{
+            candidateId: input.candidates[0].id,
+            exactClaim: input.candidates[0].exactText,
+            sourceQuote: input.candidates[0].exactText,
+            start: input.candidates[0].start,
+            end: input.candidates[0].end,
+          }],
+        },
+      };
+    });
+    const callAdmission = vi.fn(async () => {
+      order.push("admit");
+      return {
+        ok: true,
+        value: { schemaVersion: 1 as const, decision: "admit" as const },
+      };
+    });
+
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler,
+      request,
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_schema",
+      resourceKey: "gx10|fixture-model",
+      callAdapter,
+      callAdmission,
+      sendMessage,
+    });
+    await vi.waitFor(() => expect(order).toEqual(["select"]));
+
+    const userWork = scheduler.enqueue({
+      id: "foreground-user-action",
+      resourceKey: "gx10|fixture-model",
+      priority: "user_blocking",
+      run: async () => {
+        order.push("user");
+        return "done";
+      },
+    });
+    releaseSelection();
+
+    await expect(userWork).resolves.toBe("done");
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    expect(order).toEqual(["select", "user", "admit"]);
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ status: "prepared" }));
   });
 
   it("captures the exact selector envelope only when the volatile audit buffer is enabled", async () => {
@@ -269,7 +344,7 @@ describe("background General Page investigation preparation", () => {
       });
       await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
 
-      expect(scheduler.enqueue).toHaveBeenCalledTimes(1);
+      expect(scheduler.enqueue).toHaveBeenCalledTimes(2);
       expect(callAdmission).toHaveBeenCalledTimes(1);
       expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
         status: admissionResult.ok ? "ineligible" : "unavailable",
