@@ -333,6 +333,11 @@ async function main() {
           const before = await captureCount(worker, expectedScope);
           let stage = "open-source";
           let source = null;
+          console.error(
+            `[runtime-envelope-acquisition] ${samples.length + 1}/${args.count}; ` +
+            `failures=${sourceFailures.length}/${args.maxSourceFailures}; ` +
+            `stage=${stage}; origin=${new URL(url).origin}`,
+          );
           try {
             source = await openSource(worker, args.endpoint, url, args.timeoutMs);
             openedTabIds.push(source.tab.id);
@@ -363,6 +368,11 @@ async function main() {
             });
             assertSelectionCaptureMatch(capture, selection);
             samples.push(sampleMetadata(url, capture, selection));
+            console.error(
+              `[runtime-envelope-acquisition] captured=${samples.length}/${args.count}; ` +
+              `failures=${sourceFailures.length}/${args.maxSourceFailures}; ` +
+              `origin=${new URL(url).origin}`,
+            );
           } catch (error) {
             if (source) await removeCapturesForTab(worker, source.tab.id);
             if (!canContinueAfterSourceFailure(sourceFailures.length, args.maxSourceFailures)) {
@@ -373,6 +383,11 @@ async function main() {
               stage,
               message: error instanceof Error ? error.message : String(error),
             });
+            console.error(
+              `[runtime-envelope-acquisition] source-failure=${sourceFailures.length}/` +
+              `${args.maxSourceFailures}; stage=${stage}; origin=${new URL(url).origin}; ` +
+              `${error instanceof Error ? error.message : String(error)}`,
+            );
           } finally {
             source?.client.close();
             if (source) {
@@ -480,21 +495,28 @@ async function advanceFacebookFeed(client, scrolls) {
 async function openSource(worker, endpoint, url, timeoutMs) {
   const auditUrl = withAuditMarker(url);
   const tab = await createInactiveTab(worker, auditUrl);
-  const target = await waitForTabTarget(endpoint, tab.id, auditUrl, timeoutMs);
-  const client = connectCdp(target.webSocketDebuggerUrl, { commandTimeoutMs: 10_000 });
-  await configureLowResourcePageTarget(client);
-  if (/^https?:\/\/(?:www\.)?facebook\.com\//.test(url)) {
-    await emulateBackgroundPageVisibility(client);
+  let client = null;
+  try {
+    const target = await waitForTabTarget(endpoint, tab.id, auditUrl, timeoutMs);
+    client = connectCdp(target.webSocketDebuggerUrl, { commandTimeoutMs: 10_000 });
+    await configureLowResourcePageTarget(client);
+    if (/^https?:\/\/(?:www\.)?facebook\.com\//.test(url)) {
+      await emulateBackgroundPageVisibility(client);
+    }
+    await waitForDocument(client, timeoutMs);
+    await waitForHttpLocation(client, timeoutMs);
+    await waitForPublisherRedirect(client, url, timeoutMs);
+    await waitForDocument(client, timeoutMs);
+    await sleep(750);
+    const finalUrl = await client.evaluate("location.href");
+    const title = await client.evaluate("document.title");
+    const matchUrl = await client.evaluate("document.querySelector('link[rel=\"canonical\"]')?.href || location.href");
+    return { tab: { ...tab, url: finalUrl }, target, client, title, matchUrl };
+  } catch (error) {
+    client?.close();
+    await removeTab(worker, tab.id);
+    throw error;
   }
-  await waitForDocument(client, timeoutMs);
-  await waitForHttpLocation(client, timeoutMs);
-  await waitForPublisherRedirect(client, url, timeoutMs);
-  await waitForDocument(client, timeoutMs);
-  await sleep(750);
-  const finalUrl = await client.evaluate("location.href");
-  const title = await client.evaluate("document.title");
-  const matchUrl = await client.evaluate("document.querySelector('link[rel=\"canonical\"]')?.href || location.href");
-  return { tab: { ...tab, url: finalUrl }, target, client, title, matchUrl };
 }
 
 async function waitForPublisherRedirect(client, inputUrl, timeoutMs) {

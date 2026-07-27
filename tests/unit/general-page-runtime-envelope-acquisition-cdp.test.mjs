@@ -395,6 +395,16 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     expect(source).toContain("source.matchUrl");
   });
 
+  it("removes a source tab when opening it fails before ownership reaches the batch loop", () => {
+    const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
+    const open = source.indexOf("async function openSource");
+    const cleanup = source.indexOf("await removeTab(worker, tab.id)", open);
+    const rethrow = source.indexOf("throw error", cleanup);
+    expect(open).toBeGreaterThan(0);
+    expect(cleanup).toBeGreaterThan(open);
+    expect(rethrow).toBeGreaterThan(cleanup);
+  });
+
   it("does not require a Page investigation action before requesting a Focus target", () => {
     const source = fs.readFileSync(new URL("../../scripts/acquire-general-page-runtime-envelopes-cdp.mjs", import.meta.url), "utf8");
     const focusSelection = source.indexOf('stage = "select-focus-text"');
