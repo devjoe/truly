@@ -64,11 +64,19 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("materially help a reader");
     expect(system).toContain("private feeling, intention, preference");
     expect(system).toContain("generic definition, feature overview");
+    expect(system).toContain("complete standalone proposition");
+    expect(system).toContain("mere checkability is insufficient");
+    expect(system).toContain("release, publication, copyright, download-count");
+    expect(system).toContain("event opening earlier this week");
+    expect(system).toContain("The X API provides a method for");
+    expect(system).toContain("Original Publication ... 1950");
+    expect(system).toContain("When any checklist item is uncertain, reject");
     expect(system).toContain("Judge the exact sentence as a whole");
     expect(system).toContain("Do not rewrite or replace it");
     expect(user).toContain(selection.exactClaim);
     expect(user).toContain("Nearby authorized Page context");
     expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
+    expect(user).toContain("Apply all five checklist items");
   });
 
   it("requires the selected claim to remain exactly grounded", () => {
@@ -92,7 +100,7 @@ describe("General Page investigation action admission critic", () => {
     expect(body.response_format).toMatchObject({
       type: "json_schema",
       json_schema: {
-        name: "truly_general_page_investigation_action_admission_v1",
+        name: "truly_general_page_investigation_action_admission_v2",
         strict: true,
       },
     });

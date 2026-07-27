@@ -1149,7 +1149,7 @@ export function buildTierBGeneralPageInvestigationActionAdmissionChatBody(
       ? {
           type: "json_schema",
           json_schema: {
-            name: "truly_general_page_investigation_action_admission_v1",
+            name: "truly_general_page_investigation_action_admission_v2",
             strict: true,
             schema: GENERAL_PAGE_INVESTIGATION_ACTION_ADMISSION_JSON_SCHEMA,
           },
