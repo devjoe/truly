@@ -68,6 +68,8 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("mere checkability is insufficient");
     expect(system).toContain("release, publication, copyright, download-count");
     expect(system).toContain("event opening earlier this week");
+    expect(system).toContain("On a What's New page");
+    expect(system).toContain("support deadline, compatibility change, or security event");
     expect(system).toContain("The X API provides a method for");
     expect(system).toContain("Original Publication ... 1950");
     expect(system).toContain("When any checklist item is uncertain, reject");
@@ -100,7 +102,7 @@ describe("General Page investigation action admission critic", () => {
     expect(body.response_format).toMatchObject({
       type: "json_schema",
       json_schema: {
-        name: "truly_general_page_investigation_action_admission_v2",
+        name: "truly_general_page_investigation_action_admission_v3",
         strict: true,
       },
     });
