@@ -113,7 +113,10 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(system).toContain("concrete public record, event, or attributed public statement");
     expect(system).toContain("biography, relationships, entertainment, or celebrity");
     expect(system).toContain("unnamed hearsay");
+    expect(system).toContain("anonymous anecdote generalized to a wider group");
+    expect(system).toContain("identifies no study, organization, dataset");
     expect(system).toContain("navigation or interface text");
+    expect(system).toContain("flattens an article title, section heading, publisher label, or media credit");
     expect(system).toContain("incidental catalog metadata");
     expect(system).toContain("primary purpose is a public record, catalog entry");
     expect(system).toContain("where-to-watch, where-to-buy");
@@ -123,6 +126,11 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(system).toContain("categorical wording");
     expect(system).toContain("condition, exception, attribution, or scope limit");
     expect(system).toContain("concrete version or compatibility boundary");
+    expect(system).toContain("named public system, scientific or health fact");
+    expect(system).toContain("software, API, language, or developer documentation");
+    expect(system).toContain("Literal checkability is not enough");
+    expect(system).toContain("attributed slogan, insult, or inflammatory metaphor");
+    expect(system).toContain("so ... must have");
     expect(system).toContain("Do not decide whether a candidate is true");
     expect(system).toContain("Use schemaVersion 6");
     expect(system).toContain("Entertainment, sports, consumer");

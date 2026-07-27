@@ -74,6 +74,12 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("concrete public record, event, or attributed public statement");
     expect(system).not.toContain("appropriately established through public evidence");
     expect(system).toContain("generic definition, feature overview");
+    expect(system).toContain("Literal checkability is not enough");
+    expect(system).toContain("named public system, scientific or health fact");
+    expect(system).toContain("software, API, language, or developer documentation");
+    expect(system).toContain("routine developer-documentation fact");
+    expect(system).toContain("anonymous anecdote generalized to a wider group");
+    expect(system).toContain("identifies no study, organization, dataset");
     expect(system).toContain("complete standalone proposition");
     expect(system).toContain("release, publication, copyright, download-count");
     expect(system).toContain("event opening earlier this week");
@@ -86,7 +92,10 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("123456 Title The North Wind Original Publication");
     expect(system).toContain("where-to-watch, where-to-buy");
     expect(system).toContain("headings, version badges, permission labels");
+    expect(system).toContain("article title, section heading, publisher label, or media credit");
     expect(system).toContain("metaphor, nickname, analogy, or cultural allusion");
+    expect(system).toContain("slogan, insult, or metaphor");
+    expect(system).toContain("so ... must have");
     expect(system).toContain("When any checklist item is uncertain, reject");
     expect(system).toContain("Judge the exact sentence as a whole");
     expect(system).toContain("Do not rewrite or replace it");
