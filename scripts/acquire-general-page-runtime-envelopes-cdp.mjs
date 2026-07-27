@@ -140,6 +140,11 @@ export async function emulateBackgroundPageVisibility(client) {
   await client.send("Page.setWebLifecycleState", { state: "active" }).catch(() => undefined);
 }
 
+export async function configureLowResourcePageTarget(client) {
+  await client.send("Network.enable").catch(() => undefined);
+  await client.send("Network.setCacheDisabled", { cacheDisabled: true }).catch(() => undefined);
+}
+
 export function selectFacebookMessageInDocument(
   documentRef,
   selection,
@@ -477,6 +482,7 @@ async function openSource(worker, endpoint, url, timeoutMs) {
   const tab = await createInactiveTab(worker, auditUrl);
   const target = await waitForTabTarget(endpoint, tab.id, auditUrl, timeoutMs);
   const client = connectCdp(target.webSocketDebuggerUrl, { commandTimeoutMs: 10_000 });
+  await configureLowResourcePageTarget(client);
   if (/^https?:\/\/(?:www\.)?facebook\.com\//.test(url)) {
     await emulateBackgroundPageVisibility(client);
   }

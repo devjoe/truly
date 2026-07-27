@@ -7,6 +7,7 @@ import {
   acquisitionUrlsFromCapturePacket,
   assertSelectionCaptureMatch,
   canContinueAfterSourceFailure,
+  configureLowResourcePageTarget,
   emulateBackgroundPageVisibility,
   equivalentPageCaptureMetadata,
   FACEBOOK_MESSAGE_SELECTORS,
@@ -360,6 +361,22 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
         call.method === "Runtime.evaluate" &&
         call.expression.includes("window.focus")),
     ).toBe(false);
+  });
+
+  it("disables source-tab network cache to bound audit disk growth", async () => {
+    const calls = [];
+    const client = {
+      send: async (method, params) => {
+        calls.push({ method, params });
+      },
+    };
+
+    await configureLowResourcePageTarget(client);
+
+    expect(calls).toContainEqual({
+      method: "Network.setCacheDisabled",
+      params: { cacheDisabled: true },
+    });
   });
 
   it("uses a dedicated inactive side panel instead of touching the user's panel", () => {
