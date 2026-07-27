@@ -112,6 +112,22 @@ const fixtures: Fixture[] = [
     selectedText: "Riverside Cafe added lemon soda to its summer menu.",
   },
   {
+    sampleId: "admit-zh-attributed-accusation",
+    language: "zh-TW",
+    expectedDecision: "admit",
+    title: "檢察署新聞稿",
+    context: "青河市檢察署在 2026 年 7 月 20 日的新聞稿中指控海港公司提交不實發票。案件仍待法院審理。",
+    selectedText: "青河市檢察署在 2026 年 7 月 20 日的新聞稿中指控海港公司提交不實發票。",
+  },
+  {
+    sampleId: "admit-en-attributed-accusation",
+    language: "en",
+    expectedDecision: "admit",
+    title: "Prosecutor's Office statement",
+    context: "The Northbridge Prosecutor's Office accused Harbor Corp of filing false invoices in a July 20, 2026 statement. The case remains before the court.",
+    selectedText: "The Northbridge Prosecutor's Office accused Harbor Corp of filing false invoices in a July 20, 2026 statement.",
+  },
+  {
     sampleId: "reject-zh-basic-definition",
     language: "zh-TW",
     expectedDecision: "reject",
@@ -158,6 +174,22 @@ const fixtures: Fixture[] = [
     title: "Project Gutenberg catalog",
     context: "Original Publication: Harbor Press, 1900. Ebook release date: July 20, 2026.",
     selectedText: "Original Publication: Harbor Press, 1900.",
+  },
+  {
+    sampleId: "reject-zh-attributed-opinion",
+    language: "zh-TW",
+    expectedDecision: "reject",
+    title: "電影評論",
+    context: "影評人林海說《遠岸》是今年最好看的電影。文章接著介紹演員陣容。",
+    selectedText: "影評人林海說《遠岸》是今年最好看的電影。",
+  },
+  {
+    sampleId: "reject-en-attributed-opinion",
+    language: "en",
+    expectedDecision: "reject",
+    title: "Film review",
+    context: "Reviewer Lin Hai said Far Shore was the best film of the year. The article then introduces the cast.",
+    selectedText: "Reviewer Lin Hai said Far Shore was the best film of the year.",
   },
 ];
 

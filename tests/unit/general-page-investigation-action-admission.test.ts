@@ -66,6 +66,9 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("entertainment, sport, consumer, product, menu, celebrity");
     expect(system).toContain("Health or public consequences may raise priority, but are not required");
     expect(system).toContain("private feeling, intention, preference");
+    expect(system).toContain("Attribution changes the proposition being checked");
+    expect(system).toContain("said, accused, alleged, announced, or issued");
+    expect(system).toContain("do not assume the underlying allegation is true");
     expect(system).toContain("generic definition, feature overview");
     expect(system).toContain("complete standalone proposition");
     expect(system).toContain("release, publication, copyright, download-count");
@@ -104,7 +107,7 @@ describe("General Page investigation action admission critic", () => {
     expect(body.response_format).toMatchObject({
       type: "json_schema",
       json_schema: {
-        name: "truly_general_page_investigation_action_admission_v4",
+        name: "truly_general_page_investigation_action_admission_v5",
         strict: true,
       },
     });

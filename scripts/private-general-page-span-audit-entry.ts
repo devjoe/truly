@@ -411,7 +411,7 @@ const meta = {
   contract: {
     selector: "ranked_exact_span_proposal_v6",
     selectorPromptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
-    admission: "reader_action_admission_v4",
+    admission: "reader_action_admission_v5",
     admissionPromptSha256: sha256Text(buildGeneralPageInvestigationActionAdmissionSystemPrompt()),
     responseFormat: structuredOutputMode,
     outputLanguage: outputLang,
