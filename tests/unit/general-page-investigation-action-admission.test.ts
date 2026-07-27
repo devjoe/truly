@@ -80,6 +80,12 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("support deadline, compatibility change, or security event");
     expect(system).toContain("The X API provides a method for");
     expect(system).toContain("Original Publication ... 1950");
+    expect(system).toContain("primary purpose is a public record, catalog entry");
+    expect(system).toContain("primary-record rule takes priority");
+    expect(system).toContain("123456 Title The North Wind Original Publication");
+    expect(system).toContain("where-to-watch, where-to-buy");
+    expect(system).toContain("headings, version badges, permission labels");
+    expect(system).toContain("metaphor, nickname, analogy, or cultural allusion");
     expect(system).toContain("When any checklist item is uncertain, reject");
     expect(system).toContain("Judge the exact sentence as a whole");
     expect(system).toContain("Do not rewrite or replace it");

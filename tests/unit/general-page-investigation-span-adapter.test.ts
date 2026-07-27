@@ -114,7 +114,10 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(system).toContain("biography, relationships, entertainment, or celebrity");
     expect(system).toContain("unnamed hearsay");
     expect(system).toContain("navigation or interface text");
-    expect(system).toContain("catalog metadata");
+    expect(system).toContain("incidental catalog metadata");
+    expect(system).toContain("primary purpose is a public record, catalog entry");
+    expect(system).toContain("where-to-watch, where-to-buy");
+    expect(system).toContain("metaphor, nickname, analogy, or cultural allusion");
     expect(system).toContain("candidate list as source order");
     expect(system).toContain("immediate neighboring candidates");
     expect(system).toContain("categorical wording");
@@ -135,7 +138,7 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
     expect(user).toContain("## Proposal");
     expect(user).toContain("externally checkable proposition");
-    expect(user).toContain("private, subjective, generic, or catalog material");
+    expect(user).toContain("private, subjective, generic, incidental-metadata, or utility material");
     expect(user).toContain("Return null only when no complete externally checkable proposition exists");
     expect(user).toMatch(/Return one JSON object with schemaVersion 6 and candidateId set to one supplied ID or null\.$/u);
     expect(user).not.toMatch(/"start":|"end":/u);
