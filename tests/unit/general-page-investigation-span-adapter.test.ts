@@ -109,7 +109,9 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(system).not.toContain('Return exactly {"schemaVersion":6,"candidateId":"span:1"}');
     expect(system).toContain("subject or referent unresolved");
     expect(system).toContain("Context may reveal a defect but may not repair");
-    expect(system).toContain("Prefer public facts over private feelings");
+    expect(system).toContain("Prefer concrete externally decidable facts");
+    expect(system).toContain("concrete public record, event, or attributed public statement");
+    expect(system).toContain("biography, relationships, entertainment, or celebrity");
     expect(system).toContain("unnamed hearsay");
     expect(system).toContain("navigation or interface text");
     expect(system).toContain("catalog metadata");
@@ -127,6 +129,8 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(system).toContain("sole claim-identity boundary");
     expect(system).toContain("schemaVersion 6");
     expect(user).toContain('"id":"span:1"');
+    expect(user).toContain("Target: current Page content");
+    expect(user).not.toContain("Target: main article");
     expect(user).toContain("## Authorized Page context — judgment context only");
     expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
     expect(user).toContain("## Proposal");

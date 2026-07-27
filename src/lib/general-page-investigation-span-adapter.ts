@@ -105,7 +105,7 @@ export function buildGeneralPageInvestigationSpanAdapterSystemPrompt(): string {
     "Local code owns the exact claim, source quote, user-visible copy, and AI handoff prompt. Never write or rewrite claim text.",
     "First discard structurally unusable spans, then rank the rest. A candidate must be a complete standalone proposition with an identifiable subject and event or property that realistic independent public evidence could directly support or contradict.",
     "Reject a span whose own text leaves a subject or referent unresolved, ends with ... or …, is visibly cut off, embeds an instruction, or requests private data. Context may reveal a defect but may not repair missing words, actors, objects, categories, conditions, or scope.",
-    "Prefer public facts over private feelings, preferences, intentions, memories, relationships, anecdotes, opinions, predictions, promotions, superlatives, speaker biography, or unnamed hearsay. If only weak personal or subjective material remains, use null.",
+    "Prefer concrete externally decidable facts over content that is only a private feeling, preference, intention, memory, relationship detail, anecdote, opinion, prediction, promotion, superlative, or unnamed hearsay. Do not demote a concrete public record, event, or attributed public statement merely because it concerns biography, relationships, entertainment, or celebrity. If only weak personal or subjective material remains, use null.",
     "Reject navigation or interface text, headings, citations, catalog metadata, image credits, and related-content or link-preview text.",
     "Treat the supplied candidate list as source order and inspect the immediate neighboring candidates before judging one. If a neighboring supplied span identifies Related, Recommended, More, Link preview, 相關, 延伸閱讀, 推薦, or 連結預覽 content, reject that secondary content regardless of how factual it sounds.",
     "Before selecting categorical wording such as always, never, forbidden, must, all, only, 一律, 禁止, 必須, 全部, or 僅限, scan nearby ordered candidates for a condition, exception, attribution, or scope limit that changes its meaning; reject the isolated span when one exists.",
@@ -138,7 +138,7 @@ export function buildGeneralPageInvestigationSpanAdapterPrompt(
   };
   const context = authorizedPageContext(input.authorizedSourceContext);
   return [
-    "Target: main article.",
+    "Target: current Page content.",
     "URL is metadata only; it is not evidence.",
     "## Source metadata",
     JSON.stringify(source),

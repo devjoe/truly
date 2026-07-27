@@ -125,13 +125,13 @@ const zhFixtures = [
     },
   },
   {
-    fixtureKind: "compound",
-    groundingText: "北灣藥局召回 C9 批次止痛藥，並承諾在一週內完成全部門市盤點。召回原因是外盒保存期限印刷錯誤。",
+    fixtureKind: "attributed",
+    groundingText: "演員林夏在 2026 年 7 月 10 日的公開聲明中宣布已與導演何川離婚。雙方表示不再回應私人細節。",
     candidateClaim: {
-      c: "北灣藥局召回 C9 批次止痛藥並承諾一週內完成門市盤點。",
-      why: "包含召回與後續管理兩個主張。",
-      need: "藥局召回通知與盤點紀錄。",
-      q: "北灣藥局是否召回 C9 批次止痛藥並在一週內完成門市盤點？",
+      c: "演員林夏在 2026 年 7 月 10 日的公開聲明中宣布已與導演何川離婚。",
+      why: "這是具名人物的公開聲明，不是匿名私人軼事。",
+      need: "演員本人公開聲明或可信報導。",
+      q: "演員林夏是否在 2026 年 7 月 10 日的公開聲明中宣布已與導演何川離婚？",
     },
   },
   {
@@ -278,13 +278,13 @@ const enFixtures = [
     },
   },
   {
-    fixtureKind: "compound",
-    groundingText: "West Bay Pharmacy recalled pain reliever lot C9 and promised to finish a store inventory within one week. A misprinted expiration date caused the recall.",
+    fixtureKind: "attributed",
+    groundingText: "Actor Lin Xia announced in a July 10, 2026 public statement that she had divorced director He Chuan. Both said they would not discuss private details.",
     candidateClaim: {
-      c: "West Bay Pharmacy recalled pain reliever lot C9 and promised a store inventory within one week.",
-      why: "The sentence combines a recall and a follow-up commitment.",
-      need: "The recall notice and inventory record.",
-      q: "Did West Bay Pharmacy recall pain reliever lot C9 and finish a store inventory within one week?",
+      c: "Actor Lin Xia announced in a July 10, 2026 public statement that she had divorced director He Chuan.",
+      why: "This is a named person's public statement, not an anonymous private anecdote.",
+      need: "The actor's public statement or reliable reporting.",
+      q: "Did Actor Lin Xia announce in a July 10, 2026 public statement that she had divorced director He Chuan?",
     },
   },
   {
