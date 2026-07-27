@@ -95,6 +95,7 @@ describe("background General Page investigation preparation", () => {
     expect(callAdmission).toHaveBeenCalledWith(expect.objectContaining({
       authorizedSourceContext: request.context.mainText,
       structuredOutputMode: "json_schema",
+      timeoutMs: 10_000,
       selection: expect.objectContaining({
         exactClaim: "衛生局命令遠帆公司在七月三十一日前完成下架",
       }),

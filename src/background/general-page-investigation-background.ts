@@ -26,6 +26,7 @@ import {
 
 const MAX_SPAN_CANDIDATES = 48;
 const MAX_SPAN_CHARACTERS = 240;
+const ACTION_ADMISSION_TIMEOUT_MS = 10_000;
 
 export interface ScheduleGeneralPageInvestigationPreparationOptions {
   scheduler: ModelWorkScheduler;
@@ -139,6 +140,7 @@ export function scheduleGeneralPageInvestigationPreparation(
         model: options.model,
         structuredOutputMode: options.structuredOutputMode,
         apiKey: options.apiKey,
+        timeoutMs: ACTION_ADMISSION_TIMEOUT_MS,
         selection,
         authorizedSourceContext: request.context.mainText,
         source,
