@@ -88,12 +88,6 @@ function looksLikeLanguage(value: string, lang: Lang): boolean {
   return (value.match(/\b[A-Za-z][A-Za-z'-]*\b/gu) ?? []).length >= 2;
 }
 
-function effectiveGateRole(fixture: SyntheticFixture): GateRole {
-  return withAdmission && fixture.fixtureKind === "routine-fact"
-    ? "soft_negative"
-    : fixture.gateRole;
-}
-
 if (!process.argv.includes("--confirm-synthetic-model-send")) {
   throw new Error("Missing --confirm-synthetic-model-send");
 }
@@ -153,7 +147,7 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
   const selectorStarted = Date.now();
   const result = await callTierBGeneralPageInvestigationSpanAdapter(request);
   const selectorLatencyMs = Date.now() - selectorStarted;
-  const gateRole = effectiveGateRole(fixture);
+  const gateRole = fixture.gateRole;
   const expected = gateRole === "positive_control" ? "prepared" : "abstain";
   const selections = result.value?.selections ?? [];
   const selection = selections[0];
@@ -373,10 +367,7 @@ const artifact = {
         buildGeneralPageInvestigationActionAdmissionSystemPrompt(),
       ),
     } : {}),
-    fixtureSetSha256: sha256CanonicalJson(fixtures.map((fixture) => ({
-      ...fixture,
-      gateRole: effectiveGateRole(fixture),
-    }))),
+    fixtureSetSha256: sha256CanonicalJson(fixtures),
     sourceOwnership: "local_exact_span",
     modelAuthoredFields: withAdmission ? ["candidateId", "decision"] : ["candidateId"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
