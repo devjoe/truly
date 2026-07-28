@@ -248,6 +248,32 @@ describe("General Page Parser Advisor contract", () => {
     expect(effective.mainText).toContain("absent from the advisor preview");
   });
 
+  it("keeps re-extracted candidate blocks inside the authorized model context limit", () => {
+    const request = requestFixture();
+    const context = buildGeneralPageModelContext(extractGeneralPageSurface({
+      document: new JSDOM("<!doctype html><title>Fallback</title><body><p>Fallback body text remains available.</p></body>", { url: "https://example.test/fallback" }).window.document,
+      url: "https://example.test/fallback",
+    }));
+    const selectedBlockText = "A".repeat(9_000);
+    const effective = buildGeneralPageEffectiveModelContext(context, request, {
+      schemaVersion: 1,
+      pageType: "documentation",
+      decision: "prefer_candidate_block",
+      confidence: "high",
+      selectedBlockId: "block-article",
+      needsUserSelection: false,
+      needsScreenshot: false,
+      riskTags: ["candidate_block_ambiguous"],
+      rationale: "Use the documentation block.",
+    }, {
+      selectedBlockText,
+    });
+
+    expect(effective.source).toBe("candidate-block");
+    expect([...effective.mainText]).toHaveLength(8_192);
+    expect(selectedBlockText.startsWith(effective.mainText)).toBe(true);
+  });
+
   it("turns index/list advice into page overview only effective context", () => {
     const request = requestFixture();
     const context = buildGeneralPageModelContext(extractGeneralPageSurface({

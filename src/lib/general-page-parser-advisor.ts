@@ -5,6 +5,7 @@ import type {
   GeneralPageModelQualityIssue,
   GeneralPageModelReadiness,
 } from "./general-page-model-context";
+import { GENERAL_PAGE_MODEL_MAIN_TEXT_LIMIT } from "./general-page-model-context";
 
 export const GENERAL_PAGE_PARSER_ADVISOR_SCHEMA_VERSION = 1;
 export const GENERAL_PAGE_ADVISOR_LANE = "general-page-advisor";
@@ -453,7 +454,9 @@ export function buildGeneralPageEffectiveModelContext(
     const selectedBlock = request?.candidateBlocks.find((block) => block.id === advisor.selectedBlockId);
     const selectedBlockText = options.selectedBlockText?.trim();
     return effectiveContext(context, {
-      mainText: selectedBlockText || selectedBlock?.textPreview || context.mainText,
+      mainText: clampEffectiveModelText(
+        selectedBlockText || selectedBlock?.textPreview || context.mainText,
+      ),
       modelEligible: true,
       modelReadiness: advisor.confidence === "low" ? "caution" : "ready",
       allowedUse: "article_or_selection_analysis",
@@ -501,6 +504,13 @@ export function buildGeneralPageEffectiveModelContext(
     source: "advisor-block",
     advisorApplied: true,
   });
+}
+
+function clampEffectiveModelText(value: string): string {
+  const characters = [...value];
+  return characters.length <= GENERAL_PAGE_MODEL_MAIN_TEXT_LIMIT
+    ? value
+    : characters.slice(0, GENERAL_PAGE_MODEL_MAIN_TEXT_LIMIT).join("");
 }
 
 export function buildRuleBasedGeneralPageParserAdvice(
