@@ -30,7 +30,7 @@ export interface MaterializedGeneralPageInvestigationSpanSelection
 
 export interface GeneralPageInvestigationSpanAdapterValue {
   schemaVersion: 7;
-  /** One proposed action for a separate admission critic, or an empty array. */
+  /** One proposed action for separate final admission/tier correction, or an empty array. */
   selections: MaterializedGeneralPageInvestigationSpanSelection[];
 }
 
@@ -106,7 +106,7 @@ function authorizedPageContext(value: unknown): string {
 
 export function buildGeneralPageInvestigationSpanAdapterSystemPrompt(): string {
   return [
-    "Select zero or one reader-facing fact-check action from a fixed list of exact Page spans. Classify the selected span's investigation utility. A separate admission critic checks only whether its proposition shape may be shown.",
+    "Select zero or one reader-facing fact-check action from a fixed list of exact Page spans. Classify the selected span's investigation utility. A separate admission critic checks whether its proposition shape may be shown and may lower, but never raise, its tier.",
     "Use schemaVersion 7. Set candidateId to one supplied ID or null and presentationTier to primary, exploratory, or null. A null ID requires a null tier; a selected ID requires a non-null tier. Return one JSON object and no other text.",
     "Local code owns the exact claim, source quote, user-visible copy, and AI handoff prompt. Never write or rewrite claim text.",
     "Apply these three steps in order.",

@@ -1,6 +1,6 @@
 export function classifyGeneralPageAuditMockRequest(systemText, hasImageUrl = false) {
   if (/parser recovery classifier/i.test(systemText)) return "parser-advisor";
-  if (/final (?:binary )?admission critic for one optional reader-facing fact-check action/i.test(systemText)) {
+  if (/final (?:binary )?admission(?: and tier-correction)? critic for one optional reader-facing fact-check action/i.test(systemText)) {
     return "investigation-admission";
   }
   if (

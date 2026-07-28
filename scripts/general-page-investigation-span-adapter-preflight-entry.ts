@@ -10,6 +10,7 @@ import {
 } from "../src/lib/general-page-investigation-span-adapter";
 import {
   buildGeneralPageInvestigationActionAdmissionSystemPrompt,
+  resolveGeneralPageInvestigationActionTier,
 } from "../src/lib/general-page-investigation-action-admission";
 import {
   buildTierBGeneralPageInvestigationActionAdmissionChatBody,
@@ -168,8 +169,16 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     : null;
   const admissionLatencyMs = admission ? Date.now() - admissionStarted : 0;
   const protocolOk = result.ok && (!withAdmission || !selection || admission?.ok === true);
-  const admittedSelections = !withAdmission || admission?.value?.decision === "admit"
-    ? selections
+  const finalTier = !withAdmission
+    ? selection?.presentationTier ?? null
+    : selection && admission?.value
+      ? resolveGeneralPageInvestigationActionTier(
+          selection.presentationTier,
+          admission.value,
+        )
+      : null;
+  const admittedSelections = selection && finalTier
+    ? [{ ...selection, presentationTier: finalTier }]
     : [];
   const decision = admittedSelections.length > 0 ? "prepared" : "abstain";
   const actualAction: ExpectedAction = admittedSelections[0]?.presentationTier ?? "none";
@@ -211,6 +220,7 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
       ? {
           ok: admission.ok,
           decision: admission.value?.decision,
+          presentationTier: admission.value?.presentationTier,
           finishReason: admission.finishReason,
           usage: admission.usage,
           error: admission.error,

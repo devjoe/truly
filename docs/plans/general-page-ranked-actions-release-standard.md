@@ -568,3 +568,22 @@ gain explicit source-negative denominators. This prospective responsibility
 split does not reclassify the failed Gate A receipt or authorize release; the
 rebuilt fixture contract requires a new clean candidate and six fresh
 sequential receipts.
+
+The later Page-only candidate at commit `65392fd` passed its formal Gate A and
+produced 60/60 protocol-valid results on a fresh, manually sealed Gate B source
+cohort. It recovered all 22 news-primary and all 9 general-primary rows, but
+only 7 of 15 general exploratory rows. It also exposed two expected-none rows
+and overstated nine exploratory rows as primary. The run failed before
+pairwise review and is permanently consumed; no holdout was opened.
+
+That failure identified a narrow responsibility gap rather than a new release
+rule. Selector still proposes one exact span and an absolute tier. The existing
+full-context Admission stage now also returns a final tier: it may preserve or
+lower Selector's tier, never promote it, and rejection still publishes no
+action. Its prompt explicitly treats stable documentation and historical
+catalog facts as exploratory, rejects satire/parody narrative as genre-bound,
+and rejects API method/property fragments whose exact span omits the subject.
+No third model stage or local semantic rule engine was added. This successor
+passed the expanded synthetic Admission set and the composed two-stage
+preflight, but still requires a new clean commit, formal Gate A, and wholly
+fresh Gate B and C evidence.

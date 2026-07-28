@@ -1144,12 +1144,12 @@ export function buildTierBGeneralPageInvestigationActionAdmissionChatBody(
       },
     ],
     temperature: 0,
-    max_tokens: 32,
+    max_tokens: 48,
     response_format: constrained
       ? {
           type: "json_schema",
           json_schema: {
-            name: "truly_general_page_investigation_action_admission_v6",
+            name: "truly_general_page_investigation_action_admission_v7",
             strict: true,
             schema: GENERAL_PAGE_INVESTIGATION_ACTION_ADMISSION_JSON_SCHEMA,
           },

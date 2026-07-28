@@ -6,6 +6,9 @@ import type {
 import {
   buildGeneralPageInvestigationActionPresentation,
 } from "../lib/general-page-investigation-span-adapter";
+import {
+  resolveGeneralPageInvestigationActionTier,
+} from "../lib/general-page-investigation-action-admission";
 import { buildInvestigationSpanCandidates } from "../lib/investigation-span-candidate";
 import {
   callTierBGeneralPageInvestigationActionAdmission,
@@ -71,7 +74,7 @@ function investigationSourceLanguage(text: string, fallback?: Lang): Lang | unde
 
 /**
  * Starts two low-priority stages. The first model call proposes one locally
- * owned exact span; the second only admits or rejects that selection. Keeping
+ * owned exact span; the second admits/rejects it and may lower its display tier. Keeping
  * the stages as separate scheduler jobs lets already-queued user work run
  * between them, while the panel still receives only one final atomic result.
  * Reading-model claims remain outside the action identity boundary.
@@ -149,10 +152,17 @@ export function scheduleGeneralPageInvestigationPreparation(
     if (!admissionResult.ok || !admissionResult.value) {
       return { status: "unavailable" as const };
     }
-    if (admissionResult.value.decision === "reject") {
+    const finalTier = resolveGeneralPageInvestigationActionTier(
+      selection.presentationTier,
+      admissionResult.value,
+    );
+    if (finalTier === null) {
       return { status: "ineligible" as const };
     }
-    return { status: "prepared" as const, selection };
+    return {
+      status: "prepared" as const,
+      selection: { ...selection, presentationTier: finalTier },
+    };
   }).then((result) => {
     if (result.status === "unavailable") {
       sendSafely(options.sendMessage, {

@@ -391,8 +391,11 @@ async function startMockOpenAiEndpoint() {
     } else if (kind === "investigation-admission") {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
       content = JSON.stringify({
-        schemaVersion: 1,
+        schemaVersion: 2,
         decision: "admit",
+        presentationTier: /"presentationTier":"exploratory"/u.test(userText)
+          ? "exploratory"
+          : "primary",
       });
     } else {
       // Keep the ordinary reading-analysis state observable as a distinct UX

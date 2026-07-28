@@ -61,7 +61,11 @@ describe("background General Page investigation preparation", () => {
     }));
     const callAdmission = vi.fn(async () => ({
       ok: true,
-      value: { schemaVersion: 1 as const, decision: "admit" as const },
+      value: {
+        schemaVersion: 2 as const,
+        decision: "admit" as const,
+        presentationTier: "primary" as const,
+      },
     }));
 
     expect(scheduleGeneralPageInvestigationPreparation({
@@ -157,7 +161,58 @@ describe("background General Page investigation preparation", () => {
       callAdapter,
       callAdmission: vi.fn(async () => ({
         ok: true,
-        value: { schemaVersion: 1 as const, decision: "admit" as const },
+        value: {
+          schemaVersion: 2 as const,
+          decision: "admit" as const,
+          presentationTier: "exploratory" as const,
+        },
+      })),
+      sendMessage,
+    });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      status: "prepared",
+      preparedActions: [
+        expect.objectContaining({ presentationTier: "exploratory" }),
+      ],
+    }));
+  });
+
+  it("atomically lowers a proposed primary action when admission returns exploratory", async () => {
+    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const sendMessage = vi.fn();
+    const callAdapter = vi.fn(async (input: any) => ({
+      ok: true,
+      attempts: 1 as const,
+      value: {
+        schemaVersion: 7 as const,
+        selections: [{
+          candidateId: input.candidates[0].id,
+          presentationTier: "primary" as const,
+          exactClaim: input.candidates[0].exactText,
+          sourceQuote: input.candidates[0].exactText,
+          start: input.candidates[0].start,
+          end: input.candidates[0].end,
+        }],
+      },
+    }));
+
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request,
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_schema",
+      resourceKey: "gx10|fixture-model",
+      callAdapter,
+      callAdmission: vi.fn(async () => ({
+        ok: true,
+        value: {
+          schemaVersion: 2 as const,
+          decision: "admit" as const,
+          presentationTier: "exploratory" as const,
+        },
       })),
       sendMessage,
     });
@@ -202,7 +257,11 @@ describe("background General Page investigation preparation", () => {
       order.push("admit");
       return {
         ok: true,
-        value: { schemaVersion: 1 as const, decision: "admit" as const },
+        value: {
+          schemaVersion: 2 as const,
+          decision: "admit" as const,
+          presentationTier: "primary" as const,
+        },
       };
     });
 
@@ -267,7 +326,11 @@ describe("background General Page investigation preparation", () => {
       order.push("admit");
       return {
         ok: true,
-        value: { schemaVersion: 1 as const, decision: "admit" as const },
+        value: {
+          schemaVersion: 2 as const,
+          decision: "admit" as const,
+          presentationTier: "primary" as const,
+        },
       };
     });
 
@@ -444,7 +507,14 @@ describe("background General Page investigation preparation", () => {
     }));
 
     for (const admissionResult of [
-      { ok: true, value: { schemaVersion: 1 as const, decision: "reject" as const } },
+      {
+        ok: true,
+        value: {
+          schemaVersion: 2 as const,
+          decision: "reject" as const,
+          presentationTier: null,
+        },
+      },
       { ok: false, value: null, error: "investigation_action_admission_invalid_json" as const },
     ]) {
       const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };

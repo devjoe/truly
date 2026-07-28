@@ -10,6 +10,7 @@ import {
 } from "../src/lib/general-page-investigation-span-adapter";
 import {
   buildGeneralPageInvestigationActionAdmissionSystemPrompt,
+  resolveGeneralPageInvestigationActionTier,
 } from "../src/lib/general-page-investigation-action-admission";
 import { buildInvestigationSpanCandidates } from "../src/lib/investigation-span-candidate";
 import {
@@ -333,11 +334,32 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
         source: row.sourceContext,
       })
     : null;
-  const admitted = admission?.ok === true && admission.value?.decision === "admit";
+  const finalTier = admission?.ok === true && admission.value
+    ? resolveGeneralPageInvestigationActionTier(
+      selection?.presentationTier ?? "exploratory",
+      admission.value,
+    )
+    : null;
+  const admitted = finalTier !== null;
+  const admittedAction = finalTier !== null && selection
+    ? {
+        ...selection,
+        presentationTier: finalTier,
+        presentation: buildGeneralPageInvestigationActionPresentation(
+          { ...selection, presentationTier: finalTier },
+          {
+            outputLang: row.outputLang,
+            source: row.sourceContext,
+          },
+        ),
+        exactGrounding:
+          row.text.slice(selection.start, selection.end) === selection.exactClaim,
+      }
+    : null;
   const protocolOk = result.ok && (!selection || admission?.ok === true);
   const status = !protocolOk
     ? "protocol_failed"
-    : !selection || admission?.value?.decision === "reject"
+    : !selection || finalTier === null
     ? "abstain"
     : "prepared";
   return {
@@ -358,6 +380,7 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
       ? {
           ok: admission.ok,
           decision: admission.value?.decision,
+          presentationTier: admission.value?.presentationTier,
           finishReason: admission.finishReason,
           usage: admission.usage,
           error: admission.error,
@@ -365,7 +388,7 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
         }
       : null,
     proposedActions,
-    actions: admitted ? proposedActions : [],
+    actions: admittedAction ? [admittedAction] : [],
   };
 }
 
@@ -411,7 +434,7 @@ const meta = {
   contract: {
     selector: "ranked_exact_span_proposal_v6",
     selectorPromptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
-    admission: "reader_action_admission_v6",
+    admission: "reader_action_admission_v7",
     admissionPromptSha256: sha256Text(buildGeneralPageInvestigationActionAdmissionSystemPrompt()),
     responseFormat: structuredOutputMode,
     outputLanguage: outputLang,

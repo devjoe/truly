@@ -5,6 +5,7 @@ import {
   buildGeneralPageInvestigationActionAdmissionPrompt,
   buildGeneralPageInvestigationActionAdmissionSystemPrompt,
   parseGeneralPageInvestigationActionAdmissionContent,
+  resolveGeneralPageInvestigationActionTier,
 } from "@src/lib/general-page-investigation-action-admission";
 import type { MaterializedGeneralPageInvestigationSpanSelection } from "@src/lib/general-page-investigation-span-adapter";
 import {
@@ -26,23 +27,45 @@ const selection: MaterializedGeneralPageInvestigationSpanSelection = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("General Page investigation action admission critic", () => {
-  it("uses a tiny model-neutral admit/reject contract", () => {
+  it("can only preserve or lower the selector tier", () => {
+    expect(resolveGeneralPageInvestigationActionTier("primary", {
+      schemaVersion: 2,
+      decision: "admit",
+      presentationTier: "exploratory",
+    })).toBe("exploratory");
+    expect(resolveGeneralPageInvestigationActionTier("exploratory", {
+      schemaVersion: 2,
+      decision: "admit",
+      presentationTier: "primary",
+    })).toBe("exploratory");
+    expect(resolveGeneralPageInvestigationActionTier("primary", {
+      schemaVersion: 2,
+      decision: "reject",
+      presentationTier: null,
+    })).toBeNull();
+  });
+
+  it("uses a compact model-neutral admission and tier-correction contract", () => {
     expect(GENERAL_PAGE_INVESTIGATION_ACTION_ADMISSION_JSON_SCHEMA).toMatchObject({
       additionalProperties: false,
-      required: ["schemaVersion", "decision"],
+      required: ["schemaVersion", "decision", "presentationTier"],
       properties: {
-        schemaVersion: { const: 1 },
+        schemaVersion: { const: 2 },
         decision: { enum: ["admit", "reject"] },
       },
     });
     expect(parseGeneralPageInvestigationActionAdmissionContent(
-      '{"schemaVersion":1,"decision":"admit"}',
+      '{"schemaVersion":2,"decision":"admit","presentationTier":"exploratory"}',
     )).toEqual({
       ok: true,
-      value: { schemaVersion: 1, decision: "admit" },
+      value: {
+        schemaVersion: 2,
+        decision: "admit",
+        presentationTier: "exploratory",
+      },
     });
     expect(parseGeneralPageInvestigationActionAdmissionContent(
-      '{"schemaVersion":1,"decision":"reject","reason":"no"}',
+      '{"schemaVersion":2,"decision":"reject","presentationTier":"primary"}',
     )).toMatchObject({ ok: false, error: "invalid_schema" });
     expect(parseGeneralPageInvestigationActionAdmissionContent("not-json"))
       .toMatchObject({ ok: false, error: "invalid_json" });
@@ -60,10 +83,10 @@ describe("General Page investigation action admission critic", () => {
       },
     });
 
-    expect(system).toContain("final binary admission critic");
-    expect(system).toContain("Selector already owns its primary or exploratory tier");
+    expect(system).toContain("final admission and tier-correction critic");
+    expect(system).toContain("lower primary to exploratory");
     expect(system).toContain("Independent public evidence");
-    expect(system).toContain("Do not judge importance, materiality, or tier");
+    expect(system).toContain("Never promote exploratory to primary");
     expect(system).toContain("entertainment, sport, consumer, product, celebrity");
     expect(system).toContain("private, anecdotal, subjective-only");
     expect(system).toContain("named person or organization publicly announced, filed, issued, alleged, or reported");
@@ -71,9 +94,13 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("reported payload is only an opinion, prediction, recommendation");
     expect(system).toContain("could show the words were spoken does not make that payload");
     expect(system).toContain("ordinary definitions, API behavior");
-    expect(system).toContain("Lower utility is represented by Selector's exploratory tier");
+    expect(system).toContain("satire, parody, literary, or fiction Pages");
+    expect(system).toContain("omits the method, property, field, or API name");
+    expect(system).toContain("stable definitions, API behavior, workflows");
     expect(system).toContain("clean, complete, standalone proposition");
     expect(system).toContain("central publication, date, specification, or measurement fact");
+    expect(system).toContain("complete sentence naming a work and its publisher or publication year");
+    expect(system).toContain("past software release date shown on reference, documentation, or change-log Pages");
     expect(system).toContain("literary or fiction Page");
     expect(system).toContain("caption, byline, media credit");
     expect(system).toContain("instruction, command, prompt, private-data request");
@@ -81,6 +108,7 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("Judge the exact sentence as a whole");
     expect(system).toContain("Do not rewrite or replace it");
     expect(user).toContain(selection.exactClaim);
+    expect(user).toContain("Selector proposed tier");
     expect(user).toContain("Nearby authorized Page context");
     expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
     expect(user).toContain("Reject only for a clear structural");
@@ -102,12 +130,12 @@ describe("General Page investigation action admission critic", () => {
       authorizedSourceContext,
     });
 
-    expect(body.max_tokens).toBe(32);
+    expect(body.max_tokens).toBe(48);
     expect(body.temperature).toBe(0);
     expect(body.response_format).toMatchObject({
       type: "json_schema",
       json_schema: {
-        name: "truly_general_page_investigation_action_admission_v6",
+        name: "truly_general_page_investigation_action_admission_v7",
         strict: true,
       },
     });
@@ -118,7 +146,10 @@ describe("General Page investigation action admission critic", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         choices: [{
           finish_reason: "stop",
-          message: { content: '{"schemaVersion":1,"decision":"admit"}' },
+          message: {
+            content:
+              '{"schemaVersion":2,"decision":"admit","presentationTier":"primary"}',
+          },
         }],
         usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
       }), { status: 200 }))
@@ -137,7 +168,11 @@ describe("General Page investigation action admission critic", () => {
     await expect(callTierBGeneralPageInvestigationActionAdmission(request))
       .resolves.toMatchObject({
         ok: true,
-        value: { schemaVersion: 1, decision: "admit" },
+        value: {
+          schemaVersion: 2,
+          decision: "admit",
+          presentationTier: "primary",
+        },
         usage: { promptTokens: 100, completionTokens: 10, totalTokens: 110 },
       });
     await expect(callTierBGeneralPageInvestigationActionAdmission(request))
