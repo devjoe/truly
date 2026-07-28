@@ -377,22 +377,19 @@ async function startMockOpenAiEndpoint() {
       const candidates = candidateLine ? JSON.parse(candidateLine) : [];
       const selected = candidates.filter(({ exactText }) =>
         /^(?:The analyzed content is synthetic|The fixture uses no real website content|The audit runs against a local test page)$/u.test(exactText));
-      content = selected.length > 0
-        ? JSON.stringify({
-            schemaVersion: 10,
-            selection: {
-              candidateId: selected[0].id,
-            },
-          })
-        : JSON.stringify({
-            schemaVersion: 10,
-            selection: null,
-          });
+      content = JSON.stringify({
+        schemaVersion: 11,
+        selection: {
+          candidateId: (selected[0] ?? candidates[0]).id,
+        },
+      });
     } else if (kind === "investigation-admission") {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
       content = JSON.stringify({
         schemaVersion: 4,
-        decision: "admit",
+        decision: /The analyzed content is synthetic|The fixture uses no real website content|The audit runs against a local test page/u.test(userText)
+          ? "admit"
+          : "reject",
       });
     } else if (kind === "investigation-tier") {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));

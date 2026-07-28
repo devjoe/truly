@@ -15,25 +15,25 @@ locally from the current loaded document. In the first model job it returns
 only:
 
 ```json
-{"schemaVersion":10,"selection":{"candidateId":"span:4"}}
+{"schemaVersion":11,"selection":{"candidateId":"span:4"}}
 ```
 
-`selection` is one atomic state: `null`, or one object containing a supplied
-local `candidateId`. This makes abstention versus selection one schema-valid
-state and removes presentation classification from the claim-identity wire.
-The Selector sees the complete bounded candidate list and full authorized Page
-context. It must prefer a strong first verification action. If none survives,
-it may select a complete, publicly checkable but more ordinary or situational
-proposition.
+`selection` contains exactly one supplied local `candidateId`. The Selector
+only ranks candidate identity; it does not admit, reject, or classify
+presentation. The Selector sees the complete bounded candidate list and full
+authorized Page context. It must prefer a strong first verification action,
+then a complete publicly checkable but more ordinary or situational
+proposition. When all candidates violate an Admission boundary, it still
+returns the least-defective candidate for the separate terminal critic.
 
 The tier is about the likely usefulness of investigating the item, not its
 truth, falsity, or calibrated model confidence. Runtime does not receive the
 audit-only `news_article` / `general_web` category, so the Selector applies this
 same semantic contract to every eligible Page.
 
-If one exact span is proposed, a separately scheduled Admission critic
-receives that same locally owned span and authorized same-Page context. It
-returns only:
+A separately scheduled Admission critic receives that same locally owned span
+and authorized same-Page context. It is the only model stage that decides
+whether an action may be shown and returns only:
 
 ```json
 {"schemaVersion":4,"decision":"admit"}
@@ -64,8 +64,8 @@ identity checks. There is no repair call, alternate fallback, second ranker,
 model-authored query, evidence-family guess, or local semantic rewrite.
 
 The admitted action is the one Page action. The UI reveals it only after all
-three jobs settle; Selector abstention or Admission rejection reveals no
-investigation action. A primary action uses the normal presentation. An
+three jobs settle; Admission rejection reveals no investigation action. A
+primary action uses the normal presentation. An
 exploratory action uses the same compact row but adds a quiet, localized,
 always-visible cue explaining that the item's verification value is less
 certain and deserves user review. The cue must not imply that the proposition
@@ -80,11 +80,11 @@ Gemini handoff. Automatic Focus ranked actions require a separate future
 candidate and fresh release evidence.
 
 Open-web extraction is not required to be textually pristine. Local code owns
-high-confidence structural boundaries; the Edge AI selector owns relative
-usefulness among the remaining exact spans and may abstain. This tolerance does
-not relax authorization: wrong-page, cross-scope, or stale text remains
-forbidden, and a visible action derived from publisher residue is a release
-failure.
+high-confidence structural boundaries; the Edge AI Selector owns relative
+usefulness among the remaining exact spans, and Admission owns the terminal
+visibility veto. This tolerance does not relax authorization: wrong-page,
+cross-scope, or stale text remains forbidden, and a visible action derived
+from publisher residue is a release failure.
 
 Entertainment, sport, consumer, product, celebrity, and routine factual
 statements are eligible. Health, safety, money, rights, law, and public impact
@@ -792,3 +792,20 @@ boundary: a phrase such as “the documentation says” is not residue by itself
 on a reference or teaching Page when the exact sentence contains a complete
 definition, behavior, workflow, or capability. Bare role labels, unresolved
 payloads, and unnamed hearsay remain rejected.
+
+Even after that clarification, the formal composed ceremony intermittently
+returned `selection:null` for the same valid frozen technical-definition
+control. Because the schema-valid abstention duplicated Admission's terminal
+eligibility authority, more Selector wording could not make the responsibility
+split reliable. An adversarial review accepted the simpler Selector v11
+contract: given a nonempty local candidate list, Selector always ranks exactly
+one supplied ID; Admission alone admits or rejects it; Tier classifies only an
+admitted action. Local candidate generation can still stop before model work
+when it finds no spans.
+
+This change does not weaken the expected-none gate. It strengthens the formal
+ceremony: all 30 synthetic rows must reach Admission, the 24 eligible controls
+must be admitted, all 6 hard-boundary controls must be rejected there, and
+only the 24 admitted rows may reach Tier. Any expected-none action that becomes
+visible still fails Gate A, Gate B, or Gate C. The numerical release thresholds
+and Page-only product scope are unchanged.

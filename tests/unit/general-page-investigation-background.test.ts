@@ -48,7 +48,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 10 as const,
+        schemaVersion: 11 as const,
         selections: [{
           candidateId: input.candidates[1].id,
           exactClaim: input.candidates[1].exactText,
@@ -155,7 +155,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 10 as const,
+        schemaVersion: 11 as const,
         selections: [{
           candidateId: input.candidates[0].id,
           exactClaim: input.candidates[0].exactText,
@@ -204,7 +204,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 10 as const,
+        schemaVersion: 11 as const,
         selections: [{
           candidateId: input.candidates[0].id,
           exactClaim: input.candidates[0].exactText,
@@ -261,7 +261,7 @@ describe("background General Page investigation preparation", () => {
         ok: true,
         attempts: 1 as const,
         value: {
-          schemaVersion: 10 as const,
+          schemaVersion: 11 as const,
           selections: [{
             candidateId: input.candidates[0].id,
             exactClaim: input.candidates[0].exactText,
@@ -336,7 +336,7 @@ describe("background General Page investigation preparation", () => {
         ok: true,
         attempts: 1 as const,
         value: {
-          schemaVersion: 10 as const,
+          schemaVersion: 11 as const,
           selections: [{
             candidateId: input.candidates[0].id,
             exactClaim: input.candidates[0].exactText,
@@ -409,7 +409,7 @@ describe("background General Page investigation preparation", () => {
     const callAdapter = vi.fn(async () => ({
       ok: true,
       attempts: 1 as const,
-      value: { schemaVersion: 10 as const, selections: [] },
+      value: { schemaVersion: 11 as const, selections: [] },
     }));
 
     scheduleGeneralPageInvestigationPreparation({
@@ -503,7 +503,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 10 as const,
+        schemaVersion: 11 as const,
         selections: [],
       },
     }));
@@ -535,7 +535,7 @@ describe("background General Page investigation preparation", () => {
     const callAdapter = vi.fn(async () => ({
       ok: true,
       attempts: 1 as const,
-      value: { schemaVersion: 10 as const, selections: [selection] },
+      value: { schemaVersion: 11 as const, selections: [selection] },
     }));
 
     for (const admissionResult of [
