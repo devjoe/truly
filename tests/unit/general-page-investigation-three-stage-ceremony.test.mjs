@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  validateTwoStageInvestigationCeremony,
-} from "../../scripts/lib/general-page-investigation-two-stage-ceremony.mjs";
+  validateThreeStageInvestigationCeremony,
+} from "../../scripts/lib/general-page-investigation-three-stage-ceremony.mjs";
 
 const commit = "a".repeat(40);
 
@@ -14,7 +14,7 @@ function receipt(index, taskKey, responseFormat) {
     schemaVersion: 1,
     task: admission
       ? "general_page_investigation_action_admission_synthetic_preflight"
-      : "general_page_investigation_two_stage_synthetic_preflight",
+      : "general_page_investigation_three_stage_synthetic_preflight",
     split: "synthetic-dev",
     passed: true,
     candidate: { commit, worktreeDirty: false },
@@ -24,7 +24,10 @@ function receipt(index, taskKey, responseFormat) {
       responseFormat,
       concurrency: 2,
       timeoutMs: admission ? 10_000 : 60_000,
-      ...(admission ? {} : { admissionTimeoutMs: 10_000 }),
+      ...(admission ? {} : {
+        admissionTimeoutMs: 10_000,
+        tierTimeoutMs: 10_000,
+      }),
     },
     contract: {
       systemPromptSha256: admission ? "d".repeat(64) : "b".repeat(64),
@@ -34,6 +37,7 @@ function receipt(index, taskKey, responseFormat) {
         ? {}
         : {
             admissionSystemPromptSha256: "d".repeat(64),
+            tierSystemPromptSha256: "f".repeat(64),
             protocolRetryPolicy: "disabled_for_release_gate",
           }),
     },
@@ -71,6 +75,9 @@ function receipt(index, taskKey, responseFormat) {
           admissionRequested: 24,
           admissionProtocolSucceeded: 24,
           admissionProtocolFailed: 0,
+          tierRequested: 24,
+          tierProtocolSucceeded: 24,
+          tierProtocolFailed: 0,
         },
     ...(admission
       ? {}
@@ -96,7 +103,7 @@ function receipt(index, taskKey, responseFormat) {
           },
         }),
     networkBoundary: {
-      modelRequests: admission ? 32 : 54,
+      modelRequests: admission ? 32 : 78,
       publicSearchRequests: 0,
       actionsOpened: 0,
     },
@@ -120,9 +127,9 @@ function validReceipts() {
   return receipts;
 }
 
-describe("General Page two-stage Gate A ceremony", () => {
+describe("General Page three-stage Gate A ceremony", () => {
   it("binds twelve sequential passing receipts across both tasks and lowerings", () => {
-    const result = validateTwoStageInvestigationCeremony(validReceipts(), commit);
+    const result = validateThreeStageInvestigationCeremony(validReceipts(), commit);
 
     expect(result).toMatchObject({
       passed: true,
@@ -146,7 +153,7 @@ describe("General Page two-stage Gate A ceremony", () => {
     receipts[4].value.model.responseFormat = "json_schema";
     receipts[6].value.contract.admissionSystemPromptSha256 = "f".repeat(64);
 
-    const result = validateTwoStageInvestigationCeremony(receipts, commit);
+    const result = validateThreeStageInvestigationCeremony(receipts, commit);
 
     expect(result.passed).toBe(false);
     expect(result.errors.join(" ")).toMatch(/overlaps/);
@@ -166,7 +173,7 @@ describe("General Page two-stage Gate A ceremony", () => {
     ];
     receipts[8].value.networkBoundary.modelRequests = 53;
 
-    const result = validateTwoStageInvestigationCeremony(receipts, commit);
+    const result = validateThreeStageInvestigationCeremony(receipts, commit);
 
     expect(result.passed).toBe(false);
     expect(result.errors.join(" ")).toMatch(/32 of 32/);
@@ -180,7 +187,7 @@ describe("General Page two-stage Gate A ceremony", () => {
     receipts[6].value.diagnostics.exploratoryOverstatedSamples = ["synthetic-zh-04"];
     receipts[7].value.diagnostics.exploratoryOverstatedSamples = ["synthetic-en-04"];
 
-    const result = validateTwoStageInvestigationCeremony(receipts, commit);
+    const result = validateThreeStageInvestigationCeremony(receipts, commit);
 
     expect(result.passed).toBe(false);
     expect(result.errors.join(" ")).toMatch(/one-fixture exploratory variance bound/);
@@ -193,7 +200,7 @@ describe("General Page two-stage Gate A ceremony", () => {
     receipts[6].value.gates.exploratoryCorrect.result = 7;
     receipts[6].value.gates.exploratoryCorrect.visible = 7;
 
-    const result = validateTwoStageInvestigationCeremony(receipts, commit);
+    const result = validateThreeStageInvestigationCeremony(receipts, commit);
 
     expect(result.passed).toBe(false);
     expect(result.errors.join(" ")).toMatch(/capability or hard boundary/);

@@ -15,18 +15,16 @@ locally from the current loaded document. In the first model job it returns
 only:
 
 ```json
-{"schemaVersion":9,"selection":{"candidateId":"span:4","presentationTier":"primary"}}
+{"schemaVersion":10,"selection":{"candidateId":"span:4"}}
 ```
 
 `selection` is one atomic state: `null`, or one object containing a supplied
-local `candidateId` and `presentationTier` set to `primary` or `exploratory`.
-This makes abstention versus selection one schema-valid state rather than
-independently generated nullable fields with invalid cross-field combinations.
+local `candidateId`. This makes abstention versus selection one schema-valid
+state and removes presentation classification from the claim-identity wire.
 The Selector sees the complete bounded candidate list and full authorized Page
-context. It must prefer a strong first verification action and label it
-`primary`. Only when no primary candidate exists may it select a complete,
-publicly checkable but more ordinary or situational proposition and label it
-`exploratory`.
+context. It must prefer a strong first verification action. If none survives,
+it may select a complete, publicly checkable but more ordinary or situational
+proposition.
 
 The tier is about the likely usefulness of investigating the item, not its
 truth, falsity, or calibrated model confidence. Runtime does not receive the
@@ -38,25 +36,35 @@ receives that same locally owned span and authorized same-Page context. It
 returns only:
 
 ```json
-{"schemaVersion":3,"outcome":"primary"}
+{"schemaVersion":4,"decision":"admit"}
 ```
 
-`outcome` is `reject`, `primary`, or `exploratory`. Admission may preserve the
-Selector tier or lower `primary` to `exploratory`; local resolution never lets
-it promote a Selector `exploratory` result. `reject`, timeout, malformed
-output, invalid atomic state, stale scope, or either job's failure produces no
-action. Admission cannot select another span, rewrite text, explain its
-decision, judge truth, or rescue missing words from context. Selector and
-Admission are separate low-priority jobs so user-blocking and bounded Feed
-work may run between them. The panel receives only one final atomic result.
+`decision` is `admit` or `reject`. Admission cannot rank presentation utility,
+select another span, rewrite text, explain its decision, judge truth, or rescue
+missing words from context.
+
+An admitted span then reaches a separately scheduled Tier Classifier, which
+returns only:
+
+```json
+{"schemaVersion":1,"tier":"primary"}
+```
+
+`tier` is `primary` or `exploratory` and describes likely investigation
+utility, not truth or calibrated model confidence. The Tier Classifier cannot
+reject or rewrite the action. `reject`, timeout, malformed output, invalid
+atomic state, stale scope, or any stage failure produces no action. Selector,
+Admission, and Tier are separate low-priority jobs so user-blocking and
+bounded Feed work may run between them. The panel receives only one final
+atomic result.
 
 Local code owns the exact displayed text, copy action, localized Gemini
-handoff, source metadata, Page/Focus session boundary, and both stages'
+handoff, source metadata, Page/Focus session boundary, and all three stages'
 identity checks. There is no repair call, alternate fallback, second ranker,
 model-authored query, evidence-family guess, or local semantic rewrite.
 
-The admitted action is the one Page action. The UI reveals it only after both
-jobs settle; Selector abstention or Admission rejection reveals no
+The admitted action is the one Page action. The UI reveals it only after all
+three jobs settle; Selector abstention or Admission rejection reveals no
 investigation action. A primary action uses the normal presentation. An
 exploratory action uses the same compact row but adds a quiet, localized,
 always-visible cue explaining that the item's verification value is less
@@ -723,13 +731,24 @@ consumed result: news-primary recall fell to `12/16`, one expected-none action
 became visible, and overstatement increased to three rows. That follow-up was
 rejected and fully reverted; no further prompt tuning uses this cohort.
 
-Synthetic forward diagnostics passed both provider modes: direct Admission was
-`32/32` in `json_schema` and `json_object`, while the composed two-stage flow
-was `30/30` in both modes with zero protocol failure, primary understatement,
-exploratory overstatement, or locale failure. The prompt also makes the
-pre-existing domain-neutral tier rule explicit: a current product or service
-release, availability change, or menu or catalog addition is primary when the
-exact span states the current or new action, even when routine, local,
-commercial, or low-stakes. Retrospective history and stable catalog facts
-remain exploratory. The atomic contract still requires a clean candidate,
-formal Gate A, and wholly fresh Gate B and C evidence.
+Synthetic forward diagnostics passed both provider modes for the historical
+v9/v3 two-job contract, but the consumed 60-row diagnostic remained a semantic
+failure. A fixed, no-tuning responsibility ablation then compared one
+Admission-plus-tier Final Critic with separate binary Admission and Tier
+Classifier roles on all 49 spans selected in that consumed cohort. The Final
+Critic was protocol-valid in both provider modes but overstated five
+`json_schema` and six `json_object` rows. The separate Tier Classifier had zero
+overstatement in both modes. An intentionally shortened diagnostic Admission
+prompt leaked two known Page-residue spans, confirming that the shipping
+Admission boundary must be preserved rather than rewritten.
+
+The successor therefore uses three single-responsibility atomic contracts:
+Selector v10 returns only one local candidate ID or null; Admission v4 returns
+only admit or reject while retaining the full existing structural,
+public-decidability, source-role, genre, and safety boundary; Tier Classifier
+v1 returns only primary or exploratory. All three remain separately scheduled
+derived-priority jobs, and runtime reveals only the final atomic result. The
+product surface, deterministic local text, low-confidence cue, privacy
+boundary, Page-only scope, and frozen release thresholds do not change. The
+new contract still requires a clean candidate, formal Gate A, and wholly fresh
+Gate B and C evidence.

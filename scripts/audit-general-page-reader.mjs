@@ -379,23 +379,26 @@ async function startMockOpenAiEndpoint() {
         /^(?:The analyzed content is synthetic|The fixture uses no real website content|The audit runs against a local test page)$/u.test(exactText));
       content = selected.length > 0
         ? JSON.stringify({
-            schemaVersion: 9,
+            schemaVersion: 10,
             selection: {
               candidateId: selected[0].id,
-              presentationTier: "primary",
             },
           })
         : JSON.stringify({
-            schemaVersion: 9,
+            schemaVersion: 10,
             selection: null,
           });
     } else if (kind === "investigation-admission") {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
       content = JSON.stringify({
-        schemaVersion: 3,
-        outcome: /"presentationTier":"exploratory"/u.test(userText)
-          ? "exploratory"
-          : "primary",
+        schemaVersion: 4,
+        decision: "admit",
+      });
+    } else if (kind === "investigation-tier") {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));
+      content = JSON.stringify({
+        schemaVersion: 1,
+        tier: "primary",
       });
     } else {
       // Keep the ordinary reading-analysis state observable as a distinct UX

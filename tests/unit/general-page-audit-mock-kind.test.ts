@@ -1,17 +1,21 @@
 import { describe, expect, it } from "vitest";
 
 import { buildGeneralPageInvestigationActionAdmissionSystemPrompt } from "@src/lib/general-page-investigation-action-admission";
+import { buildGeneralPageInvestigationActionTierSystemPrompt } from "@src/lib/general-page-investigation-action-tier";
 import { buildGeneralPageInvestigationSpanAdapterSystemPrompt } from "@src/lib/general-page-investigation-span-adapter";
 import { classifyGeneralPageAuditMockRequest } from "../../scripts/lib/general-page-audit-mock-kind.mjs";
 
 describe("General Page audit mock routing", () => {
-  it("keeps the selector and admission critic distinct without coupling routing to schema versions", () => {
+  it("keeps selector, admission, and tier roles distinct without coupling routing to schema versions", () => {
     expect(classifyGeneralPageAuditMockRequest(
       buildGeneralPageInvestigationSpanAdapterSystemPrompt(),
     )).toBe("investigation-adapter");
     expect(classifyGeneralPageAuditMockRequest(
       buildGeneralPageInvestigationActionAdmissionSystemPrompt(),
     )).toBe("investigation-admission");
+    expect(classifyGeneralPageAuditMockRequest(
+      buildGeneralPageInvestigationActionTierSystemPrompt(),
+    )).toBe("investigation-tier");
   });
 
   it("keeps parser, screenshot, vision, and ordinary brief requests distinct", () => {

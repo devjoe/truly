@@ -10,13 +10,17 @@ import {
 } from "../src/lib/general-page-investigation-span-adapter";
 import {
   buildGeneralPageInvestigationActionAdmissionSystemPrompt,
-  resolveGeneralPageInvestigationActionTier,
 } from "../src/lib/general-page-investigation-action-admission";
+import {
+  buildGeneralPageInvestigationActionTierSystemPrompt,
+} from "../src/lib/general-page-investigation-action-tier";
 import { buildInvestigationSpanCandidates } from "../src/lib/investigation-span-candidate";
 import {
   buildTierBGeneralPageInvestigationActionAdmissionChatBody,
+  buildTierBGeneralPageInvestigationActionTierChatBody,
   buildTierBGeneralPageInvestigationSpanAdapterChatBody,
   callTierBGeneralPageInvestigationActionAdmission,
+  callTierBGeneralPageInvestigationActionTier,
   callTierBGeneralPageInvestigationSpanAdapter,
 } from "../src/lib/tier-b-client";
 import type { Lang } from "../src/lib/types";
@@ -254,6 +258,24 @@ if (admissionProtocolBody.response_format?.type !== structuredOutputMode ||
     admissionProtocolBody.temperature !== 0) {
   throw new Error("Action admission response format/body mismatch");
 }
+const tierProtocolBody = buildTierBGeneralPageInvestigationActionTierChatBody({
+  endpoint,
+  model,
+  structuredOutputMode,
+  selection: {
+    candidateId: firstProtocolCandidate.id,
+    exactClaim: firstProtocolCandidate.exactText,
+    sourceQuote: firstProtocolCandidate.exactText,
+    start: firstProtocolCandidate.start,
+    end: firstProtocolCandidate.end,
+  },
+  authorizedSourceContext: firstProtocolSample.text,
+  source: firstProtocolSample.sourceContext,
+});
+if (tierProtocolBody.response_format?.type !== structuredOutputMode ||
+    tierProtocolBody.temperature !== 0) {
+  throw new Error("Action tier response format/body mismatch");
+}
 
 const preflight = {
   result: "preflight_pass",
@@ -315,10 +337,6 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
   const selections = result.value?.selections ?? [];
   const proposedActions = selections.map((selection) => ({
     ...selection,
-    presentation: buildGeneralPageInvestigationActionPresentation(selection, {
-      outputLang: row.outputLang,
-      source: row.sourceContext,
-    }),
     exactGrounding: row.text.slice(selection.start, selection.end) === selection.exactClaim,
   }));
   const selection = selections[0];
@@ -334,13 +352,19 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
         source: row.sourceContext,
       })
     : null;
-  const finalTier = admission?.ok === true && admission.value
-    ? resolveGeneralPageInvestigationActionTier(
-      selection?.presentationTier ?? "exploratory",
-      admission.value,
-    )
+  const tier = admission?.ok === true && admission.value?.decision === "admit" && selection
+    ? await callTierBGeneralPageInvestigationActionTier({
+        endpoint,
+        model,
+        structuredOutputMode,
+        timeoutMs,
+        apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
+        selection,
+        authorizedSourceContext: row.text,
+        source: row.sourceContext,
+      })
     : null;
-  const admitted = finalTier !== null;
+  const finalTier = tier?.ok === true ? tier.value?.tier ?? null : null;
   const admittedAction = finalTier !== null && selection
     ? {
         ...selection,
@@ -356,7 +380,9 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
           row.text.slice(selection.start, selection.end) === selection.exactClaim,
       }
     : null;
-  const protocolOk = result.ok && (!selection || admission?.ok === true);
+  const protocolOk = result.ok && (!selection ||
+    (admission?.ok === true &&
+      (admission.value?.decision === "reject" || tier?.ok === true)));
   const status = !protocolOk
     ? "protocol_failed"
     : !selection || finalTier === null
@@ -379,11 +405,21 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
     admission: admission
       ? {
           ok: admission.ok,
-          outcome: admission.value?.outcome,
+          decision: admission.value?.decision,
           finishReason: admission.finishReason,
           usage: admission.usage,
           error: admission.error,
           raw: admission.raw,
+        }
+      : null,
+    tier: tier
+      ? {
+          ok: tier.ok,
+          tier: tier.value?.tier,
+          finishReason: tier.finishReason,
+          usage: tier.usage,
+          error: tier.error,
+          raw: tier.raw,
         }
       : null,
     proposedActions,
@@ -414,7 +450,9 @@ const abstained = results.filter((row) => row.status === "abstain").length;
 const proposed = results.reduce((sum, row) =>
   sum + (Array.isArray(row.proposedActions) ? row.proposedActions.length : 0), 0);
 const admissionRejected = results.filter((row) =>
-  (row.admission as { outcome?: string } | null)?.outcome === "reject").length;
+  (row.admission as { decision?: string } | null)?.decision === "reject").length;
+const tierClassified = results.filter((row) =>
+  (row.tier as { ok?: boolean } | null)?.ok === true).length;
 const actionCount = results.reduce((sum, row) => sum + (Array.isArray(row.actions) ? row.actions.length : 0), 0);
 const exactGrounding = results.reduce((sum, row) => sum +
   (Array.isArray(row.actions) ? row.actions.filter((action) => action.exactGrounding === true).length : 0), 0);
@@ -431,10 +469,12 @@ const meta = {
     trackedDiffSha256: candidateSnapshot.trackedDiffSha256,
   },
   contract: {
-    selector: "ranked_exact_span_proposal_v9",
+    selector: "ranked_exact_span_proposal_v10",
     selectorPromptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
-    admission: "reader_action_admission_v3",
+    admission: "reader_action_admission_v4",
     admissionPromptSha256: sha256Text(buildGeneralPageInvestigationActionAdmissionSystemPrompt()),
+    tier: "reader_action_tier_v1",
+    tierPromptSha256: sha256Text(buildGeneralPageInvestigationActionTierSystemPrompt()),
     responseFormat: structuredOutputMode,
     outputLanguage: outputLang,
     repairMode: "none",
@@ -450,6 +490,7 @@ const meta = {
     temperature: protocolBody.temperature,
     maxTokens: protocolBody.max_tokens,
     admissionMaxTokens: admissionProtocolBody.max_tokens,
+    tierMaxTokens: tierProtocolBody.max_tokens,
     timeoutMs,
     concurrency,
   },
@@ -464,6 +505,7 @@ const meta = {
     abstained,
     proposed,
     admissionRejected,
+    tierClassified,
     actionCount,
     exactGrounding,
   },

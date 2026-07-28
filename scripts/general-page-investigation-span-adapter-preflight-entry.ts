@@ -10,12 +10,16 @@ import {
 } from "../src/lib/general-page-investigation-span-adapter";
 import {
   buildGeneralPageInvestigationActionAdmissionSystemPrompt,
-  resolveGeneralPageInvestigationActionTier,
 } from "../src/lib/general-page-investigation-action-admission";
 import {
+  buildGeneralPageInvestigationActionTierSystemPrompt,
+} from "../src/lib/general-page-investigation-action-tier";
+import {
   buildTierBGeneralPageInvestigationActionAdmissionChatBody,
+  buildTierBGeneralPageInvestigationActionTierChatBody,
   buildTierBGeneralPageInvestigationSpanAdapterChatBody,
   callTierBGeneralPageInvestigationActionAdmission,
+  callTierBGeneralPageInvestigationActionTier,
   callTierBGeneralPageInvestigationSpanAdapter,
 } from "../src/lib/tier-b-client";
 import type { Lang } from "../src/lib/types";
@@ -102,6 +106,7 @@ const concurrency = boundedInteger("--concurrency", 2, 1, 4);
 const timeoutMs = boundedInteger("--timeout-ms", 60_000, 5_000, 120_000);
 const withAdmission = process.argv.includes("--with-admission");
 const admissionTimeoutMs = boundedInteger("--admission-timeout-ms", 10_000, 5_000, 30_000);
+const tierTimeoutMs = boundedInteger("--tier-timeout-ms", 10_000, 5_000, 30_000);
 const responseFormat = structuredOutputMode();
 if (!outputPath.includes(`${path.sep}tmp${path.sep}private-data${path.sep}runs${path.sep}`)) {
   throw new Error("Synthetic span Adapter preflight output must stay under tmp/private-data/runs");
@@ -168,15 +173,26 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
       })
     : null;
   const admissionLatencyMs = admission ? Date.now() - admissionStarted : 0;
-  const protocolOk = result.ok && (!withAdmission || !selection || admission?.ok === true);
-  const finalTier = !withAdmission
-    ? selection?.presentationTier ?? null
-    : selection && admission?.value
-      ? resolveGeneralPageInvestigationActionTier(
-          selection.presentationTier,
-          admission.value,
-        )
-      : null;
+  const tierStarted = Date.now();
+  const tier = withAdmission && selection && admission?.value?.decision === "admit"
+    ? await callTierBGeneralPageInvestigationActionTier({
+        endpoint,
+        model,
+        structuredOutputMode: responseFormat,
+        apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
+        timeoutMs: tierTimeoutMs,
+        selection,
+        authorizedSourceContext: fixture.groundingText,
+        source: fixture.source,
+      })
+    : null;
+  const tierLatencyMs = tier ? Date.now() - tierStarted : 0;
+  const protocolOk = result.ok && (!withAdmission || !selection ||
+    (admission?.ok === true &&
+      (admission.value?.decision === "reject" || tier?.ok === true)));
+  const finalTier = withAdmission && admission?.value?.decision === "admit"
+    ? tier?.value?.tier ?? null
+    : null;
   const admittedSelections = selection && finalTier
     ? [{ ...selection, presentationTier: finalTier }]
     : [];
@@ -213,17 +229,28 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     attempts: result.attempts,
     selectorLatencyMs,
     admissionLatencyMs,
+    tierLatencyMs,
     latencyMs: Date.now() - started,
     raw: result.raw,
     value: result.value,
     admission: admission
       ? {
           ok: admission.ok,
-          outcome: admission.value?.outcome,
+          decision: admission.value?.decision,
           finishReason: admission.finishReason,
           usage: admission.usage,
           error: admission.error,
           raw: admission.raw,
+        }
+      : null,
+    tier: tier
+      ? {
+          ok: tier.ok,
+          tier: tier.value?.tier,
+          finishReason: tier.finishReason,
+          usage: tier.usage,
+          error: tier.error,
+          raw: tier.raw,
         }
       : null,
     presentations,
@@ -265,6 +292,8 @@ const latencyPercentile = (percentile: number) =>
   latencyValues[Math.max(0, Math.ceil(latencyValues.length * percentile) - 1)] ?? 0;
 const admissionRequested = results.filter((row) => row.admission).length;
 const admissionProtocolSucceeded = results.filter((row) => row.admission?.ok === true).length;
+const tierRequested = results.filter((row) => row.tier).length;
+const tierProtocolSucceeded = results.filter((row) => row.tier?.ok === true).length;
 const gates = {
   protocol: { result: protocolSucceeded, required: fixtures.length, pass: protocolSucceeded === fixtures.length },
   primaryCorrect: {
@@ -348,7 +377,6 @@ const body = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
 });
 const representativeSelection = {
   candidateId: representativeCandidates[0].id,
-  presentationTier: "primary" as const,
   exactClaim: representativeCandidates[0].exactText,
   sourceQuote: representativeCandidates[0].exactText,
   start: representativeCandidates[0].start,
@@ -364,10 +392,20 @@ const admissionBody = withAdmission
       source: representative.source,
     })
   : undefined;
+const tierBody = withAdmission
+  ? buildTierBGeneralPageInvestigationActionTierChatBody({
+      endpoint,
+      model,
+      structuredOutputMode: responseFormat,
+      selection: representativeSelection,
+      authorizedSourceContext: representative.groundingText,
+      source: representative.source,
+    })
+  : undefined;
 const artifact = {
   schemaVersion: 1,
   task: withAdmission
-    ? "general_page_investigation_two_stage_synthetic_preflight"
+    ? "general_page_investigation_three_stage_synthetic_preflight"
     : "general_page_investigation_span_adapter_synthetic_preflight",
   split: "synthetic-dev",
   passed,
@@ -386,6 +424,8 @@ const artifact = {
     ...(withAdmission ? {
       admissionMaxTokens: admissionBody?.max_tokens,
       admissionTimeoutMs,
+      tierMaxTokens: tierBody?.max_tokens,
+      tierTimeoutMs,
     } : {}),
     timeoutMs,
     concurrency,
@@ -399,11 +439,14 @@ const artifact = {
       admissionSystemPromptSha256: sha256Text(
         buildGeneralPageInvestigationActionAdmissionSystemPrompt(),
       ),
+      tierSystemPromptSha256: sha256Text(
+        buildGeneralPageInvestigationActionTierSystemPrompt(),
+      ),
     } : {}),
     fixtureSetSha256: sha256CanonicalJson(fixtures),
     sourceOwnership: "local_exact_span",
     modelAuthoredFields: withAdmission
-      ? ["selection", "outcome"]
+      ? ["selection", "decision", "tier"]
       : ["selection"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
     repairPolicy: "none_one_shot",
@@ -437,8 +480,11 @@ const artifact = {
       admissionProtocolSucceeded,
       admissionProtocolFailed: admissionRequested - admissionProtocolSucceeded,
       admissionAdmitted: results.filter((row) =>
-        row.admission?.outcome === "primary" || row.admission?.outcome === "exploratory").length,
-      admissionRejected: results.filter((row) => row.admission?.outcome === "reject").length,
+        row.admission?.decision === "admit").length,
+      admissionRejected: results.filter((row) => row.admission?.decision === "reject").length,
+      tierRequested,
+      tierProtocolSucceeded,
+      tierProtocolFailed: tierRequested - tierProtocolSucceeded,
       latencyP50Ms: latencyPercentile(0.5),
       latencyP95Ms: latencyPercentile(0.95),
       latencyMaxMs: latencyValues.at(-1) ?? 0,

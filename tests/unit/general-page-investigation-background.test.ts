@@ -35,7 +35,7 @@ const request: GeneralPageAnalysisRequestMsg = {
 };
 
 describe("background General Page investigation preparation", () => {
-  it("runs two derived stages and reveals the locally owned action atomically", async () => {
+  it("runs three derived stages and reveals the locally owned action atomically", async () => {
     const capturedJobs: any[] = [];
     const scheduler = {
       enqueue: vi.fn(async (job: any) => {
@@ -48,10 +48,9 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 9 as const,
+        schemaVersion: 10 as const,
         selections: [{
           candidateId: input.candidates[1].id,
-          presentationTier: "primary" as const,
           exactClaim: input.candidates[1].exactText,
           sourceQuote: input.candidates[1].exactText,
           start: input.candidates[1].start,
@@ -62,9 +61,13 @@ describe("background General Page investigation preparation", () => {
     const callAdmission = vi.fn(async () => ({
       ok: true,
       value: {
-        schemaVersion: 3 as const,
-        outcome: "primary" as const,
+        schemaVersion: 4 as const,
+        decision: "admit" as const,
       },
+    }));
+    const callTier = vi.fn(async () => ({
+      ok: true,
+      value: { schemaVersion: 1 as const, tier: "primary" as const },
     }));
 
     expect(scheduleGeneralPageInvestigationPreparation({
@@ -76,11 +79,12 @@ describe("background General Page investigation preparation", () => {
       resourceKey: "gx10|fixture-model",
       callAdapter,
       callAdmission,
+      callTier,
       sendMessage,
     })).toBe(true);
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
 
-    expect(capturedJobs).toHaveLength(2);
+    expect(capturedJobs).toHaveLength(3);
     expect(capturedJobs.map((job) => ({
       priority: job.priority,
       supersedeKey: job.supersedeKey,
@@ -93,9 +97,14 @@ describe("background General Page investigation preparation", () => {
         priority: "derived",
         supersedeKey: "general-page-investigation:42:page:admit",
       },
+      {
+        priority: "derived",
+        supersedeKey: "general-page-investigation:42:page:tier",
+      },
     ]);
     expect(callAdapter).toHaveBeenCalledTimes(1);
     expect(callAdmission).toHaveBeenCalledTimes(1);
+    expect(callTier).toHaveBeenCalledTimes(1);
     expect(callAdmission).toHaveBeenCalledWith(expect.objectContaining({
       authorizedSourceContext: request.context.mainText,
       structuredOutputMode: "json_schema",
@@ -116,6 +125,14 @@ describe("background General Page investigation preparation", () => {
         expect.objectContaining({ exactText: "衛生局命令遠帆公司在七月三十一日前完成下架" }),
       ]),
     }));
+    expect(callTier).toHaveBeenCalledWith(expect.objectContaining({
+      authorizedSourceContext: request.context.mainText,
+      structuredOutputMode: "json_schema",
+      timeoutMs: 10_000,
+      selection: expect.objectContaining({
+        exactClaim: "衛生局命令遠帆公司在七月三十一日前完成下架",
+      }),
+    }));
     expect(sendMessage).toHaveBeenCalledWith({
       type: "GENERAL_PAGE_INVESTIGATION_RESULT",
       tabId: 42,
@@ -131,17 +148,16 @@ describe("background General Page investigation preparation", () => {
     });
   });
 
-  it("preserves an admitted exploratory tier for the reader-facing warning", async () => {
+  it("uses the separately classified exploratory tier for the reader-facing warning", async () => {
     const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
     const sendMessage = vi.fn();
     const callAdapter = vi.fn(async (input: any) => ({
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 9 as const,
+        schemaVersion: 10 as const,
         selections: [{
           candidateId: input.candidates[0].id,
-          presentationTier: "exploratory" as const,
           exactClaim: input.candidates[0].exactText,
           sourceQuote: input.candidates[0].exactText,
           start: input.candidates[0].start,
@@ -161,9 +177,13 @@ describe("background General Page investigation preparation", () => {
       callAdmission: vi.fn(async () => ({
         ok: true,
         value: {
-          schemaVersion: 3 as const,
-          outcome: "exploratory" as const,
+          schemaVersion: 4 as const,
+          decision: "admit" as const,
         },
+      })),
+      callTier: vi.fn(async () => ({
+        ok: true,
+        value: { schemaVersion: 1 as const, tier: "exploratory" as const },
       })),
       sendMessage,
     });
@@ -177,17 +197,16 @@ describe("background General Page investigation preparation", () => {
     }));
   });
 
-  it("atomically lowers a proposed primary action when admission returns exploratory", async () => {
+  it("does not reveal the action before tier classification settles", async () => {
     const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
     const sendMessage = vi.fn();
     const callAdapter = vi.fn(async (input: any) => ({
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 9 as const,
+        schemaVersion: 10 as const,
         selections: [{
           candidateId: input.candidates[0].id,
-          presentationTier: "primary" as const,
           exactClaim: input.candidates[0].exactText,
           sourceQuote: input.candidates[0].exactText,
           start: input.candidates[0].start,
@@ -207,9 +226,13 @@ describe("background General Page investigation preparation", () => {
       callAdmission: vi.fn(async () => ({
         ok: true,
         value: {
-          schemaVersion: 3 as const,
-          outcome: "exploratory" as const,
+          schemaVersion: 4 as const,
+          decision: "admit" as const,
         },
+      })),
+      callTier: vi.fn(async () => ({
+        ok: true,
+        value: { schemaVersion: 1 as const, tier: "exploratory" as const },
       })),
       sendMessage,
     });
@@ -238,10 +261,9 @@ describe("background General Page investigation preparation", () => {
         ok: true,
         attempts: 1 as const,
         value: {
-          schemaVersion: 9 as const,
+          schemaVersion: 10 as const,
           selections: [{
             candidateId: input.candidates[0].id,
-            presentationTier: "primary" as const,
             exactClaim: input.candidates[0].exactText,
             sourceQuote: input.candidates[0].exactText,
             start: input.candidates[0].start,
@@ -255,9 +277,16 @@ describe("background General Page investigation preparation", () => {
       return {
         ok: true,
         value: {
-          schemaVersion: 3 as const,
-          outcome: "primary" as const,
+          schemaVersion: 4 as const,
+          decision: "admit" as const,
         },
+      };
+    });
+    const callTier = vi.fn(async () => {
+      order.push("tier");
+      return {
+        ok: true,
+        value: { schemaVersion: 1 as const, tier: "primary" as const },
       };
     });
 
@@ -270,6 +299,7 @@ describe("background General Page investigation preparation", () => {
       resourceKey: "gx10|fixture-model",
       callAdapter,
       callAdmission,
+      callTier,
       sendMessage,
     });
     await vi.waitFor(() => expect(order).toEqual(["select"]));
@@ -287,7 +317,7 @@ describe("background General Page investigation preparation", () => {
 
     await expect(userWork).resolves.toBe("done");
     await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
-    expect(order).toEqual(["select", "user", "admit"]);
+    expect(order).toEqual(["select", "user", "admit", "tier"]);
     expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({ status: "prepared" }));
   });
 
@@ -306,10 +336,9 @@ describe("background General Page investigation preparation", () => {
         ok: true,
         attempts: 1 as const,
         value: {
-          schemaVersion: 9 as const,
+          schemaVersion: 10 as const,
           selections: [{
             candidateId: input.candidates[0].id,
-            presentationTier: "primary" as const,
             exactClaim: input.candidates[0].exactText,
             sourceQuote: input.candidates[0].exactText,
             start: input.candidates[0].start,
@@ -323,9 +352,16 @@ describe("background General Page investigation preparation", () => {
       return {
         ok: true,
         value: {
-          schemaVersion: 3 as const,
-          outcome: "primary" as const,
+          schemaVersion: 4 as const,
+          decision: "admit" as const,
         },
+      };
+    });
+    const callTier = vi.fn(async () => {
+      order.push("tier");
+      return {
+        ok: true,
+        value: { schemaVersion: 1 as const, tier: "primary" as const },
       };
     });
 
@@ -338,6 +374,7 @@ describe("background General Page investigation preparation", () => {
       resourceKey: "gx10|fixture-model",
       callAdapter,
       callAdmission,
+      callTier,
       sendMessage,
     });
     await vi.waitFor(() => expect(order).toEqual(["select"]));
@@ -362,6 +399,7 @@ describe("background General Page investigation preparation", () => {
       "feed-3",
       "admit",
       "feed-4",
+      "tier",
     ]);
   });
 
@@ -371,7 +409,7 @@ describe("background General Page investigation preparation", () => {
     const callAdapter = vi.fn(async () => ({
       ok: true,
       attempts: 1 as const,
-      value: { schemaVersion: 9 as const, selections: [] },
+      value: { schemaVersion: 10 as const, selections: [] },
     }));
 
     scheduleGeneralPageInvestigationPreparation({
@@ -465,7 +503,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 9 as const,
+        schemaVersion: 10 as const,
         selections: [],
       },
     }));
@@ -489,7 +527,6 @@ describe("background General Page investigation preparation", () => {
   it("publishes nothing when the second stage rejects or is unavailable", async () => {
     const selection = {
       candidateId: "span:1",
-      presentationTier: "primary" as const,
       exactClaim: "食藥署公布232項產品名單",
       sourceQuote: "食藥署公布232項產品名單",
       start: 0,
@@ -498,15 +535,15 @@ describe("background General Page investigation preparation", () => {
     const callAdapter = vi.fn(async () => ({
       ok: true,
       attempts: 1 as const,
-      value: { schemaVersion: 9 as const, selections: [selection] },
+      value: { schemaVersion: 10 as const, selections: [selection] },
     }));
 
     for (const admissionResult of [
       {
         ok: true,
         value: {
-          schemaVersion: 3 as const,
-          outcome: "reject" as const,
+          schemaVersion: 4 as const,
+          decision: "reject" as const,
         },
       },
       { ok: false, value: null, error: "investigation_action_admission_invalid_json" as const },

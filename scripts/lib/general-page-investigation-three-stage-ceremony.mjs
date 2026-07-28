@@ -7,7 +7,7 @@ const REQUIRED_FORMATS = new Map([
 
 const TASKS = {
   admission: "general_page_investigation_action_admission_synthetic_preflight",
-  composed: "general_page_investigation_two_stage_synthetic_preflight",
+  composed: "general_page_investigation_three_stage_synthetic_preflight",
 };
 
 function sha256Text(value) {
@@ -86,22 +86,29 @@ function validateComposedReceipt(receipt, label, errors) {
     errors.push(`${label}: tier-confusion diagnostics exceed the bounded allowance`);
   }
   const admissionRequested = receipt.counts?.admissionRequested;
+  const tierRequested = receipt.counts?.tierRequested;
   if (!Number.isInteger(admissionRequested) ||
       admissionRequested < 24 ||
       admissionRequested > 30 ||
       receipt.counts?.admissionProtocolSucceeded !== admissionRequested ||
       receipt.counts?.admissionProtocolFailed !== 0 ||
-      receipt.networkBoundary?.modelRequests !== 30 + admissionRequested) {
-    errors.push(`${label}: composed Selector and Admission request counts disagree`);
+      !Number.isInteger(tierRequested) ||
+      tierRequested < 24 ||
+      tierRequested > admissionRequested ||
+      receipt.counts?.tierProtocolSucceeded !== tierRequested ||
+      receipt.counts?.tierProtocolFailed !== 0 ||
+      receipt.networkBoundary?.modelRequests !== 30 + admissionRequested + tierRequested) {
+    errors.push(`${label}: composed Selector, Admission, and Tier request counts disagree`);
   }
   if (receipt.contract?.repairPolicy !== "none_one_shot" ||
       receipt.contract?.protocolRetryPolicy !== "disabled_for_release_gate" ||
-      receipt.model?.admissionTimeoutMs !== 10_000) {
-    errors.push(`${label}: wrong composed retry or Admission timeout contract`);
+      receipt.model?.admissionTimeoutMs !== 10_000 ||
+      receipt.model?.tierTimeoutMs !== 10_000) {
+    errors.push(`${label}: wrong composed retry, Admission, or Tier timeout contract`);
   }
 }
 
-export function validateTwoStageInvestigationCeremony(receipts, expectedCandidateCommit) {
+export function validateThreeStageInvestigationCeremony(receipts, expectedCandidateCommit) {
   const errors = [];
   if (!Array.isArray(receipts) || receipts.length !== 12) {
     errors.push(`ceremony requires exactly 12 receipts; found ${receipts?.length ?? 0}`);
@@ -119,6 +126,7 @@ export function validateTwoStageInvestigationCeremony(receipts, expectedCandidat
   let model;
   let admissionPromptSha256;
   let selectorPromptSha256;
+  let tierPromptSha256;
   const exploratoryOverstatedSamples = new Set();
 
   for (const [index, source] of (receipts ?? []).entries()) {
@@ -173,8 +181,10 @@ export function validateTwoStageInvestigationCeremony(receipts, expectedCandidat
     } else {
       selectorPromptSha256 ??= receipt.contract?.systemPromptSha256;
       admissionPromptSha256 ??= receipt.contract?.admissionSystemPromptSha256;
+      tierPromptSha256 ??= receipt.contract?.tierSystemPromptSha256;
       if (receipt.contract?.systemPromptSha256 !== selectorPromptSha256 ||
-          receipt.contract?.admissionSystemPromptSha256 !== admissionPromptSha256) {
+          receipt.contract?.admissionSystemPromptSha256 !== admissionPromptSha256 ||
+          receipt.contract?.tierSystemPromptSha256 !== tierPromptSha256) {
         errors.push(`${label}: composed prompt drift`);
       }
       validateComposedReceipt(receipt, label, errors);
@@ -227,7 +237,7 @@ export function validateTwoStageInvestigationCeremony(receipts, expectedCandidat
 
   return {
     schemaVersion: 1,
-    task: "general_page_investigation_two_stage_synthetic_ceremony",
+    task: "general_page_investigation_three_stage_synthetic_ceremony",
     passed: errors.length === 0,
     candidateCommit: expectedCandidateCommit,
     sourceCount: sources.length,
@@ -236,6 +246,7 @@ export function validateTwoStageInvestigationCeremony(receipts, expectedCandidat
     model,
     selectorPromptSha256,
     admissionPromptSha256,
+    tierPromptSha256,
     sources,
     errors,
   };

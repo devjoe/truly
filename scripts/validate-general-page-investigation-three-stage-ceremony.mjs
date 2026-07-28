@@ -3,8 +3,8 @@ import path from "node:path";
 import process from "node:process";
 
 import {
-  validateTwoStageInvestigationCeremony,
-} from "./lib/general-page-investigation-two-stage-ceremony.mjs";
+  validateThreeStageInvestigationCeremony,
+} from "./lib/general-page-investigation-three-stage-ceremony.mjs";
 
 function values(name) {
   const found = [];
@@ -33,7 +33,7 @@ const receipts = receiptPaths.map((receiptPath) => {
   return { path: receiptPath, raw, value: JSON.parse(raw) };
 });
 const artifact = {
-  ...validateTwoStageInvestigationCeremony(receipts, candidateCommit),
+  ...validateThreeStageInvestigationCeremony(receipts, candidateCommit),
   createdAt: new Date().toISOString(),
 };
 fs.mkdirSync(path.dirname(outputPath), { recursive: true, mode: 0o700 });

@@ -20,7 +20,6 @@ import { sha256Text } from "./lib/private-general-page-semantic-audit.mjs";
 
 type StructuredOutputMode = "json_schema" | "json_object";
 type Decision = "admit" | "reject";
-type PresentationTier = "primary" | "exploratory" | null;
 
 interface Fixture {
   sampleId: string;
@@ -29,15 +28,6 @@ interface Fixture {
   title: string;
   context: string;
   selectedText: string;
-}
-
-function expectedTierFor(fixture: Fixture): PresentationTier {
-  if (fixture.expectedDecision === "reject") return null;
-  return /(?:basic-definition|release-date|catalog-record|career-history)$/u.test(
-    fixture.sampleId,
-  )
-    ? "exploratory"
-    : "primary";
 }
 
 const fixtures: Fixture[] = [
@@ -370,7 +360,6 @@ function requestFor(fixture: Fixture): TierBGeneralPageInvestigationActionAdmiss
     timeoutMs,
     selection: {
       candidateId: "span:0",
-      presentationTier: "primary",
       exactClaim: fixture.selectedText,
       sourceQuote: fixture.selectedText,
       start,
@@ -390,23 +379,14 @@ async function evaluate(fixture: Fixture): Promise<Record<string, unknown>> {
   representativeBody ??= buildTierBGeneralPageInvestigationActionAdmissionChatBody(request);
   const started = Date.now();
   const result = await callTierBGeneralPageInvestigationActionAdmission(request);
-  const expectedTier = expectedTierFor(fixture);
-  const outcome = result.value?.outcome ?? null;
-  const decision = outcome === "reject" ? "reject" : outcome ? "admit" : null;
-  const presentationTier = outcome === "reject" ? null : outcome;
+  const decision = result.value?.decision ?? null;
   return {
     sampleId: fixture.sampleId,
     language: fixture.language,
     expectedDecision: fixture.expectedDecision,
-    expectedTier,
     protocolOk: result.ok,
-    outcome,
     decision,
-    presentationTier,
-    correct:
-      result.ok &&
-      decision === fixture.expectedDecision &&
-      presentationTier === expectedTier,
+    correct: result.ok && decision === fixture.expectedDecision,
     latencyMs: Date.now() - started,
     finishReason: result.finishReason,
     usage: result.usage,
@@ -475,7 +455,7 @@ const artifact = {
     schemaSha256: responseSchema ? sha256CanonicalJson(responseSchema) : undefined,
     systemPromptSha256: sha256Text(buildGeneralPageInvestigationActionAdmissionSystemPrompt()),
     fixtureSetSha256: sha256CanonicalJson(fixtures),
-    modelAuthoredFields: ["outcome"],
+    modelAuthoredFields: ["decision"],
     repairPolicy: "none_one_shot",
   },
   data: {
