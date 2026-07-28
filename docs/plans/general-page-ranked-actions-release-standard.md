@@ -259,8 +259,14 @@ adjudication must establish:
 
 - for news/article: at least 10 `expectedPrimaryAction` and at least 5
   `expectedNone` rows;
-- for general-web: at least 5 `expectedPrimaryAction`, at least 10
+- for general-web: at least 5 `expectedPrimaryAction`, at least 9
   `expectedExploratoryAction`, and at least 5 `expectedNone` rows.
+
+The general-web exploratory floor is intentionally one row lower than the
+original ten-row draft. A 2026-07-28 adversarial decision review accepted this
+bounded product-aligned relaxation because both nine and ten rows require six
+successful recoveries at the unchanged 60% recall gate. All utility and
+zero-tolerance safety gates remain unchanged.
 
 Every row uses the final effective Page context produced by the bound
 extraction and parser-advisor build. These categories are evaluation strata,
@@ -348,11 +354,11 @@ the row is `expectedNone`. These source-only labels are adjudicated before
 Selector output is revealed; they do not reuse candidate output-review tiers.
 
 Report every denominator and the complete source-label × displayed-tier ×
-reviewer-tier confusion matrix. In Gate B, a news-primary or
-general-exploratory metric is invalid below ten rows; general-primary is
-invalid below five rows. Platform, language, domain, extraction method, and
-readiness remain diagnostic slices and do not receive lower thresholds. This
-gate is development evidence, not a holdout.
+reviewer-tier confusion matrix. In Gate B, a news-primary metric is invalid
+below ten rows, general-exploratory is invalid below nine rows, and
+general-primary is invalid below five rows. Platform, language, domain,
+extraction method, and readiness remain diagnostic slices and do not receive
+lower thresholds. This gate is development evidence, not a holdout.
 
 ### C. Fresh untouched holdout
 
@@ -431,6 +437,31 @@ actual results; it is not guessed by this selector.
 Automatic Focus ranked actions are also a non-goal for this candidate.
 
 ## Candidate history
+
+The first tiered Page-only real-data candidate at commit `5fb6aeb` passed the
+formal synthetic provider gate and produced 60/60 protocol-valid results on a
+fresh source-adjudicated development cohort, but failed Gate B before pairwise
+review. The frozen source strata were news `15/7/8` and general web `13/9/8`
+for primary/exploratory/none. The candidate recovered only `9/15` news primary,
+`9/13` general primary, and `2/9` general exploratory rows; it also overstated
+four exploratory rows as primary and exposed actions on six expected-none
+rows. Selector proposed a primary action on every row and the binary Admission
+critic rejected half of them, so the combined system neither expressed the
+exploratory tier reliably nor separated weak factual-looking prose from useful
+reader actions. No holdout was opened.
+
+Inspection found one simple responsibility problem rather than a need for
+additional local semantic guards. Selector often preferred flattened
+headline/metadata spans over clean body candidates and treated stable
+documentation or literary prose as primary. Admission then rejected many
+dirty selections that had cleaner alternatives while admitting several
+fiction or publisher-boilerplate spans. The successor shortens both prompts:
+Selector uses an explicit discard, absolute-tier, then rank sequence; Admission
+blocks only clear structural, public-decidability, source-role, fiction, or
+safety violations. Wire schemas, deterministic presentation, local hard
+boundaries, release thresholds, and Page-only scope remain unchanged. The
+consumed cohort is development diagnosis only; the successor requires a fresh
+Gate A and Gate B.
 
 The v4 primary-plus-secondary candidate failed its fresh development gate:
 hard safety and news recall held, but recommendation precision, Facebook

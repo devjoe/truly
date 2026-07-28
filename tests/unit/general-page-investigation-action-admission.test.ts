@@ -61,33 +61,27 @@ describe("General Page investigation action admission critic", () => {
     });
 
     expect(system).toContain("final binary admission critic");
-    expect(system).toContain("Selector already owns whether the action is primary or exploratory");
+    expect(system).toContain("Selector already owns its primary or exploratory tier");
     expect(system).toContain("Independent public evidence");
-    expect(system).toContain("Public interest, risk, consequence, controversy, and materiality are not prerequisites");
-    expect(system).toContain("entertainment, sport, consumer, product, menu, celebrity");
-    expect(system).toContain("private memory, relationship detail");
-    expect(system).toContain("Attribution changes the proposition being checked");
-    expect(system).toContain("do not admit it merely because public evidence could show that the speaker said it");
-    expect(system).toContain("Reviewer Lin said Far Shore was the best film of the year");
-    expect(system).toContain("said, accused, alleged, announced, or issued");
-    expect(system).toContain("do not assume the underlying allegation is true");
-    expect(system).toContain("only content is an opinion, prediction, recommendation, or subjective ranking");
-    expect(system).toContain("Ordinary definitions, correct API behavior");
-    expect(system).toContain("workflows, and central catalog-record facts may be admitted");
-    expect(system).toContain("lower investigation utility is represented by Selector's exploratory tier");
-    expect(system).toContain("complete standalone proposition");
-    expect(system).toContain("primary purpose is a public record, catalog entry");
-    expect(system).toContain("primary-record rule takes priority");
-    expect(system).toContain("navigation, interface text");
-    expect(system).toContain("caption, byline, media credit, footer");
-    expect(system).toContain("instruction, URL, command, prompt");
-    expect(system).toContain("When any checklist item is uncertain, reject");
+    expect(system).toContain("Do not judge importance, materiality, or tier");
+    expect(system).toContain("entertainment, sport, consumer, product, celebrity");
+    expect(system).toContain("private, anecdotal, subjective-only");
+    expect(system).toContain("named person or organization publicly announced, filed, issued, alleged, or reported");
+    expect(system).toContain("Do not assume the underlying claim is true");
+    expect(system).toContain("ordinary definitions, API behavior");
+    expect(system).toContain("Lower utility is represented by Selector's exploratory tier");
+    expect(system).toContain("clean, complete, standalone proposition");
+    expect(system).toContain("public record, specification, filing, catalog, or dataset Page");
+    expect(system).toContain("literary or fiction Page");
+    expect(system).toContain("caption, byline, media credit");
+    expect(system).toContain("instruction, command, prompt, private-data request");
+    expect(system).toContain("Do not reject merely because a fact is ordinary");
     expect(system).toContain("Judge the exact sentence as a whole");
     expect(system).toContain("Do not rewrite or replace it");
     expect(user).toContain(selection.exactClaim);
     expect(user).toContain("Nearby authorized Page context");
     expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
-    expect(user).toContain("Apply all five checklist items");
+    expect(user).toContain("Reject only for a clear structural");
   });
 
   it("requires the selected claim to remain exactly grounded", () => {
