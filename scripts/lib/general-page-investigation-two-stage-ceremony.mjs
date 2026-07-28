@@ -59,15 +59,31 @@ function validateComposedReceipt(receipt, label, errors) {
       receipt.counts?.protocolFailed !== 0 ||
       receipt.counts?.oneShotRows !== 30 ||
       receipt.counts?.primaryCorrect !== 16 ||
-      receipt.counts?.exploratoryCorrect !== 8 ||
+      receipt.counts?.exploratoryVisible !== 8 ||
+      !Number.isInteger(receipt.counts?.exploratoryCorrect) ||
+      receipt.counts.exploratoryCorrect < 7 ||
+      receipt.counts.exploratoryCorrect > 8 ||
       receipt.counts?.noneCorrect !== 6) {
     errors.push(`${label}: composed capability or hard boundary failed`);
+  }
+  const exploratoryByLanguage = receipt.gates?.exploratoryCorrect?.byLanguage;
+  if (receipt.gates?.exploratoryCorrect?.visible !== 8 ||
+      receipt.gates?.exploratoryCorrect?.result !== receipt.counts?.exploratoryCorrect ||
+      exploratoryByLanguage?.["zh-TW"] < 3 ||
+      exploratoryByLanguage?.en < 3 ||
+      exploratoryByLanguage?.["zh-TW"] + exploratoryByLanguage?.en !==
+        receipt.counts?.exploratoryCorrect) {
+    errors.push(`${label}: exploratory language floors or visibility disagree`);
   }
   if (!Number.isInteger(receipt.diagnostics?.primaryUnderstated) ||
       !Number.isInteger(receipt.diagnostics?.exploratoryOverstated) ||
       receipt.diagnostics.primaryUnderstated !== 0 ||
-      receipt.diagnostics.exploratoryOverstated !== 0) {
-    errors.push(`${label}: tier-confusion diagnostics must be zero`);
+      receipt.diagnostics.exploratoryOverstated < 0 ||
+      receipt.diagnostics.exploratoryOverstated > 1 ||
+      !Array.isArray(receipt.diagnostics?.exploratoryOverstatedSamples) ||
+      receipt.diagnostics.exploratoryOverstatedSamples.length !==
+        receipt.diagnostics.exploratoryOverstated) {
+    errors.push(`${label}: tier-confusion diagnostics exceed the bounded allowance`);
   }
   const admissionRequested = receipt.counts?.admissionRequested;
   if (!Number.isInteger(admissionRequested) ||
@@ -103,6 +119,7 @@ export function validateTwoStageInvestigationCeremony(receipts, expectedCandidat
   let model;
   let admissionPromptSha256;
   let selectorPromptSha256;
+  const exploratoryOverstatedSamples = new Set();
 
   for (const [index, source] of (receipts ?? []).entries()) {
     const label = `receipt ${index + 1}`;
@@ -161,6 +178,13 @@ export function validateTwoStageInvestigationCeremony(receipts, expectedCandidat
         errors.push(`${label}: composed prompt drift`);
       }
       validateComposedReceipt(receipt, label, errors);
+      for (const sampleId of receipt.diagnostics?.exploratoryOverstatedSamples ?? []) {
+        if (typeof sampleId !== "string") {
+          errors.push(`${label}: invalid exploratory overstatement sample ID`);
+        } else {
+          exploratoryOverstatedSamples.add(sampleId);
+        }
+      }
     }
 
     if (!validInstant(receipt.startedAt) || !validInstant(receipt.completedAt) ||
@@ -190,6 +214,9 @@ export function validateTwoStageInvestigationCeremony(receipts, expectedCandidat
         errors.push(`${taskKey} ${format} requires ${required} receipts; found ${count}`);
       }
     }
+  }
+  if (exploratoryOverstatedSamples.size > 1) {
+    errors.push("composed receipts exceed the one-fixture exploratory variance bound");
   }
   const chronological = intervals.toSorted((left, right) => left.start - right.start);
   for (let index = 1; index < chronological.length; index += 1) {

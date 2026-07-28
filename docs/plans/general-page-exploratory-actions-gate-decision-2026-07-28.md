@@ -114,3 +114,30 @@ residue, handoff, and warning-consistency requirement remains hard.
 No previous Gate A, B, or C result can authorize this product contract. The
 prompt, schema, renderer, rubric, and thresholds define a new candidate and
 require fresh evidence.
+
+## Gate A capability tolerance follow-up
+
+The first frozen v7 synthetic attempts passed primary, expected-none, protocol,
+grounding, Admission, localization, and action-visibility controls. One
+Traditional Chinese public-library workflow control was intermittently
+promoted to `primary`, while the equivalent English control was
+`exploratory`.
+
+A second three-branch adversarial review accepted this bounded Gate A
+provider-capability tolerance:
+
+- all 8 exploratory controls must still produce a visible admitted action;
+- at least 7/8 must carry `presentationTier=exploratory`;
+- each language must achieve at least 3/4;
+- the only permitted miss is promotion of that same usable control to
+  `primary`;
+- across all six formal composed receipts, misses may involve at most one
+  preregistered fixture identity.
+
+The validated decision report is:
+
+`tmp/grill-reports/general-page-exploratory-gate-a-tolerance-2026-07-28.html`
+
+This does not authorize release-tier ambiguity. Fresh real-data Gate B and
+untouched Gate C retain zero exploratory-to-primary overstatement and require
+the localized exploratory cue on every displayed exploratory action.

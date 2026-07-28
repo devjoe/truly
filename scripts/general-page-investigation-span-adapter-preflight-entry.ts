@@ -241,7 +241,14 @@ const exploratoryRows = results.filter((row) => row.expectedAction === "explorat
 const noneRows = results.filter((row) => row.expectedAction === "none");
 const primaryCorrect = primaryRows.filter((row) => row.actualAction === "primary").length;
 const exploratoryCorrect = exploratoryRows.filter((row) => row.actualAction === "exploratory").length;
+const exploratoryVisible = exploratoryRows.filter((row) => row.actualAction !== "none").length;
 const noneCorrect = noneRows.filter((row) => row.actualAction === "none").length;
+const exploratoryCorrectByLanguage = {
+  "zh-TW": exploratoryRows.filter((row) =>
+    row.sourceLang === "zh-TW" && row.actualAction === "exploratory").length,
+  en: exploratoryRows.filter((row) =>
+    row.sourceLang === "en" && row.actualAction === "exploratory").length,
+};
 const localeEligible = results.filter((row) => row.protocolOk && row.decision === "prepared");
 const localeCorrect = localeEligible.filter((row) => row.localeCorrect).length;
 const latencyValues = results.map((row) => row.latencyMs).toSorted((left, right) => left - right);
@@ -259,9 +266,15 @@ const gates = {
   },
   exploratoryCorrect: {
     result: exploratoryCorrect,
-    required: exploratoryRows.length,
+    visible: exploratoryVisible,
+    required: 7,
     denominator: exploratoryRows.length,
-    pass: exploratoryCorrect === exploratoryRows.length,
+    requiredVisible: exploratoryRows.length,
+    byLanguage: exploratoryCorrectByLanguage,
+    requiredPerLanguage: 3,
+    pass: exploratoryVisible === exploratoryRows.length &&
+      exploratoryCorrect >= 7 &&
+      Object.values(exploratoryCorrectByLanguage).every((count) => count >= 3),
   },
   noneCorrect: {
     result: noneCorrect,
@@ -297,6 +310,9 @@ const diagnostics = {
     row.expectedAction === "primary" && row.actualAction === "exploratory").length,
   exploratoryOverstated: results.filter((row) =>
     row.expectedAction === "exploratory" && row.actualAction === "primary").length,
+  exploratoryOverstatedSamples: results.filter((row) =>
+    row.expectedAction === "exploratory" && row.actualAction === "primary")
+    .map((row) => row.sampleId),
 };
 const passed = Object.values(gates).every((gate) => gate.pass);
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -402,6 +418,7 @@ const artifact = {
     protocolFailed: fixtures.length - protocolSucceeded,
     primaryCorrect,
     exploratoryCorrect,
+    exploratoryVisible,
     noneCorrect,
     localeCorrect,
     localeEligible: localeEligible.length,

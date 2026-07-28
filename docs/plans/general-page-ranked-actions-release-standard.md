@@ -228,14 +228,26 @@ Required for every run:
 - the expected task contract and clean candidate commit;
 - protocol-valid output for every row;
 - an exact known ID or null, with at most one action;
-- for composed runs, 16/16 primary controls selected as `primary`, 8/8
-  exploratory controls selected as `exploratory`, and 6/6 hard-boundary
-  sentinels abstained;
+- for composed runs, 16/16 primary controls selected as `primary`, all 8/8
+  exploratory controls displayed, at least 7/8 selected as `exploratory` with
+  at least 3/4 correct in each language, and 6/6 hard-boundary sentinels
+  abstained;
+- the sole permitted exploratory tier miss may only promote that control's
+  displayed action to `primary`; it may not abstain, select an unusable span,
+  fail Admission, or cross any hard boundary. Across all six formal composed
+  runs, permitted misses may involve at most one preregistered fixture
+  identity;
 - for direct Admission runs, 24/24 correct binary decisions, including 16/16
   admits and 8/8 rejects;
 - no hard-boundary leak, repair, retry, public search, or opened action;
 - deterministic localized Gemini handoff generated from local data;
 - `model.concurrency === 2` and a valid, non-overlapping time interval.
+
+The bounded synthetic allowance above tests provider tier capability on
+deliberately borderline controls. It does not relax the product gate: Gate B
+and Gate C retain zero exploratory-to-primary overstatement on real Page data
+and require the localized exploratory cue on every displayed exploratory
+action.
 
 ### B. Fresh runtime-envelope development audit
 

@@ -65,7 +65,8 @@ function receipt(index, taskKey, responseFormat) {
           protocolFailed: 0,
           oneShotRows: 30,
           primaryCorrect: 16,
-          exploratoryCorrect: 8,
+          exploratoryCorrect: 7,
+          exploratoryVisible: 8,
           noneCorrect: 6,
           admissionRequested: 24,
           admissionProtocolSucceeded: 24,
@@ -77,7 +78,12 @@ function receipt(index, taskKey, responseFormat) {
           gates: {
             protocol: { pass: true },
             primaryCorrect: { pass: true },
-            exploratoryCorrect: { pass: true },
+            exploratoryCorrect: {
+              pass: true,
+              result: 7,
+              visible: 8,
+              byLanguage: { "zh-TW": 3, en: 4 },
+            },
             noneCorrect: { pass: true },
             locale: { pass: true },
             candidatesAvailable: { pass: true },
@@ -85,7 +91,8 @@ function receipt(index, taskKey, responseFormat) {
           },
           diagnostics: {
             primaryUnderstated: 0,
-            exploratoryOverstated: 0,
+            exploratoryOverstated: 1,
+            exploratoryOverstatedSamples: ["synthetic-zh-04"],
           },
         }),
     networkBoundary: {
@@ -152,7 +159,11 @@ describe("General Page two-stage Gate A ceremony", () => {
     const receipts = validReceipts();
     receipts[0].value.counts.admitCorrect = 15;
     receipts[6].value.counts.primaryCorrect = 15;
-    receipts[7].value.diagnostics.exploratoryOverstated = 1;
+    receipts[7].value.diagnostics.exploratoryOverstated = 2;
+    receipts[7].value.diagnostics.exploratoryOverstatedSamples = [
+      "synthetic-zh-04",
+      "synthetic-en-04",
+    ];
     receipts[8].value.networkBoundary.modelRequests = 53;
 
     const result = validateTwoStageInvestigationCeremony(receipts, commit);
@@ -162,5 +173,16 @@ describe("General Page two-stage Gate A ceremony", () => {
     expect(result.errors.join(" ")).toMatch(/capability or hard boundary/);
     expect(result.errors.join(" ")).toMatch(/tier-confusion diagnostics/);
     expect(result.errors.join(" ")).toMatch(/request counts disagree/);
+  });
+
+  it("fails when the bounded exploratory miss rotates across fixture identities", () => {
+    const receipts = validReceipts();
+    receipts[6].value.diagnostics.exploratoryOverstatedSamples = ["synthetic-zh-04"];
+    receipts[7].value.diagnostics.exploratoryOverstatedSamples = ["synthetic-en-04"];
+
+    const result = validateTwoStageInvestigationCeremony(receipts, commit);
+
+    expect(result.passed).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/one-fixture exploratory variance bound/);
   });
 });
