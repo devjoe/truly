@@ -148,7 +148,9 @@ describe("General Page exact-span proposal selector with schema v11", () => {
     expect(system).toContain("central public record, catalog, specification, filing, or dataset fact");
     expect(system).toContain("On a literary or fiction Page");
     expect(system).toContain("real-world aside, analogy, or historical comparison");
-    expect(system).toContain("treat an incidental real-world aside");
+    expect(system).toContain(
+      "satirical premise, setup, punchline, tutorial-like advice",
+    );
     expect(system).toContain("incidental real-world aside used only to support the joke");
     expect(system).toContain("Project Gutenberg license and bibliographic header");
     expect(system).toContain("compare survivors by investigation utility");
@@ -163,12 +165,13 @@ describe("General Page exact-span proposal selector with schema v11", () => {
     expect(system).toContain("multi-item or newsletter Page");
     expect(system).toContain("Sponsorship or commercial context alone");
     expect(system).toContain("Do not decide whether a candidate is true");
-    expect(system).toContain("Use schemaVersion 11");
+    expect(system).toContain('"selection":{"candidateId":"span:N"}');
+    expect(system).toContain("selection must be an object, never a string");
     expect(system).toContain("Entertainment, sport, consumer");
     expect(system).toContain("exactly one supplied candidateId inside selection");
     expect(system).toContain("judgment context");
     expect(system).toContain("sole claim-identity boundary");
-    expect(system).toContain("schemaVersion 11");
+    expect(system).toContain('"schemaVersion":11');
     expect(system).toContain("fewest and least severe boundary defects");
     expect(system).toContain("Admission can make the terminal reject decision");
     expect(user).toContain('"id":"span:1"');
@@ -184,7 +187,7 @@ describe("General Page exact-span proposal selector with schema v11", () => {
     expect(user).toContain("Fictional narration and publisher or license boilerplate remain lowest-ranked inputs");
     expect(user).toContain("Return exactly one supplied candidate ID");
     expect(user).toContain("Context cannot repair an unresolved or metadata-prefixed exact span");
-    expect(user).toMatch(/Return one JSON object with schemaVersion 11 and selection containing exactly one supplied candidateId\.$/u);
+    expect(user).toMatch(/selection must be an object, never a string\.$/u);
     expect(user).not.toMatch(/"start":|"end":/u);
   });
 

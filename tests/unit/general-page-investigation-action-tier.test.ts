@@ -59,6 +59,7 @@ describe("General Page investigation action tier classifier", () => {
     expect(system).toContain("browser support, compatibility, permissions, and availability");
     expect(system).toContain("retrospective, review, anniversary, catalog, or history Page");
     expect(system).toContain("review, buying guide, gift guide, or product roundup");
+    expect(system).toContain("central filing, proposal, funding round, election result");
     expect(system).toContain("secondary context, a counterpoint, or background");
     expect(user).toContain(selection.exactClaim);
     expect(user).toContain("utility judgment only");

@@ -81,7 +81,11 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("An introductory source-role phrase");
     expect(system).toContain("reference or teaching Page");
     expect(system).toContain("satire, parody, literary, or fiction Pages");
-    expect(system).toContain("tutorial-like advice and incidental real-world facts");
+    expect(system).toContain("satirical premise, setup, punchline");
+    expect(system).toContain("leading callout word such as 'Warning'");
+    expect(system).toContain(
+      "satirical premise, setup, punchline, tutorial-like advice, and incidental real-world facts",
+    );
     expect(system).toContain("omits the method, property, field, or API member name");
     expect(system).toContain("Naming only the enclosing API object");
     expect(system).toContain("code declaration or interface control");
