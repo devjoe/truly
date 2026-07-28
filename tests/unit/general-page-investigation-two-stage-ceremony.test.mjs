@@ -39,10 +39,10 @@ function receipt(index, taskKey, responseFormat) {
     },
     data: admission
       ? {
-          sampleCount: 24,
-          sourceLanguages: { "zh-TW": 12, en: 12 },
+          sampleCount: 28,
+          sourceLanguages: { "zh-TW": 14, en: 14 },
           expectedAdmit: 16,
-          expectedReject: 8,
+          expectedReject: 12,
         }
       : {
           sampleCount: 30,
@@ -53,12 +53,12 @@ function receipt(index, taskKey, responseFormat) {
         },
     counts: admission
       ? {
-          protocolSucceeded: 24,
+          protocolSucceeded: 28,
           protocolFailed: 0,
-          correct: 24,
+          correct: 28,
           incorrect: 0,
           admitCorrect: 16,
-          rejectCorrect: 8,
+          rejectCorrect: 12,
         }
       : {
           protocolSucceeded: 30,
@@ -96,7 +96,7 @@ function receipt(index, taskKey, responseFormat) {
           },
         }),
     networkBoundary: {
-      modelRequests: admission ? 24 : 54,
+      modelRequests: admission ? 28 : 54,
       publicSearchRequests: 0,
       actionsOpened: 0,
     },
@@ -169,7 +169,7 @@ describe("General Page two-stage Gate A ceremony", () => {
     const result = validateTwoStageInvestigationCeremony(receipts, commit);
 
     expect(result.passed).toBe(false);
-    expect(result.errors.join(" ")).toMatch(/24 of 24/);
+    expect(result.errors.join(" ")).toMatch(/28 of 28/);
     expect(result.errors.join(" ")).toMatch(/capability or hard boundary/);
     expect(result.errors.join(" ")).toMatch(/tier-confusion diagnostics/);
     expect(result.errors.join(" ")).toMatch(/request counts disagree/);
