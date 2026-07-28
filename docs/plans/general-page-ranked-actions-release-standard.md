@@ -587,3 +587,26 @@ No third model stage or local semantic rule engine was added. This successor
 passed the expanded synthetic Admission set and the composed two-stage
 preflight, but still requires a new clean commit, formal Gate A, and wholly
 fresh Gate B and C evidence.
+
+The clean successor at commit `2f516af` passed formal Gate A and produced
+60/60 protocol-valid, exactly grounded outputs on a wholly fresh source-first
+Gate B cohort. Independent source review and a primary-agent audit sealed the
+truth as news `22/1/7` and general web `7/17/6` for
+primary/exploratory/none. Candidate recall exceeded every floor: news primary
+was `20/22`, general primary `6/7`, and general exploratory `14/17`. The run
+nevertheless failed its hard gates because two expected-none fragments were
+visible and three rows overstated the source tier. All three failures shared
+one exact-sentence defect: an omitted object or unresolved generic reference
+(`wait`, `the feature`, or `it`) that nearby context or metadata could explain
+but the displayed sentence did not name. The cohort is permanently consumed;
+pairwise review and holdout were not opened.
+
+The next candidate therefore adds one prompt-first clarification to the
+existing Admission boundary: the exact sentence itself must name the subject
+of its action, state, capability, release, or change; nearby context, title,
+URL, and metadata cannot repair an unresolved pronoun, generic feature label,
+or omitted object. It adds no local language-specific guard, resolver branch,
+model stage, or changed release threshold. A surgical synthetic diagnostic
+accepted an explicitly named Firefox capability as exploratory while
+rejecting the three observed fragment shapes. The successor still requires a
+new clean commit, formal Gate A, and wholly fresh Gate B and C evidence.

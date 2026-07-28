@@ -96,6 +96,9 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("ordinary definitions, API behavior");
     expect(system).toContain("satire, parody, literary, or fiction Pages");
     expect(system).toContain("omits the method, property, field, or API name");
+    expect(system).toContain("unresolved pronouns or generic references");
+    expect(system).toContain("agreement 'to wait'");
+    expect(system).toContain("metadata may expose the omission but may not repair it");
     expect(system).toContain("stable definitions, API behavior, workflows");
     expect(system).toContain("clean, complete, standalone proposition");
     expect(system).toContain("central publication, date, specification, or measurement fact");
