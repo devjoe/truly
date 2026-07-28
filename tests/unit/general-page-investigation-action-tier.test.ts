@@ -56,6 +56,8 @@ describe("General Page investigation action tier classifier", () => {
     expect(system).toContain("Judge utility only");
     expect(system).toContain("Public interest is not required");
     expect(system).toContain("entertainment, sport, consumer, product, celebrity");
+    expect(system).toContain("browser support, compatibility, permissions, and availability");
+    expect(system).toContain("retrospective, review, anniversary, catalog, or history Page");
     expect(user).toContain(selection.exactClaim);
     expect(user).toContain("utility judgment only");
     expect(() => buildGeneralPageInvestigationActionTierPrompt({

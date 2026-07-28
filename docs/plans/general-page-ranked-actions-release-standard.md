@@ -752,3 +752,21 @@ product surface, deterministic local text, low-confidence cue, privacy
 boundary, Page-only scope, and frozen release thresholds do not change. The
 new contract still requires a clean candidate, formal Gate A, and wholly fresh
 Gate B and C evidence.
+
+The first end-to-end consumed diagnostic for that successor produced `60/60`
+protocol-valid rows, `41/41` exact grounding, and zero expected-none leaks.
+News-primary recall was `13/16`, general-primary recall was `6/7`, and
+general-exploratory recall was `14/17`, so all frozen recall floors passed.
+The run still failed the zero-overstatement gate on three actions: a 2001 film
+release date on a retrospective Page, a browser-support statement on MDN, and
+a stable `useRef` behavior statement on React documentation. The cohort
+remains consumed and is not rerun.
+
+The successor makes the existing tier boundary explicit without changing it:
+documentation/reference behavior, compatibility, permissions, support, and
+availability facts are exploratory unless the exact sentence and Page form a
+current change announcement; past release dates remain exploratory on
+retrospective, review, anniversary, catalog, or history Pages. This is a
+prompt-first clarification, not a local source-domain rule or deterministic
+override. It must pass the synthetic ceremony and wholly fresh Gate B; the
+three consumed failures are not used as a release receipt.
