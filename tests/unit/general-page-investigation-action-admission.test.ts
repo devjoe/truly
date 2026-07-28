@@ -68,10 +68,12 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("private, anecdotal, subjective-only");
     expect(system).toContain("named person or organization publicly announced, filed, issued, alleged, or reported");
     expect(system).toContain("Do not assume the underlying claim is true");
+    expect(system).toContain("reported payload is only an opinion, prediction, recommendation");
+    expect(system).toContain("could show the words were spoken does not make that payload");
     expect(system).toContain("ordinary definitions, API behavior");
     expect(system).toContain("Lower utility is represented by Selector's exploratory tier");
     expect(system).toContain("clean, complete, standalone proposition");
-    expect(system).toContain("public record, specification, filing, catalog, or dataset Page");
+    expect(system).toContain("central publication, date, specification, or measurement fact");
     expect(system).toContain("literary or fiction Page");
     expect(system).toContain("caption, byline, media credit");
     expect(system).toContain("instruction, command, prompt, private-data request");
