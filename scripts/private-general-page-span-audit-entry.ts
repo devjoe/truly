@@ -379,8 +379,7 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
     admission: admission
       ? {
           ok: admission.ok,
-          decision: admission.value?.decision,
-          presentationTier: admission.value?.presentationTier,
+          outcome: admission.value?.outcome,
           finishReason: admission.finishReason,
           usage: admission.usage,
           error: admission.error,
@@ -415,7 +414,7 @@ const abstained = results.filter((row) => row.status === "abstain").length;
 const proposed = results.reduce((sum, row) =>
   sum + (Array.isArray(row.proposedActions) ? row.proposedActions.length : 0), 0);
 const admissionRejected = results.filter((row) =>
-  (row.admission as { decision?: string } | null)?.decision === "reject").length;
+  (row.admission as { outcome?: string } | null)?.outcome === "reject").length;
 const actionCount = results.reduce((sum, row) => sum + (Array.isArray(row.actions) ? row.actions.length : 0), 0);
 const exactGrounding = results.reduce((sum, row) => sum +
   (Array.isArray(row.actions) ? row.actions.filter((action) => action.exactGrounding === true).length : 0), 0);
@@ -432,9 +431,9 @@ const meta = {
     trackedDiffSha256: candidateSnapshot.trackedDiffSha256,
   },
   contract: {
-    selector: "ranked_exact_span_proposal_v6",
+    selector: "ranked_exact_span_proposal_v9",
     selectorPromptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
-    admission: "reader_action_admission_v7",
+    admission: "reader_action_admission_v3",
     admissionPromptSha256: sha256Text(buildGeneralPageInvestigationActionAdmissionSystemPrompt()),
     responseFormat: structuredOutputMode,
     outputLanguage: outputLang,

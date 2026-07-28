@@ -15,37 +15,40 @@ locally from the current loaded document. In the first model job it returns
 only:
 
 ```json
-{"schemaVersion":7,"candidateId":"span:4","presentationTier":"primary"}
+{"schemaVersion":9,"selection":{"candidateId":"span:4","presentationTier":"primary"}}
 ```
 
-`candidateId` is the single proposal; `null` is abstention.
-`presentationTier` is `primary`, `exploratory`, or `null`, with strict local
-coupling: a null ID requires a null tier, while a non-null ID requires exactly
-one tier. The Selector sees the complete bounded candidate list and full
-authorized Page context. It must prefer a strong first verification action and
-label it `primary`. Only when no primary candidate exists may it select a
-complete, publicly checkable but more ordinary or situational proposition and
-label it `exploratory`.
+`selection` is one atomic state: `null`, or one object containing a supplied
+local `candidateId` and `presentationTier` set to `primary` or `exploratory`.
+This makes abstention versus selection one schema-valid state rather than
+independently generated nullable fields with invalid cross-field combinations.
+The Selector sees the complete bounded candidate list and full authorized Page
+context. It must prefer a strong first verification action and label it
+`primary`. Only when no primary candidate exists may it select a complete,
+publicly checkable but more ordinary or situational proposition and label it
+`exploratory`.
 
 The tier is about the likely usefulness of investigating the item, not its
 truth, falsity, or calibrated model confidence. Runtime does not receive the
 audit-only `news_article` / `general_web` category, so the Selector applies this
 same semantic contract to every eligible Page.
 
-If one exact span is proposed, a separately scheduled binary Admission critic
+If one exact span is proposed, a separately scheduled Admission critic
 receives that same locally owned span and authorized same-Page context. It
 returns only:
 
 ```json
-{"schemaVersion":1,"decision":"admit"}
+{"schemaVersion":3,"outcome":"primary"}
 ```
 
-`reject`, timeout, malformed output, invalid ID/tier coupling, stale scope, or
-either job's failure produces no action. Admission cannot select another span,
-change its tier, rewrite text, explain its decision, judge truth, or rescue
-missing words from context. Selector and Admission are separate low-priority
-jobs so user-blocking and bounded Feed work may run between them. The panel
-receives only one final atomic result.
+`outcome` is `reject`, `primary`, or `exploratory`. Admission may preserve the
+Selector tier or lower `primary` to `exploratory`; local resolution never lets
+it promote a Selector `exploratory` result. `reject`, timeout, malformed
+output, invalid atomic state, stale scope, or either job's failure produces no
+action. Admission cannot select another span, rewrite text, explain its
+decision, judge truth, or rescue missing words from context. Selector and
+Admission are separate low-priority jobs so user-blocking and bounded Feed
+work may run between them. The panel receives only one final atomic result.
 
 Local code owns the exact displayed text, copy action, localized Gemini
 handoff, source metadata, Page/Focus session boundary, and both stages'
@@ -657,3 +660,76 @@ adds no sponsor classifier, schema field, UI state, or sponsor-specific tier
 rule. It does not retroactively relabel or pass the consumed cohort. The
 clarified contract and expanded 32-row direct Admission suite require a new
 clean candidate, formal Gate A, and wholly fresh Gate B and C evidence.
+
+The resulting clean candidate at commit `4dd6b6c` passed all twelve formal
+Gate A receipts and produced 60/60 protocol-valid, exactly grounded outputs on
+a wholly fresh Page-only Gate B cohort. The source-first audit initially sealed
+news as `15/4/11` and general web as `8/15/7` for
+primary/exploratory/none. Candidate recall passed every floor: news primary
+was `13/15`, general primary `6/8`, and general exploratory `13/15`.
+The run nevertheless failed before pairwise review because four expected-none
+rows were visible and eight rows overstated their source tier. No holdout was
+opened.
+
+A required post-output audit then found three source-label errors in the
+primary-agent sealing pass: one current announcement had been overlooked in an
+alternate candidate, one stable regulatory statement had been ranked too
+highly, and one complete technical workflow had been ranked too low. The
+sealed truth and official score remain immutable and the run remains consumed
+and failed. The corrected diagnostic view is news `16/3/11`, general web
+`7/17/6`, with news-primary recall `14/16`, general-primary recall `5/7`,
+general-exploratory recall `14/17`, three expected-none leaks, and seven tier
+overstatements. The conclusion is unchanged.
+
+The next source-first audit must inspect every supplied candidate before
+sealing an exploratory or none row and explicitly record whether an alternate
+candidate qualifies for a higher tier. The next product candidate remains a
+prompt-first refinement: require Page relevance so an incidental real-world
+aside cannot rescue satire or opinion, reject flattened declaration and
+unnamed change-history residue, and keep retrospective history and career
+biography exploratory even when the surrounding Page is newly published.
+That prompt-only candidate improved the corrected diagnostic view but repeated
+60-row runs exposed a wire-contract defect: three rows per run produced
+schema-shaped yet semantically impossible ID/tier combinations. Prompt wording
+only moved the failures between rows because the old JSON Schema represented
+nullable `candidateId` and `presentationTier` as independent fields and local
+code enforced their coupling only after generation.
+
+The adversarial decision at
+`tmp/grill-reports/gpr-atomic-wire-contract-2026-07-28.html` therefore adopts
+atomic model states. Selector v9 returns `selection: null`, or an object with
+one supplied `candidateId` and its `presentationTier`. Admission v3 returns
+`reject`, `primary`, or `exploratory` in one field. Local code still owns exact
+text and keeps the existing never-promote rule: Admission may lower a Selector
+primary result but cannot raise an exploratory result. There is still one
+action, two separately scheduled model jobs, no repair, and no changed product
+surface, privacy boundary, release threshold, or Page-only scope.
+
+The intermediate v8 string encoding (`primary|span:N`) removed coupling
+failures but materially changed Qwen's tier behavior on the consumed 60-row
+diagnostic: primary recall fell to `5/16` for news and `1/7` for general pages.
+The same regression appeared under `json_object`, so it was not isolated to
+constrained decoding. v9 preserves the accepted atomic boundary while
+restoring the model-facing candidate and tier fields used by the stronger
+pre-v8 baseline.
+
+The first v9 consumed diagnostic restored protocol success and primary recall,
+but remained a formal semantic failure: general exploratory recall was
+`10/17`, one below the `60%` floor, and one generic statement attributed only
+to unspecified “policymakers” was overstated as primary. The result is not
+retroactively accepted. A small prompt-only follow-up that told the Selector
+to scan the full list and generalized unnamed attribution did not improve the
+consumed result: news-primary recall fell to `12/16`, one expected-none action
+became visible, and overstatement increased to three rows. That follow-up was
+rejected and fully reverted; no further prompt tuning uses this cohort.
+
+Synthetic forward diagnostics passed both provider modes: direct Admission was
+`32/32` in `json_schema` and `json_object`, while the composed two-stage flow
+was `30/30` in both modes with zero protocol failure, primary understatement,
+exploratory overstatement, or locale failure. The prompt also makes the
+pre-existing domain-neutral tier rule explicit: a current product or service
+release, availability change, or menu or catalog addition is primary when the
+exact span states the current or new action, even when routine, local,
+commercial, or low-stakes. Retrospective history and stable catalog facts
+remain exploratory. The atomic contract still requires a clean candidate,
+formal Gate A, and wholly fresh Gate B and C evidence.

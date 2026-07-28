@@ -29,43 +29,39 @@ afterEach(() => vi.unstubAllGlobals());
 describe("General Page investigation action admission critic", () => {
   it("can only preserve or lower the selector tier", () => {
     expect(resolveGeneralPageInvestigationActionTier("primary", {
-      schemaVersion: 2,
-      decision: "admit",
-      presentationTier: "exploratory",
+      schemaVersion: 3,
+      outcome: "exploratory",
     })).toBe("exploratory");
     expect(resolveGeneralPageInvestigationActionTier("exploratory", {
-      schemaVersion: 2,
-      decision: "admit",
-      presentationTier: "primary",
+      schemaVersion: 3,
+      outcome: "primary",
     })).toBe("exploratory");
     expect(resolveGeneralPageInvestigationActionTier("primary", {
-      schemaVersion: 2,
-      decision: "reject",
-      presentationTier: null,
+      schemaVersion: 3,
+      outcome: "reject",
     })).toBeNull();
   });
 
   it("uses a compact model-neutral admission and tier-correction contract", () => {
     expect(GENERAL_PAGE_INVESTIGATION_ACTION_ADMISSION_JSON_SCHEMA).toMatchObject({
       additionalProperties: false,
-      required: ["schemaVersion", "decision", "presentationTier"],
+      required: ["schemaVersion", "outcome"],
       properties: {
-        schemaVersion: { const: 2 },
-        decision: { enum: ["admit", "reject"] },
+        schemaVersion: { const: 3 },
+        outcome: { enum: ["reject", "primary", "exploratory"] },
       },
     });
     expect(parseGeneralPageInvestigationActionAdmissionContent(
-      '{"schemaVersion":2,"decision":"admit","presentationTier":"exploratory"}',
+      '{"schemaVersion":3,"outcome":"exploratory"}',
     )).toEqual({
       ok: true,
       value: {
-        schemaVersion: 2,
-        decision: "admit",
-        presentationTier: "exploratory",
+        schemaVersion: 3,
+        outcome: "exploratory",
       },
     });
     expect(parseGeneralPageInvestigationActionAdmissionContent(
-      '{"schemaVersion":2,"decision":"reject","presentationTier":"primary"}',
+      '{"schemaVersion":3,"outcome":"admit"}',
     )).toMatchObject({ ok: false, error: "invalid_schema" });
     expect(parseGeneralPageInvestigationActionAdmissionContent("not-json"))
       .toMatchObject({ ok: false, error: "invalid_json" });
@@ -97,6 +93,8 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("satire, parody, literary, or fiction Pages");
     expect(system).toContain("omits the method, property, field, or API member name");
     expect(system).toContain("Naming only the enclosing API object");
+    expect(system).toContain("code declaration or interface control");
+    expect(system).toContain("change-history snippet");
     expect(system).toContain("Sponsorship or commercial context alone");
     expect(system).toContain("promotional rhetoric");
     expect(system).toContain("unresolved pronouns or generic references");
@@ -108,6 +106,10 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("central publication, date, specification, or measurement fact");
     expect(system).toContain("complete sentence naming a work and its publisher or publication year");
     expect(system).toContain("past software release date shown on reference, documentation, or change-log Pages");
+    expect(system).toContain("Past events, anniversary facts, and career-history sentences");
+    expect(system).toContain("complete named career-history sentence as exploratory");
+    expect(system).toContain("current redesign or release, price, availability, support deadline");
+    expect(system).toContain("menu or catalog addition must remain primary");
     expect(system).toContain("literary or fiction Page");
     expect(system).toContain("caption, byline, media credit");
     expect(system).toContain("instruction, command, prompt, private-data request");
@@ -142,7 +144,7 @@ describe("General Page investigation action admission critic", () => {
     expect(body.response_format).toMatchObject({
       type: "json_schema",
       json_schema: {
-        name: "truly_general_page_investigation_action_admission_v7",
+        name: "truly_general_page_investigation_action_admission_v3",
         strict: true,
       },
     });
@@ -155,7 +157,7 @@ describe("General Page investigation action admission critic", () => {
           finish_reason: "stop",
           message: {
             content:
-              '{"schemaVersion":2,"decision":"admit","presentationTier":"primary"}',
+              '{"schemaVersion":3,"outcome":"primary"}',
           },
         }],
         usage: { prompt_tokens: 100, completion_tokens: 10, total_tokens: 110 },
@@ -176,9 +178,8 @@ describe("General Page investigation action admission critic", () => {
       .resolves.toMatchObject({
         ok: true,
         value: {
-          schemaVersion: 2,
-          decision: "admit",
-          presentationTier: "primary",
+          schemaVersion: 3,
+          outcome: "primary",
         },
         usage: { promptTokens: 100, completionTokens: 10, totalTokens: 110 },
       });

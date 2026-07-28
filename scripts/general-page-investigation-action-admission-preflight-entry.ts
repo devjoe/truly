@@ -33,7 +33,7 @@ interface Fixture {
 
 function expectedTierFor(fixture: Fixture): PresentationTier {
   if (fixture.expectedDecision === "reject") return null;
-  return /(?:basic-definition|release-date|catalog-record)$/u.test(
+  return /(?:basic-definition|release-date|catalog-record|career-history)$/u.test(
     fixture.sampleId,
   )
     ? "exploratory"
@@ -141,33 +141,33 @@ const fixtures: Fixture[] = [
     sampleId: "admit-zh-release-date",
     language: "zh-TW",
     expectedDecision: "admit",
-    title: "3.11 版新功能",
-    context: "Python 3.11 於 2022 年 10 月 24 日發布。這個頁面列出語言與標準函式庫的變更。",
-    selectedText: "Python 3.11 於 2022 年 10 月 24 日發布。",
+    title: "《星際遠征》上映二十五週年回顧",
+    context: "這篇二十五週年回顧文章發布於 2026 年。《星際遠征》於 2001 年 7 月 27 日上映。文章接著回顧其幕後製作。",
+    selectedText: "《星際遠征》於 2001 年 7 月 27 日上映。",
   },
   {
     sampleId: "admit-en-release-date",
     language: "en",
     expectedDecision: "admit",
-    title: "What's New in Python 3.11",
-    context: "Python 3.11 was released on October 24, 2022. This page lists language and standard-library changes.",
-    selectedText: "Python 3.11 was released on October 24, 2022.",
+    title: "Looking back at Star Voyage after 25 years",
+    context: "This 25th-anniversary feature was published in 2026. Star Voyage opened in theaters on July 27, 2001. The article then revisits its production.",
+    selectedText: "Star Voyage opened in theaters on July 27, 2001.",
   },
   {
-    sampleId: "admit-zh-catalog-record",
+    sampleId: "admit-zh-career-history",
     language: "zh-TW",
     expectedDecision: "admit",
-    title: "古騰堡電子書目錄",
-    context: "目錄記載《海港之光》原始出版者為海港出版社，出版於 1900 年。電子書發布日期：2026 年 7 月 20 日。",
-    selectedText: "目錄記載《海港之光》原始出版者為海港出版社，出版於 1900 年。",
+    title: "證管會任命陳海為投資人教育辦公室主任",
+    context: "證管會今天宣布新任命。陳海於 2016 年加入證管會，並在 2020 年成為投資人教育辦公室副主任。",
+    selectedText: "陳海於 2016 年加入證管會，並在 2020 年成為投資人教育辦公室副主任。",
   },
   {
-    sampleId: "admit-en-catalog-record",
+    sampleId: "admit-en-career-history",
     language: "en",
     expectedDecision: "admit",
-    title: "Project Gutenberg catalog",
-    context: "The catalog records Harbor Lights as originally published by Harbor Press in 1900. Ebook release date: July 20, 2026.",
-    selectedText: "The catalog records Harbor Lights as originally published by Harbor Press in 1900.",
+    title: "SEC appoints John Harbor to lead investor education office",
+    context: "The SEC announced the new appointment today. John Harbor joined the SEC in 2016 and became a deputy director in the investor education office in 2020.",
+    selectedText: "John Harbor joined the SEC in 2016 and became a deputy director in the investor education office in 2020.",
   },
   {
     sampleId: "reject-zh-attributed-opinion",
@@ -391,18 +391,22 @@ async function evaluate(fixture: Fixture): Promise<Record<string, unknown>> {
   const started = Date.now();
   const result = await callTierBGeneralPageInvestigationActionAdmission(request);
   const expectedTier = expectedTierFor(fixture);
+  const outcome = result.value?.outcome ?? null;
+  const decision = outcome === "reject" ? "reject" : outcome ? "admit" : null;
+  const presentationTier = outcome === "reject" ? null : outcome;
   return {
     sampleId: fixture.sampleId,
     language: fixture.language,
     expectedDecision: fixture.expectedDecision,
     expectedTier,
     protocolOk: result.ok,
-    decision: result.value?.decision ?? null,
-    presentationTier: result.value?.presentationTier ?? null,
+    outcome,
+    decision,
+    presentationTier,
     correct:
       result.ok &&
-      result.value?.decision === fixture.expectedDecision &&
-      result.value?.presentationTier === expectedTier,
+      decision === fixture.expectedDecision &&
+      presentationTier === expectedTier,
     latencyMs: Date.now() - started,
     finishReason: result.finishReason,
     usage: result.usage,
@@ -471,7 +475,7 @@ const artifact = {
     schemaSha256: responseSchema ? sha256CanonicalJson(responseSchema) : undefined,
     systemPromptSha256: sha256Text(buildGeneralPageInvestigationActionAdmissionSystemPrompt()),
     fixtureSetSha256: sha256CanonicalJson(fixtures),
-    modelAuthoredFields: ["decision", "presentationTier"],
+    modelAuthoredFields: ["outcome"],
     repairPolicy: "none_one_shot",
   },
   data: {

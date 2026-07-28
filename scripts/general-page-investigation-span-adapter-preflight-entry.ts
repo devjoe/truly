@@ -219,8 +219,7 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     admission: admission
       ? {
           ok: admission.ok,
-          decision: admission.value?.decision,
-          presentationTier: admission.value?.presentationTier,
+          outcome: admission.value?.outcome,
           finishReason: admission.finishReason,
           usage: admission.usage,
           error: admission.error,
@@ -404,8 +403,8 @@ const artifact = {
     fixtureSetSha256: sha256CanonicalJson(fixtures),
     sourceOwnership: "local_exact_span",
     modelAuthoredFields: withAdmission
-      ? ["candidateId", "presentationTier", "decision"]
-      : ["candidateId", "presentationTier"],
+      ? ["selection", "outcome"]
+      : ["selection"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
     repairPolicy: "none_one_shot",
     protocolRetryPolicy: "disabled_for_release_gate",
@@ -437,8 +436,9 @@ const artifact = {
       admissionRequested,
       admissionProtocolSucceeded,
       admissionProtocolFailed: admissionRequested - admissionProtocolSucceeded,
-      admissionAdmitted: results.filter((row) => row.admission?.decision === "admit").length,
-      admissionRejected: results.filter((row) => row.admission?.decision === "reject").length,
+      admissionAdmitted: results.filter((row) =>
+        row.admission?.outcome === "primary" || row.admission?.outcome === "exploratory").length,
+      admissionRejected: results.filter((row) => row.admission?.outcome === "reject").length,
       latencyP50Ms: latencyPercentile(0.5),
       latencyP95Ms: latencyPercentile(0.95),
       latencyMaxMs: latencyValues.at(-1) ?? 0,

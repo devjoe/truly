@@ -5,7 +5,7 @@ import { buildGeneralPageInvestigationSpanAdapterSystemPrompt } from "@src/lib/g
 import { classifyGeneralPageAuditMockRequest } from "../../scripts/lib/general-page-audit-mock-kind.mjs";
 
 describe("General Page audit mock routing", () => {
-  it("keeps the v7 selector and v2 admission critic distinct", () => {
+  it("keeps the selector and admission critic distinct without coupling routing to schema versions", () => {
     expect(classifyGeneralPageAuditMockRequest(
       buildGeneralPageInvestigationSpanAdapterSystemPrompt(),
     )).toBe("investigation-adapter");
