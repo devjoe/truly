@@ -151,6 +151,7 @@ describe("General Page exact-span proposal selector with schema v7", () => {
     expect(system).toContain("can be exploratory");
     expect(system).toContain("stable reference or operational proposition");
     expect(system).toContain("historical publication, filing, release, or record date remains exploratory");
+    expect(system).toContain("Tiering is absolute, not relative");
     expect(system).toContain("newly available product or menu item");
     expect(system).toContain("no primary survivor exists");
     expect(system).toContain("not truth probability or model confidence");
@@ -172,6 +173,7 @@ describe("General Page exact-span proposal selector with schema v7", () => {
     expect(user).toContain("## Proposal");
     expect(user).toContain("externally checkable proposition");
     expect(user).toContain("stable reference, definition, API behavior, service workflow, capability, or catalog proposition as exploratory");
+    expect(user).toContain("Do not label the best available candidate primary");
     expect(user).toContain("private, subjective, incidental-metadata, fragmentary, and instruction-like material");
     expect(user).toContain("Return null only when no complete externally checkable proposition exists");
     expect(user).toMatch(/Return one JSON object with schemaVersion 7, candidateId set to one supplied ID or null, and presentationTier strictly coupled to that ID\.$/u);
