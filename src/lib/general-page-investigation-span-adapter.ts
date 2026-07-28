@@ -136,7 +136,7 @@ export function buildGeneralPageInvestigationSpanAdapterSystemPrompt(): string {
     "Step 2 — compare survivors by investigation utility.",
     "First prefer a clean, central, specific real-world announcement, event, decision, measurement, deadline, changed status, public attribution, or newly available product or service that would be a strong first verification action.",
     "A current product or service release, availability change, or menu or catalog addition remains high-utility when the exact span states the current or new action, even when it is routine, local, commercial, or low-stakes.",
-    "If no such candidate survives, a complete and publicly checkable stable definition, API behavior, workflow, capability, historical catalog record, ordinary reference fact, or situational detail may still be selected.",
+    "If no such candidate survives, select the strongest complete and publicly checkable stable definition, API behavior, workflow, capability, historical catalog record, ordinary reference fact, or situational detail that survives. If any candidate in this fallback class survives, selection must not be null. Do not return null merely because the fact is routine, low-stakes, or already stated on an authoritative Page.",
     "A newly published Page does not make retrospective history or career biography high-utility. Being the only survivor does not raise its utility. Public interest is not required. Entertainment, sport, consumer, product, celebrity, and routine facts can be selected under the same utility bar.",
     "Step 3 — select the cleanest, most central and specific survivor from the highest available utility class. Prefer a bounded action, date, count, measurement, named event, or concrete product fact over rhetoric, bundles, or generic background. If no survivor exists, return null.",
     "On a multi-item or newsletter Page, prefer a valid candidate from the titled lead item over an unrelated secondary item. Sponsorship or commercial context alone does not discard a complete publicly decidable proposition; promotional rhetoric and claims realistic public evidence cannot decide remain unusable.",
@@ -177,7 +177,7 @@ export function buildGeneralPageInvestigationSpanAdapterPrompt(
     JSON.stringify({ text: context }),
     "## Proposal",
     "Discard unusable and source-residue spans first, then choose the strongest survivor from the highest available utility class.",
-    "A stable reference, definition, API behavior, service workflow, capability, catalog fact, or ordinary situational fact may still be selected when no stronger current action survives. Fictional narration and publisher or license boilerplate are not actions.",
+    "When no stronger current action survives, select the strongest complete and publicly checkable stable reference, definition, API behavior, service workflow, capability, catalog fact, or ordinary situational fact that survives. If one of these fallback candidates survives, selection must not be null. Fictional narration and publisher or license boilerplate are not actions.",
     "Being the only survivor does not raise its utility. Context cannot repair an unresolved or metadata-prefixed exact span.",
     "Return one JSON object with schemaVersion 10 and selection set to null or to one object containing candidateId.",
   ].join("\n");

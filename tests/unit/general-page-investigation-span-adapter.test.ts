@@ -153,6 +153,9 @@ describe("General Page exact-span proposal selector with schema v10", () => {
     expect(system).toContain("Project Gutenberg license and bibliographic header");
     expect(system).toContain("compare survivors by investigation utility");
     expect(system).toContain("stable definition, API behavior, workflow, capability");
+    expect(system).toContain("select the strongest complete and publicly checkable stable definition");
+    expect(system).toContain("If any candidate in this fallback class survives, selection must not be null");
+    expect(system).toContain("Do not return null merely because the fact is routine, low-stakes");
     expect(system).toContain("stable definition, API behavior, workflow, capability");
     expect(system).toContain("retrospective history or career biography");
     expect(system).toContain("Being the only survivor does not raise its utility");
@@ -175,6 +178,8 @@ describe("General Page exact-span proposal selector with schema v10", () => {
     expect(user).toContain("## Proposal");
     expect(user).toContain("highest available utility class");
     expect(user).toContain("stable reference, definition, API behavior, service workflow, capability, catalog fact");
+    expect(user).toContain("select the strongest complete and publicly checkable stable reference");
+    expect(user).toContain("If one of these fallback candidates survives, selection must not be null");
     expect(user).toContain("Being the only survivor does not raise its utility");
     expect(user).toContain("Fictional narration and publisher or license boilerplate are not actions");
     expect(user).toContain("Context cannot repair an unresolved or metadata-prefixed exact span");

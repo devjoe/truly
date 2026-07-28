@@ -770,3 +770,25 @@ retrospective, review, anniversary, catalog, or history Pages. This is a
 prompt-first clarification, not a local source-domain rule or deterministic
 override. It must pass the synthetic ceremony and wholly fresh Gate B; the
 three consumed failures are not used as a release receipt.
+
+The first formal provider preflight on that candidate passed all six direct
+Admission receipts but exposed a deterministic Selector coverage defect in
+the composed ceremony: the Selector repeatedly returned null for a complete
+stable programming definition, and once for a complete API capability, even
+though both were frozen exploratory controls. Protocol, primary, hard
+boundary, locale, latency, and zero-overstatement checks all passed. The
+Selector contract now makes its pre-existing ordinary-Page fallback
+unambiguous: when no stronger current action survives, it must select the
+strongest complete publicly checkable stable or ordinary survivor rather than
+abstain merely because the fact is routine, low-stakes, or already stated on
+an authoritative Page. Admission, Tier, release thresholds, and the
+low-confidence product treatment remain unchanged.
+
+The unconstrained fallback check then exposed the same policy mismatch one
+stage later: Admission once rejected the selected sentence because it began
+with a generic documentation-role phrase even though the remainder was a
+complete technical definition. Admission now states the narrow corresponding
+boundary: a phrase such as “the documentation says” is not residue by itself
+on a reference or teaching Page when the exact sentence contains a complete
+definition, behavior, workflow, or capability. Bare role labels, unresolved
+payloads, and unnamed hearsay remain rejected.
