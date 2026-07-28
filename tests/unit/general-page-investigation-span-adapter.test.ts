@@ -149,6 +149,8 @@ describe("General Page exact-span proposal selector with schema v7", () => {
     expect(system).toContain("named public system, scientific or health fact");
     expect(system).toContain("correct API behavior");
     expect(system).toContain("can be exploratory");
+    expect(system).toContain("stable reference or operational proposition");
+    expect(system).toContain("newly available product or menu item");
     expect(system).toContain("no primary survivor exists");
     expect(system).toContain("not truth probability or model confidence");
     expect(system).toContain("attributed slogan, insult, or inflammatory metaphor");
@@ -168,7 +170,7 @@ describe("General Page exact-span proposal selector with schema v7", () => {
     expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
     expect(user).toContain("## Proposal");
     expect(user).toContain("externally checkable proposition");
-    expect(user).toContain("ordinary definition, API, workflow, or catalog proposition as exploratory");
+    expect(user).toContain("stable reference, definition, API behavior, service workflow, capability, or catalog proposition as exploratory");
     expect(user).toContain("private, subjective, incidental-metadata, fragmentary, and instruction-like material");
     expect(user).toContain("Return null only when no complete externally checkable proposition exists");
     expect(user).toMatch(/Return one JSON object with schemaVersion 7, candidateId set to one supplied ID or null, and presentationTier strictly coupled to that ID\.$/u);
