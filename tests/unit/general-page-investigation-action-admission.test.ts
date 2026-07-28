@@ -95,7 +95,10 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("could show the words were spoken does not make that payload");
     expect(system).toContain("ordinary definitions, API behavior");
     expect(system).toContain("satire, parody, literary, or fiction Pages");
-    expect(system).toContain("omits the method, property, field, or API name");
+    expect(system).toContain("omits the method, property, field, or API member name");
+    expect(system).toContain("Naming only the enclosing API object");
+    expect(system).toContain("Sponsorship or commercial context alone");
+    expect(system).toContain("promotional rhetoric");
     expect(system).toContain("unresolved pronouns or generic references");
     expect(system).toContain("'such a protocol'");
     expect(system).toContain("agreement 'to wait'");

@@ -23,21 +23,21 @@ function validLanguageCounts(value, expected) {
 }
 
 function validateAdmissionReceipt(receipt, label, errors) {
-  if (receipt.data?.sampleCount !== 30 ||
-      !validLanguageCounts(receipt.data?.sourceLanguages, 15) ||
+  if (receipt.data?.sampleCount !== 32 ||
+      !validLanguageCounts(receipt.data?.sourceLanguages, 16) ||
       receipt.data?.expectedAdmit !== 16 ||
-      receipt.data?.expectedReject !== 14) {
+      receipt.data?.expectedReject !== 16) {
     errors.push(`${label}: wrong direct Admission fixture counts`);
   }
-  if (receipt.counts?.protocolSucceeded !== 30 ||
+  if (receipt.counts?.protocolSucceeded !== 32 ||
       receipt.counts?.protocolFailed !== 0 ||
-      receipt.counts?.correct !== 30 ||
+      receipt.counts?.correct !== 32 ||
       receipt.counts?.incorrect !== 0 ||
       receipt.counts?.admitCorrect !== 16 ||
-      receipt.counts?.rejectCorrect !== 14) {
-    errors.push(`${label}: direct Admission did not pass 30 of 30 controls`);
+      receipt.counts?.rejectCorrect !== 16) {
+    errors.push(`${label}: direct Admission did not pass 32 of 32 controls`);
   }
-  if (receipt.networkBoundary?.modelRequests !== 30 ||
+  if (receipt.networkBoundary?.modelRequests !== 32 ||
       receipt.contract?.repairPolicy !== "none_one_shot" ||
       receipt.model?.timeoutMs !== 10_000) {
     errors.push(`${label}: wrong direct Admission request or retry contract`);

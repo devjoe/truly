@@ -266,6 +266,22 @@ const fixtures: Fixture[] = [
     selectedText: "Returns an iterator allowing iteration through all key/value pairs.",
   },
   {
+    sampleId: "reject-zh-api-member-description-without-member-name",
+    language: "zh-TW",
+    expectedDecision: "reject",
+    title: "MutationObserver.observe()",
+    context: "MutationObserver.observe() 方法會開始監看 DOM 變更。設定 MutationObserver 開始接收符合指定選項的 DOM 變更通知。",
+    selectedText: "設定 MutationObserver 開始接收符合指定選項的 DOM 變更通知。",
+  },
+  {
+    sampleId: "reject-en-api-member-description-without-member-name",
+    language: "en",
+    expectedDecision: "reject",
+    title: "MutationObserver.observe()",
+    context: "MutationObserver.observe() starts observing DOM changes. Configures the MutationObserver to begin receiving notifications when matching DOM changes occur.",
+    selectedText: "Configures the MutationObserver to begin receiving notifications when matching DOM changes occur.",
+  },
+  {
     sampleId: "reject-zh-context-dependent-reference",
     language: "zh-TW",
     expectedDecision: "reject",

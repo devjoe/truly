@@ -138,6 +138,9 @@ describe("General Page exact-span proposal selector with schema v7", () => {
     expect(system).toContain("unspecified research or experts");
     expect(system).toContain("navigation, interface text");
     expect(system).toContain("flattens one of those roles into a body sentence");
+    expect(system).toContain("names only the enclosing API object");
+    expect(system).toContain("role-prefixed spans such as 'Price ...'");
+    expect(system).toContain("'the technology'");
     expect(system).toContain("license or download boilerplate");
     expect(system).toContain("central public record, catalog, specification, filing, or dataset fact");
     expect(system).toContain("On a literary or fiction Page");
@@ -147,6 +150,8 @@ describe("General Page exact-span proposal selector with schema v7", () => {
     expect(system).toContain("Stable reference material remains exploratory");
     expect(system).toContain("Being the only or strongest survivor never makes it primary");
     expect(system).toContain("newly available product or service");
+    expect(system).toContain("multi-item or newsletter Page");
+    expect(system).toContain("Sponsorship or commercial context alone");
     expect(system).toContain("Do not decide whether a candidate is true");
     expect(system).toContain("Use schemaVersion 7");
     expect(system).toContain("Entertainment, sport, consumer");

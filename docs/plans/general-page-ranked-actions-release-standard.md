@@ -171,7 +171,7 @@ Run two fixed bilingual suites:
 
 - the 30-case end-to-end Selector to Admission suite, three times with
   `json_schema` and three times with `json_object`;
-- the 30-case direct Admission suite, three times with `json_schema` and three
+- the 32-case direct Admission suite, three times with `json_schema` and three
   times with `json_object`.
 
 The twelve formal processes run one at a time and may not overlap; bounded
@@ -206,13 +206,14 @@ The primary controls include broad routine product/menu facts and a concrete
 public-biography statement so Selector cannot silently narrow the product
 contract before Admission runs.
 
-The fixed 30-row direct Admission suite contains exactly 15 rows per language:
+The fixed 32-row direct Admission suite contains exactly 16 rows per language:
 
 - 16 admit controls covering primary shapes plus valid ordinary reference,
   API/workflow, and central catalog-record exploratory shapes;
-- 14 reject controls covering incomplete or residue-derived spans,
+- 16 reject controls covering incomplete or residue-derived spans,
   context-dependent references, subjective-only material, unsafe/private
-  requests, and other propositions users should not receive.
+  requests, API-member descriptions that omit the member name, and other
+  propositions users should not receive.
 
 The hard sentinels must exercise the shipping exact-span boundary directly. A
 complete sentence that merely says another sentence was truncated is not an
@@ -237,8 +238,8 @@ Required for every run:
   fail Admission, or cross any hard boundary. Across all six formal composed
   runs, permitted misses may involve at most one preregistered fixture
   identity;
-- for direct Admission runs, 30/30 correct binary decisions, including 16/16
-  admits and 14/14 rejects;
+- for direct Admission runs, 32/32 correct binary decisions, including 16/16
+  admits and 16/16 rejects;
 - no hard-boundary leak, repair, retry, public search, or opened action;
 - deterministic localized Gemini handoff generated from local data;
 - `model.concurrency === 2` and a valid, non-overlapping time interval.
@@ -624,3 +625,35 @@ complete standalone definition, and moves the original context-dependent
 sentence into bilingual direct Admission reject coverage. The failed receipts
 remain diagnostic only; the corrected hashes require a fresh clean candidate
 and a complete new Gate A ceremony.
+
+The resulting clean candidate at commit `d37f696` passed all twelve formal
+Gate A receipts and produced 60/60 protocol-valid, exactly grounded outputs on
+a wholly fresh Page-only Gate B cohort. Independent source review, adjudication,
+and a primary-agent audit sealed the source truth as news `21/0/9` and general
+web `11/13/6` for primary/exploratory/none. Candidate recall passed every
+floor: news primary was `19/21`, general primary `9/11`, and general
+exploratory `11/13`. The run still failed its hard machine gate because two
+expected-none rows were visible and two selected rows overstated their source
+tier. Pairwise review and holdout were therefore not opened, and the cohort is
+permanently consumed.
+
+One leak was a genuine exact-span defect: an API method description named the
+enclosing `MutationObserver` object but omitted the `observe()` member that
+performed the described behavior. The successor makes this existing boundary
+explicit in both Selector and Admission and adds bilingual direct Admission
+reject controls. The other disputed row came from disclosed sponsored
+editorial content but named AGNTCY, its open-source status, and the Linux
+Foundation in one complete publicly decidable proposition. Source truth had
+treated the Page label as a categorical negative, contrary to the pre-existing
+mixed-Page rule.
+
+The adversarial decision at
+`tmp/grill-reports/gpr-sponsored-proposition-eligibility-2026-07-28.html`
+therefore keeps proposition-level eligibility. Sponsorship or commercial
+context alone does not reject a Page; promotional rhetoric, subjective sales
+claims, private internal effects, and other propositions that realistic public
+evidence cannot decide remain ineligible under the ordinary boundary. This
+adds no sponsor classifier, schema field, UI state, or sponsor-specific tier
+rule. It does not retroactively relabel or pass the consumed cohort. The
+clarified contract and expanded 32-row direct Admission suite require a new
+clean candidate, formal Gate A, and wholly fresh Gate B and C evidence.
