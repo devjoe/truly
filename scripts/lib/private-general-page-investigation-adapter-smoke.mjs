@@ -105,23 +105,23 @@ const zhFixtures = [
     },
   },
   {
-    fixtureKind: "attributed",
-    groundingText: "南岬法院公告指出，海辰公司仍可在 2026 年 7 月 30 日前提出上訴。法院尚未對上訴理由作成判斷。",
+    fixtureKind: "routine-fact",
+    groundingText: "北灣典藏目錄記載，《北風》由海港出版社於 1900 年首次出版。此頁另列出數位版本的檔案格式。",
     candidateClaim: {
-      c: "南岬法院公告指出，海辰公司仍可在 2026 年 7 月 30 日前提出上訴。",
-      why: "涉及法律程序與公司權利。",
-      need: "法院公告與案件時程。",
-      q: "南岬法院公告是否指出海辰公司仍可在 2026 年 7 月 30 日前提出上訴？",
+      c: "北灣典藏目錄記載，《北風》由海港出版社於 1900 年首次出版。",
+      why: "這是中央目錄中的一般出版紀錄。",
+      need: "典藏目錄或原始出版紀錄。",
+      q: "《北風》是否由海港出版社於 1900 年首次出版？",
     },
   },
   {
-    fixtureKind: "compound",
-    groundingText: "青河市政府宣布東區將於 2026 年 7 月 20 日停水八小時，並表示西區三所學校當天照常上課。兩項措施分屬不同單位執行。",
+    fixtureKind: "routine-fact",
+    groundingText: "壓縮串流 API 的說明指出，建構式支援 gzip 與 deflate 格式。範例接著示範如何壓縮文字資料。",
     candidateClaim: {
-      c: "青河市政府宣布東區將停水八小時，西區三所學校仍照常上課。",
-      why: "同時涉及民生供水與校務安排。",
-      need: "市府停水與學校公告。",
-      q: "青河市政府是否宣布東區停水八小時且西區三所學校照常上課？",
+      c: "壓縮串流 API 的建構式支援 gzip 與 deflate 格式。",
+      why: "這是普通的 API 能力說明。",
+      need: "官方 API 文件。",
+      q: "壓縮串流 API 的建構式是否支援 gzip 與 deflate 格式？",
     },
   },
   {
@@ -258,23 +258,23 @@ const enFixtures = [
     },
   },
   {
-    fixtureKind: "attributed",
-    groundingText: "The South Cape Court notice said that Sea Morning Company may still appeal by July 30, 2026. The court has not ruled on the merits of an appeal.",
+    fixtureKind: "routine-fact",
+    groundingText: "The North Bay catalog says The North Wind was first published by Harbor Press in 1900. The page also lists file formats for the digital edition.",
     candidateClaim: {
-      c: "The South Cape Court notice said that Sea Morning Company may still appeal by July 30, 2026.",
-      why: "The statement concerns a legal deadline and company rights.",
-      need: "The court notice and case schedule.",
-      q: "Did the South Cape Court notice say that Sea Morning Company may still appeal by July 30, 2026?",
+      c: "The North Bay catalog says The North Wind was first published by Harbor Press in 1900.",
+      why: "This is an ordinary central catalog record.",
+      need: "The catalog or original publication record.",
+      q: "Was The North Wind first published by Harbor Press in 1900?",
     },
   },
   {
-    fixtureKind: "compound",
-    groundingText: "Northbridge City announced an eight-hour water outage in the east district on July 20, 2026, and said three west-district schools would remain open. Different agencies manage the two measures.",
+    fixtureKind: "routine-fact",
+    groundingText: "The Compression Streams API guide says the constructor supports gzip and deflate formats. The example then shows how to compress text data.",
     candidateClaim: {
-      c: "Northbridge City announced an eight-hour water outage and said three schools would remain open.",
-      why: "The sentence combines water service and school operations.",
-      need: "The city water and school notices.",
-      q: "Did Northbridge City announce an eight-hour water outage and keep three schools open?",
+      c: "The Compression Streams API constructor supports gzip and deflate formats.",
+      why: "This is an ordinary API capability description.",
+      need: "The official API documentation.",
+      q: "Does the Compression Streams API constructor support gzip and deflate formats?",
     },
   },
   {
@@ -330,8 +330,8 @@ const enFixtures = [
 ];
 
 const SOFT_NEGATIVE_INDEXES = new Set([3, 4]);
-const PRIMARY_INDEXES = new Set([0, 1, 2, 6, 7, 8, 9, 10]);
-const EXPLORATORY_INDEXES = new Set([3, 4, 12, 13]);
+const PRIMARY_INDEXES = new Set([0, 1, 2, 6, 7, 10, 12, 13]);
+const EXPLORATORY_INDEXES = new Set([3, 4, 8, 9]);
 const HARD_BOUNDARY_KIND_BY_INDEX = new Map([
   [5, "incomplete_span"],
   [11, "untrusted_instruction"],
