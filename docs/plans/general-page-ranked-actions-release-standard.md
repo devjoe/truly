@@ -171,7 +171,7 @@ Run two fixed bilingual suites:
 
 - the 30-case end-to-end Selector to Admission suite, three times with
   `json_schema` and three times with `json_object`;
-- the 24-case direct Admission suite, three times with `json_schema` and three
+- the 30-case direct Admission suite, three times with `json_schema` and three
   times with `json_object`.
 
 The twelve formal processes run one at a time and may not overlap; bounded
@@ -206,13 +206,13 @@ The primary controls include broad routine product/menu facts and a concrete
 public-biography statement so Selector cannot silently narrow the product
 contract before Admission runs.
 
-The fixed 24-row direct Admission suite contains exactly 12 rows per language:
+The fixed 30-row direct Admission suite contains exactly 15 rows per language:
 
 - 16 admit controls covering primary shapes plus valid ordinary reference,
   API/workflow, and central catalog-record exploratory shapes;
-- 8 reject controls covering incomplete or residue-derived spans,
-  subjective-only material, unsafe/private requests, and other propositions
-  users should not receive.
+- 14 reject controls covering incomplete or residue-derived spans,
+  context-dependent references, subjective-only material, unsafe/private
+  requests, and other propositions users should not receive.
 
 The hard sentinels must exercise the shipping exact-span boundary directly. A
 complete sentence that merely says another sentence was truncated is not an
@@ -237,8 +237,8 @@ Required for every run:
   fail Admission, or cross any hard boundary. Across all six formal composed
   runs, permitted misses may involve at most one preregistered fixture
   identity;
-- for direct Admission runs, 24/24 correct binary decisions, including 16/16
-  admits and 8/8 rejects;
+- for direct Admission runs, 30/30 correct binary decisions, including 16/16
+  admits and 14/14 rejects;
 - no hard-boundary leak, repair, retry, public search, or opened action;
 - deterministic localized Gemini handoff generated from local data;
 - `model.concurrency === 2` and a valid, non-overlapping time interval.
@@ -610,3 +610,17 @@ model stage, or changed release threshold. A surgical synthetic diagnostic
 accepted an explicitly named Firefox capability as exploratory while
 rejecting the three observed fragment shapes. The successor still requires a
 new clean commit, formal Gate A, and wholly fresh Gate B and C evidence.
+
+Formal Gate A then exposed an evaluation-contract defect rather than evidence
+for lowering the capability bar. The English `synthetic-en-05` control
+required an exploratory display for the exact sentence `RiverLock is an
+example of such a protocol`, even though its own fixture rationale and the
+shipping Selector and Admission prompts classify that unresolved reference as
+non-standalone. Four completed receipts falsely admitted the sentence; one
+correctly abstained and therefore failed the `8/8` visibility requirement. A
+three-branch adversarial review rejected a global `7/8` visibility relaxation.
+The successor keeps `8/8`, replaces the contradictory composed control with a
+complete standalone definition, and moves the original context-dependent
+sentence into bilingual direct Admission reject coverage. The failed receipts
+remain diagnostic only; the corrected hashes require a fresh clean candidate
+and a complete new Gate A ceremony.

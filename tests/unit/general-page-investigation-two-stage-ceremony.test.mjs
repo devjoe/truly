@@ -39,10 +39,10 @@ function receipt(index, taskKey, responseFormat) {
     },
     data: admission
       ? {
-          sampleCount: 28,
-          sourceLanguages: { "zh-TW": 14, en: 14 },
+          sampleCount: 30,
+          sourceLanguages: { "zh-TW": 15, en: 15 },
           expectedAdmit: 16,
-          expectedReject: 12,
+          expectedReject: 14,
         }
       : {
           sampleCount: 30,
@@ -53,12 +53,12 @@ function receipt(index, taskKey, responseFormat) {
         },
     counts: admission
       ? {
-          protocolSucceeded: 28,
+          protocolSucceeded: 30,
           protocolFailed: 0,
-          correct: 28,
+          correct: 30,
           incorrect: 0,
           admitCorrect: 16,
-          rejectCorrect: 12,
+          rejectCorrect: 14,
         }
       : {
           protocolSucceeded: 30,
@@ -96,7 +96,7 @@ function receipt(index, taskKey, responseFormat) {
           },
         }),
     networkBoundary: {
-      modelRequests: admission ? 28 : 54,
+      modelRequests: admission ? 30 : 54,
       publicSearchRequests: 0,
       actionsOpened: 0,
     },
@@ -169,7 +169,7 @@ describe("General Page two-stage Gate A ceremony", () => {
     const result = validateTwoStageInvestigationCeremony(receipts, commit);
 
     expect(result.passed).toBe(false);
-    expect(result.errors.join(" ")).toMatch(/28 of 28/);
+    expect(result.errors.join(" ")).toMatch(/30 of 30/);
     expect(result.errors.join(" ")).toMatch(/capability or hard boundary/);
     expect(result.errors.join(" ")).toMatch(/tier-confusion diagnostics/);
     expect(result.errors.join(" ")).toMatch(/request counts disagree/);
@@ -184,5 +184,19 @@ describe("General Page two-stage Gate A ceremony", () => {
 
     expect(result.passed).toBe(false);
     expect(result.errors.join(" ")).toMatch(/one-fixture exploratory variance bound/);
+  });
+
+  it("keeps exploratory visibility distinct from the bounded tier allowance", () => {
+    const receipts = validReceipts();
+    receipts[6].value.counts.exploratoryCorrect = 7;
+    receipts[6].value.counts.exploratoryVisible = 7;
+    receipts[6].value.gates.exploratoryCorrect.result = 7;
+    receipts[6].value.gates.exploratoryCorrect.visible = 7;
+
+    const result = validateTwoStageInvestigationCeremony(receipts, commit);
+
+    expect(result.passed).toBe(false);
+    expect(result.errors.join(" ")).toMatch(/capability or hard boundary/);
+    expect(result.errors.join(" ")).toMatch(/language floors or visibility disagree/);
   });
 });

@@ -265,6 +265,22 @@ const fixtures: Fixture[] = [
     context: "The URLSearchParams.entries() method returns an iterator. Returns an iterator allowing iteration through all key/value pairs.",
     selectedText: "Returns an iterator allowing iteration through all key/value pairs.",
   },
+  {
+    sampleId: "reject-zh-context-dependent-reference",
+    language: "zh-TW",
+    expectedDecision: "reject",
+    title: "聯邦身分協定",
+    context: "前一句定義聯邦身分協定。RiverLock 是此類協定的一個例子。",
+    selectedText: "RiverLock 是此類協定的一個例子。",
+  },
+  {
+    sampleId: "reject-en-context-dependent-reference",
+    language: "en",
+    expectedDecision: "reject",
+    title: "Federated identity protocols",
+    context: "The prior sentence defines a federated identity protocol. RiverLock is an example of such a protocol.",
+    selectedText: "RiverLock is an example of such a protocol.",
+  },
 ];
 
 function option(name: string): string | undefined {

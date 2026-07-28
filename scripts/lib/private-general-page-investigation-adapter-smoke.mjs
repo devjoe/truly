@@ -65,7 +65,7 @@ const zhFixtures = [
     },
   },
   {
-    fixtureKind: "abstain",
+    fixtureKind: "routine-fact",
     groundingText: "教學文件寫道，建立新類別會建立一種新的物件型別，因此可以產生該型別的新實例。頁面沒有提供具體版本差異、限制或事件。",
     candidateClaim: {
       c: "建立新類別會建立一種新的物件型別。",
@@ -218,13 +218,13 @@ const enFixtures = [
     },
   },
   {
-    fixtureKind: "abstain",
-    groundingText: "The prior sentence defines a federated identity protocol. RiverLock is an example of such a protocol.",
+    fixtureKind: "routine-fact",
+    groundingText: "The documentation identifies RiverLock as a federated identity protocol. The page also describes ordinary configuration options.",
     candidateClaim: {
-      c: "RiverLock is an example of such a protocol.",
-      why: "The exact span depends on the prior sentence to resolve what kind of protocol is meant.",
-      need: "The complete claim must name the protocol category inside the selectable span.",
-      q: "What protocol category does RiverLock implement?",
+      c: "RiverLock is a federated identity protocol.",
+      why: "This is an ordinary product classification rather than a primary investigation action.",
+      need: "The official RiverLock documentation.",
+      q: "Is RiverLock a federated identity protocol?",
     },
   },
   {

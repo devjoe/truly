@@ -46,6 +46,14 @@ describe("private General Page Investigation Adapter protocol smoke", () => {
     expect(fixtures.every((fixture) => fixture.dataCategory === "synthetic-only")).toBe(true);
     expect(fixtures.every((fixture) => new URL(fixture.source.url).hostname === "synthetic.example.test"))
       .toBe(true);
+    expect(fixtures.find((fixture) => fixture.sampleId === "synthetic-en-05"))
+      .toMatchObject({
+        fixtureKind: "routine-fact",
+        expectedAction: "exploratory",
+        candidateClaim: {
+          c: "RiverLock is a federated identity protocol.",
+        },
+      });
   });
 
   it("accepts only private-data/runs paths outside the public repo or under its tmp directory", () => {
