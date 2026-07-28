@@ -90,6 +90,18 @@ function sourceClaimLine(claim: string, lang: Lang): string {
     : `${label}: “${exact}”`;
 }
 
+function investigationActionLine(
+  action: GeneralPageInvestigationActionPresentation,
+  lang: Lang,
+): string {
+  const claim = sourceClaimLine(action.displayClaim, lang);
+  const hint = clean(action.evidenceHint);
+  if (action.presentationTier === "primary") return `${claim}（${hint}）`;
+  const label = t("sidepanel.page.investigation.exploratoryLabel", lang);
+  const note = t("sidepanel.page.investigation.exploratoryNote", lang);
+  return `[${label}] ${claim}（${note} ${hint}）`;
+}
+
 function metadataLines(packet: PageReadingExportPacket): string[] {
   const separator = packet.lang === "zh-TW" ? "：" : ": ";
   const rows: Array<[string, string | undefined]> = [
@@ -113,7 +125,7 @@ function briefTextSections(packet: PageReadingExportPacket): string[] {
   if (packet.investigationActions?.length) {
     sections.push("", t("sidepanel.dynamic.readingBrief.verify", lang));
     for (const action of packet.investigationActions) {
-      sections.push(`• ${sourceClaimLine(action.displayClaim, lang)}（${clean(action.evidenceHint)}）`);
+      sections.push(`• ${investigationActionLine(action, lang)}`);
     }
   } else if (brief.claims?.length) {
     sections.push("", t("sidepanel.dynamic.readingBrief.verify", lang));
@@ -173,7 +185,7 @@ export function formatFullPageReadingMarkdown(packet: PageReadingExportPacket): 
   if (packet.investigationActions?.length) {
     lines.push("", `### ${markdownText(t("sidepanel.dynamic.readingBrief.verify", lang))}`, "");
     for (const action of packet.investigationActions) {
-      lines.push(`- ${markdownText(sourceClaimLine(action.displayClaim, lang))}（${markdownText(action.evidenceHint)}）`);
+      lines.push(`- ${markdownText(investigationActionLine(action, lang))}`);
     }
   } else if (brief.claims?.length) {
     lines.push("", `### ${markdownText(t("sidepanel.dynamic.readingBrief.verify", lang))}`, "");

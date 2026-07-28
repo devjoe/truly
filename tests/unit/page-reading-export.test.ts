@@ -108,10 +108,30 @@ describe("page reading exports", () => {
         displayClaim: "食藥署公布232項產品名單",
         evidenceHint: "建議比對官方公告",
         askAiPrompt: "session-only handoff",
+        presentationTier: "primary",
       }],
     }));
 
     expect(text).toContain("待確認事項\n• 原文主張：「食藥署公布232項產品名單」（建議比對官方公告）");
     expect(text).not.toContain("session-only handoff");
+  });
+
+  it("keeps exploratory status and its caution in exported reading context", () => {
+    const text = formatCompactPageReadingExport(packet({
+      brief: {
+        schemaVersion: 1,
+        summary: "這是頁面內容的閱讀脈絡。",
+        model: "synthetic-model",
+      },
+      investigationActions: [{
+        displayClaim: "此 API 會傳回使用者設定。",
+        evidenceHint: "建議比對官方 API 文件",
+        askAiPrompt: "session-only handoff",
+        presentationTier: "exploratory",
+      }],
+    }));
+
+    expect(text).toContain("[探索性] 原文主張：「此 API 會傳回使用者設定。」");
+    expect(text).toContain("這項內容的查核價值較不確定");
   });
 });

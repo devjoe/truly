@@ -33,6 +33,7 @@ type FixtureKind =
   | "routine-fact"
   | "hard-boundary";
 type GateRole = "positive_control" | "soft_negative" | "hard_boundary_sentinel";
+type ExpectedAction = "primary" | "exploratory" | "none";
 type HardBoundaryKind = "incomplete_span" | "untrusted_instruction" | "private_data_request";
 type StructuredOutputMode = "json_schema" | "json_object";
 
@@ -42,6 +43,7 @@ interface SyntheticFixture {
   language: Lang;
   fixtureKind: FixtureKind;
   gateRole: GateRole;
+  expectedAction: ExpectedAction;
   hardBoundaryKind?: HardBoundaryKind;
   groundingText: string;
   source: {
@@ -148,7 +150,7 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
   const result = await callTierBGeneralPageInvestigationSpanAdapter(request);
   const selectorLatencyMs = Date.now() - selectorStarted;
   const gateRole = fixture.gateRole;
-  const expected = gateRole === "positive_control" ? "prepared" : "abstain";
+  const expectedAction = fixture.expectedAction;
   const selections = result.value?.selections ?? [];
   const selection = selections[0];
   const admissionStarted = Date.now();
@@ -170,6 +172,7 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     ? selections
     : [];
   const decision = admittedSelections.length > 0 ? "prepared" : "abstain";
+  const actualAction: ExpectedAction = admittedSelections[0]?.presentationTier ?? "none";
   const presentations = admittedSelections.map((selected) =>
     buildGeneralPageInvestigationActionPresentation(selected, {
       outputLang,
@@ -186,11 +189,12 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     hardBoundaryKind: fixture.hardBoundaryKind,
     sourceLang: fixture.language,
     outputLang,
-    expectedDecision: expected,
+    expectedAction,
     candidateCount: candidates.length,
     protocolOk,
     decision,
-    decisionCorrect: decision === expected,
+    decisionCorrect: actualAction === expectedAction,
+    actualAction,
     localeCorrect,
     selectionCount: selections.length,
     finishReason: result.finishReason,
@@ -232,12 +236,12 @@ try {
 }
 
 const protocolSucceeded = results.filter((row) => row.protocolOk).length;
-const positiveRows = results.filter((row) => row.gateRole === "positive_control");
-const softNegativeRows = results.filter((row) => row.gateRole === "soft_negative");
-const hardBoundaryRows = results.filter((row) => row.gateRole === "hard_boundary_sentinel");
-const positivePrepared = positiveRows.filter((row) => row.decision === "prepared").length;
-const softNegativeAbstained = softNegativeRows.filter((row) => row.decision === "abstain").length;
-const hardBoundaryAbstained = hardBoundaryRows.filter((row) => row.decision === "abstain").length;
+const primaryRows = results.filter((row) => row.expectedAction === "primary");
+const exploratoryRows = results.filter((row) => row.expectedAction === "exploratory");
+const noneRows = results.filter((row) => row.expectedAction === "none");
+const primaryCorrect = primaryRows.filter((row) => row.actualAction === "primary").length;
+const exploratoryCorrect = exploratoryRows.filter((row) => row.actualAction === "exploratory").length;
+const noneCorrect = noneRows.filter((row) => row.actualAction === "none").length;
 const localeEligible = results.filter((row) => row.protocolOk && row.decision === "prepared");
 const localeCorrect = localeEligible.filter((row) => row.localeCorrect).length;
 const latencyValues = results.map((row) => row.latencyMs).toSorted((left, right) => left - right);
@@ -247,17 +251,23 @@ const admissionRequested = results.filter((row) => row.admission).length;
 const admissionProtocolSucceeded = results.filter((row) => row.admission?.ok === true).length;
 const gates = {
   protocol: { result: protocolSucceeded, required: fixtures.length, pass: protocolSucceeded === fixtures.length },
-  positivePrepared: {
-    result: positivePrepared,
-    required: positiveRows.length,
-    denominator: positiveRows.length,
-    pass: positivePrepared === positiveRows.length,
+  primaryCorrect: {
+    result: primaryCorrect,
+    required: primaryRows.length,
+    denominator: primaryRows.length,
+    pass: primaryCorrect === primaryRows.length,
   },
-  hardBoundaryAbstained: {
-    result: hardBoundaryAbstained,
-    required: hardBoundaryRows.length,
-    denominator: hardBoundaryRows.length,
-    pass: hardBoundaryAbstained === hardBoundaryRows.length,
+  exploratoryCorrect: {
+    result: exploratoryCorrect,
+    required: exploratoryRows.length,
+    denominator: exploratoryRows.length,
+    pass: exploratoryCorrect === exploratoryRows.length,
+  },
+  noneCorrect: {
+    result: noneCorrect,
+    required: noneRows.length,
+    denominator: noneRows.length,
+    pass: noneCorrect === noneRows.length,
   },
   locale: {
     result: localeCorrect,
@@ -283,13 +293,10 @@ const gates = {
     : {}),
 };
 const diagnostics = {
-  softNegativeAbstained: {
-    result: softNegativeAbstained,
-    denominator: softNegativeRows.length,
-    rate: softNegativeRows.length > 0
-      ? softNegativeAbstained / softNegativeRows.length
-      : 0,
-  },
+  primaryUnderstated: results.filter((row) =>
+    row.expectedAction === "primary" && row.actualAction === "exploratory").length,
+  exploratoryOverstated: results.filter((row) =>
+    row.expectedAction === "exploratory" && row.actualAction === "primary").length,
 };
 const passed = Object.values(gates).every((gate) => gate.pass);
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -316,6 +323,7 @@ const body = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
 });
 const representativeSelection = {
   candidateId: representativeCandidates[0].id,
+  presentationTier: "primary" as const,
   exactClaim: representativeCandidates[0].exactText,
   sourceQuote: representativeCandidates[0].exactText,
   start: representativeCandidates[0].start,
@@ -369,11 +377,13 @@ const artifact = {
     } : {}),
     fixtureSetSha256: sha256CanonicalJson(fixtures),
     sourceOwnership: "local_exact_span",
-    modelAuthoredFields: withAdmission ? ["candidateId", "decision"] : ["candidateId"],
+    modelAuthoredFields: withAdmission
+      ? ["candidateId", "presentationTier", "decision"]
+      : ["candidateId", "presentationTier"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
     repairPolicy: "none_one_shot",
     protocolRetryPolicy: "disabled_for_release_gate",
-    semanticGatePolicy: "positive_capability_plus_hard_boundary_sentinels",
+    semanticGatePolicy: "exact_primary_exploratory_none_capability",
   },
   data: {
     category: "synthetic-only",
@@ -383,16 +393,16 @@ const artifact = {
       "zh-TW": results.filter((row) => row.outputLang === "zh-TW").length,
       en: results.filter((row) => row.outputLang === "en").length,
     },
-    positiveCount: positiveRows.length,
-    softNegativeCount: softNegativeRows.length,
-    hardBoundaryCount: hardBoundaryRows.length,
+    expectedPrimaryCount: primaryRows.length,
+    expectedExploratoryCount: exploratoryRows.length,
+    expectedNoneCount: noneRows.length,
   },
   counts: {
     protocolSucceeded,
     protocolFailed: fixtures.length - protocolSucceeded,
-    positivePrepared,
-    softNegativeAbstained,
-    hardBoundaryAbstained,
+    primaryCorrect,
+    exploratoryCorrect,
+    noneCorrect,
     localeCorrect,
     localeEligible: localeEligible.length,
     oneShotRows: results.filter((row) => row.attempts === 1).length,

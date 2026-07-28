@@ -196,6 +196,7 @@ describe("canonical page reading session", () => {
       displayClaim: "食藥署公布232項產品名單",
       evidenceHint: "建議比對官方公告",
       askAiPrompt: "請查核以下原文陳述。",
+      presentationTier: "primary" as const,
     }];
 
     expect(projectPreparedPageInvestigationActions({

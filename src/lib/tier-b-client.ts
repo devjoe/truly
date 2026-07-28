@@ -1109,7 +1109,7 @@ export function buildTierBGeneralPageInvestigationSpanAdapterChatBody(
       ? {
           type: "json_schema",
           json_schema: {
-            name: "truly_general_page_investigation_span_adapter_v6",
+            name: "truly_general_page_investigation_span_adapter_v7",
             strict: true,
             schema: generalPageInvestigationSpanAdapterJsonSchema(
               req.candidates.map(({ id }) => id),

@@ -43,6 +43,7 @@ interface SyntheticFixture {
     | "routine-fact"
     | "hard-boundary";
   gateRole: "positive_control" | "soft_negative" | "hard_boundary_sentinel";
+  expectedAction: "primary" | "exploratory" | "none";
   hardBoundaryKind?: "incomplete_span" | "untrusted_instruction" | "private_data_request";
   candidateClaim: TierBGeneralPageInvestigationAdapterRequest["candidateClaim"];
   groundingText: string;

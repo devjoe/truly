@@ -48,9 +48,10 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 6 as const,
+        schemaVersion: 7 as const,
         selections: [{
           candidateId: input.candidates[1].id,
+          presentationTier: "primary" as const,
           exactClaim: input.candidates[1].exactText,
           sourceQuote: input.candidates[1].exactText,
           start: input.candidates[1].start,
@@ -122,8 +123,52 @@ describe("background General Page investigation preparation", () => {
         displayClaim: "衛生局命令遠帆公司在七月三十一日前完成下架",
         evidenceHint: "優先比對直接相關的官方資料、當事人原始聲明或可信報導",
         askAiPrompt: expect.stringContaining("原文陳述：衛生局命令遠帆公司在七月三十一日前完成下架"),
+        presentationTier: "primary",
       }],
     });
+  });
+
+  it("preserves an admitted exploratory tier for the reader-facing warning", async () => {
+    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const sendMessage = vi.fn();
+    const callAdapter = vi.fn(async (input: any) => ({
+      ok: true,
+      attempts: 1 as const,
+      value: {
+        schemaVersion: 7 as const,
+        selections: [{
+          candidateId: input.candidates[0].id,
+          presentationTier: "exploratory" as const,
+          exactClaim: input.candidates[0].exactText,
+          sourceQuote: input.candidates[0].exactText,
+          start: input.candidates[0].start,
+          end: input.candidates[0].end,
+        }],
+      },
+    }));
+
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request,
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_schema",
+      resourceKey: "gx10|fixture-model",
+      callAdapter,
+      callAdmission: vi.fn(async () => ({
+        ok: true,
+        value: { schemaVersion: 1 as const, decision: "admit" as const },
+      })),
+      sendMessage,
+    });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      status: "prepared",
+      preparedActions: [
+        expect.objectContaining({ presentationTier: "exploratory" }),
+      ],
+    }));
   });
 
   it("lets queued user-blocking work run between selection and admission", async () => {
@@ -141,9 +186,10 @@ describe("background General Page investigation preparation", () => {
         ok: true,
         attempts: 1 as const,
         value: {
-          schemaVersion: 6 as const,
+          schemaVersion: 7 as const,
           selections: [{
             candidateId: input.candidates[0].id,
+            presentationTier: "primary" as const,
             exactClaim: input.candidates[0].exactText,
             sourceQuote: input.candidates[0].exactText,
             start: input.candidates[0].start,
@@ -205,9 +251,10 @@ describe("background General Page investigation preparation", () => {
         ok: true,
         attempts: 1 as const,
         value: {
-          schemaVersion: 6 as const,
+          schemaVersion: 7 as const,
           selections: [{
             candidateId: input.candidates[0].id,
+            presentationTier: "primary" as const,
             exactClaim: input.candidates[0].exactText,
             sourceQuote: input.candidates[0].exactText,
             start: input.candidates[0].start,
@@ -266,7 +313,7 @@ describe("background General Page investigation preparation", () => {
     const callAdapter = vi.fn(async () => ({
       ok: true,
       attempts: 1 as const,
-      value: { schemaVersion: 6 as const, selections: [] },
+      value: { schemaVersion: 7 as const, selections: [] },
     }));
 
     scheduleGeneralPageInvestigationPreparation({
@@ -360,7 +407,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 6 as const,
+        schemaVersion: 7 as const,
         selections: [],
       },
     }));
@@ -384,6 +431,7 @@ describe("background General Page investigation preparation", () => {
   it("publishes nothing when the second stage rejects or is unavailable", async () => {
     const selection = {
       candidateId: "span:1",
+      presentationTier: "primary" as const,
       exactClaim: "食藥署公布232項產品名單",
       sourceQuote: "食藥署公布232項產品名單",
       start: 0,
@@ -392,7 +440,7 @@ describe("background General Page investigation preparation", () => {
     const callAdapter = vi.fn(async () => ({
       ok: true,
       attempts: 1 as const,
-      value: { schemaVersion: 6 as const, selections: [selection] },
+      value: { schemaVersion: 7 as const, selections: [selection] },
     }));
 
     for (const admissionResult of [

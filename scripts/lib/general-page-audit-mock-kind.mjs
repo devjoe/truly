@@ -1,6 +1,6 @@
 export function classifyGeneralPageAuditMockRequest(systemText, hasImageUrl = false) {
   if (/parser recovery classifier/i.test(systemText)) return "parser-advisor";
-  if (/final admission critic for one optional reader-facing fact-check action/i.test(systemText)) {
+  if (/final (?:binary )?admission critic for one optional reader-facing fact-check action/i.test(systemText)) {
     return "investigation-admission";
   }
   if (
@@ -8,7 +8,7 @@ export function classifyGeneralPageAuditMockRequest(systemText, hasImageUrl = fa
     /Select zero to three investigation actions from a fixed list/i.test(systemText) ||
     (
       /fixed list of exact source spans/i.test(systemText) &&
-      /(?:"schemaVersion":|schemaVersion )6/i.test(systemText) &&
+      /(?:"schemaVersion":|schemaVersion )7/i.test(systemText) &&
       /candidateId/i.test(systemText)
     )
   ) return "investigation-adapter";

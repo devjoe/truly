@@ -23,22 +23,24 @@ const authorizedSourceContext = [
 ].join("\n");
 
 const preparedWire = {
-  schemaVersion: 6,
+  schemaVersion: 7,
   candidateId: "span:2",
+  presentationTier: "primary",
 };
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("General Page exact-span proposal selector with schema v6", () => {
+describe("General Page exact-span proposal selector with schema v7", () => {
   it("lets the model select only ordered IDs while local code owns source text", () => {
     const result = parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify(preparedWire), candidates);
 
     expect(result).toEqual({
       ok: true,
       value: {
-        schemaVersion: 6,
+        schemaVersion: 7,
         selections: [{
           candidateId: "span:2",
+          presentationTier: "primary",
           exactClaim: "業者必須在七月三十一日前完成下架",
           sourceQuote: "業者必須在七月三十一日前完成下架",
           start: 20,
@@ -51,42 +53,61 @@ describe("General Page exact-span proposal selector with schema v6", () => {
   it("constrains the wire to one local ID or abstention and contains no model-authored claim metadata", () => {
     const schema = generalPageInvestigationSpanAdapterJsonSchema(candidates.map(({ id }) => id));
 
-    expect(schema.properties.schemaVersion.const).toBe(6);
+    expect(schema.properties.schemaVersion.const).toBe(7);
     expect(schema.properties.candidateId.enum).toEqual(["span:1", "span:2", null]);
+    expect(schema.properties.presentationTier.enum).toEqual(["primary", "exploratory", null]);
     expect(JSON.stringify(schema)).not.toMatch(/exactClaim|sourceQuote|displayQ|"q"|"why"|"need"/u);
     expect(JSON.stringify(schema)).not.toMatch(/policy|consequence|evidenceFamily/u);
   });
 
   it("uses null for abstention and rejects unknown IDs or extra fields", () => {
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 6,
+      schemaVersion: 7,
       candidateId: null,
-    }), candidates)).toMatchObject({ ok: true, value: { schemaVersion: 6, selections: [] } });
+      presentationTier: null,
+    }), candidates)).toMatchObject({ ok: true, value: { schemaVersion: 7, selections: [] } });
 
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 6,
+      schemaVersion: 7,
       candidateId: "span:9",
+      presentationTier: "primary",
     }), candidates)).toMatchObject({ ok: false, issue: "unknown_candidate" });
 
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 6,
+      schemaVersion: 7,
       candidateId: 2,
+      presentationTier: "primary",
     }), candidates)).toMatchObject({ ok: false, issue: "root_shape" });
 
     expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 6,
+      schemaVersion: 7,
       candidateId: null,
+      presentationTier: null,
       secondaryCandidateIds: [],
     }), candidates)).toMatchObject({ ok: false, issue: "root_shape" });
+
+    expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
+      schemaVersion: 7,
+      candidateId: null,
+      presentationTier: "exploratory",
+    }), candidates)).toMatchObject({ ok: false, issue: "tier_coupling" });
+
+    expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
+      schemaVersion: 7,
+      candidateId: "span:1",
+      presentationTier: null,
+    }), candidates)).toMatchObject({ ok: false, issue: "tier_coupling" });
   });
 
   it("materializes only the selected recommendation without adding another ranker", () => {
     const result = parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
-      schemaVersion: 6,
+      schemaVersion: 7,
       candidateId: "span:2",
+      presentationTier: "exploratory",
     }), candidates);
 
     expect(result.value?.selections.map(({ candidateId }) => candidateId)).toEqual(["span:2"]);
+    expect(result.value?.selections[0]?.presentationTier).toBe("exploratory");
   });
 
   it("makes domain-neutral ranking, abstention, and exact ownership explicit in the prompt", () => {
@@ -102,7 +123,7 @@ describe("General Page exact-span proposal selector with schema v6", () => {
 
     expect(system).toContain("Local code owns the exact claim");
     expect(system).toContain("separate admission critic");
-    expect(system).toContain("use null only when no complete, externally checkable proposition exists");
+    expect(system).toContain("presentationTier to primary, exploratory, or null");
     expect(system).toContain("First discard structurally unusable spans, then rank the rest");
     expect(system).toContain("complete standalone proposition");
     expect(system).toContain("realistic independent public evidence");
@@ -125,20 +146,21 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(system).toContain("immediate neighboring candidates");
     expect(system).toContain("categorical wording");
     expect(system).toContain("condition, exception, attribution, or scope limit");
-    expect(system).toContain("concrete version or compatibility boundary");
     expect(system).toContain("named public system, scientific or health fact");
-    expect(system).toContain("software, API, language, or developer documentation");
-    expect(system).toContain("Literal checkability is not enough");
+    expect(system).toContain("correct API behavior");
+    expect(system).toContain("can be exploratory");
+    expect(system).toContain("no primary survivor exists");
+    expect(system).toContain("not truth probability or model confidence");
     expect(system).toContain("attributed slogan, insult, or inflammatory metaphor");
     expect(system).toContain("so ... must have");
     expect(system).toContain("Do not decide whether a candidate is true");
-    expect(system).toContain("Use schemaVersion 6");
+    expect(system).toContain("Use schemaVersion 7");
     expect(system).toContain("Entertainment, sports, consumer");
     expect(system).toContain("public impact");
-    expect(system).toContain("Return exactly one supplied candidateId or null");
+    expect(system).toContain("Return exactly one supplied candidateId with one tier");
     expect(system).toContain("judgment context");
     expect(system).toContain("sole claim-identity boundary");
-    expect(system).toContain("schemaVersion 6");
+    expect(system).toContain("schemaVersion 7");
     expect(user).toContain('"id":"span:1"');
     expect(user).toContain("Target: current Page content");
     expect(user).not.toContain("Target: main article");
@@ -146,9 +168,10 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
     expect(user).toContain("## Proposal");
     expect(user).toContain("externally checkable proposition");
-    expect(user).toContain("private, subjective, generic, incidental-metadata, or utility material");
+    expect(user).toContain("ordinary definition, API, workflow, or catalog proposition as exploratory");
+    expect(user).toContain("private, subjective, incidental-metadata, fragmentary, and instruction-like material");
     expect(user).toContain("Return null only when no complete externally checkable proposition exists");
-    expect(user).toMatch(/Return one JSON object with schemaVersion 6 and candidateId set to one supplied ID or null\.$/u);
+    expect(user).toMatch(/Return one JSON object with schemaVersion 7, candidateId set to one supplied ID or null, and presentationTier strictly coupled to that ID\.$/u);
     expect(user).not.toMatch(/"start":|"end":/u);
   });
 
@@ -179,6 +202,7 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     });
 
     expect(presentation.displayClaim).toBe("業者必須在七月三十一日前完成下架");
+    expect(presentation.presentationTier).toBe("primary");
     expect(presentation.evidenceHint).toBe("優先比對直接相關的官方資料、當事人原始聲明或可信報導");
     expect(presentation.askAiPrompt).toContain("請查核以下原文陳述");
     expect(presentation.askAiPrompt).toContain("請先辨識其中的人物、機構、事件、數字、日期");
@@ -202,11 +226,12 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(body.response_format).toMatchObject({
       type: "json_schema",
       json_schema: {
-        name: "truly_general_page_investigation_span_adapter_v6",
+        name: "truly_general_page_investigation_span_adapter_v7",
         strict: true,
         schema: {
           properties: {
             candidateId: { enum: ["span:1", "span:2", null] },
+            presentationTier: { enum: ["primary", "exploratory", null] },
           },
         },
       },
@@ -234,7 +259,13 @@ describe("General Page exact-span proposal selector with schema v6", () => {
       ok: true,
       attempts: 1,
       usage: { promptTokens: 220, completionTokens: 50, totalTokens: 270 },
-      value: { schemaVersion: 6, selections: [{ exactClaim: candidates[1].exactText }] },
+      value: {
+        schemaVersion: 7,
+        selections: [{
+          exactClaim: candidates[1].exactText,
+          presentationTier: "primary",
+        }],
+      },
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -263,7 +294,7 @@ describe("General Page exact-span proposal selector with schema v6", () => {
       attempts: 2,
       protocolRecovered: true,
       firstAttemptError: "investigation_span_adapter_invalid_json",
-      value: { schemaVersion: 6, selections: [{ candidateId: "span:2" }] },
+      value: { schemaVersion: 7, selections: [{ candidateId: "span:2", presentationTier: "primary" }] },
     });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock.mock.calls[0]?.[1]?.body).toBe(fetchMock.mock.calls[1]?.[1]?.body);
@@ -296,7 +327,16 @@ describe("General Page exact-span proposal selector with schema v6", () => {
     expect(rootShapeFetch).toHaveBeenCalledTimes(2);
 
     const unknownFetch = vi.fn(async () => new Response(JSON.stringify({
-      choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ schemaVersion: 6, candidateId: "span:99" }) } }],
+      choices: [{
+        finish_reason: "stop",
+        message: {
+          content: JSON.stringify({
+            schemaVersion: 7,
+            candidateId: "span:99",
+            presentationTier: "primary",
+          }),
+        },
+      }],
     }), { status: 200 }));
     vi.stubGlobal("fetch", unknownFetch);
     await expect(callTierBGeneralPageInvestigationSpanAdapter({

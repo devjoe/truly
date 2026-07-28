@@ -41,15 +41,15 @@ function receipt(index, taskKey, responseFormat) {
       ? {
           sampleCount: 24,
           sourceLanguages: { "zh-TW": 12, en: 12 },
-          expectedAdmit: 14,
-          expectedReject: 10,
+          expectedAdmit: 16,
+          expectedReject: 8,
         }
       : {
           sampleCount: 30,
           sourceLanguages: { "zh-TW": 15, en: 15 },
-          positiveCount: 20,
-          softNegativeCount: 4,
-          hardBoundaryCount: 6,
+          expectedPrimaryCount: 16,
+          expectedExploratoryCount: 8,
+          expectedNoneCount: 6,
         },
     counts: admission
       ? {
@@ -57,17 +57,18 @@ function receipt(index, taskKey, responseFormat) {
           protocolFailed: 0,
           correct: 24,
           incorrect: 0,
-          admitCorrect: 14,
-          rejectCorrect: 10,
+          admitCorrect: 16,
+          rejectCorrect: 8,
         }
       : {
           protocolSucceeded: 30,
           protocolFailed: 0,
           oneShotRows: 30,
-          positivePrepared: 20,
-          hardBoundaryAbstained: 6,
-          admissionRequested: 22,
-          admissionProtocolSucceeded: 22,
+          primaryCorrect: 16,
+          exploratoryCorrect: 8,
+          noneCorrect: 6,
+          admissionRequested: 24,
+          admissionProtocolSucceeded: 24,
           admissionProtocolFailed: 0,
         },
     ...(admission
@@ -75,18 +76,20 @@ function receipt(index, taskKey, responseFormat) {
       : {
           gates: {
             protocol: { pass: true },
-            positivePrepared: { pass: true },
-            hardBoundaryAbstained: { pass: true },
+            primaryCorrect: { pass: true },
+            exploratoryCorrect: { pass: true },
+            noneCorrect: { pass: true },
             locale: { pass: true },
             candidatesAvailable: { pass: true },
             composedLatency: { pass: true },
           },
           diagnostics: {
-            softNegativeAbstained: { result: 4, denominator: 4 },
+            primaryUnderstated: 0,
+            exploratoryOverstated: 0,
           },
         }),
     networkBoundary: {
-      modelRequests: admission ? 24 : 52,
+      modelRequests: admission ? 24 : 54,
       publicSearchRequests: 0,
       actionsOpened: 0,
     },
@@ -147,17 +150,17 @@ describe("General Page two-stage Gate A ceremony", () => {
 
   it("fails task-specific count, boundary, or request mismatches", () => {
     const receipts = validReceipts();
-    receipts[0].value.counts.admitCorrect = 13;
-    receipts[6].value.counts.positivePrepared = 19;
-    receipts[7].value.diagnostics.softNegativeAbstained.denominator = 3;
-    receipts[8].value.networkBoundary.modelRequests = 51;
+    receipts[0].value.counts.admitCorrect = 15;
+    receipts[6].value.counts.primaryCorrect = 15;
+    receipts[7].value.diagnostics.exploratoryOverstated = 1;
+    receipts[8].value.networkBoundary.modelRequests = 53;
 
     const result = validateTwoStageInvestigationCeremony(receipts, commit);
 
     expect(result.passed).toBe(false);
     expect(result.errors.join(" ")).toMatch(/24 of 24/);
     expect(result.errors.join(" ")).toMatch(/capability or hard boundary/);
-    expect(result.errors.join(" ")).toMatch(/soft-negative diagnostic/);
+    expect(result.errors.join(" ")).toMatch(/tier-confusion diagnostics/);
     expect(result.errors.join(" ")).toMatch(/request counts disagree/);
   });
 });

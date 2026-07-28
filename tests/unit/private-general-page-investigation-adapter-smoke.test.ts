@@ -29,10 +29,16 @@ describe("private General Page Investigation Adapter protocol smoke", () => {
       expect(languageFixtures.filter((fixture) => fixture.gateRole === "positive_control")).toHaveLength(10);
       expect(languageFixtures.filter((fixture) => fixture.gateRole === "soft_negative")).toHaveLength(2);
       expect(languageFixtures.filter((fixture) => fixture.gateRole === "hard_boundary_sentinel")).toHaveLength(3);
+      expect(languageFixtures.filter((fixture) => fixture.expectedAction === "primary")).toHaveLength(8);
+      expect(languageFixtures.filter((fixture) => fixture.expectedAction === "exploratory")).toHaveLength(4);
+      expect(languageFixtures.filter((fixture) => fixture.expectedAction === "none")).toHaveLength(3);
     }
     expect(fixtures.filter((fixture) => fixture.gateRole === "positive_control")).toHaveLength(20);
     expect(fixtures.filter((fixture) => fixture.gateRole === "soft_negative")).toHaveLength(4);
     expect(fixtures.filter((fixture) => fixture.gateRole === "hard_boundary_sentinel")).toHaveLength(6);
+    expect(fixtures.filter((fixture) => fixture.expectedAction === "primary")).toHaveLength(16);
+    expect(fixtures.filter((fixture) => fixture.expectedAction === "exploratory")).toHaveLength(8);
+    expect(fixtures.filter((fixture) => fixture.expectedAction === "none")).toHaveLength(6);
     expect(fixtures.filter((fixture) => fixture.hardBoundaryKind === "incomplete_span")).toHaveLength(2);
     expect(fixtures.filter((fixture) => fixture.hardBoundaryKind === "untrusted_instruction")).toHaveLength(2);
     expect(fixtures.filter((fixture) => fixture.hardBoundaryKind === "private_data_request")).toHaveLength(2);
@@ -140,6 +146,11 @@ describe("private General Page Investigation Adapter protocol smoke", () => {
           positive_control: 20,
           soft_negative: 4,
           hard_boundary_sentinel: 6,
+        },
+        expectedActionCounts: {
+          primary: 16,
+          exploratory: 8,
+          none: 6,
         },
         hardBoundaryCounts: {
           incomplete_span: 2,

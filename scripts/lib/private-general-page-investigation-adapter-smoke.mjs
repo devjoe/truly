@@ -55,13 +55,13 @@ const zhFixtures = [
     },
   },
   {
-    fixtureKind: "abstain",
-    groundingText: "相親專欄受訪者說：「我唯一的偏好是不要律師。」這只是她在私人約會情境中的個人選擇。",
+    fixtureKind: "routine-fact",
+    groundingText: "青河市立圖書館的線上借閱說明指出，讀者可在書籍到期前三天內續借一次，但已有他人預約的書籍不能續借。",
     candidateClaim: {
-      c: "受訪者唯一的偏好是不要律師。",
-      why: "這是私人約會情境中的主觀偏好。",
-      need: "沒有可取得的公共證據。",
-      q: "受訪者是否偏好不與律師約會？",
+      c: "青河市立圖書館允許讀者在書籍到期前三天內續借一次。",
+      why: "這是一般服務流程資訊。",
+      need: "圖書館官方借閱說明。",
+      q: "青河市立圖書館是否允許讀者在書籍到期前三天內續借一次？",
     },
   },
   {
@@ -208,13 +208,13 @@ const enFixtures = [
     },
   },
   {
-    fixtureKind: "abstain",
-    groundingText: "In a Blind Date profile, the participant said, “My only preference was no lawyers.” This describes a personal preference in a private dating context.",
+    fixtureKind: "routine-fact",
+    groundingText: "The Northbridge Public Library borrowing guide says readers may renew a book once during the three days before it is due, unless another reader has reserved it.",
     candidateClaim: {
-      c: "The participant's only preference was no lawyers.",
-      why: "This is a subjective preference in a private dating context.",
-      need: "No public evidence is available.",
-      q: "Did the participant prefer not to date lawyers?",
+      c: "The Northbridge Public Library lets readers renew a book once during the three days before it is due.",
+      why: "This is an ordinary public-service workflow.",
+      need: "The library's official borrowing guide.",
+      q: "Does the Northbridge Public Library let readers renew a book once during the three days before it is due?",
     },
   },
   {
@@ -330,6 +330,8 @@ const enFixtures = [
 ];
 
 const SOFT_NEGATIVE_INDEXES = new Set([3, 4]);
+const PRIMARY_INDEXES = new Set([0, 1, 2, 6, 7, 8, 9, 10]);
+const EXPLORATORY_INDEXES = new Set([3, 4, 12, 13]);
 const HARD_BOUNDARY_KIND_BY_INDEX = new Map([
   [5, "incomplete_span"],
   [11, "untrusted_instruction"],
@@ -345,6 +347,14 @@ function materializeLanguageFixtures(language, fixtures) {
       : SOFT_NEGATIVE_INDEXES.has(index)
         ? "soft_negative"
         : "positive_control";
+    const expectedAction = hardBoundaryKind
+      ? "none"
+      : PRIMARY_INDEXES.has(index)
+        ? "primary"
+        : EXPLORATORY_INDEXES.has(index)
+          ? "exploratory"
+          : undefined;
+    if (!expectedAction) throw new Error(`Missing expected action for fixture index ${index}`);
     return {
     schemaVersion: 1,
     sampleId: `synthetic-${languageSlug}-${String(index + 1).padStart(2, "0")}`,
@@ -352,6 +362,7 @@ function materializeLanguageFixtures(language, fixtures) {
     language,
     fixtureKind: fixture.fixtureKind,
     gateRole,
+    expectedAction,
     ...(hardBoundaryKind ? { hardBoundaryKind } : {}),
     candidateClaim: fixture.candidateClaim,
     groundingText: fixture.groundingText,
@@ -395,6 +406,7 @@ export function assertInvestigationAdapterProtocolSmokeFixtures(fixtures) {
     untrusted_instruction: 0,
     private_data_request: 0,
   };
+  const expectedActionCounts = { primary: 0, exploratory: 0, none: 0 };
   for (const fixture of fixtures) {
     if (!fixture || typeof fixture !== "object" || Array.isArray(fixture)) throw new Error("Invalid synthetic fixture");
     if (fixture.dataCategory !== "synthetic-only") throw new Error("Synthetic protocol smoke accepts synthetic-only fixtures");
@@ -407,6 +419,10 @@ export function assertInvestigationAdapterProtocolSmokeFixtures(fixtures) {
     if (!supportedKinds.has(fixture.fixtureKind)) throw new Error("Unsupported synthetic fixture kind");
     if (!(fixture.gateRole in gateRoleCounts)) throw new Error("Unsupported synthetic gate role");
     gateRoleCounts[fixture.gateRole] += 1;
+    if (!(fixture.expectedAction in expectedActionCounts)) {
+      throw new Error("Unsupported synthetic expected action");
+    }
+    expectedActionCounts[fixture.expectedAction] += 1;
     roleCountsByLanguage[fixture.language][fixture.gateRole] += 1;
     if (fixture.gateRole === "hard_boundary_sentinel") {
       if (!(fixture.hardBoundaryKind in hardBoundaryCounts)) {
@@ -442,7 +458,18 @@ export function assertInvestigationAdapterProtocolSmokeFixtures(fixtures) {
   if (Object.values(hardBoundaryCounts).some((count) => count !== 2)) {
     throw new Error("Each hard-boundary sentinel kind requires one fixture per language");
   }
-  return { languageCounts, gateRoleCounts, roleCountsByLanguage, hardBoundaryCounts };
+  if (expectedActionCounts.primary !== 16 ||
+      expectedActionCounts.exploratory !== 8 ||
+      expectedActionCounts.none !== 6) {
+    throw new Error("Synthetic gate requires 16 primary, 8 exploratory, and 6 none controls");
+  }
+  return {
+    languageCounts,
+    gateRoleCounts,
+    roleCountsByLanguage,
+    hardBoundaryCounts,
+    expectedActionCounts,
+  };
 }
 
 export function investigationAdapterProtocolSmokeFixtureSha256(fixtures) {
@@ -537,6 +564,7 @@ export function buildInvestigationAdapterProtocolSmokeManifest(input) {
       sampleCount: fixtures.length,
       declaredCategories: [...INVESTIGATION_ADAPTER_PROTOCOL_SMOKE_CATEGORIES],
       gateRoleCounts: fixtureSummary.gateRoleCounts,
+      expectedActionCounts: fixtureSummary.expectedActionCounts,
       hardBoundaryCounts: fixtureSummary.hardBoundaryCounts,
     },
     counts: {
@@ -557,6 +585,7 @@ export function buildInvestigationAdapterProtocolSmokeManifest(input) {
       fixtureSetSha256: investigationAdapterProtocolSmokeFixtureSha256(fixtures),
       inputSha256: sha256CanonicalJson(fixtures.map((fixture) => ({
         gateRole: fixture.gateRole,
+        expectedAction: fixture.expectedAction,
         hardBoundaryKind: fixture.hardBoundaryKind,
         candidateClaim: fixture.candidateClaim,
         groundingText: fixture.groundingText,

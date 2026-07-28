@@ -1,7 +1,7 @@
 # General Page Ranked Actions Release Standard
 
-Status: prospective Page-only product-utility plus selector-non-regression
-standard, revised 2026-07-27
+Status: prospective Page-only tiered-utility plus selector-non-regression
+standard, revised 2026-07-28
 
 This standard governs the General Page Reader's user-facing `待確認事項` /
 `Check these items` actions. It replaces the previous policy in which a local
@@ -15,32 +15,51 @@ locally from the current loaded document. In the first model job it returns
 only:
 
 ```json
-{"schemaVersion":6,"candidateId":"span:4"}
+{"schemaVersion":7,"candidateId":"span:4","presentationTier":"primary"}
 ```
 
-`candidateId` is the single proposal; `null` is abstention. If one exact span
-is proposed, a separately scheduled Admission critic receives that same
-locally owned span and authorized same-Page context. It returns only:
+`candidateId` is the single proposal; `null` is abstention.
+`presentationTier` is `primary`, `exploratory`, or `null`, with strict local
+coupling: a null ID requires a null tier, while a non-null ID requires exactly
+one tier. The Selector sees the complete bounded candidate list and full
+authorized Page context. It must prefer a strong first verification action and
+label it `primary`. Only when no primary candidate exists may it select a
+complete, publicly checkable but more ordinary or situational proposition and
+label it `exploratory`.
+
+The tier is about the likely usefulness of investigating the item, not its
+truth, falsity, or calibrated model confidence. Runtime does not receive the
+audit-only `news_article` / `general_web` category, so the Selector applies this
+same semantic contract to every eligible Page.
+
+If one exact span is proposed, a separately scheduled binary Admission critic
+receives that same locally owned span and authorized same-Page context. It
+returns only:
 
 ```json
 {"schemaVersion":1,"decision":"admit"}
 ```
 
-`reject`, timeout, malformed output, stale scope, or either job's failure
-produces no action. Admission cannot select another span, rewrite text, explain
-its decision, judge truth, or rescue missing words from context. Selector and
-Admission are separate low-priority jobs so user-blocking and bounded Feed work
-may run between them. The panel receives only one final atomic result.
+`reject`, timeout, malformed output, invalid ID/tier coupling, stale scope, or
+either job's failure produces no action. Admission cannot select another span,
+change its tier, rewrite text, explain its decision, judge truth, or rescue
+missing words from context. Selector and Admission are separate low-priority
+jobs so user-blocking and bounded Feed work may run between them. The panel
+receives only one final atomic result.
 
 Local code owns the exact displayed text, copy action, localized Gemini
 handoff, source metadata, Page/Focus session boundary, and both stages'
 identity checks. There is no repair call, alternate fallback, second ranker,
 model-authored query, evidence-family guess, or local semantic rewrite.
 
-The admitted action is the Page product recommendation. The UI reveals it only
-after both jobs settle; Selector abstention or Admission rejection reveals no
-investigation action. This intentionally avoids publishing weaker alternatives
-merely to increase visible coverage.
+The admitted action is the one Page action. The UI reveals it only after both
+jobs settle; Selector abstention or Admission rejection reveals no
+investigation action. A primary action uses the normal presentation. An
+exploratory action uses the same compact row but adds a quiet, localized,
+always-visible cue explaining that the item's verification value is less
+certain and deserves user review. The cue must not imply that the proposition
+is probably false. Warning copy, displayed exact text, evidence direction, and
+Gemini handoff remain deterministic local presentation.
 
 Focus remains a supported reading scope, but this release does not schedule an
 automatic ranked-action selector for Focus and does not render a preparing,
@@ -74,15 +93,19 @@ Local code rejects only failures a user should not receive:
   or content/history persistence outside the existing ephemeral session.
 
 Topic importance, public-interest consequence, preferred evidence family, and
-stylistic atomicity are ranking signals, not local rejection reasons. The
-Selector may return no proposal rather than choose the best of a bad candidate
-set. Admission may veto a selected span only when its exact proposition is
-private or subjective-only, structurally unsuitable, generic reference or
-workflow material, ordinary page/catalog/release residue, or otherwise outside
-the proposition-shape contract above. Public interest, consequence,
-controversy, and materiality are not Admission prerequisites. The one-ID plus
-binary-decision wires remove duplicate, ordering, and rewrite ambiguity without
-requiring provider-specific JSON Schema support.
+whether a valid proposition is primary or exploratory are Selector ranking
+signals, not local rejection reasons. The Selector may return no proposal
+rather than choose the best of a bad candidate set. Admission may veto a
+selected span only when its exact proposition is private or subjective-only,
+unsafe, structurally incomplete, not independently publicly decidable, derived
+from publisher residue, or otherwise outside the proposition-shape contract.
+An ordinary definition, API behavior, workflow, or central catalog-record fact
+is not rejected merely for being lower utility when it remains a complete,
+Page-relevant, externally checkable proposition. Public interest, consequence,
+controversy, and materiality are not Admission prerequisites. The one-ID,
+one-tier, plus binary-decision wires remove duplicate, ordering, rewrite, and
+presentation ambiguity without requiring provider-specific JSON Schema
+support.
 
 ## Frozen release gates
 
@@ -95,13 +118,18 @@ gates. Any prompt, schema, renderer, hard boundary, metric definition, or
 threshold change creates a new candidate; changing this standard requires a
 new `grill-your-sub-agents` decision record.
 
-The output review retains three explicit reviewer tiers so the single selected
-action can be distinguished from a stronger alternative:
+The output review uses four explicit reviewer tiers:
 
 - `recommended`: strong enough to lead the reader's action list;
 - `acceptable_secondary`: exact, self-contained, externally checkable, and
   useful as a first verification step, but not the reviewer's strongest
   alternative;
+- `reviewable_exploratory`: exact, self-contained, Page-relevant, non-residue,
+  and publicly externally checkable, but ordinary or situational enough that it
+  is not a strong first verification action. It remains coherent enough for a
+  user to choose to investigate. Mere technical searchability, filler,
+  fragments, bare metadata, subjective-only material, or page residue do not
+  qualify;
 - `user_unacceptable`: confusing, filler-like, redundant, materially
   contextless, not externally resolvable, misleading, or otherwise unsuitable
   to show as a reader action.
@@ -112,6 +140,30 @@ reproduce the reviewer tiers. Product utility and selector non-regression are
 independent hard release gates. Absolute recommendation and top-rank rates
 remain diagnostics because two useful first actions may differ only by
 reviewer preference.
+
+Source-only review assigns exactly one mutually exclusive expectation before
+candidate output is revealed:
+
+- `expectedPrimaryAction`: at least one supplied exact candidate would review
+  as `recommended` or `acceptable_secondary`;
+- `expectedExploratoryAction`: no primary candidate exists, but at least one
+  supplied exact candidate would review as `reviewable_exploratory`;
+- `expectedNone`: no supplied exact candidate is suitable to display.
+
+The release predicates are explicit:
+
+- an expected-primary row is recovered only by a displayed `primary` action
+  reviewed as `recommended` or `acceptable_secondary`;
+- a displayed `exploratory` action on an expected-primary row is tier
+  understatement and does not recover that row;
+- an expected-exploratory row is recovered only by a displayed `exploratory`
+  action reviewed as `recommended`, `acceptable_secondary`, or
+  `reviewable_exploratory`, with the localized exploratory cue present;
+- a displayed `primary` action on an expected-exploratory row is tier
+  overstatement and fails the candidate;
+- an expected-none row must produce no visible action;
+- `user_unacceptable` and `hard_unacceptable` fail regardless of model tier or
+  warning presence.
 
 ### A. Synthetic provider compatibility
 
@@ -138,47 +190,49 @@ without this aggregate receipt. A deliberately overlapping run is a separate,
 non-gating shared-server load diagnostic: it cannot rescue or reject the
 compatibility candidate.
 
-This gate tests provider transport, positive selection capability, binary
-Admission behavior, and only the model-owned boundaries that are
-non-negotiable regardless of content distribution. The fixed 30-row composed
-suite contains:
+This gate tests provider transport, primary/exploratory selection capability,
+binary Admission behavior, strict ID/tier coupling, and only the model-owned
+boundaries that are non-negotiable regardless of content distribution. The
+fixed 30-row composed suite contains:
 
-- 20 positive controls, exactly 10 per language;
-- 4 soft negatives, exactly 2 per language: one private anecdote and one basic
-  reference definition;
+- 16 primary controls, exactly 8 per language;
+- 8 exploratory controls, exactly 4 per language, including ordinary
+  reference, API/workflow, and central catalog-record propositions;
 - 6 hard-boundary sentinels, exactly 3 per language: an actually incomplete
   exact span, an untrusted instruction embedded in page data, and a
   private-data request.
 
-The 20 composed positives include broad routine product/menu facts and a
-concrete public-biography statement so Selector cannot silently narrow the
-product contract before Admission runs.
+The primary controls include broad routine product/menu facts and a concrete
+public-biography statement so Selector cannot silently narrow the product
+contract before Admission runs.
 
 The fixed 24-row direct Admission suite contains exactly 12 rows per language:
 
-- 14 admit controls covering official actions, technical boundaries, routine
-  product/menu facts, attributed accusations, and public biography;
-- 10 reject controls covering basic definitions, incidental release dates,
-  catalog metadata, attributed subjective rankings, and private anecdotes.
+- 16 admit controls covering primary shapes plus valid ordinary reference,
+  API/workflow, and central catalog-record exploratory shapes;
+- 8 reject controls covering incomplete or residue-derived spans,
+  subjective-only material, unsafe/private requests, and other propositions
+  users should not receive.
 
 The hard sentinels must exercise the shipping exact-span boundary directly. A
 complete sentence that merely says another sentence was truncated is not an
-incomplete-span sentinel. Soft-negative decisions are recorded as diagnostics
-because whether a private anecdote or elementary definition deserves the sole
-action is a distribution-sensitive product-utility judgment. Fresh B and C
-evidence owns that judgment. A page that mixes low-value but independently
-verifiable facts with promotional language is not a whole-page hard negative.
+incomplete-span sentinel. Elementary definitions and ordinary workflow facts
+belong in the exploratory controls only when they form complete, Page-relevant,
+publicly checkable propositions. Private anecdotes, subjective-only material,
+and promotional fragments remain reject controls. A page that mixes low-value
+but independently verifiable facts with promotional language is not a
+whole-page hard negative.
 
 Required for every run:
 
 - the expected task contract and clean candidate commit;
 - protocol-valid output for every row;
 - an exact known ID or null, with at most one action;
-- for composed runs, 20/20 positive controls admitted, 6/6 hard-boundary
-  sentinels abstained, and all 4 soft-negative decisions reported with no
-  release threshold;
-- for direct Admission runs, 24/24 correct binary decisions, including 14/14
-  admits and 10/10 rejects;
+- for composed runs, 16/16 primary controls selected as `primary`, 8/8
+  exploratory controls selected as `exploratory`, and 6/6 hard-boundary
+  sentinels abstained;
+- for direct Admission runs, 24/24 correct binary decisions, including 16/16
+  admits and 8/8 rejects;
 - no hard-boundary leak, repair, retry, public search, or opened action;
 - deterministic localized Gemini handoff generated from local data;
 - `model.concurrency === 2` and a valid, non-overlapping time interval.
@@ -189,10 +243,16 @@ Preregister a new 60-row private Page development slice at the production
 `GENERAL_PAGE_ANALYSIS_REQUEST` boundary, source-diverse and not used by
 earlier candidate tuning. The slice contains exactly 30 news/article pages and
 30 non-news general-web pages. Before output is revealed, source-only
-adjudication must establish at least 10 `expectedAction=true` and at least 5
-`expectedAction=false` rows inside each category. Every row uses the final
-effective Page context produced by the bound extraction and parser-advisor
-build.
+adjudication must establish:
+
+- for news/article: at least 10 `expectedPrimaryAction` and at least 5
+  `expectedNone` rows;
+- for general-web: at least 5 `expectedPrimaryAction`, at least 10
+  `expectedExploratoryAction`, and at least 5 `expectedNone` rows.
+
+Every row uses the final effective Page context produced by the bound
+extraction and parser-advisor build. These categories are evaluation strata,
+not runtime routing inputs.
 
 Whole Facebook feed-card text, raw `document.body.innerText`, cross-document
 link-preview mixtures, secondary rails that replace or obscure the intended
@@ -212,6 +272,8 @@ Required:
 
 - zero hard-unacceptable actions;
 - zero `user_unacceptable` displayed actions;
+- zero tier overstatement;
+- zero visible actions on `expectedNone` rows;
 - 100% `authorizationScopeFidelity`: Page belongs to the intended loaded
   document, with no wrong-page, cross-scope, stale, or extension-instruction
   leakage;
@@ -219,22 +281,28 @@ Required:
   not publisher chrome, navigation/interface text, caption/byline/media
   metadata, footer/source utility text, related/recirculation content, or
   another secondary same-document role;
-- at least 85% useful positive-row recall overall and at least 80% in news and
-  non-news separately, with at least ten positive rows in each category. A
-  positive row is recovered only when the displayed first action is
-  `recommended` or `acceptable_secondary`; abstention and
-  `user_unacceptable` both fail recovery;
+- at least 80% news expected-primary recall;
+- at least 70% general-web expected-primary recall;
+- at least 60% general-web expected-exploratory recall;
+- tier understatement remains visible in the confusion matrix and fails
+  expected-primary recovery; it is not a route around the primary threshold;
 - a blinded, randomized A/B comparison against the preregistered frozen
-  reference selector on the same cohort. Reviewers see only source context,
-  rendered first actions, and handoffs; they do not see candidate, provider,
-  model, or version identity. `Tie` is required when the options differ only
-  by wording preference;
+  reference selector on expected-primary rows of the same cohort. Reviewers see
+  only source context, rendered first actions, and handoffs; they do not see
+  candidate, provider, model, version identity, or presentation tier. `Tie` is
+  required when the options differ only by wording preference. Exploratory rows
+  receive independent output-tier and warning review rather than comparison
+  against the deliberately suppressive reference;
 - reference-materially-better outcomes on at most 10% of comparable rows;
   `(reference wins - candidate wins) / comparable rows` at most 5 percentage
-  points overall and at most 10 points in news and non-news separately, with
-  at least ten comparable rows per category;
+  points overall and at most 10 points in news, with at least ten comparable
+  news rows. Report general-web separately; it becomes a category gate at the
+  same 10-point limit only when at least ten general-primary rows are
+  comparable, and otherwise remains diagnostic;
 - 100% exact-span and at-most-one compliance;
 - 100% of generated Gemini handoffs are usable and language-consistent;
+- 100% of displayed exploratory actions carry the localized utility cue, and
+  zero primary actions carry it;
 - no public search or external action is opened by the audit.
 
 Until a selector passes this standard, the failed but frozen `c262eb8`
@@ -254,46 +322,58 @@ as an authorization breach:
   compete with the intended body.
 
 The residue label is diagnostic rather than a standalone pass/fail threshold.
-Indirect harm still fails useful positive-row recall and selector
-non-regression; direct harm fails the zero-residue-derived and
-zero-unacceptable gates. `expectedAction` is true only when at least one
-supplied exact candidate comes from the intended Page body
-and is useful, concrete, externally verifiable, and suitable as a first
-investigation action. Intended-body provenance is necessary but not
-sufficient: when every candidate is opinion, promotion, trivial detail,
-context-dependent, fragmentary, privately unverifiable, or otherwise not
-useful enough to show, `expectedAction` is false. This source-only label is
-adjudicated before selector output is revealed; it does not reuse the
-candidate's output-review tier.
+Indirect harm still fails recall and selector non-regression; direct harm
+fails the zero-residue-derived and zero-unacceptable gates.
 
-Report every denominator. A category metric is invalid when its denominator is
-smaller than ten. Platform, language, domain, extraction method, and readiness
-remain diagnostic slices and do not receive lower thresholds. This gate is
-development evidence, not a holdout.
+The three mutually exclusive expected-action labels require intended-body
+provenance. A primary candidate must be useful, concrete, externally
+verifiable, and suitable as a first investigation action. An exploratory
+candidate must still be complete, Page-relevant, public, and externally
+checkable, but may be ordinary or situational enough not to lead. When every
+candidate is opinion, promotion, filler, bare metadata, context-dependent,
+fragmentary, privately unverifiable, or otherwise not useful enough to show,
+the row is `expectedNone`. These source-only labels are adjudicated before
+Selector output is revealed; they do not reuse candidate output-review tiers.
+
+Report every denominator and the complete source-label × displayed-tier ×
+reviewer-tier confusion matrix. In Gate B, a news-primary or
+general-exploratory metric is invalid below ten rows; general-primary is
+invalid below five rows. Platform, language, domain, extraction method, and
+readiness remain diagnostic slices and do not receive lower thresholds. This
+gate is development evidence, not a holdout.
 
 ### C. Fresh untouched holdout
 
 After B passes and the candidate is frozen, preregister a new 30-row private
 Page holdout at the same request boundary: exactly 15 news/article pages and
-15 non-news general-web pages. Each category must contain at least 10
-`expectedAction=true` and at least 5 `expectedAction=false` rows, established
-by source-only review before candidate output is opened. Keep both categories
+15 non-news general-web pages. News contains at least 10
+`expectedPrimaryAction` and at least 5 `expectedNone` rows. General-web
+contains at least 5 `expectedPrimaryAction`, at least 5
+`expectedExploratoryAction`, and at least 5 `expectedNone` rows. Establish all
+source labels before candidate output is opened. Keep both categories
 source-diverse. Do not inspect or tune on it before the run.
 
 Required:
 
 - zero hard-unacceptable actions;
 - zero `user_unacceptable` displayed actions;
+- zero tier overstatement;
+- zero visible actions on `expectedNone` rows;
 - 100% `authorizationScopeFidelity`;
 - zero `samePageResidueDerived` displayed actions;
-- at least 85% useful positive-row recall overall and at least 80% in news and
-  non-news separately when each category has at least ten positive rows;
-- the same blinded selector-non-regression limits used by Gate B, with at least
-  ten comparable rows per category;
+- at least 80% news expected-primary recall;
+- at least 70% general-web expected-primary recall;
+- at least 60% general-web expected-exploratory recall;
+- the same expected-primary-only blinded selector-non-regression limits used
+  by Gate B, with at least ten comparable news rows. Report every available
+  general-primary comparison; its category result is diagnostic below ten;
 - 100% exact-span and at-most-one compliance;
-- 100% usable, language-consistent Gemini handoffs.
+- 100% usable, language-consistent Gemini handoffs;
+- 100% correct exploratory-cue presence and absence.
 
-Any failure rejects the candidate. The holdout cannot be reused for tuning.
+Any failure rejects the candidate. Report the full confusion matrix; each Gate
+C tier threshold is invalid below its preregistered five-row minimum. The
+holdout cannot be reused for tuning.
 
 ### Mixed-role source contamination observatory
 

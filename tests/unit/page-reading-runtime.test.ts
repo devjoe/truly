@@ -3524,6 +3524,7 @@ describe("sidepanel page reading runtime", () => {
         displayClaim: "Runtime fixture reports one synthetic claim.",
         evidenceHint: "建議比對官方公告",
         askAiPrompt: "請查核以下原文陳述。\n\n原文陳述：Runtime fixture reports one synthetic claim.",
+        presentationTier: "primary",
       }],
     });
     expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
@@ -3541,10 +3542,12 @@ describe("sidepanel page reading runtime", () => {
         displayClaim: "Runtime fixture reports one synthetic claim.",
         evidenceHint: "建議比對官方公告",
         askAiPrompt: "請查核以下原文陳述。\n\n原文陳述：Runtime fixture reports one synthetic claim.\n\n來源中繼資料（不等於證據）：\nhttps://example.test/article",
+        presentationTier: "primary",
       }, {
         displayClaim: "Runtime fixture reports one secondary claim.",
         evidenceHint: "建議比對次要紀錄",
         askAiPrompt: "請查核以下原文陳述。\n\n原文陳述：Runtime fixture reports one secondary claim.",
+        presentationTier: "exploratory",
       }],
     });
     expect(pagePaneEl.querySelector(".page-claim-start")).toBeNull();
@@ -3555,6 +3558,12 @@ describe("sidepanel page reading runtime", () => {
     expect(readyCard?.querySelector(".page-claim-priority-label")?.textContent).toBe("優先");
     expect(pagePaneEl.querySelectorAll(".page-claim-row")).toHaveLength(2);
     expect(pagePaneEl.querySelectorAll(".page-claim-priority-label")).toHaveLength(1);
+    expect(pagePaneEl.querySelectorAll(".page-claim-exploratory-note")).toHaveLength(1);
+    const exploratoryRow = pagePaneEl.querySelector(".page-claim-row.is-exploratory");
+    expect(exploratoryRow).not.toBeNull();
+    expect(exploratoryRow?.querySelector(".page-claim-priority-label")).toBeNull();
+    expect(exploratoryRow?.querySelector(".page-claim-exploratory-note")?.textContent)
+      .toContain("查核價值較不確定");
     expect(readyCard?.textContent).not.toContain("查核問題");
     expect(readyCard?.querySelector(".page-claim-source-label")?.textContent).toBe("原文主張");
     expect(readyCard?.querySelector(".page-claim-exact")?.textContent)

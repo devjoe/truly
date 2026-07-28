@@ -1061,8 +1061,8 @@ function briefClaimsHtml(
   const pending = actionProjection.pending || legacyProjection.pending;
   if (!pending && actionProjection.items.length === 0 && legacyProjection.items.length === 0) return "";
   const actionRows = actionProjection.items.map((action, actionIndex) => `
-      <li class="page-claim-row${actionIndex === 0 ? " is-primary" : ""}" data-claim-index="${actionIndex}">
-        ${investigationActionHtml({ action, actionIndex, primary: actionIndex === 0, tr })}
+      <li class="page-claim-row is-${action.presentationTier}" data-claim-index="${actionIndex}" data-presentation-tier="${action.presentationTier}">
+        ${investigationActionHtml({ action, actionIndex, tr })}
       </li>`).join("");
   const legacyRows = legacyProjection.items.map(({ claim, claimIndex }) => `
       <li class="page-claim-row" data-claim-index="${claimIndex}">
@@ -1082,12 +1082,10 @@ function briefClaimsHtml(
 function investigationActionHtml({
   action,
   actionIndex,
-  primary,
   tr,
 }: {
   action: import("../lib/general-page-investigation-span-adapter").GeneralPageInvestigationActionPresentation;
   actionIndex: number;
-  primary: boolean;
   tr: (key: string, params?: Record<string, string | number>) => string;
 }): string {
   const geminiLabel = tr("sidepanel.dynamic.readingBrief.askGemini");
@@ -1095,12 +1093,20 @@ function investigationActionHtml({
   const evidenceLabel = tr("sidepanel.page.investigation.showNeed");
   const sourceClaimLabel = tr("sidepanel.page.investigation.sourceClaim");
   const needId = `page-claim-need-${actionIndex}`;
+  const primary = action.presentationTier === "primary";
+  const tierLabel = primary
+    ? tr("sidepanel.page.investigation.priority")
+    : tr("sidepanel.page.investigation.exploratoryLabel");
+  const exploratoryNote = primary
+    ? ""
+    : `<p class="page-claim-exploratory-note"><span class="page-claim-tier-label">${escapeHtml(tierLabel)}</span>${escapeHtml(tr("sidepanel.page.investigation.exploratoryNote"))}</p>`;
   return `
     <section class="page-claim-investigation">
       <div class="page-claim-investigation-main">
-        <p class="page-claim-investigation-question">${primary ? `<span class="page-claim-priority-label">${escapeHtml(tr("sidepanel.page.investigation.priority"))}</span>` : ""}<span class="page-claim-source-label">${escapeHtml(sourceClaimLabel)}</span><q class="page-claim-exact">${escapeHtml(action.displayClaim)}</q></p>
+        <p class="page-claim-investigation-question">${primary ? `<span class="page-claim-priority-label">${escapeHtml(tierLabel)}</span>` : ""}<span class="page-claim-source-label">${escapeHtml(sourceClaimLabel)}</span><q class="page-claim-exact">${escapeHtml(action.displayClaim)}</q></p>
         <button class="page-claim-evidence-toggle" type="button" aria-expanded="false" aria-controls="${needId}" aria-label="${escapeHtml(evidenceLabel)}">${INFO_ICON_SVG}</button>
       </div>
+      ${exploratoryNote}
       <p id="${needId}" class="page-claim-investigation-need" role="tooltip" aria-hidden="true">${escapeHtml(action.evidenceHint)}</p>
       <div class="reading-brief-question-actions page-claim-investigation-actions">
         <button class="reading-brief-copy-btn page-claim-copy-question" type="button" data-question="${escapeHtml(action.displayClaim)}" aria-label="${escapeHtml(copyAriaLabel)}" data-tooltip="${escapeHtml(copyAriaLabel)}">${COPY_ICON_SVG}</button>

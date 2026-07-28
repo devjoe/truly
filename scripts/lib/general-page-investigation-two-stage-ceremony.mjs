@@ -25,16 +25,16 @@ function validLanguageCounts(value, expected) {
 function validateAdmissionReceipt(receipt, label, errors) {
   if (receipt.data?.sampleCount !== 24 ||
       !validLanguageCounts(receipt.data?.sourceLanguages, 12) ||
-      receipt.data?.expectedAdmit !== 14 ||
-      receipt.data?.expectedReject !== 10) {
+      receipt.data?.expectedAdmit !== 16 ||
+      receipt.data?.expectedReject !== 8) {
     errors.push(`${label}: wrong direct Admission fixture counts`);
   }
   if (receipt.counts?.protocolSucceeded !== 24 ||
       receipt.counts?.protocolFailed !== 0 ||
       receipt.counts?.correct !== 24 ||
       receipt.counts?.incorrect !== 0 ||
-      receipt.counts?.admitCorrect !== 14 ||
-      receipt.counts?.rejectCorrect !== 10) {
+      receipt.counts?.admitCorrect !== 16 ||
+      receipt.counts?.rejectCorrect !== 8) {
     errors.push(`${label}: direct Admission did not pass 24 of 24 controls`);
   }
   if (receipt.networkBoundary?.modelRequests !== 24 ||
@@ -50,28 +50,29 @@ function validateComposedReceipt(receipt, label, errors) {
   }
   if (receipt.data?.sampleCount !== 30 ||
       !validLanguageCounts(receipt.data?.sourceLanguages, 15) ||
-      receipt.data?.positiveCount !== 20 ||
-      receipt.data?.softNegativeCount !== 4 ||
-      receipt.data?.hardBoundaryCount !== 6) {
+      receipt.data?.expectedPrimaryCount !== 16 ||
+      receipt.data?.expectedExploratoryCount !== 8 ||
+      receipt.data?.expectedNoneCount !== 6) {
     errors.push(`${label}: wrong composed fixture counts`);
   }
   if (receipt.counts?.protocolSucceeded !== 30 ||
       receipt.counts?.protocolFailed !== 0 ||
       receipt.counts?.oneShotRows !== 30 ||
-      receipt.counts?.positivePrepared !== 20 ||
-      receipt.counts?.hardBoundaryAbstained !== 6) {
+      receipt.counts?.primaryCorrect !== 16 ||
+      receipt.counts?.exploratoryCorrect !== 8 ||
+      receipt.counts?.noneCorrect !== 6) {
     errors.push(`${label}: composed capability or hard boundary failed`);
   }
-  if (receipt.diagnostics?.softNegativeAbstained?.denominator !== 4 ||
-      !Number.isInteger(receipt.diagnostics?.softNegativeAbstained?.result) ||
-      receipt.diagnostics.softNegativeAbstained.result < 0 ||
-      receipt.diagnostics.softNegativeAbstained.result > 4) {
-    errors.push(`${label}: soft-negative diagnostic must report 4 controls`);
+  if (!Number.isInteger(receipt.diagnostics?.primaryUnderstated) ||
+      !Number.isInteger(receipt.diagnostics?.exploratoryOverstated) ||
+      receipt.diagnostics.primaryUnderstated !== 0 ||
+      receipt.diagnostics.exploratoryOverstated !== 0) {
+    errors.push(`${label}: tier-confusion diagnostics must be zero`);
   }
   const admissionRequested = receipt.counts?.admissionRequested;
   if (!Number.isInteger(admissionRequested) ||
-      admissionRequested < 20 ||
-      admissionRequested > 24 ||
+      admissionRequested < 24 ||
+      admissionRequested > 30 ||
       receipt.counts?.admissionProtocolSucceeded !== admissionRequested ||
       receipt.counts?.admissionProtocolFailed !== 0 ||
       receipt.networkBoundary?.modelRequests !== 30 + admissionRequested) {

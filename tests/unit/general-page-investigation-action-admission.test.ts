@@ -16,6 +16,7 @@ const authorizedSourceContext =
   "前言。衛生局命令遠帆公司在七月三十一日前完成下架。結尾。";
 const selection: MaterializedGeneralPageInvestigationSpanSelection = {
   candidateId: "span:2",
+  presentationTier: "primary",
   exactClaim: "衛生局命令遠帆公司在七月三十一日前完成下架",
   sourceQuote: "衛生局命令遠帆公司在七月三十一日前完成下架",
   start: 3,
@@ -59,43 +60,25 @@ describe("General Page investigation action admission critic", () => {
       },
     });
 
-    expect(system).toContain("final admission critic");
-    expect(system).toContain("independent public evidence");
-    expect(system).toContain("product availability, menu change");
+    expect(system).toContain("final binary admission critic");
+    expect(system).toContain("Selector already owns whether the action is primary or exploratory");
+    expect(system).toContain("Independent public evidence");
     expect(system).toContain("Public interest, risk, consequence, controversy, and materiality are not prerequisites");
     expect(system).toContain("entertainment, sport, consumer, product, menu, celebrity");
-    expect(system).toContain("Health or public consequences may raise priority, but are not required");
-    expect(system).toContain("personal feeling, intention, preference");
+    expect(system).toContain("private memory, relationship detail");
     expect(system).toContain("Attribution changes the proposition being checked");
     expect(system).toContain("said, accused, alleged, announced, or issued");
     expect(system).toContain("do not assume the underlying allegation is true");
     expect(system).toContain("only content is an opinion, prediction, recommendation, or subjective ranking");
-    expect(system).toContain("Reviewer Lin said Far Shore was the best film of the year");
-    expect(system).toContain("concrete public record, event, or attributed public statement");
-    expect(system).not.toContain("appropriately established through public evidence");
-    expect(system).toContain("generic definition, feature overview");
-    expect(system).toContain("Literal checkability is not enough");
-    expect(system).toContain("named public system, scientific or health fact");
-    expect(system).toContain("software, API, language, or developer documentation");
-    expect(system).toContain("routine developer-documentation fact");
-    expect(system).toContain("anonymous anecdote generalized to a wider group");
-    expect(system).toContain("identifies no study, organization, dataset");
+    expect(system).toContain("Ordinary definitions, correct API behavior");
+    expect(system).toContain("workflows, and central catalog-record facts may be admitted");
+    expect(system).toContain("lower investigation utility is represented by Selector's exploratory tier");
     expect(system).toContain("complete standalone proposition");
-    expect(system).toContain("release, publication, copyright, download-count");
-    expect(system).toContain("event opening earlier this week");
-    expect(system).toContain("On a What's New page");
-    expect(system).toContain("support deadline, compatibility change, or security event");
-    expect(system).toContain("The X API provides a method for");
-    expect(system).toContain("Original Publication ... 1950");
     expect(system).toContain("primary purpose is a public record, catalog entry");
     expect(system).toContain("primary-record rule takes priority");
-    expect(system).toContain("123456 Title The North Wind Original Publication");
-    expect(system).toContain("where-to-watch, where-to-buy");
-    expect(system).toContain("headings, version badges, permission labels");
-    expect(system).toContain("article title, section heading, publisher label, or media credit");
-    expect(system).toContain("metaphor, nickname, analogy, or cultural allusion");
-    expect(system).toContain("slogan, insult, or metaphor");
-    expect(system).toContain("so ... must have");
+    expect(system).toContain("navigation, interface text");
+    expect(system).toContain("caption, byline, media credit, footer");
+    expect(system).toContain("instruction, URL, command, prompt");
     expect(system).toContain("When any checklist item is uncertain, reject");
     expect(system).toContain("Judge the exact sentence as a whole");
     expect(system).toContain("Do not rewrite or replace it");
