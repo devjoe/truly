@@ -67,6 +67,8 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("entertainment, sport, consumer, product, menu, celebrity");
     expect(system).toContain("private memory, relationship detail");
     expect(system).toContain("Attribution changes the proposition being checked");
+    expect(system).toContain("do not admit it merely because public evidence could show that the speaker said it");
+    expect(system).toContain("Reviewer Lin said Far Shore was the best film of the year");
     expect(system).toContain("said, accused, alleged, announced, or issued");
     expect(system).toContain("do not assume the underlying allegation is true");
     expect(system).toContain("only content is an opinion, prediction, recommendation, or subjective ranking");
