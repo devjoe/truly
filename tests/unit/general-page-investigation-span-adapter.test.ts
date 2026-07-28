@@ -150,6 +150,7 @@ describe("General Page exact-span proposal selector with schema v7", () => {
     expect(system).toContain("correct API behavior");
     expect(system).toContain("can be exploratory");
     expect(system).toContain("stable reference or operational proposition");
+    expect(system).toContain("historical publication, filing, release, or record date remains exploratory");
     expect(system).toContain("newly available product or menu item");
     expect(system).toContain("no primary survivor exists");
     expect(system).toContain("not truth probability or model confidence");
