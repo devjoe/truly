@@ -122,6 +122,9 @@ describe("General Page exact-span proposal selector with schema v11", () => {
     expect(system).toContain("Local code owns the exact claim");
     expect(system).toContain("Rank exactly one proposed");
     expect(system).toContain("Admission critic alone decides");
+    expect(system).toContain("best, easiest, or most user-friendly");
+    expect(system).toContain("tutorial-like advice");
+    expect(system).toContain("'many' or 'some' unnamed companies or people");
     expect(system).toContain("Apply these three steps in order");
     expect(system).toContain("complete, standalone proposition");
     expect(system).toContain("realistic independent public evidence");
