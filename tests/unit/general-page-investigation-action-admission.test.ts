@@ -69,6 +69,7 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("Parameters, Returns, Usage, Examples");
     expect(system).toContain("'One objective', 'Other objectives', 'another goal'");
     expect(system).toContain("literary, novel, fiction, satire, or parody Page");
+    expect(system).toContain("numbered or Roman-numeral chapter");
     expect(system).toContain("essential, better, worse, beneficial, harmful, should");
     expect(system).toContain("no later exception or usefulness judgment may override");
     expect(system).toContain("Independent public evidence");
@@ -132,6 +133,7 @@ describe("General Page investigation action admission critic", () => {
     expect(user).toContain("as described above");
     expect(user).toContain("reject before judging the useful clause");
     expect(user).toContain("between an author or 'et al.' and a journal or DOI");
+    expect(user).toContain("book or ebook Page organized as a numbered or Roman-numeral chapter");
     expect(user).toContain("'One objective', 'Other objectives', 'another goal'");
     expect(user).toContain("If any veto matches, stop and return reject");
     expect(user).toContain("Reject only for a clear structural");

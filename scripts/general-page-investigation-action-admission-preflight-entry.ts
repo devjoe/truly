@@ -332,8 +332,8 @@ const fixtures: Fixture[] = [
     language: "en",
     expectedDecision: "reject",
     title: "The Picture of Dorian Gray - XI",
-    context: "This Page is Chapter XI of Oscar Wilde's novel. For years, Dorian Gray could not free himself from the influence of this book. The story continues with his life.",
-    selectedText: "For years, Dorian Gray could not free himself from the influence of this book.",
+    context: "This ebook Page is Chapter XI of Oscar Wilde's novel. XI For years, Dorian Gray could not free himself from the influence of this book. The story continues with his life.",
+    selectedText: "XI For years, Dorian Gray could not free himself from the influence of this book.",
   },
   {
     sampleId: "reject-zh-normative-policy-rationale",
