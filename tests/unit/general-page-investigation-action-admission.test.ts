@@ -90,6 +90,8 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("Naming only the enclosing API object");
     expect(system).toContain("code declaration or interface control");
     expect(system).toContain("change-history snippet");
+    expect(system).toContain("forward pointer whose only payload");
+    expect(system).toContain("unspecified or 'latest' evidence");
     expect(system).toContain("Sponsorship or commercial context alone");
     expect(system).toContain("promotional rhetoric");
     expect(system).toContain("unresolved pronouns or generic references");
