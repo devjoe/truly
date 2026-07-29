@@ -29,9 +29,9 @@ const EXPLICIT_SATIRE_LABEL =
 const UNAVAILABLE_TITLE =
   /^(?:404\b|page (?:not found|unavailable)\b|not found\b|找不到(?:此|這個|这个)?頁面|找不到網頁|頁面(?:不存在|無法使用)|页面(?:不存在|无法使用))/iu;
 const UNRESOLVED_REFERENCE =
-  /^(?:(?:(?:if|when)\s+)?(?:it|this|that|these|those)\b|both\s+(?:leaders?|sides?|parties?|companies?|countries?|teams?|officials?|candidates?|figures?|groups?|people|men|women)\b)|\bas described above\b/iu;
+  /^(?:(?:(?:if|when)\s+)?(?:it|this|that|these|those)\b|both\s+(?:leaders?|sides?|parties?|companies?|countries?|teams?|officials?|candidates?|figures?|groups?|people|men|women)\b)|\b(?:(?:as\s+)?described|set out|shown|listed|mentioned)\s+(?:above|below)\b/iu;
 const UNRESOLVED_NAMED_MEMBER =
-  /\b(?:this|that|these|those)\s+(?:method|property|field|feature|function|protocol|condition)\b/iu;
+  /\b(?:this|that|these|those)\s+(?:assessment|documents?|field|feature|function|method|property|protocol|transaction)\b/iu;
 const VAGUE_PUBLIC_ATTRIBUTION =
   /\bmany(?:\s+people)?\s+(?:believe|think|say|feel)\b/iu;
 const PAGE_META_DESCRIPTION =
@@ -42,6 +42,16 @@ const CONFLICT_DISCLOSURE =
   /\breports?\s+(?:grants?\s+or\s+contracts?|payments?\s+of\s+honoraria|other\s+financial\s+interests?)\b[\s\S]{0,240}\boutside\s+the\s+submitted\s+work\b/iu;
 const FLATTENED_DOCUMENTATION_LABEL =
   /^(?:(?:parameters?|returns?|usage|examples?)\b|(?:參數|参数|回傳|返回|用法|範例|示例)).{0,100}[:：]/iu;
+const FLATTENED_NAVIGATION_CHAIN =
+  /^(?:overview\s+)?(?:[a-z][\w-]{1,40}:\s*){3,}/iu;
+const PUBLICATION_METADATA_PREFIX =
+  /^from:\s+published:\s+\d{1,2}\s+\p{L}+\s+\d{4}\s+last updated:/iu;
+const LEADING_TIMEZONE_FRAGMENT =
+  /^(?:E[DS]T|C[DS]T|M[DS]T|P[DS]T)\s+(?:a|an|the)\b/iu;
+const SOURCE_CODE_METADATA_PREFIX =
+  /^[\p{L}\d_.-]{2,40}\s+source code:\s+stability:\s*\d+\b/iu;
+const EDITORIAL_SECTION_PREFIX =
+  /^what you need to know\b.{0,100}\b(?:wildfires?|fires?|storms?|floods?|elections?|protests?|outages?|conflict|war)\b/iu;
 const UNSUBJECTED_API_DESCRIPTION =
   /^(?:returns?|takes?|creates?|provides?|specifies?|indicates?)\s+(?:an?|the)\b/iu;
 const UNRESOLVED_GROUP_REFERENCE =
@@ -64,6 +74,20 @@ function hasDuplicatedLeadingToken(text: string): boolean {
     token.replace(/^[^\p{L}\p{N}_$]+|[^\p{L}\p{N}_$]+$/gu, "").toLowerCase();
   const normalizedFirst = normalize(first);
   return normalizedFirst.length >= 3 && normalizedFirst === normalize(second);
+}
+
+function hasHeadingPrefixedSubject(text: string): boolean {
+  const tokens = text.split(/\s+/u, 4);
+  if (tokens.length < 3) return false;
+  const normalize = (token: string) =>
+    token
+      .replace(/^[^\p{L}\p{N}_$]+|[^\p{L}\p{N}_$]+$/gu, "")
+      .toLowerCase()
+      .replace(/s$/u, "");
+  const heading = normalize(tokens[0]);
+  return heading.length >= 4 &&
+    ["a", "an", "the"].includes(tokens[1].toLowerCase()) &&
+    heading === normalize(tokens[2]);
 }
 
 function sourceHostname(source?: GeneralPageInvestigationSourceMetadata): string | undefined {
@@ -156,7 +180,13 @@ export function generalPageInvestigationSelectionRejectionReason(
     return "non_publicly_decidable";
   }
   if (hasDuplicatedLeadingToken(text) ||
+      hasHeadingPrefixedSubject(text) ||
       FLATTENED_DOCUMENTATION_LABEL.test(text) ||
+      FLATTENED_NAVIGATION_CHAIN.test(text) ||
+      PUBLICATION_METADATA_PREFIX.test(text) ||
+      LEADING_TIMEZONE_FRAGMENT.test(text) ||
+      SOURCE_CODE_METADATA_PREFIX.test(text) ||
+      EDITORIAL_SECTION_PREFIX.test(text) ||
       UNSUBJECTED_API_DESCRIPTION.test(text) ||
       CONFLICT_DISCLOSURE.test(text) ||
       isCitedPaperTitle(selection, context.authorizedSourceContext) ||

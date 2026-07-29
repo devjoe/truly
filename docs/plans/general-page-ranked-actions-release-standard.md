@@ -853,3 +853,32 @@ not infer truth, rank utility, classify general opinion, inspect arbitrary
 domains, or rewrite text. The three-stage ceremony, zero-leak gate, recall
 floors, Page-only scope, and requirement for a wholly fresh Gate B cohort are
 unchanged.
+
+The later clean candidate at `84c81fe` passed all formal three-stage Gate A
+receipts and produced `60/60` protocol-valid, exactly grounded results on a
+wholly fresh Page-only Gate B cohort. Independent source review, disagreement
+adjudication, and a complete primary-agent audit sealed source truth as news
+`24/0/6` and general web `12/12/6` for primary/exploratory/none. The candidate
+passed every frozen machine floor: news-primary recall was `20/24`, general-
+primary recall was `10/12`, general-exploratory recall was `11/12`, with zero
+expected-none leaks and zero tier overstatements.
+
+The candidate nevertheless failed the independent semantic hard gate before
+blind pairwise review. Both output reviewers classified the same four visible
+actions as user-unacceptable: one unresolved page-relative instruction and
+three exact spans contaminated by a leading timezone fragment, flattened
+documentation navigation, or publication metadata. The cohort is permanently
+consumed, pairwise review was not opened, and no holdout was opened. Passing
+the machine score therefore does not reclassify or rescue the run.
+
+The successor keeps the prompt-first ranking and Admission responsibilities,
+then extends the existing narrow local boundary only for those unambiguous
+structural shapes and closely related duplicated heading or section-label
+prefixes. It does not rewrite an otherwise useful claim; a rejected proposal
+falls through to the already supported clean backup candidates. An offline
+replay against the consumed output rejected all four consensus failures plus
+five additional heading, metadata, timezone, or unresolved-reference defects.
+Manually reviewed negative controls confirmed that complete propositions using
+the same subject matter and terms remained eligible. This replay is development
+diagnosis only. The successor still requires a new clean commit, formal Gate A,
+and a wholly fresh Gate B and C.

@@ -63,6 +63,8 @@ describe("General Page investigation local action boundary", () => {
       "One objective is to provide a firm regulatory foundation for digital assets",
       "目標之一是為數位資產提供穩固的監管基礎",
       "The presence of this method distinguishes window aggregate functions",
+      "Once finalised, these documents will replace the current guidance",
+      "Written representations should be provided by the deadline set out above",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -94,6 +96,12 @@ describe("General Page investigation local action boundary", () => {
       "Returns an iterator allowing iteration through all key/value pairs",
       "參數 value：沒有待處理 Action 時回傳的值。可選 reducer(currentState, action)：指定樂觀狀態如何更新",
       "Khubchandani reports grants or contracts from the National Science Foundation and other financial interests, all outside the submitted work",
+      "EDT The Federal Reserve Board announced the stress-test results",
+      "Overview with-clause: cte-table-name: select-stmt: Common Table Expressions act like temporary views",
+      "From: Published: 31 July 2015 Last updated: 22 July 2026 — Details The Consumer Rights Act 2015 sets out the law",
+      "HTTP Source Code: Stability: 2 - Stable This module can be imported via require('node:http')",
+      "What you need to know as wildfires continue Wildfires in Spain and France have caused mass evacuation",
+      "StatefulSets A StatefulSet runs a group of Pods and maintains a sticky identity for each Pod",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -165,6 +173,17 @@ describe("General Page investigation local action boundary", () => {
       "The agency published the final report on July 18, 2026",
       "MessageChannel creates a new message channel and returns its two ports",
       "Apple and Google published updates on Tuesday",
+      "UTC timestamps identify a single global instant",
+      "The documentation source code is published under an open licence",
+      "A StatefulSet manages Pods that are based on an identical container specification",
+      "The report was published at 4:00 p.m. EDT on June 24, 2026",
+      "The Federal Reserve published the stress-test results at 4:00 p.m. EDT",
+      "The project uses stability labels for each source code module",
+      "The overview explains that CTEs act like temporary views",
+      "The consultation documents will replace CMA37 once they are finalised",
+      "The StatefulSet controller maintains a stable identity for each Pod",
+      "Wildfires in Spain and France forced more than 300,000 people to evacuate",
+      "The Consumer Rights Act 2015 governs unfair terms in consumer contracts",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
