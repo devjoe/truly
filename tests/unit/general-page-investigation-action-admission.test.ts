@@ -64,6 +64,12 @@ describe("General Page investigation action admission critic", () => {
 
     expect(system).toContain("final admission critic");
     expect(system).toContain('"decision":"admit"|"reject"');
+    expect(system).toContain("mandatory veto checklist");
+    expect(system).toContain("paper title, citation, DOI");
+    expect(system).toContain("Parameters, Returns, Usage, Examples");
+    expect(system).toContain("literary, novel, fiction, satire, or parody Page");
+    expect(system).toContain("essential, better, worse, beneficial, harmful, should");
+    expect(system).toContain("no later exception or usefulness judgment may override");
     expect(system).toContain("Independent public evidence");
     expect(system).toContain("entertainment, sport, consumer, product, celebrity");
     expect(system).toContain("private, anecdotal, subjective-only");

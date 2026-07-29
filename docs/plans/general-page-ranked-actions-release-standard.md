@@ -818,3 +818,26 @@ must be admitted, all 6 hard-boundary controls must be rejected there, and
 only the 24 admitted rows may reach Tier. Any expected-none action that becomes
 visible still fails Gate A, Gate B, or Gate C. The numerical release thresholds
 and Page-only product scope are unchanged.
+
+The later clean three-stage candidate at `18e39d3` passed its provider
+preflight and was evaluated on a wholly fresh 60-row Page-only Gate B cohort.
+Before candidate output was opened, two independent source reviewers,
+disagreement adjudication, and a complete primary-agent audit sealed source
+truth as news `18/1/11` and general web `6/10/14` for
+primary/exploratory/none. The candidate was protocol-valid on `60/60`, exactly
+grounded every one of its 40 visible actions, and exceeded all recall floors:
+news primary `17/18`, general primary `6/6`, and general exploratory `10/10`.
+It nevertheless failed the hard gate because five expected-none rows were
+visible. Pairwise review and holdout were not opened.
+
+Those five leaks were narrow Admission veto failures rather than recall or
+transport failures: a cited scientific-paper title treated as a proposition,
+two flattened React parameter/return entries whose API subject existed only
+outside the exact span, one sentence of novel narration, and one normative SEC
+policy rationale. The next candidate therefore keeps the same three stages and
+adds one prompt-first mandatory veto checklist at the start of Admission. It
+does not add a local semantic classifier, regex rejection rule, model stage,
+UI state, source-domain exception, or relaxed threshold. Synthetic controls
+cover the four generalized shapes in both interface languages; the consumed
+Gate B rows may be used only for diagnostic replay. A clean successor must
+repeat formal Gate A and use a wholly fresh Gate B cohort.
