@@ -292,7 +292,7 @@ const fixtures: Fixture[] = [
     language: "zh-TW",
     expectedDecision: "reject",
     title: "研究進展短評",
-    context: "參考文獻 林海等人。背景基因決定實驗性癌症演化軌跡。期刊 DOI:10.0000/example。",
+    context: "本文摘要自：林海等人。背景基因決定實驗性癌症演化軌跡。期刊 DOI:10.0000/example。",
     selectedText: "背景基因決定實驗性癌症演化軌跡。",
   },
   {
@@ -300,7 +300,7 @@ const fixtures: Fixture[] = [
     language: "en",
     expectedDecision: "reject",
     title: "Research highlight",
-    context: "References J. et al. Genetic background sets the trajectory of experimental cancer evolution. Journal DOI:10.0000/example.",
+    context: "This is a summary of: J. et al. Genetic background sets the trajectory of experimental cancer evolution. Journal DOI:10.0000/example.",
     selectedText: "Genetic background sets the trajectory of experimental cancer evolution.",
   },
   {
@@ -350,6 +350,22 @@ const fixtures: Fixture[] = [
     title: "SEC draft strategic plan",
     context: "The SEC published a draft strategic plan. Modernizing disclosure, expanding access to private markets, and enabling new capital-raising pathways are essential to ensuring that small businesses can thrive.",
     selectedText: "Modernizing disclosure, expanding access to private markets, and enabling new capital-raising pathways are essential to ensuring that small businesses can thrive.",
+  },
+  {
+    sampleId: "reject-zh-unresolved-objective-owner",
+    language: "zh-TW",
+    expectedDecision: "reject",
+    title: "證管會策略草案",
+    context: "證管會公布策略草案。目標之一是以合理且一致的方式，為數位資產與分散式帳本技術提供穩固的監管基礎。",
+    selectedText: "目標之一是以合理且一致的方式，為數位資產與分散式帳本技術提供穩固的監管基礎。",
+  },
+  {
+    sampleId: "reject-en-unresolved-objective-owner",
+    language: "en",
+    expectedDecision: "reject",
+    title: "SEC draft strategic plan",
+    context: "The SEC published a draft strategic plan. One objective is to provide a firm regulatory foundation for digital assets and distributed ledger technologies through a coherent approach.",
+    selectedText: "One objective is to provide a firm regulatory foundation for digital assets and distributed ledger technologies through a coherent approach.",
   },
 ];
 

@@ -838,6 +838,7 @@ policy rationale. The next candidate therefore keeps the same three stages and
 adds one prompt-first mandatory veto checklist at the start of Admission. It
 does not add a local semantic classifier, regex rejection rule, model stage,
 UI state, source-domain exception, or relaxed threshold. Synthetic controls
-cover the four generalized shapes in both interface languages; the consumed
+cover the five generalized shapes in both interface languages, including
+bibliographic role and unresolved objective ownership; the consumed
 Gate B rows may be used only for diagnostic replay. A clean successor must
 repeat formal Gate A and use a wholly fresh Gate B cohort.
