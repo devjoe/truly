@@ -64,6 +64,7 @@ describe("General Page investigation action tier classifier", () => {
     expect(system).toContain("informational event Page");
     expect(system).toContain("ordinary event date, venue, visibility area");
     expect(system).toContain("upcoming eclipse, conference, exhibition");
+    expect(system).toContain("newly added product, service, menu item");
     expect(user).toContain(selection.exactClaim);
     expect(user).toContain("utility judgment only");
     expect(() => buildGeneralPageInvestigationActionTierPrompt({
