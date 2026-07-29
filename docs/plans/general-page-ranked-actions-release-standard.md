@@ -898,3 +898,21 @@ structural boundary and its positive and negative controls. This keeps semantic
 ranking with the model, avoids prompt drift, and lets a rejected contaminated
 proposal fall through to an already ranked backup. The `0310a415` replay is
 development diagnosis only and does not alter any release threshold.
+
+The restored-prompt snapshot at `15616fcd` was also stopped before fresh data.
+Its 60-row replay kept zero expected-none leaks and zero tier overstatements,
+and passed both general-web recall floors, but one borderline conditional news
+proposal alternated between primary and exploratory across five identical
+Tier calls. The visible action and exact span remained stable. A second
+diagnostic also found that one sealed primary source label contradicted the
+standalone-reference boundary by treating “this transaction” as self-contained.
+Neither finding retroactively changes the sealed cohort or its formal score.
+
+Changed-output review then found four newly selected structural defects and one
+unchanged control that the original full review had missed: a release label
+and date fused with body text, a publication date fused with the exact source
+title, stacked consultation labels, and a repeated section-heading phrase.
+The next boundary revision keeps the restored model prompts and adds only
+machine-observable tests for those shapes. It does not classify topics or
+truth, and complete propositions containing dates, release terminology, or the
+same technical subjects remain eligible through explicit negative controls.

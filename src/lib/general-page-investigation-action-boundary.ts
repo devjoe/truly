@@ -52,6 +52,10 @@ const SOURCE_CODE_METADATA_PREFIX =
   /^[\p{L}\d_.-]{2,40}\s+source code:\s+stability:\s*\d+\b/iu;
 const EDITORIAL_SECTION_PREFIX =
   /^what you need to know\b.{0,100}\b(?:wildfires?|fires?|storms?|floods?|elections?|protests?|outages?|conflict|war)\b/iu;
+const PRESS_RELEASE_HEADER =
+  /^press release\b.{0,120}\b\d{1,2}\s+\p{L}+\s+\d{4}\s+(?:a|an|the)\b/iu;
+const STACKED_SECTION_LABELS =
+  /^(?:original\s+)?consultation\s+(?:consultation\s+)?description\b/iu;
 const UNSUBJECTED_API_DESCRIPTION =
   /^(?:returns?|takes?|creates?|provides?|specifies?|indicates?)\s+(?:an?|the)\b/iu;
 const UNRESOLVED_GROUP_REFERENCE =
@@ -88,6 +92,34 @@ function hasHeadingPrefixedSubject(text: string): boolean {
   return heading.length >= 4 &&
     ["a", "an", "the"].includes(tokens[1].toLowerCase()) &&
     heading === normalize(tokens[2]);
+}
+
+function hasRepeatedLeadingPhrase(text: string): boolean {
+  const tokens = text.match(/[\p{L}\p{N}'’_-]+/gu)
+    ?.map((token) => token.toLowerCase()) ?? [];
+  const phraseLength = 5;
+  if (tokens.length < phraseLength * 2) return false;
+  const leading = tokens.slice(0, phraseLength).join(" ");
+  const lastStart = Math.min(18, tokens.length - phraseLength);
+  for (let index = phraseLength; index <= lastStart; index += 1) {
+    if (tokens.slice(index, index + phraseLength).join(" ") === leading) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function hasDatePrefixedSourceTitle(
+  text: string,
+  source?: GeneralPageInvestigationSourceMetadata,
+): boolean {
+  const match =
+    /^(?:\p{L}+\s+\d{1,2},\s+\d{4}|\d{1,2}\s+\p{L}+\s+\d{4})\s+(.+)$/u
+      .exec(text);
+  if (!match || !source?.title) return false;
+  const normalize = (value: string) =>
+    value.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  return normalize(match[1]) === normalize(source.title);
 }
 
 function sourceHostname(source?: GeneralPageInvestigationSourceMetadata): string | undefined {
@@ -181,12 +213,16 @@ export function generalPageInvestigationSelectionRejectionReason(
   }
   if (hasDuplicatedLeadingToken(text) ||
       hasHeadingPrefixedSubject(text) ||
+      hasRepeatedLeadingPhrase(text) ||
+      hasDatePrefixedSourceTitle(text, context.source) ||
       FLATTENED_DOCUMENTATION_LABEL.test(text) ||
       FLATTENED_NAVIGATION_CHAIN.test(text) ||
       PUBLICATION_METADATA_PREFIX.test(text) ||
       LEADING_TIMEZONE_FRAGMENT.test(text) ||
       SOURCE_CODE_METADATA_PREFIX.test(text) ||
       EDITORIAL_SECTION_PREFIX.test(text) ||
+      PRESS_RELEASE_HEADER.test(text) ||
+      STACKED_SECTION_LABELS.test(text) ||
       UNSUBJECTED_API_DESCRIPTION.test(text) ||
       CONFLICT_DISCLOSURE.test(text) ||
       isCitedPaperTitle(selection, context.authorizedSourceContext) ||

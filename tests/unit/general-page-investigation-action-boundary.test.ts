@@ -102,6 +102,9 @@ describe("General Page investigation local action boundary", () => {
       "HTTP Source Code: Stability: 2 - Stable This module can be imported via require('node:http')",
       "What you need to know as wildfires continue Wildfires in Spain and France have caused mass evacuation",
       "StatefulSets A StatefulSet runs a group of Pods and maintains a sticky identity for each Pod",
+      "PRESS RELEASE Monetary policy decisions 23 July 2026 The Governing Council decided to keep rates unchanged",
+      "Original consultation Consultation description The CMA has produced draft revised guidance",
+      "A digital form of cash that preserves customer relationships A digital form of cash The digital euro is public money",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -184,10 +187,41 @@ describe("General Page investigation local action boundary", () => {
       "The StatefulSet controller maintains a stable identity for each Pod",
       "Wildfires in Spain and France forced more than 300,000 people to evacuate",
       "The Consumer Rights Act 2015 governs unfair terms in consumer contracts",
+      "The press release published on 23 July 2026 states that the rates remain unchanged",
+      "June 18, 2026 was the date the Federal Reserve issued the enforcement action",
+      "The original consultation description explains how the CMA will revise its guidance",
+      "A digital form of cash can preserve customer relationships",
+      "New York City officials said New York City residents would receive an update",
+      "The Federal Reserve Board announced that the Federal Reserve Board would publish the results",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
       ), text).toBeUndefined();
     }
+  });
+
+  it("rejects a publication date fused with the complete source title", () => {
+    expect(generalPageInvestigationSelectionRejectionReason(
+      selection(
+        "June 18, 2026 Federal Reserve Board issues enforcement action with former employee of Bank of Eufaula",
+      ),
+      {
+        source: {
+          title:
+            "Federal Reserve Board issues enforcement action with former employee of Bank of Eufaula",
+        },
+      },
+    )).toBe("page_or_documentation_residue");
+    expect(generalPageInvestigationSelectionRejectionReason(
+      selection(
+        "June 18, 2026 Federal Reserve Board issued an enforcement action with a former employee",
+      ),
+      {
+        source: {
+          title:
+            "Federal Reserve Board issues enforcement action with former employee of Bank of Eufaula",
+        },
+      },
+    )).toBeUndefined();
   });
 });
