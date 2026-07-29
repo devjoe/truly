@@ -6,6 +6,10 @@ import type {
 import {
   buildGeneralPageInvestigationActionPresentation,
 } from "../lib/general-page-investigation-span-adapter";
+import {
+  generalPageInvestigationSelectionRejectionReason,
+  generalPageInvestigationSourceRejectionReason,
+} from "../lib/general-page-investigation-action-boundary";
 import { buildInvestigationSpanCandidates } from "../lib/investigation-span-candidate";
 import {
   callTierBGeneralPageInvestigationActionAdmission,
@@ -108,6 +112,7 @@ export function scheduleGeneralPageInvestigationPreparation(
     publishedAt: request.context.publishedAt,
     url: request.context.canonicalUrl || request.context.url,
   };
+  if (generalPageInvestigationSourceRejectionReason(source)) return false;
   const adapterRequest: TierBGeneralPageInvestigationSpanAdapterRequest = {
     endpoint: options.endpoint,
     model: options.model,
@@ -143,6 +148,7 @@ export function scheduleGeneralPageInvestigationPreparation(
       | (typeof selections[number] & { presentationTier: "exploratory" })
       | undefined;
     for (const [index, selection] of selections.entries()) {
+      if (generalPageInvestigationSelectionRejectionReason(selection)) continue;
       const stage = index + 1;
       const admissionResult = await options.scheduler.enqueue({
         id: `${id}:admit:${stage}`,

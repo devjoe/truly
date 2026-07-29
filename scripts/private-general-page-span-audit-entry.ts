@@ -14,6 +14,10 @@ import {
 import {
   buildGeneralPageInvestigationActionTierSystemPrompt,
 } from "../src/lib/general-page-investigation-action-tier";
+import {
+  generalPageInvestigationSelectionRejectionReason,
+  generalPageInvestigationSourceRejectionReason,
+} from "../src/lib/general-page-investigation-action-boundary";
 import { buildInvestigationSpanCandidates } from "../src/lib/investigation-span-candidate";
 import {
   buildTierBGeneralPageInvestigationActionAdmissionChatBody,
@@ -320,6 +324,24 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
   if (candidates.length < 1) {
     return privateSpanAuditNoCandidateResult(base);
   }
+  const sourceRejectionReason =
+    generalPageInvestigationSourceRejectionReason(row.sourceContext);
+  if (sourceRejectionReason) {
+    return {
+      ...base,
+      ok: true,
+      status: "abstain",
+      selector: { ok: true, skipped: "local_source_boundary" },
+      admissionAttempts: [],
+      tierAttempts: [],
+      localRejectionAttempts: [{
+        candidateId: null,
+        reason: sourceRejectionReason,
+      }],
+      proposedActions: [],
+      actions: [],
+    };
+  }
   const started = Date.now();
   const result = await callTierBGeneralPageInvestigationSpanAdapter({
     endpoint,
@@ -341,11 +363,21 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
   }));
   const admissionAttempts = [];
   const tierAttempts = [];
+  const localRejectionAttempts = [];
   let admittedAction = null;
   let exploratoryAction = null;
   let downstreamProtocolOk = true;
   if (result.ok) {
     for (const selection of selections) {
+      const localRejectionReason =
+        generalPageInvestigationSelectionRejectionReason(selection);
+      if (localRejectionReason) {
+        localRejectionAttempts.push({
+          candidateId: selection.candidateId,
+          reason: localRejectionReason,
+        });
+        continue;
+      }
       const admission = await callTierBGeneralPageInvestigationActionAdmission({
         endpoint,
         model,
@@ -426,6 +458,7 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
       error: admission.error,
       raw: admission.raw,
     })),
+    localRejectionAttempts,
     tierAttempts: tierAttempts.map((tier) => ({
       ok: tier.ok,
       tier: tier.value?.tier,
@@ -467,6 +500,10 @@ const admissionRejected = results.reduce((sum, row) =>
         (attempt) => attempt?.decision === "reject",
       ).length
     : 0), 0);
+const localRejected = results.reduce((sum, row) =>
+  sum + (Array.isArray(row.localRejectionAttempts)
+    ? row.localRejectionAttempts.length
+    : 0), 0);
 const tierClassified = results.reduce((sum, row) =>
   sum + (Array.isArray(row.tierAttempts)
     ? row.tierAttempts.filter((attempt) => attempt?.ok === true).length
@@ -500,6 +537,7 @@ const meta = {
     maxInternalProposals: 3,
     maxActions: 1,
     replacementAfterRejection: true,
+    localBoundary: "reader_action_local_boundary_v1",
     inputBoundary: runtimeEnvelopeMode ? "captured_adapter_envelope" : "legacy_rebuilt_candidates",
   },
   model: {
@@ -524,6 +562,7 @@ const meta = {
     abstained,
     proposed,
     admissionRejected,
+    localRejected,
     tierClassified,
     actionCount,
     exactGrounding,

@@ -649,6 +649,86 @@ describe("background General Page investigation preparation", () => {
     }
   });
 
+  it("does not schedule model work for an unavailable or known satire source", () => {
+    for (const context of [
+      {
+        ...request.context,
+        title: "Page Not Found - Fixture News",
+      },
+      {
+        ...request.context,
+        title: "A factual-looking satirical headline",
+        sourceName: "The Shovel",
+        canonicalUrl: "https://theshovel.com.au/story",
+      },
+    ]) {
+      const scheduler = { enqueue: vi.fn() };
+      expect(scheduleGeneralPageInvestigationPreparation({
+        scheduler: scheduler as never,
+        request: { ...request, context },
+        endpoint: "http://127.0.0.1:8000/v1",
+        model: "fixture-model",
+        structuredOutputMode: "json_object",
+        resourceKey: "local|fixture-model",
+        callAdapter: vi.fn(),
+        sendMessage: vi.fn(),
+      })).toBe(false);
+      expect(scheduler.enqueue).not.toHaveBeenCalled();
+    }
+  });
+
+  it("skips an obviously incomplete ranked span before model admission", async () => {
+    const incompleteRequest = {
+      ...request,
+      analysisKey: "page:local-boundary",
+      outputLang: "en" as const,
+      context: {
+        ...request.context,
+        title: "Fixture report",
+        mainText: "Both leaders are expected to meet on Tuesday.",
+      },
+    };
+    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const sendMessage = vi.fn();
+    const callAdapter = vi.fn(async (input: any) => ({
+      ok: true,
+      attempts: 1 as const,
+      value: {
+        schemaVersion: 12 as const,
+        selections: [{
+          candidateId: input.candidates[0].id,
+          exactClaim: input.candidates[0].exactText,
+          sourceQuote: input.candidates[0].exactText,
+          start: input.candidates[0].start,
+          end: input.candidates[0].end,
+        }],
+      },
+    }));
+    const callAdmission = vi.fn();
+    const callTier = vi.fn();
+
+    expect(scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request: incompleteRequest,
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_object",
+      resourceKey: "local|fixture-model",
+      callAdapter,
+      callAdmission,
+      callTier,
+      sendMessage,
+    })).toBe(true);
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    expect(callAdapter).toHaveBeenCalledTimes(1);
+    expect(callAdmission).not.toHaveBeenCalled();
+    expect(callTier).not.toHaveBeenCalled();
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      status: "ineligible",
+    }));
+  });
+
   it("does not schedule Focus, overview, screenshot, or text without local candidates", () => {
     const scheduler = { enqueue: vi.fn() };
     const base = {
