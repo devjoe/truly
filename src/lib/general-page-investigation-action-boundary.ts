@@ -48,6 +48,8 @@ const UNRESOLVED_GROUP_REFERENCE =
   /^(?:(?:one|another|other)\s+(?:objectives?|goals?|proposals?|recommendations?)\b|(?:目標|目标|目的)(?:之一|一|二|三)|(?:另一|其他)(?:項)?(?:目標|目标|目的|提案|建議|建议))/iu;
 const NORMATIVE_VALUE_JUDGMENT =
   /\b(?:is|are|was|were)\s+essential\s+to\s+(?:ensure|ensuring|support|supporting|help|helping)\b|(?:對|对).{0,80}(?:至關重要|至关重要|不可或缺)/iu;
+const ATTRIBUTED_RANKING_OPINION =
+  /\b(?:said|called|described)\b[\s\S]{0,140}\b(?:best|worst|greatest)\b/iu;
 const CHAPTER_TITLE =
   /(?:\bchapter\s+[\dIVXLCDM]+\b|[-–—]\s*[\dIVXLCDM]+)\s*$/iu;
 const CHAPTER_PATH = /\/(?:chapter|chapitre|capitulo|capítulo)[-_/]?\d+(?:[/?#]|$)/iu;
@@ -145,6 +147,7 @@ export function generalPageInvestigationSelectionRejectionReason(
     return "unresolved_reference";
   }
   if (NORMATIVE_VALUE_JUDGMENT.test(text) ||
+      ATTRIBUTED_RANKING_OPINION.test(text) ||
       (
         FICTION_REVIEW_TITLE.test(context.source?.title ?? "") &&
         FICTION_REVIEW_NARRATIVE_CUE.test(text)

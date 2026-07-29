@@ -77,6 +77,7 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("Tier, not Admission, decides whether it is central or secondary");
     expect(system).toContain("Do not apply this payload rule");
     expect(system).toContain("Do not assume the underlying claim is true");
+    expect(system).toContain("A named speaker does not make a subjective ranking");
     expect(system).toContain("reported payload is only an opinion, prediction, recommendation");
     expect(system).toContain("separately observable act of signing, filing, or issuing");
     expect(system).toContain("ordinary definitions, API behavior");

@@ -145,6 +145,9 @@ describe("General Page investigation local action boundary", () => {
       selection("簡化揭露對確保小型企業蓬勃發展至關重要"),
     )).toBe("non_publicly_decidable");
     expect(generalPageInvestigationSelectionRejectionReason(
+      selection("Reviewer Lin Hai said Far Shore was the best film of the year"),
+    )).toBe("non_publicly_decidable");
+    expect(generalPageInvestigationSelectionRejectionReason(
       selection(
         "Gomorrah fans know that, in 30 years’ time, Pietro Savastano will be a king",
       ),
