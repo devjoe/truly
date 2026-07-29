@@ -94,6 +94,25 @@ function hasHeadingPrefixedSubject(text: string): boolean {
     heading === normalize(tokens[2]);
 }
 
+function hasShortHeadingPrefixedSentence(text: string): boolean {
+  const match =
+    /^([\p{L}\p{N}'’_-]+(?:\s+[\p{L}\p{N}'’_-]+){1,4})\s+(?:A|An|The)\s+(.+)$/u
+      .exec(text);
+  if (!match || !/^\p{Lu}/u.test(match[1])) return false;
+  const normalize = (token: string) =>
+    token.toLowerCase().replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "")
+      .replace(/s$/u, "");
+  const headingTokens = match[1].split(/\s+/u).map(normalize).filter(Boolean);
+  const sentenceTokens =
+    match[2].match(/[\p{L}\p{N}'’_-]+/gu)?.slice(0, 6).map(normalize) ?? [];
+  const headingPairs = new Set(
+    headingTokens.slice(0, -1)
+      .map((token, index) => `${token} ${headingTokens[index + 1]}`),
+  );
+  return sentenceTokens.slice(0, -1)
+    .some((token, index) => headingPairs.has(`${token} ${sentenceTokens[index + 1]}`));
+}
+
 function hasRepeatedLeadingPhrase(text: string): boolean {
   const tokens = text.match(/[\p{L}\p{N}'’_-]+/gu)
     ?.map((token) => token.toLowerCase()) ?? [];
@@ -213,6 +232,7 @@ export function generalPageInvestigationSelectionRejectionReason(
   }
   if (hasDuplicatedLeadingToken(text) ||
       hasHeadingPrefixedSubject(text) ||
+      hasShortHeadingPrefixedSentence(text) ||
       hasRepeatedLeadingPhrase(text) ||
       hasDatePrefixedSourceTitle(text, context.source) ||
       FLATTENED_DOCUMENTATION_LABEL.test(text) ||

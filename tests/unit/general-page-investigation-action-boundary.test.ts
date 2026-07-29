@@ -105,6 +105,7 @@ describe("General Page investigation local action boundary", () => {
       "PRESS RELEASE Monetary policy decisions 23 July 2026 The Governing Council decided to keep rates unchanged",
       "Original consultation Consultation description The CMA has produced draft revised guidance",
       "A digital form of cash that preserves customer relationships A digital form of cash The digital euro is public money",
+      "Key ECB interest rates The interest rates on the deposit facility, the main refinancing operations and the marginal lending facility will remain unchanged",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -193,6 +194,8 @@ describe("General Page investigation local action boundary", () => {
       "A digital form of cash can preserve customer relationships",
       "New York City officials said New York City residents would receive an update",
       "The Federal Reserve Board announced that the Federal Reserve Board would publish the results",
+      "Key ECB interest rates remained unchanged after the Governing Council meeting",
+      "The interest rates on the deposit facility and refinancing operations will remain unchanged",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),

@@ -916,3 +916,20 @@ The next boundary revision keeps the restored model prompts and adds only
 machine-observable tests for those shapes. It does not classify topics or
 truth, and complete propositions containing dates, release terminology, or the
 same technical subjects remain eligible through explicit negative controls.
+
+The resulting `4e369a38` consumed-data replay again preserved `60/60` protocol
+validity, zero expected-none leaks, and zero tier overstatements. It recovered
+the frozen news-primary floor, while the frozen general-web score was distorted
+by two already-sealed source labels that contradict the current standalone
+action contract: an unresolved “this transaction” reference and an unresolved
+“these documents” reference. Those source labels remain immutable and the
+replay is not reclassified as a pass.
+
+A changed-output-only review found no newly selected consensus-unacceptable
+action, but both reviewers caught an unchanged ECB control whose short section
+heading was fused directly to a complete rate sentence. A final local
+structural rule therefore rejects only a two-to-five-token heading followed by
+an English sentence whose opening repeats a heading bigram. Ordinary complete
+rate propositions and non-fused heading vocabulary remain eligible in negative
+controls. The consumed cohort remains diagnosis-only; the clean successor must
+still pass a complete formal Gate A before any fresh Gate B data is opened.
