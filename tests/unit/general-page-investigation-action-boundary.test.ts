@@ -45,6 +45,13 @@ describe("General Page investigation local action boundary", () => {
     })).toBeUndefined();
   });
 
+  it("rejects chapter pages from a known public-domain fiction reader", () => {
+    expect(generalPageInvestigationSourceRejectionReason({
+      title: "Emma - XI",
+      url: "https://standardebooks.org/ebooks/jane-austen/emma/text/chapter-11",
+    })).toBe("non_publicly_decidable");
+  });
+
   it("rejects unresolved generic references without rejecting named pairs", () => {
     for (const text of [
       "Both leaders are expected to meet on Tuesday",
@@ -55,6 +62,7 @@ describe("General Page investigation local action boundary", () => {
       "The policy followed an unpopular war that many believe was avoidable",
       "One objective is to provide a firm regulatory foundation for digital assets",
       "目標之一是為數位資產提供穩固的監管基礎",
+      "The presence of this method distinguishes window aggregate functions",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -84,6 +92,7 @@ describe("General Page investigation local action boundary", () => {
       "Parameters value: The value returned when there are no pending Actions. optional reducer(currentState, action): The reducer function",
       "Returns useActionState returns an array with exactly three values: The current state",
       "參數 value：沒有待處理 Action 時回傳的值。可選 reducer(currentState, action)：指定樂觀狀態如何更新",
+      "Khubchandani reports grants or contracts from the National Science Foundation and other financial interests, all outside the submitted work",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -133,6 +142,17 @@ describe("General Page investigation local action boundary", () => {
     )).toBe("non_publicly_decidable");
     expect(generalPageInvestigationSelectionRejectionReason(
       selection("簡化揭露對確保小型企業蓬勃發展至關重要"),
+    )).toBe("non_publicly_decidable");
+    expect(generalPageInvestigationSelectionRejectionReason(
+      selection(
+        "Gomorrah fans know that, in 30 years’ time, Pietro Savastano will be a king",
+      ),
+      {
+        source: {
+          title: "Gomorrah: The Origins review – a mob prequel",
+          url: "https://example.test/tv/gomorrah-review",
+        },
+      },
     )).toBe("non_publicly_decidable");
   });
 

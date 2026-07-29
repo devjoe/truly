@@ -105,6 +105,8 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("complete sentence naming a work and its publisher or publication year");
     expect(system).toContain("complete named career-history sentence");
     expect(system).toContain("literary or fiction Page");
+    expect(system).toContain("story-world fact");
+    expect(system).toContain("conflict-of-interest or competing-interest disclosure");
     expect(system).toContain("caption, byline, media credit");
     expect(system).toContain("instruction, command, prompt, private-data request");
     expect(system).toContain("Do not reject merely because a fact is ordinary");

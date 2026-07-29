@@ -21,18 +21,25 @@ const KNOWN_SATIRE_HOSTS = new Set([
   "theshovel.com.au",
   "waterfordwhispersnews.com",
 ]);
+const KNOWN_FICTION_READER_HOSTS = new Set([
+  "standardebooks.org",
+]);
 const EXPLICIT_SATIRE_LABEL =
   /(?:\b(?:satire|satirical|parody)\b|(?:諷刺|讽刺|惡搞|恶搞)(?:新聞|新闻|媒體|媒体)?)/iu;
 const UNAVAILABLE_TITLE =
   /^(?:404\b|page (?:not found|unavailable)\b|not found\b|找不到(?:此|這個|这个)?頁面|找不到網頁|頁面(?:不存在|無法使用)|页面(?:不存在|无法使用))/iu;
 const UNRESOLVED_REFERENCE =
   /^(?:(?:(?:if|when)\s+)?(?:it|this|that|these|those)\b|both\s+(?:leaders?|sides?|parties?|companies?|countries?|teams?|officials?|candidates?|figures?|groups?|people|men|women)\b)|\bas described above\b/iu;
+const UNRESOLVED_NAMED_MEMBER =
+  /\b(?:this|that|these|those)\s+(?:method|property|field|feature|function|protocol|condition)\b/iu;
 const VAGUE_PUBLIC_ATTRIBUTION =
   /\bmany(?:\s+people)?\s+(?:believe|think|say|feel)\b/iu;
 const PAGE_META_DESCRIPTION =
   /^(?:today(?:'s|’s)?(?:\s+(?:article|newsletter|edition))?\s+(?:is\s+)?about\b|today,?\s+(?:[\p{L}'’.-]+\s+){1,4}(?:writes?|reports?|explores?|discusses?)\s+about\b|we\s+(?:came|went|visited|are here)\b.{0,80}\b(?:to\s+)?(?:see|learn|find|report)\b)/iu;
 const PAGE_OR_DOCUMENTATION_RESIDUE =
   /^(?:supported by|sponsored by|presented by|advertisement|documentation\s+overview|overview\s+package|variables?\s+this section is empty)\b|(?:\bexample output:|\bfunc(?:\s+added\s+in\s+go\d+(?:\.\d+)*)?\s+func\b)|(?:^[A-Za-z_$][\w$]*\s*=\s*.+\/\/)|(?:\bthe (?:type|method|function|field|property|class|interface|package|module)\s*$)/iu;
+const CONFLICT_DISCLOSURE =
+  /\breports?\s+(?:grants?\s+or\s+contracts?|payments?\s+of\s+honoraria|other\s+financial\s+interests?)\b[\s\S]{0,240}\boutside\s+the\s+submitted\s+work\b/iu;
 const FLATTENED_DOCUMENTATION_LABEL =
   /^(?:(?:parameters?|returns?|usage|examples?)\b|(?:參數|参数|回傳|返回|用法|範例|示例)).{0,100}[:：]/iu;
 const UNRESOLVED_GROUP_REFERENCE =
@@ -43,6 +50,9 @@ const CHAPTER_TITLE =
   /(?:\bchapter\s+[\dIVXLCDM]+\b|[-–—]\s*[\dIVXLCDM]+)\s*$/iu;
 const CHAPTER_PATH = /\/(?:chapter|chapitre|capitulo|capítulo)[-_/]?\d+(?:[/?#]|$)/iu;
 const CHAPTER_LEAD = /^(?:chapter\s+)?[\dIVXLCDM]+\s+\p{Lu}[\p{L}'’.-]+\b/u;
+const FICTION_REVIEW_TITLE = /\breview\b/iu;
+const FICTION_REVIEW_NARRATIVE_CUE =
+  /\bfans?\s+(?:know|remember)(?:\s+that)?\b/iu;
 
 function hasDuplicatedLeadingToken(text: string): boolean {
   const [first = "", second = ""] = text.split(/\s+/u, 2);
@@ -110,6 +120,10 @@ export function generalPageInvestigationSourceRejectionReason(
       EXPLICIT_SATIRE_LABEL.test(source?.sourceName ?? "")) {
     return "satire_source";
   }
+  if (hostname && KNOWN_FICTION_READER_HOSTS.has(hostname) &&
+      CHAPTER_PATH.test(source?.url ?? "")) {
+    return "non_publicly_decidable";
+  }
   return undefined;
 }
 
@@ -123,16 +137,22 @@ export function generalPageInvestigationSelectionRejectionReason(
 ): GeneralPageInvestigationLocalRejectionReason | undefined {
   const text = selection.exactClaim.replace(/\s+/gu, " ").trim();
   if (UNRESOLVED_REFERENCE.test(text) ||
+      UNRESOLVED_NAMED_MEMBER.test(text) ||
       UNRESOLVED_GROUP_REFERENCE.test(text) ||
       VAGUE_PUBLIC_ATTRIBUTION.test(text)) {
     return "unresolved_reference";
   }
   if (NORMATIVE_VALUE_JUDGMENT.test(text) ||
+      (
+        FICTION_REVIEW_TITLE.test(context.source?.title ?? "") &&
+        FICTION_REVIEW_NARRATIVE_CUE.test(text)
+      ) ||
       isChapterLeadNarrative(text, context.source)) {
     return "non_publicly_decidable";
   }
   if (hasDuplicatedLeadingToken(text) ||
       FLATTENED_DOCUMENTATION_LABEL.test(text) ||
+      CONFLICT_DISCLOSURE.test(text) ||
       isCitedPaperTitle(selection, context.authorizedSourceContext) ||
       PAGE_META_DESCRIPTION.test(text) ||
       PAGE_OR_DOCUMENTATION_RESIDUE.test(text)) {
