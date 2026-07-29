@@ -42,6 +42,8 @@ const CONFLICT_DISCLOSURE =
   /\breports?\s+(?:grants?\s+or\s+contracts?|payments?\s+of\s+honoraria|other\s+financial\s+interests?)\b[\s\S]{0,240}\boutside\s+the\s+submitted\s+work\b/iu;
 const FLATTENED_DOCUMENTATION_LABEL =
   /^(?:(?:parameters?|returns?|usage|examples?)\b|(?:參數|参数|回傳|返回|用法|範例|示例)).{0,100}[:：]/iu;
+const UNSUBJECTED_API_DESCRIPTION =
+  /^(?:returns?|takes?|creates?|provides?|specifies?|indicates?)\s+(?:an?|the)\b/iu;
 const UNRESOLVED_GROUP_REFERENCE =
   /^(?:(?:one|another|other)\s+(?:objectives?|goals?|proposals?|recommendations?)\b|(?:目標|目标|目的)(?:之一|一|二|三)|(?:另一|其他)(?:項)?(?:目標|目标|目的|提案|建議|建议))/iu;
 const NORMATIVE_VALUE_JUDGMENT =
@@ -152,6 +154,7 @@ export function generalPageInvestigationSelectionRejectionReason(
   }
   if (hasDuplicatedLeadingToken(text) ||
       FLATTENED_DOCUMENTATION_LABEL.test(text) ||
+      UNSUBJECTED_API_DESCRIPTION.test(text) ||
       CONFLICT_DISCLOSURE.test(text) ||
       isCitedPaperTitle(selection, context.authorizedSourceContext) ||
       PAGE_META_DESCRIPTION.test(text) ||

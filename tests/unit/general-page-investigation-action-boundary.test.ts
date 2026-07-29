@@ -91,6 +91,7 @@ describe("General Page investigation local action boundary", () => {
       "We came here to see how Cuba is managing an energy crisis",
       "Parameters value: The value returned when there are no pending Actions. optional reducer(currentState, action): The reducer function",
       "Returns useActionState returns an array with exactly three values: The current state",
+      "Returns an iterator allowing iteration through all key/value pairs",
       "參數 value：沒有待處理 Action 時回傳的值。可選 reducer(currentState, action)：指定樂觀狀態如何更新",
       "Khubchandani reports grants or contracts from the National Science Foundation and other financial interests, all outside the submitted work",
     ]) {

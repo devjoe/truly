@@ -90,6 +90,7 @@ describe("General Page investigation action admission critic", () => {
     );
     expect(system).toContain("omits the method, property, field, or API member name");
     expect(system).toContain("Naming only the enclosing API object");
+    expect(system).toContain("begins with a bare verb");
     expect(system).toContain("code declaration or interface control");
     expect(system).toContain("change-history snippet");
     expect(system).toContain("forward pointer whose only payload");
