@@ -131,7 +131,7 @@ export function privateRuntimeEnvelopeInputErrors(rows, expectedCount, declaredC
       errors.push(`${label}: capture is outside the investigation runtime boundary`);
     }
     const text = analysis.context?.mainText;
-    if (typeof text !== "string" || text.trim().length < 80 || text.length > 8192) {
+    if (typeof text !== "string" || [...text.trim()].length < 80 || [...text].length > 8192) {
       errors.push(`${label}: captured mainText must be 80-8192 characters`);
     }
     if (analysis.scope === "focus" && analysis.context?.targetKind !== "selection") {

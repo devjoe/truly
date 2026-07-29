@@ -91,6 +91,24 @@ describe("private general page eval boundary", () => {
     expect(privateRuntimeEnvelopeInputErrors([row], 1, "page-news_article")).toEqual([]);
   });
 
+  it("counts runtime Page text in Unicode characters like the production adapters", () => {
+    const row = runtimeRow("page", "general_web", "page");
+    const text = `${"a".repeat(8189)}🔬🔬🔬`;
+    row.capture.analysis.context.mainText = text;
+    row.capture.adapter.authorizedSourceContext = text;
+    row.capture.adapter.candidates = [{
+      id: "span:1",
+      exactText: text.slice(-20),
+      start: text.length - 20,
+      end: text.length,
+    }];
+    row.captureSha256 = crypto.createHash("sha256").update(JSON.stringify(row.capture)).digest("hex");
+
+    expect([...text]).toHaveLength(8192);
+    expect(text.length).toBe(8195);
+    expect(privateRuntimeEnvelopeInputErrors([row], 1, "page-general_web")).toEqual([]);
+  });
+
   it("rejects a Focus envelope whose target is not the exact selection", () => {
     const row = runtimeRow("focus", "facebook", "page");
     expect(privateRuntimeEnvelopeInputErrors([row], 1, "focus-facebook").join(" ")).toMatch(/targetKind=selection/);
