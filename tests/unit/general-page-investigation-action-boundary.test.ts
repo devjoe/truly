@@ -70,6 +70,7 @@ describe("General Page investigation local action boundary", () => {
       "Max is the largest finite value representable by the type",
       "MinInt = -1 << (intSize - 1) // MinInt32 or MinInt64 depending on intSize",
       "Special cases are: Abs(±Inf) = +Inf Example Output: 2.0 func func Acos(x)",
+      "<StrictMode> <StrictMode> lets you find common bugs during development",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),

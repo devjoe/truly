@@ -23,6 +23,14 @@ const UNRESOLVED_REFERENCE =
 const PAGE_OR_DOCUMENTATION_RESIDUE =
   /^(?:supported by|sponsored by|presented by|advertisement|documentation\s+overview|overview\s+package|variables?\s+this section is empty)\b|(?:\bexample output:|\bfunc(?:\s+added\s+in\s+go\d+(?:\.\d+)*)?\s+func\b)|(?:^[A-Za-z_$][\w$]*\s*=\s*.+\/\/)|(?:\bthe (?:type|method|function|field|property|class|interface|package|module)\s*$)/iu;
 
+function hasDuplicatedLeadingToken(text: string): boolean {
+  const [first = "", second = ""] = text.split(/\s+/u, 2);
+  const normalize = (token: string) =>
+    token.replace(/^[^\p{L}\p{N}_$]+|[^\p{L}\p{N}_$]+$/gu, "").toLowerCase();
+  const normalizedFirst = normalize(first);
+  return normalizedFirst.length >= 3 && normalizedFirst === normalize(second);
+}
+
 function sourceHostname(source?: GeneralPageInvestigationSourceMetadata): string | undefined {
   try {
     const hostname = source?.url ? new URL(source.url).hostname.toLowerCase() : "";
@@ -58,7 +66,7 @@ export function generalPageInvestigationSelectionRejectionReason(
 ): GeneralPageInvestigationLocalRejectionReason | undefined {
   const text = selection.exactClaim.replace(/\s+/gu, " ").trim();
   if (UNRESOLVED_REFERENCE.test(text)) return "unresolved_reference";
-  if (PAGE_OR_DOCUMENTATION_RESIDUE.test(text)) {
+  if (hasDuplicatedLeadingToken(text) || PAGE_OR_DOCUMENTATION_RESIDUE.test(text)) {
     return "page_or_documentation_residue";
   }
   return undefined;
