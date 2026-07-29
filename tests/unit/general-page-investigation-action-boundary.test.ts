@@ -42,12 +42,25 @@ describe("General Page investigation local action boundary", () => {
   });
 
   it("rejects unresolved generic references without rejecting named pairs", () => {
-    expect(generalPageInvestigationSelectionRejectionReason(
-      selection("Both leaders are expected to meet on Tuesday"),
-    )).toBe("unresolved_reference");
-    expect(generalPageInvestigationSelectionRejectionReason(
-      selection("Both Apple and Google published updates on Tuesday"),
-    )).toBeUndefined();
+    for (const text of [
+      "Both leaders are expected to meet on Tuesday",
+      "It was announced on Tuesday",
+      "This option removes diacritics",
+      "If this option is set to 2, diacritics are removed",
+      "Diacritics are removed as described above",
+    ]) {
+      expect(generalPageInvestigationSelectionRejectionReason(
+        selection(text),
+      ), text).toBe("unresolved_reference");
+    }
+    for (const text of [
+      "Both Apple and Google published updates on Tuesday",
+      "If remove_diacritics is set to 2, all Latin diacritics are removed",
+    ]) {
+      expect(generalPageInvestigationSelectionRejectionReason(
+        selection(text),
+      ), text).toBeUndefined();
+    }
   });
 
   it("rejects obvious publisher and flattened documentation residue", () => {
