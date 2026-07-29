@@ -68,6 +68,8 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("entertainment, sport, consumer, product, celebrity");
     expect(system).toContain("private, anecdotal, subjective-only");
     expect(system).toContain("direct recommendation or advice");
+    expect(system).toContain("counterfactual causal assertion");
+    expect(system).toContain("imagined alternate outcome");
     expect(system).toContain("named person or organization publicly announced, filed, issued, alleged, or reported");
     expect(system).toContain("'many' or 'some' unnamed companies or people");
     expect(system).toContain("exact count of organizations signed, filed, or issued");
