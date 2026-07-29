@@ -120,6 +120,7 @@ export function buildGeneralPageInvestigationActionAdmissionPrompt(
     "## Nearby authorized Page context",
     JSON.stringify({ text: nearbyContext(context, input.selection) }),
     "## Decision",
+    "First inspect the whole exact text for duplicated title or type text, chained Page-role labels (release header and date, section and subsection, table option and name, document link or update label), an article-about-topic meta-description, or a forward pointer. If any is present, reject before judging the useful clause inside it.",
     "Reject only for a clear structural, public-decidability, source-role, genre, or safety boundary violation. Otherwise admit.",
   ].join("\n");
 }

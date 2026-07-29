@@ -184,6 +184,7 @@ export function buildGeneralPageInvestigationSpanAdapterPrompt(
     "## Proposal",
     `Discard unusable and source-residue spans first, then rank exactly ${selectionCount} distinct candidates strongest to weakest.`,
     "Treat structural cleanliness as a prerequisite: centrality never overrides structural cleanliness.",
+    "Before comparing utility, discard any candidate that starts with duplicated title or type text, chains Page-role labels into prose (release header and date, section and subsection, table option and name, document link or update label), merely says an author writes about a topic, or points forward to an example. Reject the whole exact span even when its remaining clause is central.",
     "When no stronger current action survives, select the strongest complete and publicly checkable stable reference, definition, API behavior, service workflow, capability, catalog fact, or ordinary situational fact that survives. Fictional narration and publisher or license boilerplate remain lowest-ranked inputs for Admission to reject.",
     "Being the only survivor does not raise its utility. Context cannot repair an unresolved or metadata-prefixed exact span.",
     `Return exactly {"schemaVersion":12,"selections":[{"candidateId":"span:N"}]} with exactly ${selectionCount} distinct supplied candidate IDs, strongest first.`,

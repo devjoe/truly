@@ -268,6 +268,9 @@ describe("General Page exact-span proposal selector with schema v12", () => {
     expect(user).toContain("exactly 3 distinct supplied candidate IDs");
     expect(user).toContain("Context cannot repair an unresolved or metadata-prefixed exact span");
     expect(user).toContain("centrality never overrides structural cleanliness");
+    expect(user).toContain("release header and date");
+    expect(user).toContain("table option and name");
+    expect(user).toContain("Reject the whole exact span");
     expect(user).toMatch(/strongest first\.$/u);
     expect(user).not.toMatch(/"start":|"end":/u);
   });
