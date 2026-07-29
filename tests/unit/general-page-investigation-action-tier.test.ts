@@ -67,6 +67,7 @@ describe("General Page investigation action tier classifier", () => {
     expect(system).toContain("newly added product, service, menu item");
     expect(system).toContain("Mandatory precedence");
     expect(system).toContain("spectacular description");
+    expect(system).toContain("infrastructure closure, service disruption, official detour");
     expect(user).toContain(selection.exactClaim);
     expect(user).toContain("utility judgment only");
     expect(user).toContain("informational-event precedence");
