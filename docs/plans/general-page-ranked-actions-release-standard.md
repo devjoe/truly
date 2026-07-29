@@ -882,3 +882,19 @@ Manually reviewed negative controls confirmed that complete propositions using
 the same subject matter and terms remained eligible. This replay is development
 diagnosis only. The successor still requires a new clean commit, formal Gate A,
 and a wholly fresh Gate B and C.
+
+The first successor snapshot at `0310a415` was stopped by the lower-cost
+consumed-data replay before it could open a fresh cohort. It remained
+protocol-valid and preserved zero expected-none leaks and zero tier
+overstatements, but missed the frozen primary recall floors by one news and one
+general-web row. Differential inspection found that two of the three lost
+primary actions never touched the new local boundary; the expanded Selector
+wording had changed their ranking. The third was correctly rejected for an
+unresolved document reference and fell back to an exploratory action.
+
+The next candidate therefore restores the previously successful Selector and
+Admission prompts byte-for-byte while retaining only the narrow local
+structural boundary and its positive and negative controls. This keeps semantic
+ranking with the model, avoids prompt drift, and lets a rejected contaminated
+proposal fall through to an already ranked backup. The `0310a415` replay is
+development diagnosis only and does not alter any release threshold.
