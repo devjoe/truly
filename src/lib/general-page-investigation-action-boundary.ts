@@ -5,7 +5,13 @@ export type GeneralPageInvestigationLocalRejectionReason =
   | "unavailable_source"
   | "satire_source"
   | "unresolved_reference"
+  | "non_publicly_decidable"
   | "page_or_documentation_residue";
+
+export interface GeneralPageInvestigationSelectionBoundaryContext {
+  authorizedSourceContext?: string;
+  source?: GeneralPageInvestigationSourceMetadata;
+}
 
 const KNOWN_SATIRE_HOSTS = new Set([
   "babylonbee.com",
@@ -27,6 +33,16 @@ const PAGE_META_DESCRIPTION =
   /^(?:today(?:'s|’s)?(?:\s+(?:article|newsletter|edition))?\s+(?:is\s+)?about\b|today,?\s+(?:[\p{L}'’.-]+\s+){1,4}(?:writes?|reports?|explores?|discusses?)\s+about\b|we\s+(?:came|went|visited|are here)\b.{0,80}\b(?:to\s+)?(?:see|learn|find|report)\b)/iu;
 const PAGE_OR_DOCUMENTATION_RESIDUE =
   /^(?:supported by|sponsored by|presented by|advertisement|documentation\s+overview|overview\s+package|variables?\s+this section is empty)\b|(?:\bexample output:|\bfunc(?:\s+added\s+in\s+go\d+(?:\.\d+)*)?\s+func\b)|(?:^[A-Za-z_$][\w$]*\s*=\s*.+\/\/)|(?:\bthe (?:type|method|function|field|property|class|interface|package|module)\s*$)/iu;
+const FLATTENED_DOCUMENTATION_LABEL =
+  /^(?:parameters?|returns?|usage|examples?)\b.{0,100}:/iu;
+const UNRESOLVED_GROUP_REFERENCE =
+  /^(?:(?:one|another|other)\s+(?:objectives?|goals?|proposals?|recommendations?)\b|(?:目標|目标|目的)(?:之一|一|二|三)|(?:另一|其他)(?:項)?(?:目標|目标|目的|提案|建議|建议))/iu;
+const NORMATIVE_VALUE_JUDGMENT =
+  /\b(?:is|are|was|were)\s+essential\s+to\s+(?:ensure|ensuring|support|supporting|help|helping)\b|(?:對|对).{0,80}(?:至關重要|至关重要|不可或缺)/iu;
+const CHAPTER_TITLE =
+  /(?:\bchapter\s+[\dIVXLCDM]+\b|[-–—]\s*[\dIVXLCDM]+)\s*$/iu;
+const CHAPTER_PATH = /\/(?:chapter|chapitre|capitulo|capítulo)[-_/]?\d+(?:[/?#]|$)/iu;
+const CHAPTER_LEAD = /^(?:chapter\s+)?[\dIVXLCDM]+\s+\p{Lu}[\p{L}'’.-]+\b/u;
 
 function hasDuplicatedLeadingToken(text: string): boolean {
   const [first = "", second = ""] = text.split(/\s+/u, 2);
@@ -43,6 +59,41 @@ function sourceHostname(source?: GeneralPageInvestigationSourceMetadata): string
   } catch {
     return undefined;
   }
+}
+
+function isCitedPaperTitle(
+  selection: MaterializedGeneralPageInvestigationSpanSelection,
+  authorizedSourceContext?: string,
+): boolean {
+  if (!authorizedSourceContext ||
+      authorizedSourceContext.slice(selection.start, selection.end) !== selection.exactClaim) {
+    return false;
+  }
+  const before = authorizedSourceContext.slice(
+    Math.max(0, selection.start - 220),
+    selection.start,
+  );
+  const after = authorizedSourceContext.slice(
+    selection.end,
+    Math.min(authorizedSourceContext.length, selection.end + 160),
+  );
+  return /(?:this is a summary of|references?|本文摘要自|參考文獻|参考文献)[\s\S]{0,180}\bet al\.?\s*$/iu
+    .test(before) && /doi\.org\//iu.test(after);
+}
+
+function isChapterLeadNarrative(
+  text: string,
+  source?: GeneralPageInvestigationSourceMetadata,
+): boolean {
+  const title = source?.title?.replace(/\s+/gu, " ").trim() ?? "";
+  let path = "";
+  try {
+    path = source?.url ? new URL(source.url).pathname : "";
+  } catch {
+    // Invalid metadata is ignored by this narrow optional boundary.
+  }
+  return CHAPTER_LEAD.test(text) &&
+    (CHAPTER_TITLE.test(title) || CHAPTER_PATH.test(path));
 }
 
 /**
@@ -68,12 +119,21 @@ export function generalPageInvestigationSourceRejectionReason(
  */
 export function generalPageInvestigationSelectionRejectionReason(
   selection: MaterializedGeneralPageInvestigationSpanSelection,
+  context: GeneralPageInvestigationSelectionBoundaryContext = {},
 ): GeneralPageInvestigationLocalRejectionReason | undefined {
   const text = selection.exactClaim.replace(/\s+/gu, " ").trim();
-  if (UNRESOLVED_REFERENCE.test(text) || VAGUE_PUBLIC_ATTRIBUTION.test(text)) {
+  if (UNRESOLVED_REFERENCE.test(text) ||
+      UNRESOLVED_GROUP_REFERENCE.test(text) ||
+      VAGUE_PUBLIC_ATTRIBUTION.test(text)) {
     return "unresolved_reference";
   }
+  if (NORMATIVE_VALUE_JUDGMENT.test(text) ||
+      isChapterLeadNarrative(text, context.source)) {
+    return "non_publicly_decidable";
+  }
   if (hasDuplicatedLeadingToken(text) ||
+      FLATTENED_DOCUMENTATION_LABEL.test(text) ||
+      isCitedPaperTitle(selection, context.authorizedSourceContext) ||
       PAGE_META_DESCRIPTION.test(text) ||
       PAGE_OR_DOCUMENTATION_RESIDUE.test(text)) {
     return "page_or_documentation_residue";

@@ -359,7 +359,10 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
   } else if (result.ok) {
     for (const selection of selections) {
       const localRejectionReason =
-        generalPageInvestigationSelectionRejectionReason(selection);
+        generalPageInvestigationSelectionRejectionReason(selection, {
+          authorizedSourceContext: row.text,
+          source: row.sourceContext,
+        });
       if (localRejectionReason) {
         localRejectionAttempts.push({
           candidateId: selection.candidateId,

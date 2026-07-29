@@ -53,6 +53,8 @@ describe("General Page investigation local action boundary", () => {
       "If this option is set to 2, diacritics are removed",
       "Diacritics are removed as described above",
       "The policy followed an unpopular war that many believe was avoidable",
+      "One objective is to provide a firm regulatory foundation for digital assets",
+      "目標之一是為數位資產提供穩固的監管基礎",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -79,11 +81,45 @@ describe("General Page investigation local action boundary", () => {
       "Today, John writes about how protests changed South Africa",
       "Today’s is about the climate for immigrants in South Africa",
       "We came here to see how Cuba is managing an energy crisis",
+      "Parameters value: The value returned when there are no pending Actions. optional reducer(currentState, action): The reducer function",
+      "Returns useActionState returns an array with exactly three values: The current state",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
       ), text).toBe("page_or_documentation_residue");
     }
+  });
+
+  it("rejects a cited paper title using only its local source role", () => {
+    const context =
+      "This is a summary of: Aitken, S. J. et al. Genetic background sets the trajectory of experimental cancer evolution. Nature https://doi.org/10.1038/example.";
+    const exactClaim =
+      "Genetic background sets the trajectory of experimental cancer evolution";
+    const start = context.indexOf(exactClaim);
+    expect(generalPageInvestigationSelectionRejectionReason({
+      ...selection(exactClaim),
+      start,
+      end: start + exactClaim.length,
+    }, {
+      authorizedSourceContext: context,
+    })).toBe("page_or_documentation_residue");
+  });
+
+  it("rejects chapter-lead narration and narrow normative payloads", () => {
+    expect(generalPageInvestigationSelectionRejectionReason(
+      selection("XI For years, Dorian Gray could not free himself from the influence of this book"),
+      {
+        source: {
+          title: "The Picture of Dorian Gray - XI",
+          url: "https://books.example/text/chapter-11",
+        },
+      },
+    )).toBe("non_publicly_decidable");
+    expect(generalPageInvestigationSelectionRejectionReason(
+      selection(
+        "Modernizing disclosure practices is essential to ensuring that small businesses can thrive",
+      ),
+    )).toBe("non_publicly_decidable");
   });
 
   it("preserves complete ordinary and documentation propositions", () => {

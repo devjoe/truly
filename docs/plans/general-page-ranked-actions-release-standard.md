@@ -842,3 +842,16 @@ cover the five generalized shapes in both interface languages, including
 bibliographic role and unresolved objective ownership; the consumed
 Gate B rows may be used only for diagnostic replay. A clean successor must
 repeat formal Gate A and use a wholly fresh Gate B cohort.
+
+Repeated long-context replay then showed that prompt wording alone did not
+make those vetoes deterministic: the same clean commit alternated between two
+and four correct abstentions on the five consumed rows. The next successor
+therefore preserves the prompt-first Admission critic and adds a deliberately
+narrow local second boundary for only machine-observable, user-unacceptable
+structure: flattened documentation labels, unresolved objective ownership,
+cited-paper-title placement between `et al.` and a DOI, chapter-lead narration
+on chapter-identified book Pages, and the narrow evaluative
+`essential to ensuring` payload. The guard does not infer truth, rank utility,
+classify general opinion, inspect arbitrary domains, or rewrite text. These
+same shapes are covered by unit tests and remain subject to the unchanged
+zero-leak and recall gates on a fresh cohort.

@@ -150,7 +150,10 @@ export function scheduleGeneralPageInvestigationPreparation(
       | undefined;
     for (const [index, selection] of selections.entries()) {
       if (sourceRejectionReason ||
-          generalPageInvestigationSelectionRejectionReason(selection)) continue;
+          generalPageInvestigationSelectionRejectionReason(selection, {
+            authorizedSourceContext: request.context.mainText,
+            source,
+          })) continue;
       const stage = index + 1;
       const admissionResult = await options.scheduler.enqueue({
         id: `${id}:admit:${stage}`,
