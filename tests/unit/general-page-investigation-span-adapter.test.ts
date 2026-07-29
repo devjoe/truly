@@ -272,6 +272,8 @@ describe("General Page exact-span proposal selector with schema v12", () => {
     expect(user).toContain("Usage Enabling NAME");
     expect(user).toContain("Option Usage NAME");
     expect(user).toContain("Today’s article is about");
+    expect(user).toContain("Today, NAME writes about");
+    expect(user).toContain("We came here to see");
     expect(user).toContain("as described above");
     expect(user).toContain("Reject the whole exact span");
     expect(user).toMatch(/strongest first\.$/u);

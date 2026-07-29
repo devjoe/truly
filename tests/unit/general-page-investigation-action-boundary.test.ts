@@ -27,6 +27,10 @@ describe("General Page investigation local action boundary", () => {
       url: "https://theshovel.com.au/story",
     })).toBe("satire_source");
     expect(generalPageInvestigationSourceRejectionReason({
+      title: "The President Meets With Trump",
+      url: "https://thehardtimes.net/politics/example/",
+    })).toBe("satire_source");
+    expect(generalPageInvestigationSourceRejectionReason({
       title: "今日觀點",
       sourceName: "諷刺新聞",
       url: "https://example.test/story",
@@ -48,6 +52,7 @@ describe("General Page investigation local action boundary", () => {
       "This option removes diacritics",
       "If this option is set to 2, diacritics are removed",
       "Diacritics are removed as described above",
+      "The policy followed an unpopular war that many believe was avoidable",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -71,6 +76,9 @@ describe("General Page investigation local action boundary", () => {
       "MinInt = -1 << (intSize - 1) // MinInt32 or MinInt64 depending on intSize",
       "Special cases are: Abs(±Inf) = +Inf Example Output: 2.0 func func Acos(x)",
       "<StrictMode> <StrictMode> lets you find common bugs during development",
+      "Today, John writes about how protests changed South Africa",
+      "Today’s is about the climate for immigrants in South Africa",
+      "We came here to see how Cuba is managing an energy crisis",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),

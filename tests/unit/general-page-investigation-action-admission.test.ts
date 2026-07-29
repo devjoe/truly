@@ -120,6 +120,8 @@ describe("General Page investigation action admission critic", () => {
     expect(user).toContain("Usage Enabling NAME");
     expect(user).toContain("Option Usage NAME");
     expect(user).toContain("Today’s article is about");
+    expect(user).toContain("Today, NAME writes about");
+    expect(user).toContain("We came here to see");
     expect(user).toContain("as described above");
     expect(user).toContain("reject before judging the useful clause");
     expect(user).toContain("Reject only for a clear structural");

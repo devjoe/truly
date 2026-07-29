@@ -10,6 +10,7 @@ export type GeneralPageInvestigationLocalRejectionReason =
 const KNOWN_SATIRE_HOSTS = new Set([
   "babylonbee.com",
   "newsthump.com",
+  "thehardtimes.net",
   "theonion.com",
   "theshovel.com.au",
   "waterfordwhispersnews.com",
@@ -20,6 +21,10 @@ const UNAVAILABLE_TITLE =
   /^(?:404\b|page (?:not found|unavailable)\b|not found\b|找不到(?:此|這個|这个)?頁面|找不到網頁|頁面(?:不存在|無法使用)|页面(?:不存在|无法使用))/iu;
 const UNRESOLVED_REFERENCE =
   /^(?:(?:(?:if|when)\s+)?(?:it|this|that|these|those)\b|both\s+(?:leaders?|sides?|parties?|companies?|countries?|teams?|officials?|candidates?|figures?|groups?|people|men|women)\b)|\bas described above\b/iu;
+const VAGUE_PUBLIC_ATTRIBUTION =
+  /\bmany(?:\s+people)?\s+(?:believe|think|say|feel)\b/iu;
+const PAGE_META_DESCRIPTION =
+  /^(?:today(?:'s|’s)?(?:\s+(?:article|newsletter|edition))?\s+(?:is\s+)?about\b|today,?\s+(?:[\p{L}'’.-]+\s+){1,4}(?:writes?|reports?|explores?|discusses?)\s+about\b|we\s+(?:came|went|visited|are here)\b.{0,80}\b(?:to\s+)?(?:see|learn|find|report)\b)/iu;
 const PAGE_OR_DOCUMENTATION_RESIDUE =
   /^(?:supported by|sponsored by|presented by|advertisement|documentation\s+overview|overview\s+package|variables?\s+this section is empty)\b|(?:\bexample output:|\bfunc(?:\s+added\s+in\s+go\d+(?:\.\d+)*)?\s+func\b)|(?:^[A-Za-z_$][\w$]*\s*=\s*.+\/\/)|(?:\bthe (?:type|method|function|field|property|class|interface|package|module)\s*$)/iu;
 
@@ -65,8 +70,12 @@ export function generalPageInvestigationSelectionRejectionReason(
   selection: MaterializedGeneralPageInvestigationSpanSelection,
 ): GeneralPageInvestigationLocalRejectionReason | undefined {
   const text = selection.exactClaim.replace(/\s+/gu, " ").trim();
-  if (UNRESOLVED_REFERENCE.test(text)) return "unresolved_reference";
-  if (hasDuplicatedLeadingToken(text) || PAGE_OR_DOCUMENTATION_RESIDUE.test(text)) {
+  if (UNRESOLVED_REFERENCE.test(text) || VAGUE_PUBLIC_ATTRIBUTION.test(text)) {
+    return "unresolved_reference";
+  }
+  if (hasDuplicatedLeadingToken(text) ||
+      PAGE_META_DESCRIPTION.test(text) ||
+      PAGE_OR_DOCUMENTATION_RESIDUE.test(text)) {
     return "page_or_documentation_residue";
   }
   return undefined;
