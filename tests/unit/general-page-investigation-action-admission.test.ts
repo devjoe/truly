@@ -135,6 +135,7 @@ describe("General Page investigation action admission critic", () => {
     expect(user).toContain("'One objective', 'Other objectives', 'another goal'");
     expect(user).toContain("If any veto matches, stop and return reject");
     expect(user).toContain("Reject only for a clear structural");
+    expect(user).toContain("never omit schemaVersion");
   });
 
   it("requires the selected claim to remain exactly grounded", () => {
