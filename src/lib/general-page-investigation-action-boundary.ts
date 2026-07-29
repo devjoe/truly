@@ -34,7 +34,7 @@ const PAGE_META_DESCRIPTION =
 const PAGE_OR_DOCUMENTATION_RESIDUE =
   /^(?:supported by|sponsored by|presented by|advertisement|documentation\s+overview|overview\s+package|variables?\s+this section is empty)\b|(?:\bexample output:|\bfunc(?:\s+added\s+in\s+go\d+(?:\.\d+)*)?\s+func\b)|(?:^[A-Za-z_$][\w$]*\s*=\s*.+\/\/)|(?:\bthe (?:type|method|function|field|property|class|interface|package|module)\s*$)/iu;
 const FLATTENED_DOCUMENTATION_LABEL =
-  /^(?:parameters?|returns?|usage|examples?)\b.{0,100}:/iu;
+  /^(?:(?:parameters?|returns?|usage|examples?)\b|(?:參數|参数|回傳|返回|用法|範例|示例)).{0,100}[:：]/iu;
 const UNRESOLVED_GROUP_REFERENCE =
   /^(?:(?:one|another|other)\s+(?:objectives?|goals?|proposals?|recommendations?)\b|(?:目標|目标|目的)(?:之一|一|二|三)|(?:另一|其他)(?:項)?(?:目標|目标|目的|提案|建議|建议))/iu;
 const NORMATIVE_VALUE_JUDGMENT =
@@ -77,8 +77,8 @@ function isCitedPaperTitle(
     selection.end,
     Math.min(authorizedSourceContext.length, selection.end + 160),
   );
-  return /(?:this is a summary of|references?|本文摘要自|參考文獻|参考文献)[\s\S]{0,180}\bet al\.?\s*$/iu
-    .test(before) && /doi\.org\//iu.test(after);
+  return /(?:this is a summary of|references?|本文摘要自|參考文獻|参考文献)[\s\S]{0,180}(?:\bet al\.?|等人[。.])\s*$/iu
+    .test(before) && /(?:doi(?:\.org\/|:\s*10\.)|https?:\/\/doi\.org\/)/iu.test(after);
 }
 
 function isChapterLeadNarrative(

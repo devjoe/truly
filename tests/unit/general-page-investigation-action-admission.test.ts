@@ -64,14 +64,6 @@ describe("General Page investigation action admission critic", () => {
 
     expect(system).toContain("final admission critic");
     expect(system).toContain('"decision":"admit"|"reject"');
-    expect(system).toContain("mandatory veto checklist");
-    expect(system).toContain("paper title, citation, DOI");
-    expect(system).toContain("Parameters, Returns, Usage, Examples");
-    expect(system).toContain("'One objective', 'Other objectives', 'another goal'");
-    expect(system).toContain("literary, novel, fiction, satire, or parody Page");
-    expect(system).toContain("numbered or Roman-numeral chapter");
-    expect(system).toContain("essential, better, worse, beneficial, harmful, should");
-    expect(system).toContain("no later exception or usefulness judgment may override");
     expect(system).toContain("Independent public evidence");
     expect(system).toContain("entertainment, sport, consumer, product, celebrity");
     expect(system).toContain("private, anecdotal, subjective-only");
@@ -105,11 +97,6 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("agreement 'to wait'");
     expect(system).toContain("metadata may expose the omission but may not repair it");
     expect(system).toContain("clean, complete, standalone proposition");
-    expect(system).toContain("adjacent Page-role labels");
-    expect(system).toContain("article or newsletter meta-description");
-    expect(system).toContain("forward pointer to a following example");
-    expect(system).toContain("concrete example flow");
-    expect(system).toContain("clean substantive proposition");
     expect(system).toContain("coherent publication, date, specification, or measurement fact");
     expect(system).toContain("complete sentence naming a work and its publisher or publication year");
     expect(system).toContain("complete named career-history sentence");
@@ -124,20 +111,7 @@ describe("General Page investigation action admission critic", () => {
     expect(user).not.toContain("Selector proposed tier");
     expect(user).toContain("Nearby authorized Page context");
     expect(user).toContain(JSON.stringify({ text: authorizedSourceContext }));
-    expect(user).toContain("duplicated title or type text");
-    expect(user).toContain("Usage Enabling NAME");
-    expect(user).toContain("Option Usage NAME");
-    expect(user).toContain("Today’s article is about");
-    expect(user).toContain("Today, NAME writes about");
-    expect(user).toContain("We came here to see");
-    expect(user).toContain("as described above");
-    expect(user).toContain("reject before judging the useful clause");
-    expect(user).toContain("between an author or 'et al.' and a journal or DOI");
-    expect(user).toContain("book or ebook Page organized as a numbered or Roman-numeral chapter");
-    expect(user).toContain("'One objective', 'Other objectives', 'another goal'");
-    expect(user).toContain("If any veto matches, stop and return reject");
     expect(user).toContain("Reject only for a clear structural");
-    expect(user).toContain("never omit schemaVersion");
   });
 
   it("requires the selected claim to remain exactly grounded", () => {

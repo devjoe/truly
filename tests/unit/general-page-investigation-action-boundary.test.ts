@@ -83,6 +83,7 @@ describe("General Page investigation local action boundary", () => {
       "We came here to see how Cuba is managing an energy crisis",
       "Parameters value: The value returned when there are no pending Actions. optional reducer(currentState, action): The reducer function",
       "Returns useActionState returns an array with exactly three values: The current state",
+      "參數 value：沒有待處理 Action 時回傳的值。可選 reducer(currentState, action)：指定樂觀狀態如何更新",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -91,18 +92,28 @@ describe("General Page investigation local action boundary", () => {
   });
 
   it("rejects a cited paper title using only its local source role", () => {
-    const context =
-      "This is a summary of: Aitken, S. J. et al. Genetic background sets the trajectory of experimental cancer evolution. Nature https://doi.org/10.1038/example.";
-    const exactClaim =
-      "Genetic background sets the trajectory of experimental cancer evolution";
-    const start = context.indexOf(exactClaim);
-    expect(generalPageInvestigationSelectionRejectionReason({
-      ...selection(exactClaim),
-      start,
-      end: start + exactClaim.length,
-    }, {
-      authorizedSourceContext: context,
-    })).toBe("page_or_documentation_residue");
+    for (const { context, exactClaim } of [
+      {
+        context:
+          "This is a summary of: Aitken, S. J. et al. Genetic background sets the trajectory of experimental cancer evolution. Nature https://doi.org/10.1038/example.",
+        exactClaim:
+          "Genetic background sets the trajectory of experimental cancer evolution",
+      },
+      {
+        context:
+          "本文摘要自：林海等人。背景基因決定實驗性癌症演化軌跡。期刊 DOI:10.0000/example。",
+        exactClaim: "背景基因決定實驗性癌症演化軌跡",
+      },
+    ]) {
+      const start = context.indexOf(exactClaim);
+      expect(generalPageInvestigationSelectionRejectionReason({
+        ...selection(exactClaim),
+        start,
+        end: start + exactClaim.length,
+      }, {
+        authorizedSourceContext: context,
+      }), exactClaim).toBe("page_or_documentation_residue");
+    }
   });
 
   it("rejects chapter-lead narration and narrow normative payloads", () => {
@@ -119,6 +130,9 @@ describe("General Page investigation local action boundary", () => {
       selection(
         "Modernizing disclosure practices is essential to ensuring that small businesses can thrive",
       ),
+    )).toBe("non_publicly_decidable");
+    expect(generalPageInvestigationSelectionRejectionReason(
+      selection("簡化揭露對確保小型企業蓬勃發展至關重要"),
     )).toBe("non_publicly_decidable");
   });
 

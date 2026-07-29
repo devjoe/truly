@@ -830,28 +830,26 @@ news primary `17/18`, general primary `6/6`, and general exploratory `10/10`.
 It nevertheless failed the hard gate because five expected-none rows were
 visible. Pairwise review and holdout were not opened.
 
-Those five leaks were narrow Admission veto failures rather than recall or
+Those five leaks were narrow Admission-boundary failures rather than recall or
 transport failures: a cited scientific-paper title treated as a proposition,
 two flattened React parameter/return entries whose API subject existed only
 outside the exact span, one sentence of novel narration, and one normative SEC
-policy rationale. The next candidate therefore keeps the same three stages and
-adds one prompt-first mandatory veto checklist at the start of Admission. It
-does not add a local semantic classifier, regex rejection rule, model stage,
-UI state, source-domain exception, or relaxed threshold. Synthetic controls
-cover the five generalized shapes in both interface languages, including
-bibliographic role and unresolved objective ownership; the consumed
-Gate B rows may be used only for diagnostic replay. A clean successor must
-repeat formal Gate A and use a wholly fresh Gate B cohort.
+policy rationale. Prompt-only successors made those vetoes explicit, but
+consumed-row replay still alternated between two and four correct abstentions.
+Widening direct Admission from its frozen 32 controls to 42 also regressed
+stable private-anecdote, incomplete-API-subject, and unresolved-reference
+decisions: two one-shot diagnostics scored only `31/42` and `32/42` despite
+`42/42` protocol success.
 
-Repeated long-context replay then showed that prompt wording alone did not
-make those vetoes deterministic: the same clean commit alternated between two
-and four correct abstentions on the five consumed rows. The next successor
-therefore preserves the prompt-first Admission critic and adds a deliberately
-narrow local second boundary for only machine-observable, user-unacceptable
+The clean successor therefore restores the concise model Admission contract
+that already earned six `32/32` formal receipts and keeps a deliberately narrow
+local second boundary for only machine-observable, user-unacceptable
 structure: flattened documentation labels, unresolved objective ownership,
-cited-paper-title placement between `et al.` and a DOI, chapter-lead narration
-on chapter-identified book Pages, and the narrow evaluative
-`essential to ensuring` payload. The guard does not infer truth, rank utility,
-classify general opinion, inspect arbitrary domains, or rewrite text. These
-same shapes are covered by unit tests and remain subject to the unchanged
-zero-leak and recall gates on a fresh cohort.
+cited-paper-title placement between an author marker and a DOI, chapter-lead
+narration on chapter-identified book Pages, and the narrow evaluative
+`essential to ensuring` payload. These residue shapes belong to deterministic
+boundary tests rather than the direct model capability receipt. The guard does
+not infer truth, rank utility, classify general opinion, inspect arbitrary
+domains, or rewrite text. The three-stage ceremony, zero-leak gate, recall
+floors, Page-only scope, and requirement for a wholly fresh Gate B cohort are
+unchanged.
