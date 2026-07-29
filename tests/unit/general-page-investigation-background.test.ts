@@ -664,6 +664,8 @@ describe("background General Page investigation preparation", () => {
     ]) {
       const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
       const sendMessage = vi.fn();
+      const capture = createGeneralPageInvestigationCaptureBuffer();
+      capture.enabled = true;
       const callAdapter = vi.fn(async (input: any) => ({
         ok: true,
         attempts: 1 as const,
@@ -687,6 +689,7 @@ describe("background General Page investigation preparation", () => {
         model: "fixture-model",
         structuredOutputMode: "json_object",
         resourceKey: "local|fixture-model",
+        capture,
         callAdapter,
         callAdmission,
         callTier,
@@ -696,6 +699,7 @@ describe("background General Page investigation preparation", () => {
       expect(callAdapter).toHaveBeenCalledTimes(1);
       expect(callAdmission).not.toHaveBeenCalled();
       expect(callTier).not.toHaveBeenCalled();
+      expect(capture.items).toHaveLength(1);
       expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
         status: "ineligible",
       }));
