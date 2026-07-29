@@ -11,20 +11,22 @@ It does not authorize release by itself.
 ## Product contract
 
 For Page reading, the Selector receives a bounded list of exact spans produced
-locally from the current loaded document. In the first model job it returns
-only:
+locally from the current loaded document. In the first model job it ranks up to
+three internal candidates:
 
 ```json
-{"schemaVersion":11,"selection":{"candidateId":"span:4"}}
+{"schemaVersion":12,"selections":[{"candidateId":"span:4"},{"candidateId":"span:7"},{"candidateId":"span:2"}]}
 ```
 
-`selection` contains exactly one supplied local `candidateId`. The Selector
-only ranks candidate identity; it does not admit, reject, or classify
-presentation. The Selector sees the complete bounded candidate list and full
-authorized Page context. It must prefer a strong first verification action,
-then a complete publicly checkable but more ordinary or situational
-proposition. When all candidates violate an Admission boundary, it still
-returns the least-defective candidate for the separate terminal critic.
+`selections` contains distinct supplied local `candidateId` values in strongest
+first order. These are internal fallbacks, not multiple reader-facing actions:
+runtime still publishes at most one action. The Selector only ranks candidate
+identity; it does not admit, reject, or classify presentation. The Selector
+sees the complete bounded candidate list and full authorized Page context. It
+must prefer a strong first verification action, then complete publicly
+checkable but more ordinary or situational propositions. When too few
+candidates survive the Selector boundary, it appends the least-defective
+remaining candidates for the separate Admission critic to reject.
 
 The tier is about the likely usefulness of investigating the item, not its
 truth, falsity, or calibrated model confidence. Runtime does not receive the
@@ -52,20 +54,23 @@ returns only:
 
 `tier` is `primary` or `exploratory` and describes likely investigation
 utility, not truth or calibrated model confidence. The Tier Classifier cannot
-reject or rewrite the action. `reject`, timeout, malformed output, invalid
-atomic state, stale scope, or any stage failure produces no action. Selector,
-Admission, and Tier are separate low-priority jobs so user-blocking and
-bounded Feed work may run between them. The panel receives only one final
-atomic result.
+reject or rewrite the action. Admission rejection advances to the next ranked
+internal candidate. Runtime returns the first admitted `primary`; if none is
+primary, it returns the first admitted `exploratory`. Exhausted candidates,
+timeout, malformed output, invalid atomic state, stale scope, or any stage
+failure produces no action. Selector, Admission, and Tier are separate
+low-priority jobs so user-blocking and bounded Feed work may run between them.
+The panel receives only one final atomic result.
 
 Local code owns the exact displayed text, copy action, localized Gemini
 handoff, source metadata, Page/Focus session boundary, and all three stages'
-identity checks. There is no repair call, alternate fallback, second ranker,
-model-authored query, evidence-family guess, or local semantic rewrite.
+identity checks. There is no repair call, second ranker, model-authored query,
+evidence-family guess, or local semantic rewrite. The only fallback is the
+same Selector response's bounded ranked list.
 
-The admitted action is the one Page action. The UI reveals it only after all
-three jobs settle; Admission rejection reveals no investigation action. A
-primary action uses the normal presentation. An
+The admitted action is the one Page action. The UI reveals it only after the
+bounded internal evaluation settles; individual rejected candidates are never
+shown. A primary action uses the normal presentation. An
 exploratory action uses the same compact row but adds a quiet, localized,
 always-visible cue explaining that the item's verification value is less
 certain and deserves user review. The cue must not imply that the proposition
@@ -105,9 +110,10 @@ Local code rejects only failures a user should not receive:
 
 Topic importance, public-interest consequence, preferred evidence family, and
 whether a valid proposition is primary or exploratory are Selector ranking
-signals, not local rejection reasons. The Selector may return no proposal
-rather than choose the best of a bad candidate set. Admission may veto a
-selected span only when its exact proposition is private or subjective-only,
+signals, not local rejection reasons. When every ranked candidate is
+unsuitable, Admission rejects each bounded fallback and runtime publishes no
+action. Admission may veto a selected span only when its exact proposition is
+private or subjective-only,
 unsafe, structurally incomplete, not independently publicly decidable, derived
 from publisher residue, or otherwise outside the proposition-shape contract.
 An ordinary definition, API behavior, workflow, or central catalog-record fact

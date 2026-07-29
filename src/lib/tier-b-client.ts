@@ -1134,7 +1134,8 @@ export function buildTierBGeneralPageInvestigationSpanAdapterChatBody(
       { role: "user", content: buildGeneralPageInvestigationSpanAdapterPrompt(req) },
     ],
     temperature: 0,
-    // The model returns one recommended local ID or abstains.
+    // The model returns up to three ranked local IDs; local code still
+    // publishes at most one action after admission and tier classification.
     // Keep the budget deliberately small so derived work does not crowd out
     // the primary Feed/Page reading queue.
     max_tokens: 96,
@@ -1142,7 +1143,7 @@ export function buildTierBGeneralPageInvestigationSpanAdapterChatBody(
       ? {
           type: "json_schema",
           json_schema: {
-            name: "truly_general_page_investigation_span_adapter_v11",
+            name: "truly_general_page_investigation_span_adapter_v12",
             strict: true,
             schema: generalPageInvestigationSpanAdapterJsonSchema(
               req.candidates.map(({ id }) => id),

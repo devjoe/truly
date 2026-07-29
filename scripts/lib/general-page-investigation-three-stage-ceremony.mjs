@@ -87,16 +87,18 @@ function validateComposedReceipt(receipt, label, errors) {
   }
   const admissionRequested = receipt.counts?.admissionRequested;
   const tierRequested = receipt.counts?.tierRequested;
-  if (admissionRequested !== 30 ||
+  if (!Number.isInteger(admissionRequested) ||
+      admissionRequested < 30 ||
+      admissionRequested > 90 ||
       receipt.counts?.admissionProtocolSucceeded !== admissionRequested ||
       receipt.counts?.admissionProtocolFailed !== 0 ||
-      receipt.counts?.admissionAdmitted !== 24 ||
-      receipt.counts?.admissionRejected !== 6 ||
-      tierRequested !== 24 ||
+      receipt.counts?.admissionAdmitted + receipt.counts?.admissionRejected !==
+        admissionRequested ||
+      tierRequested !== receipt.counts?.admissionAdmitted ||
       receipt.counts?.tierProtocolSucceeded !== tierRequested ||
       receipt.counts?.tierProtocolFailed !== 0 ||
       receipt.networkBoundary?.modelRequests !== 30 + admissionRequested + tierRequested) {
-    errors.push(`${label}: composed Selector, terminal Admission, and Tier request counts disagree`);
+    errors.push(`${label}: composed Selector, bounded Admission fallbacks, and Tier request counts disagree`);
   }
   if (receipt.contract?.repairPolicy !== "none_one_shot" ||
       receipt.contract?.protocolRetryPolicy !== "disabled_for_release_gate" ||

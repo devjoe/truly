@@ -339,9 +339,14 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
     ...selection,
     exactGrounding: row.text.slice(selection.start, selection.end) === selection.exactClaim,
   }));
-  const selection = selections[0];
-  const admission = result.ok && selection
-    ? await callTierBGeneralPageInvestigationActionAdmission({
+  const admissionAttempts = [];
+  const tierAttempts = [];
+  let admittedAction = null;
+  let exploratoryAction = null;
+  let downstreamProtocolOk = true;
+  if (result.ok) {
+    for (const selection of selections) {
+      const admission = await callTierBGeneralPageInvestigationActionAdmission({
         endpoint,
         model,
         structuredOutputMode,
@@ -350,10 +355,14 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
         selection,
         authorizedSourceContext: row.text,
         source: row.sourceContext,
-      })
-    : null;
-  const tier = admission?.ok === true && admission.value?.decision === "admit" && selection
-    ? await callTierBGeneralPageInvestigationActionTier({
+      });
+      admissionAttempts.push(admission);
+      if (!admission.ok || !admission.value) {
+        downstreamProtocolOk = false;
+        break;
+      }
+      if (admission.value.decision === "reject") continue;
+      const tier = await callTierBGeneralPageInvestigationActionTier({
         endpoint,
         model,
         structuredOutputMode,
@@ -362,15 +371,17 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
         selection,
         authorizedSourceContext: row.text,
         source: row.sourceContext,
-      })
-    : null;
-  const finalTier = tier?.ok === true ? tier.value?.tier ?? null : null;
-  const admittedAction = finalTier !== null && selection
-    ? {
+      });
+      tierAttempts.push(tier);
+      if (!tier.ok || !tier.value) {
+        downstreamProtocolOk = false;
+        break;
+      }
+      const candidateAction = {
         ...selection,
-        presentationTier: finalTier,
+        presentationTier: tier.value.tier,
         presentation: buildGeneralPageInvestigationActionPresentation(
-          { ...selection, presentationTier: finalTier },
+          { ...selection, presentationTier: tier.value.tier },
           {
             outputLang: row.outputLang,
             source: row.sourceContext,
@@ -378,14 +389,19 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
         ),
         exactGrounding:
           row.text.slice(selection.start, selection.end) === selection.exactClaim,
+      };
+      if (tier.value.tier === "primary") {
+        admittedAction = candidateAction;
+        break;
       }
-    : null;
-  const protocolOk = result.ok && (!selection ||
-    (admission?.ok === true &&
-      (admission.value?.decision === "reject" || tier?.ok === true)));
+      exploratoryAction ??= candidateAction;
+    }
+  }
+  admittedAction ??= exploratoryAction;
+  const protocolOk = result.ok && downstreamProtocolOk;
   const status = !protocolOk
     ? "protocol_failed"
-    : !selection || finalTier === null
+    : !admittedAction
     ? "abstain"
     : "prepared";
   return {
@@ -402,26 +418,22 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
       issue: result.issue,
       raw: result.raw,
     },
-    admission: admission
-      ? {
-          ok: admission.ok,
-          decision: admission.value?.decision,
-          finishReason: admission.finishReason,
-          usage: admission.usage,
-          error: admission.error,
-          raw: admission.raw,
-        }
-      : null,
-    tier: tier
-      ? {
-          ok: tier.ok,
-          tier: tier.value?.tier,
-          finishReason: tier.finishReason,
-          usage: tier.usage,
-          error: tier.error,
-          raw: tier.raw,
-        }
-      : null,
+    admissionAttempts: admissionAttempts.map((admission) => ({
+      ok: admission.ok,
+      decision: admission.value?.decision,
+      finishReason: admission.finishReason,
+      usage: admission.usage,
+      error: admission.error,
+      raw: admission.raw,
+    })),
+    tierAttempts: tierAttempts.map((tier) => ({
+      ok: tier.ok,
+      tier: tier.value?.tier,
+      finishReason: tier.finishReason,
+      usage: tier.usage,
+      error: tier.error,
+      raw: tier.raw,
+    })),
     proposedActions,
     actions: admittedAction ? [admittedAction] : [],
   };
@@ -449,10 +461,16 @@ const prepared = results.filter((row) => row.status === "prepared").length;
 const abstained = results.filter((row) => row.status === "abstain").length;
 const proposed = results.reduce((sum, row) =>
   sum + (Array.isArray(row.proposedActions) ? row.proposedActions.length : 0), 0);
-const admissionRejected = results.filter((row) =>
-  (row.admission as { decision?: string } | null)?.decision === "reject").length;
-const tierClassified = results.filter((row) =>
-  (row.tier as { ok?: boolean } | null)?.ok === true).length;
+const admissionRejected = results.reduce((sum, row) =>
+  sum + (Array.isArray(row.admissionAttempts)
+    ? row.admissionAttempts.filter(
+        (attempt) => attempt?.decision === "reject",
+      ).length
+    : 0), 0);
+const tierClassified = results.reduce((sum, row) =>
+  sum + (Array.isArray(row.tierAttempts)
+    ? row.tierAttempts.filter((attempt) => attempt?.ok === true).length
+    : 0), 0);
 const actionCount = results.reduce((sum, row) => sum + (Array.isArray(row.actions) ? row.actions.length : 0), 0);
 const exactGrounding = results.reduce((sum, row) => sum +
   (Array.isArray(row.actions) ? row.actions.filter((action) => action.exactGrounding === true).length : 0), 0);
@@ -469,7 +487,7 @@ const meta = {
     trackedDiffSha256: candidateSnapshot.trackedDiffSha256,
   },
   contract: {
-    selector: "ranked_exact_span_proposal_v10",
+    selector: "ranked_exact_span_proposal_v12_with_backups",
     selectorPromptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
     admission: "reader_action_admission_v4",
     admissionPromptSha256: sha256Text(buildGeneralPageInvestigationActionAdmissionSystemPrompt()),
@@ -479,8 +497,9 @@ const meta = {
     outputLanguage: outputLang,
     repairMode: "none",
     maxCandidates: 48,
+    maxInternalProposals: 3,
     maxActions: 1,
-    replacementAfterRejection: false,
+    replacementAfterRejection: true,
     inputBoundary: runtimeEnvelopeMode ? "captured_adapter_envelope" : "legacy_rebuilt_candidates",
   },
   model: {

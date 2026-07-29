@@ -158,10 +158,19 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
   const gateRole = fixture.gateRole;
   const expectedAction = fixture.expectedAction;
   const selections = result.value?.selections ?? [];
-  const selection = selections[0];
   const admissionStarted = Date.now();
-  const admission = withAdmission && result.ok && selection
-    ? await callTierBGeneralPageInvestigationActionAdmission({
+  const admissionAttempts = [];
+  const tierAttempts = [];
+  let admittedSelection:
+    | (typeof selections[number] & { presentationTier: "primary" | "exploratory" })
+    | undefined;
+  let exploratorySelection:
+    | (typeof selections[number] & { presentationTier: "exploratory" })
+    | undefined;
+  let downstreamProtocolOk = true;
+  if (withAdmission && result.ok) {
+    for (const selection of selections) {
+      const admission = await callTierBGeneralPageInvestigationActionAdmission({
         endpoint,
         model,
         structuredOutputMode: responseFormat,
@@ -170,12 +179,14 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
         selection,
         authorizedSourceContext: fixture.groundingText,
         source: fixture.source,
-      })
-    : null;
-  const admissionLatencyMs = admission ? Date.now() - admissionStarted : 0;
-  const tierStarted = Date.now();
-  const tier = withAdmission && selection && admission?.value?.decision === "admit"
-    ? await callTierBGeneralPageInvestigationActionTier({
+      });
+      admissionAttempts.push(admission);
+      if (!admission.ok || !admission.value) {
+        downstreamProtocolOk = false;
+        break;
+      }
+      if (admission.value.decision === "reject") continue;
+      const tier = await callTierBGeneralPageInvestigationActionTier({
         endpoint,
         model,
         structuredOutputMode: responseFormat,
@@ -184,18 +195,29 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
         selection,
         authorizedSourceContext: fixture.groundingText,
         source: fixture.source,
-      })
-    : null;
-  const tierLatencyMs = tier ? Date.now() - tierStarted : 0;
-  const protocolOk = result.ok && (!withAdmission || !selection ||
-    (admission?.ok === true &&
-      (admission.value?.decision === "reject" || tier?.ok === true)));
-  const finalTier = withAdmission && admission?.value?.decision === "admit"
-    ? tier?.value?.tier ?? null
-    : null;
-  const admittedSelections = selection && finalTier
-    ? [{ ...selection, presentationTier: finalTier }]
-    : [];
+      });
+      tierAttempts.push(tier);
+      if (!tier.ok || !tier.value) {
+        downstreamProtocolOk = false;
+        break;
+      }
+      if (tier.value.tier === "primary") {
+        admittedSelection = { ...selection, presentationTier: "primary" };
+        break;
+      }
+      exploratorySelection ??= { ...selection, presentationTier: "exploratory" };
+    }
+  }
+  admittedSelection ??= exploratorySelection;
+  const admissionLatencyMs = admissionAttempts.length > 0
+    ? Date.now() - admissionStarted
+    : 0;
+  const tierLatencyMs = tierAttempts.reduce(
+    (sum, attempt) => sum + (attempt.latencyMs ?? 0),
+    0,
+  );
+  const protocolOk = result.ok && (!withAdmission || downstreamProtocolOk);
+  const admittedSelections = admittedSelection ? [admittedSelection] : [];
   const decision = admittedSelections.length > 0 ? "prepared" : "abstain";
   const actualAction: ExpectedAction = admittedSelections[0]?.presentationTier ?? "none";
   const presentations = admittedSelections.map((selected) =>
@@ -233,26 +255,22 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     latencyMs: Date.now() - started,
     raw: result.raw,
     value: result.value,
-    admission: admission
-      ? {
-          ok: admission.ok,
-          decision: admission.value?.decision,
-          finishReason: admission.finishReason,
-          usage: admission.usage,
-          error: admission.error,
-          raw: admission.raw,
-        }
-      : null,
-    tier: tier
-      ? {
-          ok: tier.ok,
-          tier: tier.value?.tier,
-          finishReason: tier.finishReason,
-          usage: tier.usage,
-          error: tier.error,
-          raw: tier.raw,
-        }
-      : null,
+    admissionAttempts: admissionAttempts.map((attempt) => ({
+      ok: attempt.ok,
+      decision: attempt.value?.decision,
+      finishReason: attempt.finishReason,
+      usage: attempt.usage,
+      error: attempt.error,
+      raw: attempt.raw,
+    })),
+    tierAttempts: tierAttempts.map((attempt) => ({
+      ok: attempt.ok,
+      tier: attempt.value?.tier,
+      finishReason: attempt.finishReason,
+      usage: attempt.usage,
+      error: attempt.error,
+      raw: attempt.raw,
+    })),
     presentations,
   };
 }
@@ -290,10 +308,14 @@ const localeCorrect = localeEligible.filter((row) => row.localeCorrect).length;
 const latencyValues = results.map((row) => row.latencyMs).toSorted((left, right) => left - right);
 const latencyPercentile = (percentile: number) =>
   latencyValues[Math.max(0, Math.ceil(latencyValues.length * percentile) - 1)] ?? 0;
-const admissionRequested = results.filter((row) => row.admission).length;
-const admissionProtocolSucceeded = results.filter((row) => row.admission?.ok === true).length;
-const tierRequested = results.filter((row) => row.tier).length;
-const tierProtocolSucceeded = results.filter((row) => row.tier?.ok === true).length;
+const admissionRequested = results.reduce((sum, row) =>
+  sum + row.admissionAttempts.length, 0);
+const admissionProtocolSucceeded = results.reduce((sum, row) =>
+  sum + row.admissionAttempts.filter((attempt) => attempt.ok === true).length, 0);
+const tierRequested = results.reduce((sum, row) =>
+  sum + row.tierAttempts.length, 0);
+const tierProtocolSucceeded = results.reduce((sum, row) =>
+  sum + row.tierAttempts.filter((attempt) => attempt.ok === true).length, 0);
 const gates = {
   protocol: { result: protocolSucceeded, required: fixtures.length, pass: protocolSucceeded === fixtures.length },
   primaryCorrect: {
@@ -446,8 +468,8 @@ const artifact = {
     fixtureSetSha256: sha256CanonicalJson(fixtures),
     sourceOwnership: "local_exact_span",
     modelAuthoredFields: withAdmission
-      ? ["selection", "decision", "tier"]
-      : ["selection"],
+      ? ["selections", "decision", "tier"]
+      : ["selections"],
     locallyOwnedFields: ["exactClaim", "sourceQuote", "displayClaim", "evidenceHint", "askAiPrompt"],
     repairPolicy: "none_one_shot",
     protocolRetryPolicy: "disabled_for_release_gate",
@@ -479,9 +501,12 @@ const artifact = {
       admissionRequested,
       admissionProtocolSucceeded,
       admissionProtocolFailed: admissionRequested - admissionProtocolSucceeded,
-      admissionAdmitted: results.filter((row) =>
-        row.admission?.decision === "admit").length,
-      admissionRejected: results.filter((row) => row.admission?.decision === "reject").length,
+      admissionAdmitted: results.reduce((sum, row) =>
+        sum + row.admissionAttempts.filter((attempt) =>
+          attempt.decision === "admit").length, 0),
+      admissionRejected: results.reduce((sum, row) =>
+        sum + row.admissionAttempts.filter((attempt) =>
+          attempt.decision === "reject").length, 0),
       tierRequested,
       tierProtocolSucceeded,
       tierProtocolFailed: tierRequested - tierProtocolSucceeded,

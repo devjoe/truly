@@ -77,11 +77,12 @@ function investigationSourceLanguage(text: string, fallback?: Lang): Lang | unde
 }
 
 /**
- * Starts three low-priority stages. The first model call proposes one locally
- * owned exact span, the second admits/rejects it, and the third classifies its
- * display tier. Keeping the stages as separate derived scheduler jobs lets
- * already-queued user work run between them, while the panel still receives
- * only one final atomic result.
+ * Starts low-priority ranking, admission, and tier stages. The first model call
+ * proposes up to three locally owned exact spans. Later stages evaluate those
+ * backups in order, preferring the first primary result and otherwise retaining
+ * the first exploratory result. Separate derived scheduler jobs let already
+ * queued user work run between them, while the panel still receives only one
+ * final atomic result.
  * Reading-model claims remain outside the action identity boundary.
  */
 export function scheduleGeneralPageInvestigationPreparation(
@@ -134,57 +135,72 @@ export function scheduleGeneralPageInvestigationPreparation(
     if (!selectionResult.ok || !selectionResult.value) {
       return { status: "unavailable" as const };
     }
-    const selection = selectionResult.value.selections[0];
-    if (!selection) {
+    const selections = selectionResult.value.selections;
+    if (selections.length === 0) {
       return { status: "ineligible" as const };
     }
-    const admissionResult = await options.scheduler.enqueue({
-      id: `${id}:admit`,
-      resourceKey: options.resourceKey,
-      priority: "derived",
-      dedupeKey: `${id}:admit`,
-      supersedeKey: `general-page-investigation:${request.tabId}:${request.scope}:admit`,
-      run: () => callAdmission({
-        endpoint: options.endpoint,
-        model: options.model,
-        structuredOutputMode: options.structuredOutputMode,
-        apiKey: options.apiKey,
-        timeoutMs: ACTION_ADMISSION_TIMEOUT_MS,
-        selection,
-        authorizedSourceContext: request.context.mainText,
-        source,
-      }),
-    });
-    if (!admissionResult.ok || !admissionResult.value) {
-      return { status: "unavailable" as const };
+    let exploratorySelection:
+      | (typeof selections[number] & { presentationTier: "exploratory" })
+      | undefined;
+    for (const [index, selection] of selections.entries()) {
+      const stage = index + 1;
+      const admissionResult = await options.scheduler.enqueue({
+        id: `${id}:admit:${stage}`,
+        resourceKey: options.resourceKey,
+        priority: "derived",
+        dedupeKey: `${id}:admit:${stage}`,
+        supersedeKey:
+          `general-page-investigation:${request.tabId}:${request.scope}:admit:${stage}`,
+        run: () => callAdmission({
+          endpoint: options.endpoint,
+          model: options.model,
+          structuredOutputMode: options.structuredOutputMode,
+          apiKey: options.apiKey,
+          timeoutMs: ACTION_ADMISSION_TIMEOUT_MS,
+          selection,
+          authorizedSourceContext: request.context.mainText,
+          source,
+        }),
+      });
+      if (!admissionResult.ok || !admissionResult.value) {
+        return { status: "unavailable" as const };
+      }
+      if (admissionResult.value.decision === "reject") continue;
+      const tierResult = await options.scheduler.enqueue({
+        id: `${id}:tier:${stage}`,
+        resourceKey: options.resourceKey,
+        priority: "derived",
+        dedupeKey: `${id}:tier:${stage}`,
+        supersedeKey:
+          `general-page-investigation:${request.tabId}:${request.scope}:tier:${stage}`,
+        run: () => callTier({
+          endpoint: options.endpoint,
+          model: options.model,
+          structuredOutputMode: options.structuredOutputMode,
+          apiKey: options.apiKey,
+          timeoutMs: ACTION_TIER_TIMEOUT_MS,
+          selection,
+          authorizedSourceContext: request.context.mainText,
+          source,
+        }),
+      });
+      if (!tierResult.ok || !tierResult.value) {
+        return { status: "unavailable" as const };
+      }
+      if (tierResult.value.tier === "primary") {
+        return {
+          status: "prepared" as const,
+          selection: { ...selection, presentationTier: "primary" as const },
+        };
+      }
+      exploratorySelection ??= {
+        ...selection,
+        presentationTier: "exploratory",
+      };
     }
-    if (admissionResult.value.decision === "reject") {
-      return { status: "ineligible" as const };
-    }
-    const tierResult = await options.scheduler.enqueue({
-      id: `${id}:tier`,
-      resourceKey: options.resourceKey,
-      priority: "derived",
-      dedupeKey: `${id}:tier`,
-      supersedeKey: `general-page-investigation:${request.tabId}:${request.scope}:tier`,
-      run: () => callTier({
-        endpoint: options.endpoint,
-        model: options.model,
-        structuredOutputMode: options.structuredOutputMode,
-        apiKey: options.apiKey,
-        timeoutMs: ACTION_TIER_TIMEOUT_MS,
-        selection,
-        authorizedSourceContext: request.context.mainText,
-        source,
-      }),
-    });
-    if (!tierResult.ok || !tierResult.value) {
-      return { status: "unavailable" as const };
-    }
-    return {
-      status: "prepared" as const,
-      selection: { ...selection, presentationTier: tierResult.value.tier },
-    };
+    return exploratorySelection
+      ? { status: "prepared" as const, selection: exploratorySelection }
+      : { status: "ineligible" as const };
   }).then((result) => {
     if (result.status === "unavailable") {
       sendSafely(options.sendMessage, {

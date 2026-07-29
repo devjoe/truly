@@ -48,7 +48,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 11 as const,
+        schemaVersion: 12 as const,
         selections: [{
           candidateId: input.candidates[1].id,
           exactClaim: input.candidates[1].exactText,
@@ -95,11 +95,11 @@ describe("background General Page investigation preparation", () => {
       },
       {
         priority: "derived",
-        supersedeKey: "general-page-investigation:42:page:admit",
+        supersedeKey: "general-page-investigation:42:page:admit:1",
       },
       {
         priority: "derived",
-        supersedeKey: "general-page-investigation:42:page:tier",
+        supersedeKey: "general-page-investigation:42:page:tier:1",
       },
     ]);
     expect(callAdapter).toHaveBeenCalledTimes(1);
@@ -155,7 +155,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 11 as const,
+        schemaVersion: 12 as const,
         selections: [{
           candidateId: input.candidates[0].id,
           exactClaim: input.candidates[0].exactText,
@@ -197,6 +197,80 @@ describe("background General Page investigation preparation", () => {
     }));
   });
 
+  it("uses ranked backups internally and publishes only the strongest admitted tier", async () => {
+    const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
+    const sendMessage = vi.fn();
+    const callAdapter = vi.fn(async (input: any) => ({
+      ok: true,
+      attempts: 1 as const,
+      value: {
+        schemaVersion: 12 as const,
+        selections: input.candidates.slice(0, 3).map((candidate: any) => ({
+          candidateId: candidate.id,
+          exactClaim: candidate.exactText,
+          sourceQuote: candidate.exactText,
+          start: candidate.start,
+          end: candidate.end,
+        })),
+      },
+    }));
+    const callAdmission = vi.fn(async (input: any) => ({
+      ok: true,
+      value: {
+        schemaVersion: 4 as const,
+        decision: input.selection.candidateId === "span:1"
+          ? "reject" as const
+          : "admit" as const,
+      },
+    }));
+    const callTier = vi.fn(async (input: any) => ({
+      ok: true,
+      value: {
+        schemaVersion: 1 as const,
+        tier: input.selection.candidateId === "span:3"
+          ? "primary" as const
+          : "exploratory" as const,
+      },
+    }));
+
+    scheduleGeneralPageInvestigationPreparation({
+      scheduler: scheduler as never,
+      request: {
+        ...request,
+        context: {
+          ...request.context,
+          mainText: [
+            "食藥署公布232項產品名單。",
+            "市府說明資料將在網站更新。",
+            "衛生局命令遠帆公司在七月三十一日前完成下架。",
+          ].join(""),
+        },
+      },
+      endpoint: "http://127.0.0.1:8000/v1",
+      model: "fixture-model",
+      structuredOutputMode: "json_schema",
+      resourceKey: "gx10|fixture-model",
+      callAdapter,
+      callAdmission,
+      callTier,
+      sendMessage,
+    });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    expect(callAdapter).toHaveBeenCalledTimes(1);
+    expect(callAdmission).toHaveBeenCalledTimes(3);
+    expect(callTier).toHaveBeenCalledTimes(2);
+    expect(sendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      status: "prepared",
+      preparedActions: [
+        expect.objectContaining({
+          displayClaim: "衛生局命令遠帆公司在七月三十一日前完成下架",
+          presentationTier: "primary",
+        }),
+      ],
+    }));
+  });
+
   it("does not reveal the action before tier classification settles", async () => {
     const scheduler = { enqueue: vi.fn(async (job: any) => job.run()) };
     const sendMessage = vi.fn();
@@ -204,7 +278,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 11 as const,
+        schemaVersion: 12 as const,
         selections: [{
           candidateId: input.candidates[0].id,
           exactClaim: input.candidates[0].exactText,
@@ -261,7 +335,7 @@ describe("background General Page investigation preparation", () => {
         ok: true,
         attempts: 1 as const,
         value: {
-          schemaVersion: 11 as const,
+          schemaVersion: 12 as const,
           selections: [{
             candidateId: input.candidates[0].id,
             exactClaim: input.candidates[0].exactText,
@@ -336,7 +410,7 @@ describe("background General Page investigation preparation", () => {
         ok: true,
         attempts: 1 as const,
         value: {
-          schemaVersion: 11 as const,
+          schemaVersion: 12 as const,
           selections: [{
             candidateId: input.candidates[0].id,
             exactClaim: input.candidates[0].exactText,
@@ -409,7 +483,7 @@ describe("background General Page investigation preparation", () => {
     const callAdapter = vi.fn(async () => ({
       ok: true,
       attempts: 1 as const,
-      value: { schemaVersion: 11 as const, selections: [] },
+      value: { schemaVersion: 12 as const, selections: [] },
     }));
 
     scheduleGeneralPageInvestigationPreparation({
@@ -503,7 +577,7 @@ describe("background General Page investigation preparation", () => {
       ok: true,
       attempts: 1 as const,
       value: {
-        schemaVersion: 11 as const,
+        schemaVersion: 12 as const,
         selections: [],
       },
     }));
@@ -535,7 +609,7 @@ describe("background General Page investigation preparation", () => {
     const callAdapter = vi.fn(async () => ({
       ok: true,
       attempts: 1 as const,
-      value: { schemaVersion: 11 as const, selections: [selection] },
+      value: { schemaVersion: 12 as const, selections: [selection] },
     }));
 
     for (const admissionResult of [
