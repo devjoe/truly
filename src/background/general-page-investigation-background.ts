@@ -112,7 +112,8 @@ export function scheduleGeneralPageInvestigationPreparation(
     publishedAt: request.context.publishedAt,
     url: request.context.canonicalUrl || request.context.url,
   };
-  if (generalPageInvestigationSourceRejectionReason(source)) return false;
+  const sourceRejectionReason =
+    generalPageInvestigationSourceRejectionReason(source);
   const adapterRequest: TierBGeneralPageInvestigationSpanAdapterRequest = {
     endpoint: options.endpoint,
     model: options.model,
@@ -148,7 +149,8 @@ export function scheduleGeneralPageInvestigationPreparation(
       | (typeof selections[number] & { presentationTier: "exploratory" })
       | undefined;
     for (const [index, selection] of selections.entries()) {
-      if (generalPageInvestigationSelectionRejectionReason(selection)) continue;
+      if (sourceRejectionReason ||
+          generalPageInvestigationSelectionRejectionReason(selection)) continue;
       const stage = index + 1;
       const admissionResult = await options.scheduler.enqueue({
         id: `${id}:admit:${stage}`,

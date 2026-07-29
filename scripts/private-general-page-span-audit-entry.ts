@@ -324,24 +324,6 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
   if (candidates.length < 1) {
     return privateSpanAuditNoCandidateResult(base);
   }
-  const sourceRejectionReason =
-    generalPageInvestigationSourceRejectionReason(row.sourceContext);
-  if (sourceRejectionReason) {
-    return {
-      ...base,
-      ok: true,
-      status: "abstain",
-      selector: { ok: true, skipped: "local_source_boundary" },
-      admissionAttempts: [],
-      tierAttempts: [],
-      localRejectionAttempts: [{
-        candidateId: null,
-        reason: sourceRejectionReason,
-      }],
-      proposedActions: [],
-      actions: [],
-    };
-  }
   const started = Date.now();
   const result = await callTierBGeneralPageInvestigationSpanAdapter({
     endpoint,
@@ -367,7 +349,14 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
   let admittedAction = null;
   let exploratoryAction = null;
   let downstreamProtocolOk = true;
-  if (result.ok) {
+  const sourceRejectionReason =
+    generalPageInvestigationSourceRejectionReason(row.sourceContext);
+  if (result.ok && sourceRejectionReason) {
+    localRejectionAttempts.push({
+      candidateId: null,
+      reason: sourceRejectionReason,
+    });
+  } else if (result.ok) {
     for (const selection of selections) {
       const localRejectionReason =
         generalPageInvestigationSelectionRejectionReason(selection);
