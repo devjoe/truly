@@ -72,7 +72,6 @@ export function generalPageInvestigationSpanAdapterJsonSchema(candidateIds: stri
         type: "array",
         minItems: Math.min(3, candidateIds.length),
         maxItems: Math.min(3, candidateIds.length),
-        uniqueItems: true,
         items: {
           type: "object",
           additionalProperties: false,

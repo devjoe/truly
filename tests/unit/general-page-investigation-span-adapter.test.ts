@@ -73,7 +73,6 @@ describe("General Page exact-span proposal selector with schema v12", () => {
       type: "array",
       minItems: 3,
       maxItems: 3,
-      uniqueItems: true,
       items: {
         type: "object",
         additionalProperties: false,
@@ -88,6 +87,7 @@ describe("General Page exact-span proposal selector with schema v12", () => {
     });
     expect(JSON.stringify(schema)).not.toMatch(/exactClaim|sourceQuote|displayQ|"q"|"why"|"need"/u);
     expect(JSON.stringify(schema)).not.toMatch(/policy|consequence|evidenceFamily/u);
+    expect(JSON.stringify(schema)).not.toContain("uniqueItems");
   });
 
   it("rejects abstention, unknown IDs, and extra fields", () => {
@@ -133,6 +133,15 @@ describe("General Page exact-span proposal selector with schema v12", () => {
         { candidateId: "span:3" },
       ],
     }), candidates)).toMatchObject({ ok: false, issue: "selection_shape" });
+
+    expect(parseAndMaterializeGeneralPageSpanAdapter(JSON.stringify({
+      schemaVersion: 12,
+      selections: [
+        { candidateId: "span:1" },
+        { candidateId: "span:1" },
+        { candidateId: "span:2" },
+      ],
+    }), candidates)).toMatchObject({ ok: false, issue: "unknown_candidate" });
   });
 
   it("materializes only the selected recommendation without adding another ranker", () => {
@@ -319,7 +328,6 @@ describe("General Page exact-span proposal selector with schema v12", () => {
               type: "array",
               minItems: 3,
               maxItems: 3,
-              uniqueItems: true,
               items: {
                 type: "object",
                 additionalProperties: false,

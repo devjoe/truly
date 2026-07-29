@@ -19,9 +19,12 @@ three internal candidates:
 ```
 
 `selections` contains distinct supplied local `candidateId` values in strongest
-first order. These are internal fallbacks, not multiple reader-facing actions:
-runtime still publishes at most one action. The Selector only ranks candidate
-identity; it does not admit, reject, or classify presentation. The Selector
+first order. The provider-neutral wire schema bounds the array and enumerates
+the allowed IDs; the local parser independently enforces uniqueness because
+not every constrained-decoding backend implements JSON Schema `uniqueItems`.
+These are internal fallbacks, not multiple reader-facing actions: runtime still
+publishes at most one action. The Selector only ranks candidate identity; it
+does not admit, reject, or classify presentation. The Selector
 sees the complete bounded candidate list and full authorized Page context. It
 must prefer a strong first verification action, then complete publicly
 checkable but more ordinary or situational propositions. When too few
