@@ -200,6 +200,12 @@ describe("General Page exact-span proposal selector with schema v12", () => {
     expect(system).toContain("tutorial-like advice");
     expect(system).toContain("'many' or 'some' unnamed companies or people");
     expect(system).toContain("Apply these three steps in order");
+    expect(system).toContain("Cleanliness is a non-negotiable prerequisite");
+    expect(system).toContain("cannot rescue a dirty span");
+    expect(system).toContain("article, newsletter, or editor meta-description");
+    expect(system).toContain("adjacent Page-role labels");
+    expect(system).toContain("forward pointer to a following example");
+    expect(system).toContain("clean substantive judgment or action");
     expect(system).toContain("complete, standalone proposition");
     expect(system).toContain("realistic independent public evidence");
     expect(system).not.toContain('Return exactly {"schemaVersion":6,"candidateId":"span:1"}');
@@ -261,6 +267,7 @@ describe("General Page exact-span proposal selector with schema v12", () => {
     expect(user).toContain("Fictional narration and publisher or license boilerplate remain lowest-ranked inputs");
     expect(user).toContain("exactly 3 distinct supplied candidate IDs");
     expect(user).toContain("Context cannot repair an unresolved or metadata-prefixed exact span");
+    expect(user).toContain("centrality never overrides structural cleanliness");
     expect(user).toMatch(/strongest first\.$/u);
     expect(user).not.toMatch(/"start":|"end":/u);
   });

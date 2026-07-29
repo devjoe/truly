@@ -97,6 +97,11 @@ describe("General Page investigation action admission critic", () => {
     expect(system).toContain("agreement 'to wait'");
     expect(system).toContain("metadata may expose the omission but may not repair it");
     expect(system).toContain("clean, complete, standalone proposition");
+    expect(system).toContain("adjacent Page-role labels");
+    expect(system).toContain("article or newsletter meta-description");
+    expect(system).toContain("forward pointer to a following example");
+    expect(system).toContain("concrete example flow");
+    expect(system).toContain("clean substantive proposition");
     expect(system).toContain("coherent publication, date, specification, or measurement fact");
     expect(system).toContain("complete sentence naming a work and its publisher or publication year");
     expect(system).toContain("complete named career-history sentence");
