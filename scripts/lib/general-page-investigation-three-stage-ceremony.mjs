@@ -1,5 +1,12 @@
 import crypto from "node:crypto";
 
+import {
+  ABSOLUTE_MAX_MS,
+  INTERACTIVE_P95_MS,
+  aggregateInvestigationServiceProfiles,
+  classifyInvestigationServiceProfile,
+} from "./general-page-investigation-service-profile.mjs";
+
 const REQUIRED_FORMATS = new Map([
   ["json_schema", 3],
   ["json_object", 3],
@@ -9,7 +16,6 @@ const TASKS = {
   admission: "general_page_investigation_action_admission_synthetic_preflight",
   composed: "general_page_investigation_three_stage_synthetic_preflight",
 };
-
 function sha256Text(value) {
   return crypto.createHash("sha256").update(value, "utf8").digest("hex");
 }
@@ -44,7 +50,28 @@ function validateAdmissionReceipt(receipt, label, errors) {
   }
 }
 
+function composedServiceProfile(receipt, label, errors) {
+  const latency = receipt.performance?.composedLatency;
+  const p95Ms = latency?.p95Ms;
+  const maxMs = latency?.maxMs;
+  const thresholdsMatch = latency?.interactiveP95Ms === INTERACTIVE_P95_MS &&
+    latency?.absoluteMaxMs === ABSOLUTE_MAX_MS;
+  const measured = classifyInvestigationServiceProfile({
+    compatibility: receipt.compatibility,
+    p95Ms,
+    maxMs,
+  });
+  if (!thresholdsMatch || receipt.serviceProfile !== measured ||
+      measured === "unqualified") {
+    errors.push(`${label}: invalid service profile or latency evidence`);
+  }
+  return measured;
+}
+
 function validateComposedReceipt(receipt, label, errors) {
+  if (receipt.compatibility !== "compatible") {
+    errors.push(`${label}: composed compatibility did not pass`);
+  }
   if (Object.values(receipt.gates ?? {}).some((gate) => gate?.pass !== true)) {
     errors.push(`${label}: composed source gate did not pass`);
   }
@@ -106,6 +133,7 @@ function validateComposedReceipt(receipt, label, errors) {
       receipt.model?.tierTimeoutMs !== 10_000) {
     errors.push(`${label}: wrong composed retry, Admission, or Tier timeout contract`);
   }
+  return composedServiceProfile(receipt, label, errors);
 }
 
 export function validateThreeStageInvestigationCeremony(receipts, expectedCandidateCommit) {
@@ -120,6 +148,7 @@ export function validateThreeStageInvestigationCeremony(receipts, expectedCandid
   const seenPaths = new Set();
   const taskFormats = new Map();
   const taskContracts = new Map();
+  const composedServiceProfiles = new Map();
   const intervals = [];
   const sources = [];
   let endpoint;
@@ -141,7 +170,9 @@ export function validateThreeStageInvestigationCeremony(receipts, expectedCandid
     const receipt = source.value;
     const taskKey = Object.entries(TASKS)
       .find(([, task]) => task === receipt.task)?.[0];
-    if (receipt.schemaVersion !== 1 || receipt.split !== "synthetic-dev" || !taskKey) {
+    const expectedSchemaVersion = taskKey === "composed" ? 2 : 1;
+    if (receipt.schemaVersion !== expectedSchemaVersion ||
+        receipt.split !== "synthetic-dev" || !taskKey) {
       errors.push(`${label}: wrong receipt contract`);
       continue;
     }
@@ -187,7 +218,10 @@ export function validateThreeStageInvestigationCeremony(receipts, expectedCandid
           receipt.contract?.tierSystemPromptSha256 !== tierPromptSha256) {
         errors.push(`${label}: composed prompt drift`);
       }
-      validateComposedReceipt(receipt, label, errors);
+      const serviceProfile = validateComposedReceipt(receipt, label, errors);
+      const profiles = composedServiceProfiles.get(format) ?? [];
+      profiles.push(serviceProfile);
+      composedServiceProfiles.set(format, profiles);
       for (const sampleId of receipt.diagnostics?.exploratoryOverstatedSamples ?? []) {
         if (typeof sampleId !== "string") {
           errors.push(`${label}: invalid exploratory overstatement sample ID`);
@@ -228,6 +262,14 @@ export function validateThreeStageInvestigationCeremony(receipts, expectedCandid
   if (exploratoryOverstatedSamples.size > 1) {
     errors.push("composed receipts exceed the one-fixture exploratory variance bound");
   }
+  const serviceProfiles = {};
+  for (const format of REQUIRED_FORMATS.keys()) {
+    const profiles = composedServiceProfiles.get(format) ?? [];
+    serviceProfiles[format] = aggregateInvestigationServiceProfiles(profiles);
+    if (serviceProfiles[format] === "unqualified") {
+      errors.push(`composed ${format} has unqualified service profile`);
+    }
+  }
   const chronological = intervals.toSorted((left, right) => left.start - right.start);
   for (let index = 1; index < chronological.length; index += 1) {
     if (chronological[index].start < chronological[index - 1].end) {
@@ -236,12 +278,13 @@ export function validateThreeStageInvestigationCeremony(receipts, expectedCandid
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     task: "general_page_investigation_three_stage_synthetic_ceremony",
     passed: errors.length === 0,
     candidateCommit: expectedCandidateCommit,
     sourceCount: sources.length,
     taskFormats: Object.fromEntries([...taskFormats.entries()].sort()),
+    serviceProfiles,
     endpoint,
     model,
     selectorPromptSha256,

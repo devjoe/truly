@@ -210,6 +210,30 @@ without this aggregate receipt. A deliberately overlapping run is a separate,
 non-gating shared-server load diagnostic: it cannot rescue or reject the
 compatibility candidate.
 
+Composed receipts report two orthogonal results. `compatibility` is
+`compatible` only when every existing protocol, primary, exploratory, none,
+locale, candidate-availability, tier-confusion, request-count, retry, and
+safety predicate passes. `serviceProfile` records the observed latency of that
+formal run without changing compatibility:
+
+- `interactive`: p95 is at most 20 seconds and max is at most 40 seconds;
+- `background_deferred`: compatibility passes, p95 exceeds 20 seconds, and max
+  remains at most 40 seconds;
+- `unqualified`: compatibility fails or max exceeds 40 seconds.
+
+For each response format, the aggregate profile is `interactive` only when all
+three composed runs are interactive. It is `background_deferred` when every
+run remains inside the unchanged 40-second max and at least one misses the
+interactive p95. Any unqualified run fails Gate A. Both qualified profiles are
+release-capable because investigation preparation already runs as derived,
+non-blocking work behind user-blocking and foreground model jobs. The profile
+describes this ceremony, not a permanent promise about a shared GPU.
+
+The side-panel's 120-second preparation deadline remains an independent
+per-batch fail-closed safeguard. It is not a provider benchmark and does not
+widen the 40-second formal max. Direct Admission remains a hard 32/32
+correctness receipt and receives no latency reclassification.
+
 This gate tests provider transport, primary/exploratory selection capability,
 binary Admission behavior, strict ID/tier coupling, and only the model-owned
 boundaries that are non-negotiable regardless of content distribution. The
@@ -933,3 +957,17 @@ an English sentence whose opening repeats a heading bigram. Ordinary complete
 rate propositions and non-fused heading vocabulary remain eligible in negative
 controls. The consumed cohort remains diagnosis-only; the clean successor must
 still pass a complete formal Gate A before any fresh Gate B data is opened.
+
+Candidate `6141805` added that final structural boundary and passed the first
+`json_schema` composed and direct-Admission receipts. Its first `json_object`
+composed receipt passed every hard compatibility predicate but failed the old
+combined latency gate at p95 `27.248s`; max remained `27.451s`. The run stopped
+fail-fast and remains failed under the standard that produced it.
+
+An adversarial decision review then accepted a versioned successor contract
+that separates compatibility from observed service profile. It preserves both
+old latency numbers: a p95-only miss below the same 40-second max is
+`background_deferred`, while any max miss remains unqualified. It does not
+retroactively rescue `6141805`, alter the consumed Gate B cohort, or weaken any
+semantic threshold. A new clean candidate and twelve wholly new sequential
+Gate A receipts are required.

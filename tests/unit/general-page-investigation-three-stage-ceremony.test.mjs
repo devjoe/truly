@@ -11,7 +11,7 @@ function receipt(index, taskKey, responseFormat) {
   const completedAt = new Date(Date.UTC(2026, 6, 27, 0, index, 30)).toISOString();
   const admission = taskKey === "admission";
   const value = {
-    schemaVersion: 1,
+    schemaVersion: admission ? 1 : 2,
     task: admission
       ? "general_page_investigation_action_admission_synthetic_preflight"
       : "general_page_investigation_three_stage_synthetic_preflight",
@@ -84,6 +84,16 @@ function receipt(index, taskKey, responseFormat) {
     ...(admission
       ? {}
       : {
+          compatibility: "compatible",
+          serviceProfile: "interactive",
+          performance: {
+            composedLatency: {
+              p95Ms: 12_000,
+              maxMs: 18_000,
+              interactiveP95Ms: 20_000,
+              absoluteMaxMs: 40_000,
+            },
+          },
           gates: {
             protocol: { pass: true },
             primaryCorrect: { pass: true },
@@ -96,7 +106,6 @@ function receipt(index, taskKey, responseFormat) {
             noneCorrect: { pass: true },
             locale: { pass: true },
             candidatesAvailable: { pass: true },
-            composedLatency: { pass: true },
           },
           diagnostics: {
             primaryUnderstated: 0,
@@ -141,6 +150,10 @@ describe("General Page three-stage Gate A ceremony", () => {
         "admission:json_schema": 3,
         "composed:json_object": 3,
         "composed:json_schema": 3,
+      },
+      serviceProfiles: {
+        json_object: "interactive",
+        json_schema: "interactive",
       },
       errors: [],
     });
@@ -207,5 +220,40 @@ describe("General Page three-stage Gate A ceremony", () => {
     expect(result.passed).toBe(false);
     expect(result.errors.join(" ")).toMatch(/capability or hard boundary/);
     expect(result.errors.join(" ")).toMatch(/language floors or visibility disagree/);
+  });
+
+  it("accepts a compatible background-deferred response format without lowering max latency", () => {
+    const receipts = validReceipts();
+    for (const source of receipts.slice(9, 12)) {
+      source.value.serviceProfile = "background_deferred";
+      source.value.performance.composedLatency.p95Ms = 27_000;
+      source.value.performance.composedLatency.maxMs = 32_000;
+      source.raw = JSON.stringify(source.value);
+    }
+
+    const result = validateThreeStageInvestigationCeremony(receipts, commit);
+
+    expect(result).toMatchObject({
+      passed: true,
+      serviceProfiles: {
+        json_object: "background_deferred",
+        json_schema: "interactive",
+      },
+      errors: [],
+    });
+  });
+
+  it("rejects an unqualified or falsely classified composed latency receipt", () => {
+    const receipts = validReceipts();
+    receipts[9].value.serviceProfile = "background_deferred";
+    receipts[9].value.performance.composedLatency.p95Ms = 27_000;
+    receipts[9].value.performance.composedLatency.maxMs = 40_001;
+    receipts[9].raw = JSON.stringify(receipts[9].value);
+
+    const result = validateThreeStageInvestigationCeremony(receipts, commit);
+
+    expect(result.passed).toBe(false);
+    expect(result.serviceProfiles.json_object).toBe("unqualified");
+    expect(result.errors.join(" ")).toMatch(/service profile or latency evidence/);
   });
 });

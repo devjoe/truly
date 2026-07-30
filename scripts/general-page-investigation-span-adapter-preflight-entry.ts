@@ -28,6 +28,11 @@ import {
   installInvestigationAdapterProtocolSmokeNetworkGuard,
   sha256CanonicalJson,
 } from "./lib/private-general-page-investigation-adapter-smoke.mjs";
+import {
+  ABSOLUTE_MAX_MS,
+  INTERACTIVE_P95_MS,
+  classifyInvestigationServiceProfile,
+} from "./lib/general-page-investigation-service-profile.mjs";
 import { sha256Text } from "./lib/private-general-page-semantic-audit.mjs";
 
 type FixtureKind =
@@ -312,10 +317,18 @@ const admissionRequested = results.reduce((sum, row) =>
   sum + row.admissionAttempts.length, 0);
 const admissionProtocolSucceeded = results.reduce((sum, row) =>
   sum + row.admissionAttempts.filter((attempt) => attempt.ok === true).length, 0);
+const admissionAdmitted = results.reduce((sum, row) =>
+  sum + row.admissionAttempts.filter((attempt) =>
+    attempt.decision === "admit").length, 0);
+const admissionRejected = results.reduce((sum, row) =>
+  sum + row.admissionAttempts.filter((attempt) =>
+    attempt.decision === "reject").length, 0);
 const tierRequested = results.reduce((sum, row) =>
   sum + row.tierAttempts.length, 0);
 const tierProtocolSucceeded = results.reduce((sum, row) =>
   sum + row.tierAttempts.filter((attempt) => attempt.ok === true).length, 0);
+const latencyP95Ms = latencyPercentile(0.95);
+const latencyMaxMs = latencyValues.at(-1) ?? 0;
 const gates = {
   protocol: { result: protocolSucceeded, required: fixtures.length, pass: protocolSucceeded === fixtures.length },
   primaryCorrect: {
@@ -353,17 +366,6 @@ const gates = {
     required: fixtures.length,
     pass: results.every((row) => row.candidateCount > 0),
   },
-  ...(withAdmission
-    ? {
-        composedLatency: {
-          p95Ms: latencyPercentile(0.95),
-          maxMs: latencyValues.at(-1) ?? 0,
-          requiredP95Ms: 20_000,
-          requiredMaxMs: 40_000,
-          pass: latencyPercentile(0.95) <= 20_000 && (latencyValues.at(-1) ?? 0) <= 40_000,
-        },
-      }
-    : {}),
 };
 const diagnostics = {
   primaryUnderstated: results.filter((row) =>
@@ -374,7 +376,33 @@ const diagnostics = {
     row.expectedAction === "exploratory" && row.actualAction === "primary")
     .map((row) => row.sampleId),
 };
-const passed = Object.values(gates).every((gate) => gate.pass);
+const requestContractPassed = !withAdmission || (
+  admissionRequested >= fixtures.length &&
+  admissionRequested <= fixtures.length * 3 &&
+  admissionProtocolSucceeded === admissionRequested &&
+  admissionAdmitted + admissionRejected === admissionRequested &&
+  tierRequested === admissionAdmitted &&
+  tierProtocolSucceeded === tierRequested &&
+  modelRequests === fixtures.length + admissionRequested + tierRequested
+);
+const tierContractPassed = !withAdmission || (
+  diagnostics.primaryUnderstated === 0 &&
+  diagnostics.exploratoryOverstated >= 0 &&
+  diagnostics.exploratoryOverstated <= 1
+);
+const compatibility = Object.values(gates).every((gate) => gate.pass) &&
+  requestContractPassed && tierContractPassed
+  ? "compatible"
+  : "incompatible";
+const serviceProfile = withAdmission
+  ? classifyInvestigationServiceProfile({
+      compatibility,
+      p95Ms: latencyP95Ms,
+      maxMs: latencyMaxMs,
+    })
+  : "unqualified";
+const passed = compatibility === "compatible" &&
+  (!withAdmission || serviceProfile !== "unqualified");
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const diff = execFileSync("git", ["diff", "--binary", "HEAD"], {
   cwd: repoRoot,
@@ -425,12 +453,24 @@ const tierBody = withAdmission
     })
   : undefined;
 const artifact = {
-  schemaVersion: 1,
+  schemaVersion: withAdmission ? 2 : 1,
   task: withAdmission
     ? "general_page_investigation_three_stage_synthetic_preflight"
     : "general_page_investigation_span_adapter_synthetic_preflight",
   split: "synthetic-dev",
   passed,
+  ...(withAdmission ? {
+    compatibility,
+    serviceProfile,
+    performance: {
+      composedLatency: {
+        p95Ms: latencyP95Ms,
+        maxMs: latencyMaxMs,
+        interactiveP95Ms: INTERACTIVE_P95_MS,
+        absoluteMaxMs: ABSOLUTE_MAX_MS,
+      },
+    },
+  } : {}),
   candidate: {
     commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim(),
     worktreeDirty: diff.length > 0,
@@ -501,18 +541,14 @@ const artifact = {
       admissionRequested,
       admissionProtocolSucceeded,
       admissionProtocolFailed: admissionRequested - admissionProtocolSucceeded,
-      admissionAdmitted: results.reduce((sum, row) =>
-        sum + row.admissionAttempts.filter((attempt) =>
-          attempt.decision === "admit").length, 0),
-      admissionRejected: results.reduce((sum, row) =>
-        sum + row.admissionAttempts.filter((attempt) =>
-          attempt.decision === "reject").length, 0),
+      admissionAdmitted,
+      admissionRejected,
       tierRequested,
       tierProtocolSucceeded,
       tierProtocolFailed: tierRequested - tierProtocolSucceeded,
       latencyP50Ms: latencyPercentile(0.5),
-      latencyP95Ms: latencyPercentile(0.95),
-      latencyMaxMs: latencyValues.at(-1) ?? 0,
+      latencyP95Ms,
+      latencyMaxMs,
     } : {}),
   },
   gates,
@@ -528,6 +564,7 @@ fs.writeFileSync(outputPath, `${JSON.stringify(artifact, null, 2)}\n`, { flag: "
 console.log(JSON.stringify({
   outputPath,
   passed,
+  ...(withAdmission ? { compatibility, serviceProfile } : {}),
   counts: artifact.counts,
   gates,
   diagnostics,
