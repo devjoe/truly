@@ -65,6 +65,13 @@ export function acquisitionUrlsMatch(left, right) {
     const normalized = (value) => {
       const url = new URL(value);
       url.hash = "";
+      // BBC RSS uses bbc.co.uk while the same article may canonicalize to
+      // bbc.com after the background tab has loaded. Treat only this known
+      // publisher-owned host pair as equivalent; path, query, protocol, tab,
+      // and capture provenance must still match.
+      if (url.hostname === "www.bbc.co.uk" || url.hostname === "www.bbc.com") {
+        url.hostname = "bbc.invalid";
+      }
       return url.href;
     };
     return normalized(left) === normalized(right);

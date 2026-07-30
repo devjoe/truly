@@ -59,6 +59,21 @@ describe("General Page runtime-envelope no-focus acquisition", () => {
     )).toBe(false);
   });
 
+  it("accepts the BBC RSS host redirect only when the article URL is otherwise exact", () => {
+    expect(acquisitionUrlsMatch(
+      "https://www.bbc.co.uk/news/articles/c74gwdzywmeo",
+      "https://www.bbc.com/news/articles/c74gwdzywmeo",
+    )).toBe(true);
+    expect(acquisitionUrlsMatch(
+      "https://www.bbc.co.uk/news/articles/c74gwdzywmeo",
+      "https://www.bbc.com/news/articles/different",
+    )).toBe(false);
+    expect(acquisitionUrlsMatch(
+      "https://www.bbc.co.uk/news/articles/c74gwdzywmeo",
+      "https://www.bbc.example/news/articles/c74gwdzywmeo",
+    )).toBe(false);
+  });
+
   it("accepts a Page capture only from the expected tab and URL", () => {
     const metadata = {
       tabId: 42,
