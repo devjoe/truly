@@ -6,10 +6,13 @@ import { buildGeneralPageInvestigationSpanAdapterSystemPrompt } from "@src/lib/g
 import { classifyGeneralPageAuditMockRequest } from "../../scripts/lib/general-page-audit-mock-kind.mjs";
 
 describe("General Page audit mock routing", () => {
-  it("keeps selector, admission, and tier roles distinct without coupling routing to schema versions", () => {
+  it("recognizes the single-pass selector without coupling routing to schema versions", () => {
     expect(classifyGeneralPageAuditMockRequest(
       buildGeneralPageInvestigationSpanAdapterSystemPrompt(),
     )).toBe("investigation-adapter");
+  });
+
+  it("keeps legacy diagnostic admission and tier roles distinguishable", () => {
     expect(classifyGeneralPageAuditMockRequest(
       buildGeneralPageInvestigationActionAdmissionSystemPrompt(),
     )).toBe("investigation-admission");

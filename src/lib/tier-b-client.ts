@@ -589,9 +589,8 @@ export interface TierBGeneralPageInvestigationSpanAdapterRequest
   structuredOutputMode: "json_schema" | "json_object";
   apiKey?: string;
   timeoutMs?: number;
-  /** Product runtime may repeat the identical request once for a narrowly
-   *  classified protocol-shape failure. Release gates set this to 1 so a
-   *  recovered response never masks first-attempt provider reliability. */
+  /** Evaluation-only transport diagnostic. Product runtime and release gates
+   *  set this to 1 so retries never mask provider reliability. */
   maxProtocolAttempts?: 1 | 2;
 }
 
@@ -1134,16 +1133,16 @@ export function buildTierBGeneralPageInvestigationSpanAdapterChatBody(
       { role: "user", content: buildGeneralPageInvestigationSpanAdapterPrompt(req) },
     ],
     temperature: 0,
-    // The model returns up to three ranked local IDs; local code still
-    // publishes at most one action after admission and tier classification.
+    // The model returns up to three semantically eligible ranked local IDs
+    // with tiers; local code still publishes at most one action.
     // Keep the budget deliberately small so derived work does not crowd out
     // the primary Feed/Page reading queue.
-    max_tokens: 96,
+    max_tokens: 128,
     response_format: constrained
       ? {
           type: "json_schema",
           json_schema: {
-            name: "truly_general_page_investigation_span_adapter_v12",
+            name: "truly_general_page_investigation_span_adapter_v13",
             strict: true,
             schema: generalPageInvestigationSpanAdapterJsonSchema(
               req.candidates.map(({ id }) => id),

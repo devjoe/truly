@@ -12,13 +12,7 @@ import {
 } from "../lib/general-page-investigation-action-boundary";
 import { buildInvestigationSpanCandidates } from "../lib/investigation-span-candidate";
 import {
-  callTierBGeneralPageInvestigationActionAdmission,
-  callTierBGeneralPageInvestigationActionTier,
   callTierBGeneralPageInvestigationSpanAdapter,
-  type TierBGeneralPageInvestigationActionAdmissionRequest,
-  type TierBGeneralPageInvestigationActionAdmissionResult,
-  type TierBGeneralPageInvestigationActionTierRequest,
-  type TierBGeneralPageInvestigationActionTierResult,
   type TierBGeneralPageInvestigationSpanAdapterRequest,
   type TierBGeneralPageInvestigationSpanAdapterResult,
 } from "../lib/tier-b-client";
@@ -33,8 +27,6 @@ import {
 
 const MAX_SPAN_CANDIDATES = 48;
 const MAX_SPAN_CHARACTERS = 240;
-const ACTION_ADMISSION_TIMEOUT_MS = 10_000;
-const ACTION_TIER_TIMEOUT_MS = 10_000;
 
 export interface ScheduleGeneralPageInvestigationPreparationOptions {
   scheduler: ModelWorkScheduler;
@@ -48,12 +40,6 @@ export interface ScheduleGeneralPageInvestigationPreparationOptions {
   callAdapter?: (
     request: TierBGeneralPageInvestigationSpanAdapterRequest,
   ) => Promise<TierBGeneralPageInvestigationSpanAdapterResult>;
-  callAdmission?: (
-    request: TierBGeneralPageInvestigationActionAdmissionRequest,
-  ) => Promise<TierBGeneralPageInvestigationActionAdmissionResult>;
-  callTier?: (
-    request: TierBGeneralPageInvestigationActionTierRequest,
-  ) => Promise<TierBGeneralPageInvestigationActionTierResult>;
   sendMessage(message: GeneralPageInvestigationResultMsg): unknown;
 }
 
@@ -81,12 +67,10 @@ function investigationSourceLanguage(text: string, fallback?: Lang): Lang | unde
 }
 
 /**
- * Starts low-priority ranking, admission, and tier stages. The first model call
- * proposes up to three locally owned exact spans. Later stages evaluate those
- * backups in order, preferring the first primary result and otherwise retaining
- * the first exploratory result. Separate derived scheduler jobs let already
- * queued user work run between them, while the panel still receives only one
- * final atomic result.
+ * Starts one low-priority semantic ranking job. The model may return up to
+ * three eligible locally owned exact spans with tiers. Local hard boundaries
+ * select the first surviving primary result or, otherwise, the first surviving
+ * exploratory result. The panel receives only one final atomic result.
  * Reading-model claims remain outside the action identity boundary.
  */
 export function scheduleGeneralPageInvestigationPreparation(
@@ -102,9 +86,6 @@ export function scheduleGeneralPageInvestigationPreparation(
   if (candidates.length === 0) return false;
 
   const callAdapter = options.callAdapter ?? callTierBGeneralPageInvestigationSpanAdapter;
-  const callAdmission =
-    options.callAdmission ?? callTierBGeneralPageInvestigationActionAdmission;
-  const callTier = options.callTier ?? callTierBGeneralPageInvestigationActionTier;
   const source = {
     title: request.context.title,
     authorName: request.context.authorName,
@@ -125,6 +106,7 @@ export function scheduleGeneralPageInvestigationPreparation(
     source,
     sourceLang: investigationSourceLanguage(request.context.mainText, request.outputLang),
     outputLang: request.outputLang,
+    maxProtocolAttempts: 1,
   };
   maybeCaptureGeneralPageInvestigation(options.capture, request, adapterRequest);
   const id = `general-page-investigation:${request.tabId}:${request.scope}:${request.analysisKey}`;
@@ -148,60 +130,16 @@ export function scheduleGeneralPageInvestigationPreparation(
     let exploratorySelection:
       | (typeof selections[number] & { presentationTier: "exploratory" })
       | undefined;
-    for (const [index, selection] of selections.entries()) {
+    for (const selection of selections) {
       if (sourceRejectionReason ||
           generalPageInvestigationSelectionRejectionReason(selection, {
             authorizedSourceContext: request.context.mainText,
             source,
           })) continue;
-      const stage = index + 1;
-      const admissionResult = await options.scheduler.enqueue({
-        id: `${id}:admit:${stage}`,
-        resourceKey: options.resourceKey,
-        priority: "derived",
-        dedupeKey: `${id}:admit:${stage}`,
-        supersedeKey:
-          `general-page-investigation:${request.tabId}:${request.scope}:admit:${stage}`,
-        run: () => callAdmission({
-          endpoint: options.endpoint,
-          model: options.model,
-          structuredOutputMode: options.structuredOutputMode,
-          apiKey: options.apiKey,
-          timeoutMs: ACTION_ADMISSION_TIMEOUT_MS,
-          selection,
-          authorizedSourceContext: request.context.mainText,
-          source,
-        }),
-      });
-      if (!admissionResult.ok || !admissionResult.value) {
-        return { status: "unavailable" as const };
-      }
-      if (admissionResult.value.decision === "reject") continue;
-      const tierResult = await options.scheduler.enqueue({
-        id: `${id}:tier:${stage}`,
-        resourceKey: options.resourceKey,
-        priority: "derived",
-        dedupeKey: `${id}:tier:${stage}`,
-        supersedeKey:
-          `general-page-investigation:${request.tabId}:${request.scope}:tier:${stage}`,
-        run: () => callTier({
-          endpoint: options.endpoint,
-          model: options.model,
-          structuredOutputMode: options.structuredOutputMode,
-          apiKey: options.apiKey,
-          timeoutMs: ACTION_TIER_TIMEOUT_MS,
-          selection,
-          authorizedSourceContext: request.context.mainText,
-          source,
-        }),
-      });
-      if (!tierResult.ok || !tierResult.value) {
-        return { status: "unavailable" as const };
-      }
-      if (tierResult.value.tier === "primary") {
+      if (selection.presentationTier === "primary") {
         return {
           status: "prepared" as const,
-          selection: { ...selection, presentationTier: "primary" as const },
+          selection,
         };
       }
       exploratorySelection ??= {

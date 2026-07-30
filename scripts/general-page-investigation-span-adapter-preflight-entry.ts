@@ -213,6 +213,14 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
       exploratorySelection ??= { ...selection, presentationTier: "exploratory" };
     }
   }
+  if (!withAdmission && result.ok) {
+    admittedSelection = selections.find(({ presentationTier }) =>
+      presentationTier === "primary");
+    exploratorySelection = selections.find(({ presentationTier }) =>
+      presentationTier === "exploratory") as
+        | (typeof selections[number] & { presentationTier: "exploratory" })
+        | undefined;
+  }
   admittedSelection ??= exploratorySelection;
   const admissionLatencyMs = admissionAttempts.length > 0
     ? Date.now() - admissionStarted
@@ -376,16 +384,16 @@ const diagnostics = {
     row.expectedAction === "exploratory" && row.actualAction === "primary")
     .map((row) => row.sampleId),
 };
-const requestContractPassed = !withAdmission || (
-  admissionRequested >= fixtures.length &&
-  admissionRequested <= fixtures.length * 3 &&
-  admissionProtocolSucceeded === admissionRequested &&
-  admissionAdmitted + admissionRejected === admissionRequested &&
-  tierRequested === admissionAdmitted &&
-  tierProtocolSucceeded === tierRequested &&
-  modelRequests === fixtures.length + admissionRequested + tierRequested
-);
-const tierContractPassed = !withAdmission || (
+const requestContractPassed = withAdmission
+  ? admissionRequested >= fixtures.length &&
+    admissionRequested <= fixtures.length * 3 &&
+    admissionProtocolSucceeded === admissionRequested &&
+    admissionAdmitted + admissionRejected === admissionRequested &&
+    tierRequested === admissionAdmitted &&
+    tierProtocolSucceeded === tierRequested &&
+    modelRequests === fixtures.length + admissionRequested + tierRequested
+  : modelRequests === fixtures.length;
+const tierContractPassed = (
   diagnostics.primaryUnderstated === 0 &&
   diagnostics.exploratoryOverstated >= 0 &&
   diagnostics.exploratoryOverstated <= 1
@@ -394,15 +402,13 @@ const compatibility = Object.values(gates).every((gate) => gate.pass) &&
   requestContractPassed && tierContractPassed
   ? "compatible"
   : "incompatible";
-const serviceProfile = withAdmission
-  ? classifyInvestigationServiceProfile({
-      compatibility,
-      p95Ms: latencyP95Ms,
-      maxMs: latencyMaxMs,
-    })
-  : "unqualified";
+const serviceProfile = classifyInvestigationServiceProfile({
+  compatibility,
+  p95Ms: latencyP95Ms,
+  maxMs: latencyMaxMs,
+});
 const passed = compatibility === "compatible" &&
-  (!withAdmission || serviceProfile !== "unqualified");
+  serviceProfile !== "unqualified";
 const repoRoot = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
 const diff = execFileSync("git", ["diff", "--binary", "HEAD"], {
   cwd: repoRoot,
@@ -453,24 +459,22 @@ const tierBody = withAdmission
     })
   : undefined;
 const artifact = {
-  schemaVersion: withAdmission ? 2 : 1,
+  schemaVersion: withAdmission ? 2 : 3,
   task: withAdmission
     ? "general_page_investigation_three_stage_synthetic_preflight"
-    : "general_page_investigation_span_adapter_synthetic_preflight",
+    : "general_page_investigation_single_pass_synthetic_preflight",
   split: "synthetic-dev",
   passed,
-  ...(withAdmission ? {
-    compatibility,
-    serviceProfile,
-    performance: {
-      composedLatency: {
-        p95Ms: latencyP95Ms,
-        maxMs: latencyMaxMs,
-        interactiveP95Ms: INTERACTIVE_P95_MS,
-        absoluteMaxMs: ABSOLUTE_MAX_MS,
-      },
+  compatibility,
+  serviceProfile,
+  performance: {
+    composedLatency: {
+      p95Ms: latencyP95Ms,
+      maxMs: latencyMaxMs,
+      interactiveP95Ms: INTERACTIVE_P95_MS,
+      absoluteMaxMs: ABSOLUTE_MAX_MS,
     },
-  } : {}),
+  },
   candidate: {
     commit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim(),
     worktreeDirty: diff.length > 0,
@@ -546,10 +550,10 @@ const artifact = {
       tierRequested,
       tierProtocolSucceeded,
       tierProtocolFailed: tierRequested - tierProtocolSucceeded,
-      latencyP50Ms: latencyPercentile(0.5),
-      latencyP95Ms,
-      latencyMaxMs,
     } : {}),
+    latencyP50Ms: latencyPercentile(0.5),
+    latencyP95Ms,
+    latencyMaxMs,
   },
   gates,
   diagnostics,
@@ -564,7 +568,8 @@ fs.writeFileSync(outputPath, `${JSON.stringify(artifact, null, 2)}\n`, { flag: "
 console.log(JSON.stringify({
   outputPath,
   passed,
-  ...(withAdmission ? { compatibility, serviceProfile } : {}),
+  compatibility,
+  serviceProfile,
   counts: artifact.counts,
   gates,
   diagnostics,

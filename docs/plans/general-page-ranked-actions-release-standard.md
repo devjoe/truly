@@ -1,7 +1,7 @@
 # General Page Ranked Actions Release Standard
 
-Status: prospective Page-only tiered-utility plus selector-non-regression
-standard, revised 2026-07-28
+Status: prospective Page-only single-pass ranked-action plus
+selector-non-regression standard, revised 2026-07-30
 
 This standard governs the General Page Reader's user-facing `待確認事項` /
 `Check these items` actions. It replaces the previous policy in which a local
@@ -10,66 +10,51 @@ It does not authorize release by itself.
 
 ## Product contract
 
-For Page reading, the Selector receives a bounded list of exact spans produced
-locally from the current loaded document. In the first model job it ranks up to
-three internal candidates:
+For Page reading, one semantic model job receives a bounded list of exact spans
+produced locally from the current loaded document. It returns zero to three
+eligible internal candidates, each with a presentation tier:
 
 ```json
-{"schemaVersion":12,"selections":[{"candidateId":"span:4"},{"candidateId":"span:7"},{"candidateId":"span:2"}]}
+{"schemaVersion":13,"selections":[{"candidateId":"span:4","presentationTier":"primary"},{"candidateId":"span:7","presentationTier":"exploratory"}]}
 ```
 
 `selections` contains distinct supplied local `candidateId` values in strongest
-first order. The provider-neutral wire schema bounds the array and enumerates
-the allowed IDs; the local parser independently enforces uniqueness because
-not every constrained-decoding backend implements JSON Schema `uniqueItems`.
+first order. The provider-neutral wire schema bounds the array, enumerates the
+allowed IDs, and couples each ID to `primary` or `exploratory`; the local parser
+independently enforces uniqueness because not every constrained-decoding
+backend implements JSON Schema `uniqueItems`. Omitted candidates are rejected.
+An empty list is a valid abstention. The model must not fill backup slots with
+defective material.
+
 These are internal fallbacks, not multiple reader-facing actions: runtime still
-publishes at most one action. The Selector only ranks candidate identity; it
-does not admit, reject, or classify presentation. The Selector
-sees the complete bounded candidate list and full authorized Page context. It
-must prefer a strong first verification action, then complete publicly
-checkable but more ordinary or situational propositions. When too few
-candidates survive the Selector boundary, it appends the least-defective
-remaining candidates for the separate Admission critic to reject.
+publishes at most one action. The single job owns semantic eligibility,
+relative ranking, and presentation tier. It sees the complete bounded candidate
+list and full authorized Page context. It must prefer a strong first
+verification action, then complete publicly checkable but more ordinary or
+situational propositions. Local code validates every returned ID and exact
+span, then publishes the first surviving `primary`; if none survives, it
+publishes the first surviving `exploratory`. If no selection survives, runtime
+publishes no action.
 
 The tier is about the likely usefulness of investigating the item, not its
 truth, falsity, or calibrated model confidence. Runtime does not receive the
 audit-only `news_article` / `general_web` category, so the Selector applies this
 same semantic contract to every eligible Page.
 
-A separately scheduled Admission critic receives that same locally owned span
-and authorized same-Page context. It is the only model stage that decides
-whether an action may be shown and returns only:
-
-```json
-{"schemaVersion":4,"decision":"admit"}
-```
-
-`decision` is `admit` or `reject`. Admission cannot rank presentation utility,
-select another span, rewrite text, explain its decision, judge truth, or rescue
-missing words from context.
-
-An admitted span then reaches a separately scheduled Tier Classifier, which
-returns only:
-
-```json
-{"schemaVersion":1,"tier":"primary"}
-```
-
-`tier` is `primary` or `exploratory` and describes likely investigation
-utility, not truth or calibrated model confidence. The Tier Classifier cannot
-reject or rewrite the action. Admission rejection advances to the next ranked
-internal candidate. Runtime returns the first admitted `primary`; if none is
-primary, it returns the first admitted `exploratory`. Exhausted candidates,
-timeout, malformed output, invalid atomic state, stale scope, or any stage
-failure produces no action. Selector, Admission, and Tier are separate
-low-priority jobs so user-blocking and bounded Feed work may run between them.
-The panel receives only one final atomic result.
+There is no separate model Admission or Tier call in this candidate. Timeout,
+malformed output, invalid atomic state, stale scope, or model failure produces
+no action. The one semantic job is scheduled as derived, low-priority work so
+user-blocking and bounded Feed work may run first. The panel receives only one
+final atomic result. The previously frozen three-stage implementation remains
+an experiment baseline until this candidate passes fresh Gate A and Gate B; it
+is not a runtime fallback, because silently switching semantic contracts would
+make receipts incomparable.
 
 Local code owns the exact displayed text, copy action, localized Gemini
-handoff, source metadata, Page/Focus session boundary, and all three stages'
-identity checks. There is no repair call, second ranker, model-authored query,
-evidence-family guess, or local semantic rewrite. The only fallback is the
-same Selector response's bounded ranked list.
+handoff, source metadata, Page/Focus session boundary, identity checks, and
+hard structural boundaries. There is no repair call, second ranker,
+model-authored query, evidence-family guess, or local semantic rewrite. The
+only fallback is the same response's bounded ranked list.
 
 The admitted action is the one Page action. The UI reveals it only after the
 bounded internal evaluation settles; individual rejected candidates are never
@@ -88,11 +73,11 @@ Gemini handoff. Automatic Focus ranked actions require a separate future
 candidate and fresh release evidence.
 
 Open-web extraction is not required to be textually pristine. Local code owns
-high-confidence structural boundaries; the Edge AI Selector owns relative
-usefulness among the remaining exact spans, and Admission owns the terminal
-visibility veto. This tolerance does not relax authorization: wrong-page,
-cross-scope, or stale text remains forbidden, and a visible action derived
-from publisher residue is a release failure.
+high-confidence structural boundaries; the Edge AI job owns semantic
+eligibility, relative usefulness, and tier among the remaining exact spans.
+This tolerance does not relax authorization: wrong-page, cross-scope, or stale
+text remains forbidden, and a visible action derived from publisher residue is
+a release failure.
 
 Entertainment, sport, consumer, product, celebrity, and routine factual
 statements are eligible. Health, safety, money, rights, law, and public impact
@@ -112,20 +97,17 @@ Local code rejects only failures a user should not receive:
   or content/history persistence outside the existing ephemeral session.
 
 Topic importance, public-interest consequence, preferred evidence family, and
-whether a valid proposition is primary or exploratory are Selector ranking
-signals, not local rejection reasons. When every ranked candidate is
-unsuitable, Admission rejects each bounded fallback and runtime publishes no
-action. Admission may veto a selected span only when its exact proposition is
-private or subjective-only,
-unsafe, structurally incomplete, not independently publicly decidable, derived
-from publisher residue, or otherwise outside the proposition-shape contract.
+whether a valid proposition is primary or exploratory are model ranking
+signals, not local rejection reasons. The model omits a span when its exact
+proposition is private or subjective-only, unsafe, structurally incomplete,
+not independently publicly decidable, derived from publisher residue, or
+otherwise outside the proposition-shape contract.
 An ordinary definition, API behavior, workflow, or central catalog-record fact
 is not rejected merely for being lower utility when it remains a complete,
 Page-relevant, externally checkable proposition. Public interest, consequence,
-controversy, and materiality are not Admission prerequisites. The one-ID,
-one-tier, plus binary-decision wires remove duplicate, ordering, rewrite, and
-presentation ambiguity without requiring provider-specific JSON Schema
-support.
+controversy, and materiality are not eligibility prerequisites. The bounded
+ID-plus-tier wire removes rewrite ambiguity without requiring provider-specific
+JSON Schema support.
 
 ## Frozen release gates
 
@@ -161,24 +143,28 @@ independent hard release gates. Absolute recommendation and top-rank rates
 remain diagnostics because two useful first actions may differ only by
 reviewer preference.
 
-Source-only review assigns exactly one mutually exclusive expectation before
-candidate output is revealed:
+Source-only review labels every supplied candidate before candidate output is
+revealed with `maxAllowedTier: primary | exploratory | null`. A separate
+`preferredCandidateId` is diagnostic only; reviewers may recognize more than
+one valid action without pretending that wording preference is a product
+failure. Row-level expectations are then derived:
 
-- `expectedPrimaryAction`: at least one supplied exact candidate would review
-  as `recommended` or `acceptable_secondary`;
+- `expectedPrimaryAction`: at least one supplied exact candidate has
+  `maxAllowedTier: primary`;
 - `expectedExploratoryAction`: no primary candidate exists, but at least one
-  supplied exact candidate would review as `reviewable_exploratory`;
-- `expectedNone`: no supplied exact candidate is suitable to display.
+  supplied exact candidate has `maxAllowedTier: exploratory`;
+- `expectedNone`: every supplied exact candidate has `maxAllowedTier: null`.
 
 The release predicates are explicit:
 
 - an expected-primary row is recovered only by a displayed `primary` action
-  reviewed as `recommended` or `acceptable_secondary`;
+  whose candidate has `maxAllowedTier: primary`;
 - a displayed `exploratory` action on an expected-primary row is tier
-  understatement and does not recover that row;
+  understatement and does not recover that row, even when the selected
+  candidate is otherwise acceptable;
 - an expected-exploratory row is recovered only by a displayed `exploratory`
-  action reviewed as `recommended`, `acceptable_secondary`, or
-  `reviewable_exploratory`, with the localized exploratory cue present;
+  action whose candidate allows at least `exploratory`, with the localized
+  exploratory cue present;
 - a displayed `primary` action on an expected-exploratory row is tier
   overstatement and fails the candidate;
 - an expected-none row must produce no visible action;
@@ -187,24 +173,18 @@ The release predicates are explicit:
 
 ### A. Synthetic provider compatibility
 
-Run two fixed bilingual suites:
+Run the fixed 30-case bilingual end-to-end suite three times with `json_schema`
+and three times with `json_object`. The six formal processes run one at a time
+and may not overlap; bounded concurrency remains `2` inside each run. This
+matches the product scheduler's one-resource-at-a-time contract while testing
+both provider lowerings without making provider-specific constrained decoding
+a product requirement.
 
-- the 30-case end-to-end Selector to Admission suite, three times with
-  `json_schema` and three times with `json_object`;
-- the 32-case direct Admission suite, three times with `json_schema` and three
-  times with `json_object`.
-
-The twelve formal processes run one at a time and may not overlap; bounded
-concurrency remains `2` inside each run. This matches the product scheduler's
-one-resource-at-a-time contract while testing both provider lowerings and the
-Admission boundary independently from Selector behavior.
-
-After all twelve runs, a local validator must emit one aggregate ceremony
+After all six runs, a local validator must emit one aggregate ceremony
 receipt that binds the clean candidate commit and every source receipt by
-SHA-256, checks three runs per task and lowering, proves that all recorded time
-intervals are non-overlapping, confirms task-specific prompt and fixture hashes
-do not drift, and confirms every run passed. The direct Admission prompt hash
-must equal the Admission prompt hash embedded in every composed receipt.
+SHA-256, checks three runs per lowering, proves that all recorded time intervals
+are non-overlapping, confirms prompt, schema, and fixture hashes do not drift,
+and confirms every run passed.
 Individual receipts and preliminary diagnostics are not formal Gate A evidence
 without this aggregate receipt. A deliberately overlapping run is a separate,
 non-gating shared-server load diagnostic: it cannot rescue or reject the
@@ -231,13 +211,12 @@ describes this ceremony, not a permanent promise about a shared GPU.
 
 The side-panel's 120-second preparation deadline remains an independent
 per-batch fail-closed safeguard. It is not a provider benchmark and does not
-widen the 40-second formal max. Direct Admission remains a hard 32/32
-correctness receipt and receives no latency reclassification.
+widen the 40-second formal max.
 
 This gate tests provider transport, primary/exploratory selection capability,
-binary Admission behavior, strict ID/tier coupling, and only the model-owned
+semantic abstention, strict ID/tier coupling, and only the model-owned
 boundaries that are non-negotiable regardless of content distribution. The
-fixed 30-row composed suite contains:
+fixed 30-row suite contains:
 
 - 16 primary controls, exactly 8 per language;
 - 8 exploratory controls, exactly 4 per language, including ordinary
@@ -249,15 +228,6 @@ fixed 30-row composed suite contains:
 The primary controls include broad routine product/menu facts and a concrete
 public-biography statement so Selector cannot silently narrow the product
 contract before Admission runs.
-
-The fixed 32-row direct Admission suite contains exactly 16 rows per language:
-
-- 16 admit controls covering primary shapes plus valid ordinary reference,
-  API/workflow, and central catalog-record exploratory shapes;
-- 16 reject controls covering incomplete or residue-derived spans,
-  context-dependent references, subjective-only material, unsafe/private
-  requests, API-member descriptions that omit the member name, and other
-  propositions users should not receive.
 
 The hard sentinels must exercise the shipping exact-span boundary directly. A
 complete sentence that merely says another sentence was truncated is not an
@@ -273,17 +243,15 @@ Required for every run:
 - the expected task contract and clean candidate commit;
 - protocol-valid output for every row;
 - an exact known ID or null, with at most one action;
-- for composed runs, 16/16 primary controls selected as `primary`, all 8/8
+- 16/16 primary controls selected as `primary`, all 8/8
   exploratory controls displayed, at least 7/8 selected as `exploratory` with
   at least 3/4 correct in each language, and 6/6 hard-boundary sentinels
   abstained;
 - the sole permitted exploratory tier miss may only promote that control's
   displayed action to `primary`; it may not abstain, select an unusable span,
-  fail Admission, or cross any hard boundary. Across all six formal composed
+  cross any hard boundary. Across all six formal
   runs, permitted misses may involve at most one preregistered fixture
   identity;
-- for direct Admission runs, 32/32 correct binary decisions, including 16/16
-  admits and 16/16 rejects;
 - no hard-boundary leak, repair, retry, public search, or opened action;
 - deterministic localized Gemini handoff generated from local data;
 - `model.concurrency === 2` and a valid, non-overlapping time interval.
@@ -970,4 +938,62 @@ old latency numbers: a p95-only miss below the same 40-second max is
 `background_deferred`, while any max miss remains unqualified. It does not
 retroactively rescue `6141805`, alter the consumed Gate B cohort, or weaken any
 semantic threshold. A new clean candidate and twelve wholly new sequential
-Gate A receipts are required.
+Gate A receipts were required under that three-stage standard. The single-pass
+successor below replaces that ceremony with six wholly new sequential receipts.
+
+The subsequent clean three-stage candidate at `cadfd17` passed protocol and
+grounding on a wholly fresh 60-row Gate B development cohort, but failed before
+pairwise review: news-primary recall was `14/22`, general-primary recall was
+`3/6`, five expected-none rows were visible, and the same five rows overstated
+their tier. The run used 254 model requests because one Selector response could
+schedule Admission and Tier work for up to three candidates. Source review also
+found structural residue among the leaks. The cohort is permanently consumed;
+no output review, blind comparison, Gate C, or holdout was opened.
+
+The 2026-07-30 adversarial decision record at
+`tmp/grill-reports/gpr-single-pass-release-contract-2026-07-30.html` accepts a
+reversible single-pass successor. One full-context semantic response returns
+zero to three ordered supplied IDs with `primary` or `exploratory`; omitted
+spans are rejected. Local code still owns exact text, authorization scope,
+privacy, stale-result suppression, schema validation, and narrow
+machine-observable structural boundaries. The old three-stage candidate
+remains the experiment baseline until fresh Gate A and Gate B evidence passes.
+This does not reinterpret the earlier Final Critic ablation: its five or six
+tier overstatements are directly relevant negative evidence and are why the
+new contract cannot replace production from synthetic evidence alone.
+
+The same decision adopts stratified acceptable-candidate source truth.
+Reviewers label every supplied candidate's maximum allowed tier; a preferred ID
+is diagnostic only. A safe alternate candidate is observable, but a primary
+candidate displayed as exploratory still does not satisfy primary recall.
+Existing news-primary, general-primary, and general-exploratory floors remain
+separate and unchanged, as do zero expected-none leaks, zero tier
+overstatement, and zero user-unacceptable output. The `cadfd17` cohort may
+diagnose failure shapes but may not tune or validate this successor.
+
+Local structural additions are allowed only for independently specified,
+machine-observable shapes with paired positive and negative fixtures. No
+domain-specific phrase, semantic importance rule, public-interest rule, or
+truth classifier may be added locally. If flattened text does not expose a
+high-precision structural signal, eligibility remains model-owned. Every new
+structural class requires fresh synthetic controls and wholly fresh Gate B
+evidence.
+
+The first dirty-worktree single-pass diagnostic was protocol-valid in both
+provider lowerings but repeated the historical merged-tier defect: three of
+eight exploratory controls were overstated under `json_schema` and four under
+`json_object`. The candidate therefore did not weaken the gate or add a local
+tier classifier. One prompt clarification made the existing product boundary
+explicit: stable instructions, policies, reference documentation, APIs,
+catalogs, and historical records remain exploratory unless the Page explicitly
+presents the exact proposition as a current change, launch, incident,
+decision, or new measurement. A date, count, supported format, or official
+publisher inside stable reference material does not alone make it primary.
+
+After that single clarification, one non-formal diagnostic per lowering passed:
+`json_schema` produced `16/16` primary, `7/8` exploratory, and `6/6` none;
+`json_object` produced `16/16`, `8/8`, and `6/6`. Both were `30/30`
+protocol-valid, one-shot, and interactive with p95 near 6.3 seconds. These
+dirty-worktree diagnostics justify freezing a candidate for the six-receipt
+Gate A ceremony only; they are not formal release evidence and cannot open
+Gate B by themselves.

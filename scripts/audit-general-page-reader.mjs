@@ -382,8 +382,11 @@ async function startMockOpenAiEndpoint() {
         ...candidates.filter(({ id }) => id !== selected[0]?.id),
       ].slice(0, Math.min(3, candidates.length));
       content = JSON.stringify({
-        schemaVersion: 12,
-        selections: ranked.map(({ id }) => ({ candidateId: id })),
+        schemaVersion: 13,
+        selections: ranked.map(({ id }, index) => ({
+          candidateId: id,
+          presentationTier: index === 0 ? "primary" : "exploratory",
+        })),
       });
     } else if (kind === "investigation-admission") {
       await new Promise((resolveDelay) => setTimeout(resolveDelay, 500));

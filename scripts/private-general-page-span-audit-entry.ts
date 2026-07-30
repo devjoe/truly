@@ -9,22 +9,12 @@ import {
   buildGeneralPageInvestigationSpanAdapterSystemPrompt,
 } from "../src/lib/general-page-investigation-span-adapter";
 import {
-  buildGeneralPageInvestigationActionAdmissionSystemPrompt,
-} from "../src/lib/general-page-investigation-action-admission";
-import {
-  buildGeneralPageInvestigationActionTierSystemPrompt,
-} from "../src/lib/general-page-investigation-action-tier";
-import {
   generalPageInvestigationSelectionRejectionReason,
   generalPageInvestigationSourceRejectionReason,
 } from "../src/lib/general-page-investigation-action-boundary";
 import { buildInvestigationSpanCandidates } from "../src/lib/investigation-span-candidate";
 import {
-  buildTierBGeneralPageInvestigationActionAdmissionChatBody,
-  buildTierBGeneralPageInvestigationActionTierChatBody,
   buildTierBGeneralPageInvestigationSpanAdapterChatBody,
-  callTierBGeneralPageInvestigationActionAdmission,
-  callTierBGeneralPageInvestigationActionTier,
   callTierBGeneralPageInvestigationSpanAdapter,
 } from "../src/lib/tier-b-client";
 import type { Lang } from "../src/lib/types";
@@ -243,44 +233,6 @@ const protocolBody = buildTierBGeneralPageInvestigationSpanAdapterChatBody({
 if (protocolBody.response_format?.type !== structuredOutputMode || protocolBody.temperature !== 0) {
   throw new Error("Span audit response format/body mismatch");
 }
-const firstProtocolCandidate = firstProtocolSample.candidates[0];
-const admissionProtocolBody = buildTierBGeneralPageInvestigationActionAdmissionChatBody({
-  endpoint,
-  model,
-  structuredOutputMode,
-  selection: {
-    candidateId: firstProtocolCandidate.id,
-    exactClaim: firstProtocolCandidate.exactText,
-    sourceQuote: firstProtocolCandidate.exactText,
-    start: firstProtocolCandidate.start,
-    end: firstProtocolCandidate.end,
-  },
-  authorizedSourceContext: firstProtocolSample.text,
-  source: firstProtocolSample.sourceContext,
-});
-if (admissionProtocolBody.response_format?.type !== structuredOutputMode ||
-    admissionProtocolBody.temperature !== 0) {
-  throw new Error("Action admission response format/body mismatch");
-}
-const tierProtocolBody = buildTierBGeneralPageInvestigationActionTierChatBody({
-  endpoint,
-  model,
-  structuredOutputMode,
-  selection: {
-    candidateId: firstProtocolCandidate.id,
-    exactClaim: firstProtocolCandidate.exactText,
-    sourceQuote: firstProtocolCandidate.exactText,
-    start: firstProtocolCandidate.start,
-    end: firstProtocolCandidate.end,
-  },
-  authorizedSourceContext: firstProtocolSample.text,
-  source: firstProtocolSample.sourceContext,
-});
-if (tierProtocolBody.response_format?.type !== structuredOutputMode ||
-    tierProtocolBody.temperature !== 0) {
-  throw new Error("Action tier response format/body mismatch");
-}
-
 const preflight = {
   result: "preflight_pass",
   runId,
@@ -337,18 +289,16 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
     source: row.sourceContext,
     sourceLang: row.language,
     outputLang: row.outputLang,
+    maxProtocolAttempts: 1,
   });
   const selections = result.value?.selections ?? [];
   const proposedActions = selections.map((selection) => ({
     ...selection,
     exactGrounding: row.text.slice(selection.start, selection.end) === selection.exactClaim,
   }));
-  const admissionAttempts = [];
-  const tierAttempts = [];
   const localRejectionAttempts = [];
   let admittedAction = null;
   let exploratoryAction = null;
-  let downstreamProtocolOk = true;
   const sourceRejectionReason =
     generalPageInvestigationSourceRejectionReason(row.sourceContext);
   if (result.ok && sourceRejectionReason) {
@@ -370,42 +320,10 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
         });
         continue;
       }
-      const admission = await callTierBGeneralPageInvestigationActionAdmission({
-        endpoint,
-        model,
-        structuredOutputMode,
-        timeoutMs,
-        apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
-        selection,
-        authorizedSourceContext: row.text,
-        source: row.sourceContext,
-      });
-      admissionAttempts.push(admission);
-      if (!admission.ok || !admission.value) {
-        downstreamProtocolOk = false;
-        break;
-      }
-      if (admission.value.decision === "reject") continue;
-      const tier = await callTierBGeneralPageInvestigationActionTier({
-        endpoint,
-        model,
-        structuredOutputMode,
-        timeoutMs,
-        apiKey: process.env.TRULY_PRIVATE_EVAL_API_KEY,
-        selection,
-        authorizedSourceContext: row.text,
-        source: row.sourceContext,
-      });
-      tierAttempts.push(tier);
-      if (!tier.ok || !tier.value) {
-        downstreamProtocolOk = false;
-        break;
-      }
       const candidateAction = {
         ...selection,
-        presentationTier: tier.value.tier,
         presentation: buildGeneralPageInvestigationActionPresentation(
-          { ...selection, presentationTier: tier.value.tier },
+          selection,
           {
             outputLang: row.outputLang,
             source: row.sourceContext,
@@ -414,7 +332,7 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
         exactGrounding:
           row.text.slice(selection.start, selection.end) === selection.exactClaim,
       };
-      if (tier.value.tier === "primary") {
+      if (selection.presentationTier === "primary") {
         admittedAction = candidateAction;
         break;
       }
@@ -422,7 +340,7 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
     }
   }
   admittedAction ??= exploratoryAction;
-  const protocolOk = result.ok && downstreamProtocolOk;
+  const protocolOk = result.ok;
   const status = !protocolOk
     ? "protocol_failed"
     : !admittedAction
@@ -442,23 +360,7 @@ async function evaluateRow(row: NormalizedInputRow): Promise<Record<string, unkn
       issue: result.issue,
       raw: result.raw,
     },
-    admissionAttempts: admissionAttempts.map((admission) => ({
-      ok: admission.ok,
-      decision: admission.value?.decision,
-      finishReason: admission.finishReason,
-      usage: admission.usage,
-      error: admission.error,
-      raw: admission.raw,
-    })),
     localRejectionAttempts,
-    tierAttempts: tierAttempts.map((tier) => ({
-      ok: tier.ok,
-      tier: tier.value?.tier,
-      finishReason: tier.finishReason,
-      usage: tier.usage,
-      error: tier.error,
-      raw: tier.raw,
-    })),
     proposedActions,
     actions: admittedAction ? [admittedAction] : [],
   };
@@ -486,19 +388,9 @@ const prepared = results.filter((row) => row.status === "prepared").length;
 const abstained = results.filter((row) => row.status === "abstain").length;
 const proposed = results.reduce((sum, row) =>
   sum + (Array.isArray(row.proposedActions) ? row.proposedActions.length : 0), 0);
-const admissionRejected = results.reduce((sum, row) =>
-  sum + (Array.isArray(row.admissionAttempts)
-    ? row.admissionAttempts.filter(
-        (attempt) => attempt?.decision === "reject",
-      ).length
-    : 0), 0);
 const localRejected = results.reduce((sum, row) =>
   sum + (Array.isArray(row.localRejectionAttempts)
     ? row.localRejectionAttempts.length
-    : 0), 0);
-const tierClassified = results.reduce((sum, row) =>
-  sum + (Array.isArray(row.tierAttempts)
-    ? row.tierAttempts.filter((attempt) => attempt?.ok === true).length
     : 0), 0);
 const actionCount = results.reduce((sum, row) => sum + (Array.isArray(row.actions) ? row.actions.length : 0), 0);
 const exactGrounding = results.reduce((sum, row) => sum +
@@ -516,19 +408,15 @@ const meta = {
     trackedDiffSha256: candidateSnapshot.trackedDiffSha256,
   },
   contract: {
-    selector: "ranked_exact_span_proposal_v12_with_backups",
+    singlePass: "ranked_exact_span_selection_v13_with_tiers",
     selectorPromptSha256: sha256Text(buildGeneralPageInvestigationSpanAdapterSystemPrompt()),
-    admission: "reader_action_admission_v4",
-    admissionPromptSha256: sha256Text(buildGeneralPageInvestigationActionAdmissionSystemPrompt()),
-    tier: "reader_action_tier_v1",
-    tierPromptSha256: sha256Text(buildGeneralPageInvestigationActionTierSystemPrompt()),
     responseFormat: structuredOutputMode,
     outputLanguage: outputLang,
     repairMode: "none",
     maxCandidates: 48,
     maxInternalProposals: 3,
     maxActions: 1,
-    replacementAfterRejection: true,
+    replacementAfterLocalRejection: true,
     localBoundary: "reader_action_local_boundary_v1",
     inputBoundary: runtimeEnvelopeMode ? "captured_adapter_envelope" : "legacy_rebuilt_candidates",
   },
@@ -538,8 +426,6 @@ const meta = {
     name: model,
     temperature: protocolBody.temperature,
     maxTokens: protocolBody.max_tokens,
-    admissionMaxTokens: admissionProtocolBody.max_tokens,
-    tierMaxTokens: tierProtocolBody.max_tokens,
     timeoutMs,
     concurrency,
   },
@@ -553,9 +439,7 @@ const meta = {
     prepared,
     abstained,
     proposed,
-    admissionRejected,
     localRejected,
-    tierClassified,
     actionCount,
     exactGrounding,
   },
