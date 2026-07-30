@@ -1108,3 +1108,12 @@ exact span that flattens a Page title, module or file path, or source-code label
 into trailing prose. No new model stage, semantic regex gate, repair call, or
 release-standard change is introduced. The successor requires a new clean
 commit, fresh formal Gate A, and wholly fresh Gate B and Gate C evidence.
+
+The first prompt-only successor at commit `0a8a9ff` was rejected on the
+consumed v49 cohort before any fresh gate opened. It did not suppress the known
+subscription-promotion action, reduced correctly tiered exploratory-only rows
+from 12/15 to 9/15, and exchanged one flattened Python documentation wrapper
+for another. The next diagnostic therefore restores the compact system
+contract and moves only the blocking subscription-page veto to the final
+selection instruction nearest the response. It remains a one-call prompt-only
+candidate with no new runtime guard or changed threshold.

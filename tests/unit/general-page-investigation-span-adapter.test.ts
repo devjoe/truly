@@ -165,9 +165,6 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
     expect(system).toContain("Public interest is not required");
     expect(system).toContain("Stable instructions, policies, reference documentation");
     expect(system).toContain("does not by itself make the action primary");
-    expect(system).toContain("flattens a Page title, module or file path, Source code label");
-    expect(system).toContain("ongoing self-promotional subscription or upgrade benefit");
-    expect(system).toContain("Explanatory causal background remains exploratory");
     expect(system).toContain(
       "An introductory source-role phrase such as 'the documentation says' or 'the guide explains' is not by itself a pointer or unnamed hearsay",
     );
@@ -181,6 +178,7 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
     expect(user).toContain('"schemaVersion":13');
     expect(user).toContain("Return zero to three eligible supplied IDs");
     expect(user).toContain("Do not group or reorder candidates by tier");
+    expect(user).toContain("when the Page purpose is selling a subscription");
     expect(user).toContain("Omit fictional narration and publisher or license boilerplate");
     expect(user).not.toMatch(/exactly 3 distinct|Admission to reject/u);
     expect(user).not.toMatch(/"start":|"end":/u);
