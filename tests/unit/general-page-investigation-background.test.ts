@@ -112,7 +112,7 @@ describe("background General Page single-pass investigation preparation", () => 
     });
   });
 
-  it("prefers a surviving primary over an earlier exploratory backup", async () => {
+  it("publishes the first surviving model-ranked candidate regardless of cue tier", async () => {
     const { scheduler } = immediateScheduler();
     const sendMessage = vi.fn();
 
@@ -141,8 +141,8 @@ describe("background General Page single-pass investigation preparation", () => 
       status: "prepared",
       preparedActions: [
         expect.objectContaining({
-          displayClaim: "衛生局命令遠帆公司在七月三十一日前完成下架",
-          presentationTier: "primary",
+          displayClaim: "食藥署公布232項產品名單",
+          presentationTier: "exploratory",
         }),
       ],
     }));

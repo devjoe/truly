@@ -997,3 +997,91 @@ protocol-valid, one-shot, and interactive with p95 near 6.3 seconds. These
 dirty-worktree diagnostics justify freezing a candidate for the six-receipt
 Gate A ceremony only; they are not formal release evidence and cannot open
 Gate B by themselves.
+
+## Layered product successor — 2026-07-30
+
+The adversarial decision record in
+`docs/plans/general-page-layered-release-gate-decision-2026-07-30.md`
+supersedes the reviewer-grade tier gates above for candidates frozen after
+this decision. It does not rescue, relabel, or reopen any consumed cohort.
+Candidate output from
+the 24-row `gpr-ranked-actions-compact-prompt-dev-v47` development slice was
+visible during the decision and therefore cannot become Gate B evidence.
+
+The successor separates three responsibilities:
+
+- the model returns zero to three eligible supplied IDs in strongest-first
+  reader-utility order and supplies `primary` or `exploratory` only as a
+  presentation cue;
+- local code scans that returned order and publishes the first candidate that
+  survives the existing source and structural hard boundaries; tier never
+  reorders candidates;
+- `primary` is an ordinary unbadged source-claim row. `exploratory` uses the
+  same row plus the persistent localized lower-confidence cue. Neither tier is
+  a truth verdict. Exact text, offsets, source metadata, Gemini handoff, scope,
+  session identity, and stale-result suppression remain local.
+
+No local semantic tier classifier, second ranker, repair request, or additional
+model call is introduced. Local additions remain limited to independently
+specified machine-observable structural boundaries with positive and negative
+fixtures.
+
+### Source truth and fixed denominators
+
+Source-only reviewers label the complete authorized source context before
+candidate output is revealed:
+
+- `actionable`: the source context contains at least one complete,
+  Page-relevant, publicly externally checkable proposition suitable for a
+  reader action;
+- `none`: the source context contains no such proposition;
+- `exploratoryOnly`: every acceptable proposition is at most
+  `reviewable_exploratory`.
+
+This label is independent of whether the candidate builder actually supplied
+the proposition. A missing extraction or missing candidate remains a coverage
+miss and cannot shrink the denominator. Candidate-level `maxAllowedTier` and
+the full tier confusion matrix remain recorded for diagnosis and cue review.
+
+Gate B remains a fixed 60-row Page-only cohort with 30 news and 30 general-web
+rows. Before output is revealed, its sealed source truth must contain at least:
+
+- 20 actionable news rows;
+- 15 actionable general-web rows;
+- 9 exploratory-only rows;
+- 5 `none` news rows and 5 `none` general-web rows.
+
+Reachable extraction, advisor, candidate-builder, timeout, or model failures
+stay in their original category denominator.
+
+### Layered Gate B and Gate C predicates
+
+The following remain zero-tolerance hard gates:
+
+- zero `hard_unacceptable` and zero `user_unacceptable` displayed actions;
+- zero visible actions on source-truth `none` rows;
+- 100% exact grounding and authorization-scope fidelity;
+- zero stale, cross-scope, or same-Page residue-derived actions;
+- at most one atomic displayed action and a complete locally generated
+  handoff for every displayed action.
+
+Product coverage is measured separately:
+
+- acceptable displayed action on at least 80% of actionable news rows;
+- acceptable displayed action on at least 60% of actionable general-web rows;
+- visible exploratory cue on at least 60% of `exploratoryOnly` rows.
+
+These three ratios are category-specific and cannot be averaged or traded
+against each other. Tier overstatement remains visible in the confusion matrix
+but is not an independent zero-tolerance failure; systematic missing cues still
+fail the 60% exploratory-cue floor. The existing provider compatibility,
+service-profile, privacy, residue, and blinded reference non-regression gates
+remain unchanged. The blind comparison evaluates the actual rendered first
+action and handoff, so a merely acceptable but materially weaker ordering
+cannot pass by coverage alone.
+
+The executable aggregate contract is
+`scripts/lib/general-page-investigation-layered-gate.mjs`, covered by
+`tests/unit/general-page-investigation-layered-gate.test.mjs`. A wholly fresh
+Gate A, source-diverse Gate B, and untouched Gate C are still required before
+release authority can become true.

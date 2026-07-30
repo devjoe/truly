@@ -1094,16 +1094,14 @@ function investigationActionHtml({
   const sourceClaimLabel = tr("sidepanel.page.investigation.sourceClaim");
   const needId = `page-claim-need-${actionIndex}`;
   const primary = action.presentationTier === "primary";
-  const tierLabel = primary
-    ? tr("sidepanel.page.investigation.priority")
-    : tr("sidepanel.page.investigation.exploratoryLabel");
+  const tierLabel = tr("sidepanel.page.investigation.exploratoryLabel");
   const exploratoryNote = primary
     ? ""
     : `<p class="page-claim-exploratory-note"><span class="page-claim-tier-label">${escapeHtml(tierLabel)}</span>${escapeHtml(tr("sidepanel.page.investigation.exploratoryNote"))}</p>`;
   return `
     <section class="page-claim-investigation">
       <div class="page-claim-investigation-main">
-        <p class="page-claim-investigation-question">${primary ? `<span class="page-claim-priority-label">${escapeHtml(tierLabel)}</span>` : ""}<span class="page-claim-source-label">${escapeHtml(sourceClaimLabel)}</span><q class="page-claim-exact">${escapeHtml(action.displayClaim)}</q></p>
+        <p class="page-claim-investigation-question"><span class="page-claim-source-label">${escapeHtml(sourceClaimLabel)}</span><q class="page-claim-exact">${escapeHtml(action.displayClaim)}</q></p>
         <button class="page-claim-evidence-toggle" type="button" aria-expanded="false" aria-controls="${needId}" aria-label="${escapeHtml(evidenceLabel)}">${INFO_ICON_SVG}</button>
       </div>
       ${exploratoryNote}
@@ -2480,12 +2478,13 @@ export function createSidepanelPageReadingRuntime({
     if (currentScope.investigation?.deadlineExpired) return;
     if (message.preparedActions || message.claimIndex === undefined) {
       if (message.status === "prepared" && !message.preparedActions?.length) return;
+      const preparedActions = message.preparedActions?.slice(0, 1);
       sessions.set(message.tabId, replaceScopeState(session, message.scope, {
         ...currentScope,
         investigation: {
           analysisKey: message.analysisKey,
           status: message.status === "prepared" ? "ready" : message.status,
-          ...(message.preparedActions?.length ? { preparedActions: message.preparedActions } : {}),
+          ...(preparedActions?.length ? { preparedActions } : {}),
         },
       }));
       clearInvestigationDeadline(message.tabId, message.scope);

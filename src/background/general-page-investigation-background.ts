@@ -69,8 +69,9 @@ function investigationSourceLanguage(text: string, fallback?: Lang): Lang | unde
 /**
  * Starts one low-priority semantic ranking job. The model may return up to
  * three eligible locally owned exact spans with tiers. Local hard boundaries
- * select the first surviving primary result or, otherwise, the first surviving
- * exploratory result. The panel receives only one final atomic result.
+ * select the first surviving model-ranked result. Presentation tier only
+ * controls the caution shown with that result. The panel receives one final
+ * atomic result.
  * Reading-model claims remain outside the action identity boundary.
  */
 export function scheduleGeneralPageInvestigationPreparation(
@@ -127,29 +128,18 @@ export function scheduleGeneralPageInvestigationPreparation(
     if (selections.length === 0) {
       return { status: "ineligible" as const };
     }
-    let exploratorySelection:
-      | (typeof selections[number] & { presentationTier: "exploratory" })
-      | undefined;
     for (const selection of selections) {
       if (sourceRejectionReason ||
           generalPageInvestigationSelectionRejectionReason(selection, {
             authorizedSourceContext: request.context.mainText,
             source,
           })) continue;
-      if (selection.presentationTier === "primary") {
-        return {
-          status: "prepared" as const,
-          selection,
-        };
-      }
-      exploratorySelection ??= {
-        ...selection,
-        presentationTier: "exploratory",
+      return {
+        status: "prepared" as const,
+        selection,
       };
     }
-    return exploratorySelection
-      ? { status: "prepared" as const, selection: exploratorySelection }
-      : { status: "ineligible" as const };
+    return { status: "ineligible" as const };
   }).then((result) => {
     if (result.status === "unavailable") {
       sendSafely(options.sendMessage, {

@@ -3555,15 +3555,11 @@ describe("sidepanel page reading runtime", () => {
     const readyCard = pagePaneEl.querySelector(".page-claim-investigation");
     expect(readyCard).not.toBeNull();
     expect(readyCard?.closest(".page-claim-row")?.classList.contains("is-primary")).toBe(true);
-    expect(readyCard?.querySelector(".page-claim-priority-label")?.textContent).toBe("優先");
-    expect(pagePaneEl.querySelectorAll(".page-claim-row")).toHaveLength(2);
-    expect(pagePaneEl.querySelectorAll(".page-claim-priority-label")).toHaveLength(1);
-    expect(pagePaneEl.querySelectorAll(".page-claim-exploratory-note")).toHaveLength(1);
-    const exploratoryRow = pagePaneEl.querySelector(".page-claim-row.is-exploratory");
-    expect(exploratoryRow).not.toBeNull();
-    expect(exploratoryRow?.querySelector(".page-claim-priority-label")).toBeNull();
-    expect(exploratoryRow?.querySelector(".page-claim-exploratory-note")?.textContent)
-      .toContain("查核價值較不確定");
+    expect(readyCard?.querySelector(".page-claim-priority-label")).toBeNull();
+    expect(pagePaneEl.querySelectorAll(".page-claim-row")).toHaveLength(1);
+    expect(pagePaneEl.querySelectorAll(".page-claim-priority-label")).toHaveLength(0);
+    expect(pagePaneEl.querySelectorAll(".page-claim-exploratory-note")).toHaveLength(0);
+    expect(pagePaneEl.textContent).not.toContain("Runtime fixture reports one secondary claim.");
     expect(readyCard?.textContent).not.toContain("查核問題");
     expect(readyCard?.querySelector(".page-claim-source-label")?.textContent).toBe("原文主張");
     expect(readyCard?.querySelector(".page-claim-exact")?.textContent)
@@ -3572,7 +3568,7 @@ describe("sidepanel page reading runtime", () => {
     expect(pagePaneEl.querySelector(".page-claim-section-loading")).toBeNull();
     expect(animateInvestigationState).not.toHaveBeenCalled();
     const links = [...pagePaneEl.querySelectorAll<HTMLAnchorElement>(".page-claim-investigation-actions a")];
-    expect(links).toHaveLength(2);
+    expect(links).toHaveLength(1);
     const aiModeQuery = new URL(links[0]!.href).searchParams.get("q") ?? "";
     expect(aiModeQuery).toContain("https://example.test/article");
     expect(aiModeQuery).toContain("請查核以下原文陳述");
@@ -3584,6 +3580,25 @@ describe("sidepanel page reading runtime", () => {
     expect(readyCard?.querySelector(".page-claim-investigation-need")?.getAttribute("aria-hidden")).toBe("false");
     expect(readyCard?.querySelector(".page-claim-investigation-need")?.textContent)
       .toBe("建議比對官方公告");
+
+    runtime.handleGeneralPageInvestigationResult({
+      type: "GENERAL_PAGE_INVESTIGATION_RESULT",
+      tabId: 42,
+      analysisKey,
+      scope: "page",
+      status: "prepared",
+      preparedActions: [{
+        displayClaim: "Runtime fixture reports one exploratory claim.",
+        evidenceHint: "建議先判斷是否值得追查",
+        askAiPrompt: "請查核以下原文陳述。",
+        presentationTier: "exploratory",
+      }],
+    });
+    const exploratoryRow = pagePaneEl.querySelector(".page-claim-row.is-exploratory");
+    expect(exploratoryRow).not.toBeNull();
+    expect(exploratoryRow?.querySelector(".page-claim-priority-label")).toBeNull();
+    expect(exploratoryRow?.querySelector(".page-claim-exploratory-note")?.textContent)
+      .toContain("查核價值較不確定");
 
     prefersReducedMotion.mockReturnValue({ matches: true } as MediaQueryList);
     for (const status of ["ineligible", "unavailable"] as const) {

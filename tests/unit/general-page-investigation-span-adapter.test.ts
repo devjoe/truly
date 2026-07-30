@@ -136,9 +136,12 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
     expect(system).toContain("Public interest is not required");
     expect(system).toContain("Stable instructions, policies, reference documentation");
     expect(system).toContain("does not by itself make the action primary");
+    expect(system).toContain("Rank all eligible survivors strongest to weakest regardless of tier");
+    expect(system).not.toContain("Rank eligible primary survivors first");
     expect(system).not.toMatch(/Admission critic|Tier critic/u);
     expect(user).toContain('"schemaVersion":13');
     expect(user).toContain("Return zero to three eligible supplied IDs");
+    expect(user).toContain("Do not group or reorder candidates by tier");
     expect(user).toContain("Omit fictional narration and publisher or license boilerplate");
     expect(user).not.toMatch(/exactly 3 distinct|Admission to reject/u);
     expect(user).not.toMatch(/"start":|"end":/u);

@@ -206,7 +206,13 @@ describe("canonical page reading session", () => {
     expect(projectPreparedPageInvestigationActions({
       analysisKey: "page-key",
       status: "ready",
-      preparedActions,
+      preparedActions: [
+        ...preparedActions,
+        {
+          ...preparedActions[0],
+          displayClaim: "This malformed internal batch must stay hidden.",
+        },
+      ],
     }, "page-key")).toEqual({ items: preparedActions, pending: false });
     expect(projectPreparedPageInvestigationActions({
       analysisKey: "stale-key",

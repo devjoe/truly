@@ -61,7 +61,11 @@ export interface PreparedPageInvestigationActionProjection {
   pending: boolean;
 }
 
-/** Projects only a complete local action batch; partial model output is never visible. */
+/**
+ * Projects only the first complete local action. The background contract emits
+ * one action, and this final clamp keeps synthetic, stale-version, or malformed
+ * internal messages from widening the product surface.
+ */
 export function projectPreparedPageInvestigationActions(
   session: PageClaimInvestigationSession | undefined,
   analysisKey: string | undefined,
@@ -73,7 +77,7 @@ export function projectPreparedPageInvestigationActions(
   if (session.status !== "ready" || !session.preparedActions?.length) {
     return { items: [], pending: false };
   }
-  return { items: session.preparedActions, pending: false };
+  return { items: session.preparedActions.slice(0, 1), pending: false };
 }
 
 export interface ApprovedPageClaimProjection {

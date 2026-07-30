@@ -69,6 +69,14 @@ the private evaluation repository; raw source text, labels, prompts, and
 per-row output never enter this public repository. Release authority remains
 false until all A-D gates pass on one frozen candidate.
 
+Candidates frozen after the 2026-07-30 layered-contract decision use the
+source-context denominators and product-facing 80% news, 60% general, and 60%
+exploratory-cue floors defined in the release standard. The executable
+aggregate contract runs through `npm run test:gpr:ceremony` and is covered by
+`tests/unit/general-page-investigation-layered-gate.test.mjs`. It does not
+replace the six sequential provider-lowering receipts, the fresh private
+60-row Gate B, blind non-regression review, or untouched Gate C.
+
 ### Private grounding evaluation runner
 
 The public repository owns the runtime-equivalent context builder, prompt,
