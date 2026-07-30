@@ -80,6 +80,28 @@ Accepted with modifications:
 The full returned order is a development diagnostic. The actual rendered first
 action and handoff remain subject to blind reference non-regression review.
 
+### D6 — attributed stable propositions
+
+Accepted with narrow safeguards after the first `7a47c40` Gate A receipt
+produced one exploratory abstention:
+
+- preserve the original `synthetic-zh-05` text, expectation, and unchanged
+  8-of-8 exploratory-visibility threshold;
+- clarify that an introductory attribution is not a pointer when the same
+  exact span states a complete, standalone technical definition, behavior,
+  workflow, or capability;
+- continue rejecting text that only says what a document discusses or
+  introduces, redirects the reader, uses unnamed hearsay, or relies on nearby
+  text to repair its subject or payload;
+- add no local semantic classifier, repair request, or extra model call;
+- permanently reject the failed receipt and rerun the complete six-receipt
+  Gate A on a new clean commit.
+
+The rejected alternative was to rewrite the positive fixture after seeing the
+failure. A larger 32-row synthetic contract with new matched negatives remains
+available if the existing hard sentinels and fresh Gate B do not falsify the
+narrow clarification; it is not required by this decision.
+
 ## Executable boundary
 
 The aggregate contract lives in

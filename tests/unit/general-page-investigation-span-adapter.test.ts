@@ -165,6 +165,13 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
     expect(system).toContain("Public interest is not required");
     expect(system).toContain("Stable instructions, policies, reference documentation");
     expect(system).toContain("does not by itself make the action primary");
+    expect(system).toContain(
+      "An introductory source-role phrase such as 'the documentation says' or 'the guide explains' is not by itself a pointer or unnamed hearsay",
+    );
+    expect(system).toContain(
+      "only says what a document discusses or introduces",
+    );
+    expect(system).toContain("Page context shows a reference or teaching Page");
     expect(system).toContain("Rank all eligible survivors strongest to weakest regardless of tier");
     expect(system).not.toContain("Rank eligible primary survivors first");
     expect(system).not.toMatch(/Admission critic|Tier critic/u);
