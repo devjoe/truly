@@ -1117,3 +1117,23 @@ for another. The next diagnostic therefore restores the compact system
 contract and moves only the blocking subscription-page veto to the final
 selection instruction nearest the response. It remains a one-call prompt-only
 candidate with no new runtime guard or changed threshold.
+
+The focused subscription-veto candidate at commit `8808b03` then removed the
+known source-truth `none` action on the consumed v49 cohort while preserving
+24/24 actionable-news visibility, 24/25 actionable-general visibility, and
+12/15 exploratory-only cues. Independent consumed-data output review still
+found two actions that both reviewers rejected: a CNBC span prefixed by a
+multi-part Getty Images credit and an Ars span prefixed by `Credit: Google`.
+Reviewers also disagreed about Federal Register field labels and a Python
+class/module wrapper.
+
+The next candidate adds only machine-observable structural prefixes to the
+existing local boundary: media-credit prefixes, Federal Register
+`ACTION`/`SUMMARY`/`DATES`-style field labels, and a flattened
+`class ... Module:` wrapper. Replaying the already returned ranked candidates
+rejects those wrappers and selects the next clean candidate without changing
+the consumed cohort's visibility or cue counts. Ordinary documentation facts,
+report descriptions, and public appointments remain outside the local
+boundary even when reviewers disagree about their utility. This is a hard-role
+boundary refinement, not a local semantic scorer or a release-standard
+change; it requires a new clean commit and fresh A-C evidence.

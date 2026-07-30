@@ -50,6 +50,12 @@ const LEADING_TIMEZONE_FRAGMENT =
   /^(?:E[DS]T|C[DS]T|M[DS]T|P[DS]T)\s+(?:a|an|the)\b/iu;
 const SOURCE_CODE_METADATA_PREFIX =
   /^[\p{L}\d_.-]{2,40}\s+source code:\s+stability:\s*\d+\b/iu;
+const MEDIA_CREDIT_PREFIX =
+  /^(?:credit:\s+|(?:[^|\n]{1,80}\|\s*){2,}(?:Getty Images|Reuters|AP|AFP|Bloomberg|NurPhoto|Anadolu)(?:\s+via\s+[\p{L}\p{N}.&'’_-]+){0,2}\s+(?=\p{Lu}\p{Ll}))/iu;
+const FEDERAL_REGISTER_FIELD_PREFIX =
+  /^(?:ACTION|SUMMARY|DATES|ADDRESSES|FOR FURTHER INFORMATION CONTACT):\s+/u;
+const FLATTENED_CLASS_MODULE_PREFIX =
+  /^(?:here are the classes:\s+)?class\s+\S+\([^)]*\)\s+module:\s+\S+\s+/iu;
 const EDITORIAL_SECTION_PREFIX =
   /^what you need to know\b.{0,100}\b(?:wildfires?|fires?|storms?|floods?|elections?|protests?|outages?|conflict|war)\b/iu;
 const PRESS_RELEASE_HEADER =
@@ -240,6 +246,9 @@ export function generalPageInvestigationSelectionRejectionReason(
       PUBLICATION_METADATA_PREFIX.test(text) ||
       LEADING_TIMEZONE_FRAGMENT.test(text) ||
       SOURCE_CODE_METADATA_PREFIX.test(text) ||
+      MEDIA_CREDIT_PREFIX.test(text) ||
+      FEDERAL_REGISTER_FIELD_PREFIX.test(text) ||
+      FLATTENED_CLASS_MODULE_PREFIX.test(text) ||
       EDITORIAL_SECTION_PREFIX.test(text) ||
       PRESS_RELEASE_HEADER.test(text) ||
       STACKED_SECTION_LABELS.test(text) ||
