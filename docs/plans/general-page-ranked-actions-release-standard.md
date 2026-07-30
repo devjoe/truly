@@ -1085,3 +1085,26 @@ The executable aggregate contract is
 `tests/unit/general-page-investigation-layered-gate.test.mjs`. A wholly fresh
 Gate A, source-diverse Gate B, and untouched Gate C are still required before
 release authority can become true.
+
+The clean single-pass candidate at commit `6f20a88` passed formal Gate A and
+then produced 60/60 protocol-valid, exactly grounded results on the fresh
+source-sealed v49 Gate B cohort. Before semantic output review, blind
+comparison, or Gate C could open, its deterministic gate failed because one
+source-truth `none` subscription-promotion Page still produced a visible
+primary action. Raw visibility was high at 24/24 actionable news and 24/25
+actionable general-web rows; 12/15 exploratory-only rows carried the
+exploratory tier, above the unchanged 60% cue floor. Two exploratory-only rows
+were presented as primary and remain tier-confusion diagnostics under the
+layered standard, not independent blockers. The cohort is permanently
+consumed.
+
+The successor keeps the same one-call schema, ranked fallback, local hard
+boundary, thresholds, and Page-only scope. It makes three prompt-only
+clarifications learned from the consumed cohort: omit ongoing
+publisher-subscription upsells unless the exact span states a specific current
+change; keep explanatory science background exploratory unless the exact span
+itself reports a new finding, measurement, decision, or change; and reject an
+exact span that flattens a Page title, module or file path, or source-code label
+into trailing prose. No new model stage, semantic regex gate, repair call, or
+release-standard change is introduced. The successor requires a new clean
+commit, fresh formal Gate A, and wholly fresh Gate B and Gate C evidence.

@@ -165,6 +165,9 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
     expect(system).toContain("Public interest is not required");
     expect(system).toContain("Stable instructions, policies, reference documentation");
     expect(system).toContain("does not by itself make the action primary");
+    expect(system).toContain("flattens a Page title, module or file path, Source code label");
+    expect(system).toContain("ongoing self-promotional subscription or upgrade benefit");
+    expect(system).toContain("Explanatory causal background remains exploratory");
     expect(system).toContain(
       "An introductory source-role phrase such as 'the documentation says' or 'the guide explains' is not by itself a pointer or unnamed hearsay",
     );
