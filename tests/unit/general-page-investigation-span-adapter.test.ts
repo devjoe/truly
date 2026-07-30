@@ -144,6 +144,20 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
     expect(user).not.toMatch(/"start":|"end":/u);
   });
 
+  it("keeps the semantic contract compact enough for constrained Edge models", () => {
+    const system = buildGeneralPageInvestigationSpanAdapterSystemPrompt();
+    const user = buildGeneralPageInvestigationSpanAdapterPrompt({
+      candidates,
+      targetKind: "page",
+      authorizedSourceContext,
+      source: { title: "Synthetic article", url: "https://example.com/article" },
+    });
+
+    expect(system.split("\n").length).toBeLessThanOrEqual(14);
+    expect([...system].length).toBeLessThanOrEqual(6_000);
+    expect([...user].length).toBeLessThanOrEqual(4_000);
+  });
+
   it("requires one bounded authorized Page context", () => {
     expect(() => buildGeneralPageInvestigationSpanAdapterPrompt({
       candidates,
