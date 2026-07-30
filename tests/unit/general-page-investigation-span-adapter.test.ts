@@ -179,7 +179,16 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
     expect(user).toContain("Return zero to three eligible supplied IDs");
     expect(user).toContain("Do not group or reorder candidates by tier");
     expect(user).toContain("when the Page purpose is selling a subscription");
-    expect(user).toContain("Omit fictional narration and publisher or license boilerplate");
+    expect(user).toContain(
+      "omit story-world events even when they imitate news, quote named sources, or use real organizations",
+    );
+    expect(user).toContain(
+      "only an update history, publication log, or 'Updates to this page' list",
+    );
+    expect(user).toContain(
+      "notes or commentary that only explain its characters, plot, dialogue, or translation",
+    );
+    expect(user).toContain("Omit publisher or license boilerplate");
     expect(user).not.toMatch(/exactly 3 distinct|Admission to reject/u);
     expect(user).not.toMatch(/"start":|"end":/u);
   });

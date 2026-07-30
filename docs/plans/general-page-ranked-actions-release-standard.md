@@ -1137,3 +1137,25 @@ report descriptions, and public appointments remain outside the local
 boundary even when reviewers disagree about their utility. This is a hard-role
 boundary refinement, not a local semantic scorer or a release-standard
 change; it requires a new clean commit and fresh A-C evidence.
+
+That boundary candidate at `f131702` passed all six formal Gate A receipts and
+then ran once on the wholly fresh, source-sealed v50 Gate B cohort. Transport
+was `60/60`, all `52/52` displayed actions were exactly grounded, actionable
+visibility was `24/24` news and `25/25` general web, and `15/18`
+exploratory-only rows carried the exploratory cue. The deterministic gate
+still failed before semantic output review: three source-truth `none` rows
+were visible. Qwen treated a Hard Drive story-world event as news, selected a
+GOV.UK publication-log entry, and selected a Ramayana footnote that only
+explained a character's intent. Semantic Cloud review, blind comparison, and
+Gate C were not opened; v50 is permanently consumed.
+
+The next prompt-only successor keeps the same schema, thresholds, scheduling,
+local boundary, and single-call architecture. Its final veto makes those
+already-existing semantic exclusions salient at the final decision point:
+fiction, satire, or parody remains story-world narration even when written as
+news or attributed to named sources; a Page whose authorized context is only
+an update or publication log has no selectable body claim; and literary notes
+that only explain characters, plot, dialogue, or translation remain
+context-dependent. This adds no domain list, local semantic classifier, model
+stage, or release-standard change. It must first falsify against consumed v50,
+then pass a fresh formal Gate A and wholly fresh Gate B.
