@@ -56,6 +56,16 @@ export interface GeneralPageInvestigationActionPresentation {
   presentationTier: GeneralPageInvestigationPresentationTier;
 }
 
+/** Preserves model utility order while allowing local hard-boundary rejection. */
+export function firstSurvivingGeneralPageInvestigationSelection(
+  selections: readonly MaterializedGeneralPageInvestigationSpanSelection[],
+  isRejected: (
+    selection: MaterializedGeneralPageInvestigationSpanSelection,
+  ) => boolean = () => false,
+): MaterializedGeneralPageInvestigationSpanSelection | undefined {
+  return selections.find((selection) => !isRejected(selection));
+}
+
 export function generalPageInvestigationSpanAdapterJsonSchema(candidateIds: string[]) {
   if (!Array.isArray(candidateIds) || candidateIds.length < 1 || candidateIds.length > 64 ||
     new Set(candidateIds).size !== candidateIds.length || candidateIds.some((id) => !/^span:\d+$/u.test(id))) {

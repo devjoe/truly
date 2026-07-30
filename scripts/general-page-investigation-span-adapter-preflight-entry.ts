@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { buildInvestigationSpanCandidates } from "../src/lib/investigation-span-candidate";
 import {
   buildGeneralPageInvestigationActionPresentation,
+  firstSurvivingGeneralPageInvestigationSelection,
 } from "../src/lib/general-page-investigation-span-adapter";
 import {
   buildGeneralPageInvestigationActionAdmissionSystemPrompt,
@@ -214,12 +215,9 @@ async function evaluate(fixture: SyntheticFixture, index: number) {
     }
   }
   if (!withAdmission && result.ok) {
-    admittedSelection = selections.find(({ presentationTier }) =>
-      presentationTier === "primary");
-    exploratorySelection = selections.find(({ presentationTier }) =>
-      presentationTier === "exploratory") as
-        | (typeof selections[number] & { presentationTier: "exploratory" })
-        | undefined;
+    admittedSelection = firstSurvivingGeneralPageInvestigationSelection(
+      selections,
+    );
   }
   admittedSelection ??= exploratorySelection;
   const admissionLatencyMs = admissionAttempts.length > 0

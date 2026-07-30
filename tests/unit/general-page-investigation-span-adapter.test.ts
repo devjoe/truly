@@ -4,6 +4,7 @@ import {
   buildGeneralPageInvestigationActionPresentation,
   buildGeneralPageInvestigationSpanAdapterPrompt,
   buildGeneralPageInvestigationSpanAdapterSystemPrompt,
+  firstSurvivingGeneralPageInvestigationSelection,
   generalPageInvestigationSpanAdapterJsonSchema,
   parseAndMaterializeGeneralPageSpanAdapter,
 } from "@src/lib/general-page-investigation-span-adapter";
@@ -33,6 +34,34 @@ const preparedWire = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("General Page single-pass exact-span selector with schema v13", () => {
+  it("preserves model utility order when cue tiers differ", () => {
+    const ranked = [
+      {
+        candidateId: "span:0",
+        presentationTier: "exploratory" as const,
+        exactClaim: "A stable public fact.",
+        sourceQuote: "A stable public fact.",
+        start: 0,
+        end: 21,
+      },
+      {
+        candidateId: "span:1",
+        presentationTier: "primary" as const,
+        exactClaim: "A current public announcement.",
+        sourceQuote: "A current public announcement.",
+        start: 22,
+        end: 52,
+      },
+    ];
+
+    expect(firstSurvivingGeneralPageInvestigationSelection(ranked))
+      .toBe(ranked[0]);
+    expect(firstSurvivingGeneralPageInvestigationSelection(
+      ranked,
+      ({ candidateId }) => candidateId === "span:0",
+    )).toBe(ranked[1]);
+  });
+
   it("materializes model-selected IDs and tiers while local code owns exact text", () => {
     expect(parseAndMaterializeGeneralPageSpanAdapter(
       JSON.stringify(preparedWire),

@@ -5,6 +5,7 @@ import type {
 } from "../lib/messages";
 import {
   buildGeneralPageInvestigationActionPresentation,
+  firstSurvivingGeneralPageInvestigationSelection,
 } from "../lib/general-page-investigation-span-adapter";
 import {
   generalPageInvestigationSelectionRejectionReason,
@@ -128,12 +129,17 @@ export function scheduleGeneralPageInvestigationPreparation(
     if (selections.length === 0) {
       return { status: "ineligible" as const };
     }
-    for (const selection of selections) {
-      if (sourceRejectionReason ||
-          generalPageInvestigationSelectionRejectionReason(selection, {
+    const selection = firstSurvivingGeneralPageInvestigationSelection(
+      selections,
+      (candidate) => Boolean(
+        sourceRejectionReason ||
+          generalPageInvestigationSelectionRejectionReason(candidate, {
             authorizedSourceContext: request.context.mainText,
             source,
-          })) continue;
+          }),
+      ),
+    );
+    if (selection) {
       return {
         status: "prepared" as const,
         selection,
