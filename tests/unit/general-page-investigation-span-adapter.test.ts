@@ -177,6 +177,12 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
       "Reject tutorial, course, or book promises about what the reader will learn or be able to do after completing the material",
     );
     expect(system).toContain(
+      "declarative grammar alone does not make advice factual",
+    );
+    expect(system).toContain(
+      "public archiving does not turn private narrative into a reader verification action",
+    );
+    expect(system).toContain(
       "Before returning JSON, apply a final Page-role tier check",
     );
     expect(system).toContain(

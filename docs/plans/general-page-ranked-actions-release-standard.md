@@ -1190,3 +1190,29 @@ exploratory unless the same Page explicitly presents the exact proposition as
 a current change or event. The successor must first falsify these observed
 classes against consumed v51, then pass a new formal Gate A and wholly fresh
 Gate B and Gate C evidence.
+
+That successor at `5eff5fd` removed the known v51 `none` leak and raised
+correct exploratory cues from `7/15` to `10/15` on consumed falsification
+evidence, then passed all six formal Gate A receipts. On the wholly fresh,
+source-sealed v52 Gate B cohort it again completed `60/60` protocol requests
+and exactly grounded all `48/48` displayed actions. News visibility was
+`24/24`, general-web visibility was `22/25`, and `12/14` exploratory-only rows
+carried the exploratory cue. The deterministic gate still rejected the
+candidate before semantic review: a Wikibooks advice course produced a
+generalized viewpoint about networking, and a first-person historical
+missionary letter produced the narrator's travel statement. Semantic Cloud
+review, blind comparison, and Gate C were not opened; v52 is permanently
+consumed.
+
+The next prompt-only successor again keeps the same schema, local boundary,
+scheduler, one-call architecture, Page-only scope, and release thresholds. It
+clarifies two Page-role boundaries at the model decision point: generalized
+social or behavioral viewpoints on course, guide, or advice Pages do not
+become factual reader actions merely because they use declarative grammar; and
+a narrator's movements, encounters, experiences, recollections, or reported
+reactions on a first-person letter, diary, or memoir Page remain private
+narrative even when names, dates, and places are specific. Public archiving
+does not change that role. This adds no regex, domain list, local semantic
+guard, model stage, or release-standard change. The successor requires
+consumed-data falsification, a new clean commit, formal Gate A, and a wholly
+fresh Gate B before Gate C may open.
