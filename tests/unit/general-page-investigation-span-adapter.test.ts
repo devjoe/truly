@@ -180,6 +180,12 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
       "declarative grammar alone does not make advice factual",
     );
     expect(system).toContain(
+      "A proposition being debatable does not make it publicly verifiable",
+    );
+    expect(user).toContain(
+      "debatable prose is not automatically publicly verifiable",
+    );
+    expect(system).toContain(
       "public archiving does not turn private narrative into a reader verification action",
     );
     expect(system).toContain(
