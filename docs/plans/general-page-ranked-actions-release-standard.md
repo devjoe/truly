@@ -1159,3 +1159,13 @@ that only explain characters, plot, dialogue, or translation remain
 context-dependent. This adds no domain list, local semantic classifier, model
 stage, or release-standard change. It must first falsify against consumed v50,
 then pass a fresh formal Gate A and wholly fresh Gate B.
+
+The prompt-only successor at `a24d24a` then ran exactly once against consumed
+v50 as a falsification diagnostic. All `60/60` requests completed and all
+`49/49` displayed actions were exactly grounded. The three known `none` leaks
+became abstentions, while actionable visibility remained `24/24` for news and
+`25/25` for general web. Exploratory cue coverage improved from `15/18` to
+`16/18`; seven rows changed in total. This is evidence that the narrow prompt
+change fixed the observed failure classes without a coverage regression, not a
+Gate B pass. The result is sealed as consumed diagnostic evidence; the
+candidate still requires a fresh formal Gate A and a wholly fresh Gate B.
