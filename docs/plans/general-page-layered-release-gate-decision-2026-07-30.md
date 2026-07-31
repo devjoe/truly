@@ -109,3 +109,34 @@ The aggregate contract lives in
 `tests/unit/general-page-investigation-layered-gate.test.mjs`. A fresh Gate A,
 fresh preregistered Gate B, and untouched Gate C are still required; this
 decision does not retroactively rescue any failed or consumed cohort.
+
+## Final v57 audit outcome — 2026-08-01
+
+Candidate `f2a3007` was the final automatic Page ranked-action candidate in
+this development sequence. It passed the six-receipt Gate A provider
+compatibility ceremony and the deterministic portion of a fresh, sealed
+60-row Gate B:
+
+- news expected-primary recovery: 24/24;
+- general-web expected-primary recovery: 21/25;
+- exploratory cue recovery: 11/16;
+- expected-none leaks, grounding failures, and scope failures: zero.
+
+The independent semantic output review did not pass. Two blinded reviewers
+reviewed all 45 displayed actions, and a distinct adjudicator resolved their
+24 disagreements. The final review found six `user_unacceptable` actions,
+including two `hard_unacceptable` actions, four actions derived from
+same-page residue, and two unusable handoffs. Failure classes included
+timestamp/byline text fused into a proposition, a contextless parenthetical,
+document-header metadata, table-of-contents/caption fusion, and concatenated
+parameter descriptions.
+
+The candidate therefore failed Gate B. Blind selector comparison was not
+opened, and the untouched Gate C holdout was not consumed. Automatic Page
+ranked actions are not release-approved by this branch. This conclusion does
+not revoke the separately verified General Page Reader core; shipping the core
+without automatic ranked actions is a separate product-scope decision.
+
+Canonical row-level evidence remains in the private evaluation repository.
+This public record intentionally contains only aggregate counts and failure
+classes.
