@@ -173,6 +173,15 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
     );
     expect(system).toContain("Page context shows a reference or teaching Page");
     expect(system).toContain("Rank all eligible survivors strongest to weakest regardless of tier");
+    expect(system).toContain(
+      "Reject tutorial, course, or book promises about what the reader will learn or be able to do after completing the material",
+    );
+    expect(system).toContain(
+      "Before returning JSON, apply a final Page-role tier check",
+    );
+    expect(system).toContain(
+      "stable documentation, reference, history, or biography can only be exploratory",
+    );
     expect(system).not.toContain("Rank eligible primary survivors first");
     expect(system).not.toMatch(/Admission critic|Tier critic/u);
     expect(user).toContain('"schemaVersion":13');

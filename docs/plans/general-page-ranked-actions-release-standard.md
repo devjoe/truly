@@ -1169,3 +1169,24 @@ became abstentions, while actionable visibility remained `24/24` for news and
 change fixed the observed failure classes without a coverage regression, not a
 Gate B pass. The result is sealed as consumed diagnostic evidence; the
 candidate still requires a fresh formal Gate A and a wholly fresh Gate B.
+
+The resulting clean candidate at `9f18314` passed formal Gate A and then ran
+once on the wholly fresh, source-sealed v51 Gate B cohort. Transport was
+`60/60`; all `49/49` displayed actions were exactly grounded, with actionable
+visibility of `24/24` news and `24/25` general web. The candidate nevertheless
+failed before semantic output review: one Wikibooks learning-outcome promise
+was visible on a source-truth `none` row, and only `7/15` exploratory-only rows
+carried the exploratory tier, below the unchanged 60% floor. Seven stable
+documentation, historical, or biographical rows were presented as primary.
+Semantic review, blind comparison, and Gate C were not opened; v51 is
+permanently consumed.
+
+The next prompt-only successor keeps the same schema, local boundary,
+scheduler, one-call architecture, Page-only scope, and release thresholds. It
+adds two final semantic reminders without adding a local semantic guard:
+tutorial or book promises about what the reader will learn are ineligible, and
+stable documentation, reference, history, or biography must remain
+exploratory unless the same Page explicitly presents the exact proposition as
+a current change or event. The successor must first falsify these observed
+classes against consumed v51, then pass a new formal Gate A and wholly fresh
+Gate B and Gate C evidence.
