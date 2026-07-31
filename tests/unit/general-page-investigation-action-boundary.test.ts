@@ -154,6 +154,38 @@ describe("General Page investigation local action boundary", () => {
     }
   });
 
+  it("rejects dated entries inside an explicit Page update-history section", () => {
+    const context = [
+      "Details These framework documents set out the current arrangements.",
+      "Updates to this page Published 26 January 2024 Last updated 31 July 2026",
+      "31 July 2026 Published the inspectorate framework document.",
+      "26 June 2026 Published an updated version of the disclosure framework document.",
+      "7 April 2026 The archived authority closed and its responsibilities moved.",
+      "Sign up for emails or print this page.",
+    ].join(" ");
+    for (const exactClaim of [
+      "Updates to this page Published 26 January 2024 Last updated 31 July 2026 31 July 2026 Published the inspectorate framework document.",
+      "26 June 2026 Published an updated version of the disclosure framework document.",
+      "7 April 2026 The archived authority closed and its responsibilities moved.",
+    ]) {
+      const start = context.indexOf(exactClaim);
+      expect(generalPageInvestigationSelectionRejectionReason({
+        ...selection(exactClaim),
+        start,
+        end: start + exactClaim.length,
+      }, {
+        authorizedSourceContext: context,
+      }), exactClaim).toBe("page_or_documentation_residue");
+    }
+
+    const ordinaryClaim =
+      "31 July 2026 The agency published its final decision after a public hearing.";
+    expect(generalPageInvestigationSelectionRejectionReason(
+      selection(ordinaryClaim),
+      { authorizedSourceContext: ordinaryClaim },
+    )).toBeUndefined();
+  });
+
   it("rejects chapter-lead narration and narrow normative payloads", () => {
     expect(generalPageInvestigationSelectionRejectionReason(
       selection("XI For years, Dorian Gray could not free himself from the influence of this book"),

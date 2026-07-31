@@ -181,6 +181,25 @@ function isCitedPaperTitle(
     .test(before) && /(?:doi(?:\.org\/|:\s*10\.)|https?:\/\/doi\.org\/)/iu.test(after);
 }
 
+function isUpdateHistoryEntry(
+  selection: MaterializedGeneralPageInvestigationSpanSelection,
+  authorizedSourceContext?: string,
+): boolean {
+  if (!authorizedSourceContext ||
+      authorizedSourceContext.slice(selection.start, selection.end) !== selection.exactClaim) {
+    return false;
+  }
+  const heading = "updates to this page";
+  const throughSelection = authorizedSourceContext
+    .slice(Math.max(0, selection.start - 2_500), selection.end)
+    .toLowerCase();
+  const headingOffset = throughSelection.lastIndexOf(heading);
+  if (headingOffset < 0) return false;
+  const text = selection.exactClaim.replace(/\s+/gu, " ").trim();
+  return /^(?:updates to this page\b|\d{1,2}\s+\p{L}+\s+\d{4}\b)/iu
+    .test(text);
+}
+
 function isChapterLeadNarrative(
   text: string,
   source?: GeneralPageInvestigationSourceMetadata,
@@ -265,6 +284,7 @@ export function generalPageInvestigationSelectionRejectionReason(
       UNSUBJECTED_API_DESCRIPTION.test(text) ||
       CONFLICT_DISCLOSURE.test(text) ||
       isCitedPaperTitle(selection, context.authorizedSourceContext) ||
+      isUpdateHistoryEntry(selection, context.authorizedSourceContext) ||
       PAGE_META_DESCRIPTION.test(text) ||
       PAGE_OR_DOCUMENTATION_RESIDUE.test(text)) {
     return "page_or_documentation_residue";
