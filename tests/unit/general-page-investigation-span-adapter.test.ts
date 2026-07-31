@@ -195,7 +195,16 @@ describe("General Page single-pass exact-span selector with schema v13", () => {
     expect(user).toContain("Do not group or reorder candidates by tier");
     expect(user).toContain("when the Page purpose is selling a subscription");
     expect(user).toContain(
-      "omit story-world events even when they imitate news, quote named sources, or use real organizations",
+      "omit story-world events and dialogue even when they imitate news, quote named sources, or use real organizations",
+    );
+    expect(user).toContain(
+      "On a first-person letter, diary, memoir, or testimony Page",
+    );
+    expect(user).toContain(
+      "a fan wiki, or a fictional character, spell, item, plot, or story reference",
+    );
+    expect(user).toContain(
+      "If the Page role is unclear and a candidate matches one of these classes, omit it",
     );
     expect(user).toContain(
       "only an update history, publication log, or 'Updates to this page' list",

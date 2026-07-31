@@ -1216,3 +1216,21 @@ does not change that role. This adds no regex, domain list, local semantic
 guard, model stage, or release-standard change. The successor requires
 consumed-data falsification, a new clean commit, formal Gate A, and a wholly
 fresh Gate B before Gate C may open.
+
+Consumed v52 falsification rejected that first successor at `d6081e6`. It
+completed all `60/60` protocol requests and exactly grounded all `50/50`
+displayed actions, but neither previously observed `none` leak was removed and
+a third `none` leak appeared from a Harry Potter fictional-reference Page.
+News and general-web visibility did not regress, but the safety boundary did;
+therefore no fresh Gate A, semantic review, blind comparison, or Gate C was
+opened for `d6081e6`.
+
+The next prompt-only successor leaves those semantic rules intact and repeats
+the same three Page-role vetoes at the final model decision point: generalized
+group viewpoints on course, guide, advice, or opinion Pages; first-person
+narrator experiences on letters, diaries, memoirs, or testimony; and
+story-world events on fiction, satire, fan-wiki, or fictional-reference Pages.
+An unclear Page role now resolves to omission for those exact classes. This
+still adds no local regex, host list, guard, schema, model stage, or release
+threshold. It must first remove all three observed v52 `none` leaks without
+coverage or exploratory-cue regression on consumed evidence.
