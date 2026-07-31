@@ -22,6 +22,14 @@ describe("General Page investigation local action boundary", () => {
       url: "https://example.test/",
     })).toBe("unavailable_source");
     expect(generalPageInvestigationSourceRejectionReason({
+      title: "Something went wrong.",
+      url: "https://example.test/document",
+    })).toBe("unavailable_source");
+    expect(generalPageInvestigationSourceRejectionReason({
+      title: "發生錯誤",
+      url: "https://example.test/document",
+    })).toBe("unavailable_source");
+    expect(generalPageInvestigationSourceRejectionReason({
       title: "A perfectly factual-looking headline",
       sourceName: "The Shovel",
       url: "https://theshovel.com.au/story",
@@ -52,6 +60,13 @@ describe("General Page investigation local action boundary", () => {
       title: "Unexpected research result",
       sourceName: "Example Science",
       url: "https://science.example/story",
+    })).toBeUndefined();
+  });
+
+  it("does not treat a longer article headline as a generic error page", () => {
+    expect(generalPageInvestigationSourceRejectionReason({
+      title: "Something went wrong in the merger talks",
+      url: "https://example.test/news/merger-talks",
     })).toBeUndefined();
   });
 

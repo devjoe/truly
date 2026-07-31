@@ -31,6 +31,8 @@ const EXPLICIT_SATIRE_LABEL =
   /(?:\b(?:satire|satirical|parody)\b|(?:諷刺|讽刺|惡搞|恶搞)(?:新聞|新闻|媒體|媒体)?)/iu;
 const UNAVAILABLE_TITLE =
   /^(?:404\b|page (?:not found|unavailable)\b|not found\b|找不到(?:此|這個|这个)?頁面|找不到網頁|頁面(?:不存在|無法使用)|页面(?:不存在|无法使用))/iu;
+const GENERIC_ERROR_PAGE_TITLE =
+  /^(?:something (?:went wrong|has gone wrong)|an? (?:unexpected )?error (?:occurred|has occurred)|發生(?:未預期的)?錯誤|发生(?:未预期的)?错误)[.!。！]?$/iu;
 const UNRESOLVED_REFERENCE =
   /^(?:(?:(?:if|when)\s+)?(?:it|this|that|these|those)\b|both\s+(?:leaders?|sides?|parties?|companies?|countries?|teams?|officials?|candidates?|figures?|groups?|people|men|women)\b)|\b(?:(?:as\s+)?described|set out|shown|listed|mentioned)\s+(?:above|below)\b/iu;
 const UNRESOLVED_NAMED_MEMBER =
@@ -223,7 +225,9 @@ export function generalPageInvestigationSourceRejectionReason(
   source?: GeneralPageInvestigationSourceMetadata,
 ): GeneralPageInvestigationLocalRejectionReason | undefined {
   const title = source?.title?.replace(/\s+/gu, " ").trim() ?? "";
-  if (UNAVAILABLE_TITLE.test(title)) return "unavailable_source";
+  if (UNAVAILABLE_TITLE.test(title) || GENERIC_ERROR_PAGE_TITLE.test(title)) {
+    return "unavailable_source";
+  }
   const hostname = sourceHostname(source);
   if ((hostname && KNOWN_SATIRE_HOSTS.has(hostname)) ||
       EXPLICIT_SATIRE_LABEL.test(source?.sourceName ?? "")) {
