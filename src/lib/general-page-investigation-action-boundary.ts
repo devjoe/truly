@@ -84,6 +84,8 @@ const FICTION_REVIEW_NARRATIVE_CUE =
   /\bfans?\s+(?:know|remember)(?:\s+that)?\b/iu;
 const EXPLICIT_AUTHOR_COURSE_PAGE =
   /\bthis is (?:an?\s+)?[^.\n]{0,80}\bcourse by\b/iu;
+const TRAILING_INCOMPLETE_RELEASE_MONTH =
+  /\b(?:set|scheduled|slated|planned|due)\s+(?:for\s+)?(?:release|launch|publication|arrival)\s+(?:Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)$/iu;
 
 function hasDuplicatedLeadingToken(text: string): boolean {
   const [first = "", second = ""] = text.split(/\s+/u, 2);
@@ -286,6 +288,7 @@ export function generalPageInvestigationSelectionRejectionReason(
       PRESS_RELEASE_HEADER.test(text) ||
       STACKED_SECTION_LABELS.test(text) ||
       UNSUBJECTED_API_DESCRIPTION.test(text) ||
+      TRAILING_INCOMPLETE_RELEASE_MONTH.test(text) ||
       CONFLICT_DISCLOSURE.test(text) ||
       isCitedPaperTitle(selection, context.authorizedSourceContext) ||
       isUpdateHistoryEntry(selection, context.authorizedSourceContext) ||

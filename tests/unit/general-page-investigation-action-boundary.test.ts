@@ -137,6 +137,7 @@ describe("General Page investigation local action boundary", () => {
       "Original consultation Consultation description The CMA has produced draft revised guidance",
       "A digital form of cash that preserves customer relationships A digital form of cash The digital euro is public money",
       "Key ECB interest rates The interest rates on the deposit facility, the main refinancing operations and the marginal lending facility will remain unchanged",
+      "\"Black Panther III\" is set for release Dec",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
@@ -286,6 +287,8 @@ describe("General Page investigation local action boundary", () => {
       "The Federal Reserve Board announced that the Federal Reserve Board would publish the results",
       "Key ECB interest rates remained unchanged after the Governing Council meeting",
       "The interest rates on the deposit facility and refinancing operations will remain unchanged",
+      "\"Black Panther III\" is set for release in December",
+      "\"Black Panther III\" is set for release Dec. 12, 2026",
     ]) {
       expect(generalPageInvestigationSelectionRejectionReason(
         selection(text),
