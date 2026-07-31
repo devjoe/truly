@@ -15,7 +15,10 @@ export interface GeneralPageInvestigationSelectionBoundaryContext {
 
 const KNOWN_SATIRE_HOSTS = new Set([
   "babylonbee.com",
+  "duffelblog.com",
+  "hard-drive.net",
   "newsthump.com",
+  "thebeaverton.com",
   "thehardtimes.net",
   "theonion.com",
   "theshovel.com.au",
@@ -77,6 +80,8 @@ const CHAPTER_LEAD = /^(?:chapter\s+)?[\dIVXLCDM]+\s+\p{Lu}[\p{L}'’.-]+\b/u;
 const FICTION_REVIEW_TITLE = /\breview\b/iu;
 const FICTION_REVIEW_NARRATIVE_CUE =
   /\bfans?\s+(?:know|remember)(?:\s+that)?\b/iu;
+const EXPLICIT_AUTHOR_COURSE_PAGE =
+  /\bthis is (?:an?\s+)?[^.\n]{0,80}\bcourse by\b/iu;
 
 function hasDuplicatedLeadingToken(text: string): boolean {
   const [first = "", second = ""] = text.split(/\s+/u, 2);
@@ -221,6 +226,11 @@ export function generalPageInvestigationSelectionRejectionReason(
   context: GeneralPageInvestigationSelectionBoundaryContext = {},
 ): GeneralPageInvestigationLocalRejectionReason | undefined {
   const text = selection.exactClaim.replace(/\s+/gu, " ").trim();
+  if (
+    EXPLICIT_AUTHOR_COURSE_PAGE.test(context.authorizedSourceContext ?? "")
+  ) {
+    return "non_publicly_decidable";
+  }
   if (UNRESOLVED_REFERENCE.test(text) ||
       UNRESOLVED_NAMED_MEMBER.test(text) ||
       UNRESOLVED_GROUP_REFERENCE.test(text) ||

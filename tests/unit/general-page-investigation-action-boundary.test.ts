@@ -30,6 +30,16 @@ describe("General Page investigation local action boundary", () => {
       title: "The President Meets With Trump",
       url: "https://thehardtimes.net/politics/example/",
     })).toBe("satire_source");
+    for (const url of [
+      "https://duffelblog.com/example/",
+      "https://hard-drive.net/example/",
+      "https://thebeaverton.com/example/",
+    ]) {
+      expect(generalPageInvestigationSourceRejectionReason({
+        title: "A factual-looking headline",
+        url,
+      }), url).toBe("satire_source");
+    }
     expect(generalPageInvestigationSourceRejectionReason({
       title: "今日觀點",
       sourceName: "諷刺新聞",
@@ -176,6 +186,28 @@ describe("General Page investigation local action boundary", () => {
         },
       },
     )).toBe("non_publicly_decidable");
+  });
+
+  it("rejects actions from an explicitly self-identified authored course", () => {
+    const exactClaim =
+      "Social rules are communicated in verbal and nonverbal ways";
+    const courseContext = [
+      "Social Networking From Wikibooks, open books for an open world.",
+      "This is a Networking course by Gerard D. de Gier.",
+      exactClaim,
+    ].join(" ");
+    expect(generalPageInvestigationSelectionRejectionReason(
+      selection(exactClaim),
+      { authorizedSourceContext: courseContext },
+    )).toBe("non_publicly_decidable");
+
+    expect(generalPageInvestigationSelectionRejectionReason(
+      selection("MessageChannel creates a new message channel"),
+      {
+        authorizedSourceContext:
+          "This guide explains stable platform APIs. MessageChannel creates a new message channel.",
+      },
+    )).toBeUndefined();
   });
 
   it("preserves complete ordinary and documentation propositions", () => {

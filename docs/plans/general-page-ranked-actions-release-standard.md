@@ -1234,3 +1234,21 @@ An unclear Page role now resolves to omission for those exact classes. This
 still adds no local regex, host list, guard, schema, model stage, or release
 threshold. It must first remove all three observed v52 `none` leaks without
 coverage or exploratory-cue regression on consumed evidence.
+
+Consumed v52 falsification also rejected that final-veto successor at
+`028db7e`. It removed the first-person letter and fictional-reference leaks,
+but the same explicitly self-identified Wikibooks course yielded a different
+generalized social claim, and a Duffel Blog satire article yielded a
+factual-looking setup sentence. This left two visible `none` rows and added two
+exploratory-tier overstatements. No fresh Gate A or later gate was opened.
+
+The next successor applies the existing local-boundary role to the two
+remaining user-unacceptable classes after two prompt-first attempts failed. It
+adds three established satire publications to the existing explicit satire
+source set, and rejects all proposed actions when same-scope Page context
+narrowly and explicitly identifies itself as an authored course (`This is
+... course by ...`). It does not infer satire from surprising content and does
+not reject ordinary guides, references, or teaching Pages. This is a
+deterministic fail-closed boundary, not a new model call, semantic classifier,
+domain-wide Wikibooks ban, or release-threshold change. It must pass consumed
+v52 falsification before any fresh gate opens.
